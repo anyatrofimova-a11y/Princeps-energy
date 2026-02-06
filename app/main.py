@@ -17,6 +17,7 @@ import asyncpg
 # Allow importing from project root (for utils/)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.deferral import greedy_allocate, store_allocations
+from utils.ml_solar_predictor import predict_24h as ml_predict_24h, train_model as ml_train_model
 from agent_claude import get_structured_agent_output
 from pipeline import fetch_vibe_raster, clip_and_reproject, compute_slope, generate_tiles
 from fastapi import FastAPI, HTTPException, Query
@@ -304,8 +305,18 @@ async def explain_site(parcel_id: str):
         context = await fetch_parcel_context(pid, conn)
         try:
             explanation = await explain_with_claude(context)
-        except Exception as e:
-            explanation = f"Claude unavailable: {type(e).__name__}. Score: {context['score_total']}/120."
+        except Exception:
+            # Deterministic fallback
+            sc = context["score_components"]
+            explanation = (
+                f"Score: {context['score_total']}/120 "
+                f"(grid: {sc['grid']}/50, planning: {sc['planning']}/30, terrain: {sc['terrain']}/40). "
+                f"Overlays: {', '.join(context.get('overlays', []))}. "
+                f"Mean slope: {context.get('mean_slope_deg', 'N/A')}. "
+                f"Mitigations: 1) Identify nearest substation for grid score. "
+                f"2) Obtain DEM data for terrain analysis. "
+                f"3) Submit pre-app planning enquiry."
+            )
 
         await conn.execute(
             """
@@ -654,6 +665,48 @@ async def solar_hourly(
 
 
 # ---------------------------------------------------------------------------
+# ML solar prediction (GBM trained on weather features)
+# ---------------------------------------------------------------------------
+
+@app.get("/site/{parcel_id}/solar_yield_ml")
+async def solar_yield_ml(
+    parcel_id: str,
+    capacity_kw: float = Query(100.0, ge=1, le=100000),
+    day_of_year: int = Query(172, ge=1, le=365),
+):
+    """
+    ML-based solar energy prediction using weather features.
+    Complements the SAM physics model with a data-driven approach.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+
+        lat = float(row["lat"]) if row["lat"] is not None else 52.5
+        lon = float(row["lon"]) if row["lon"] is not None else -1.5
+
+    try:
+        result = ml_predict_24h(lat, lon, day_of_year, capacity_kw)
+        result["parcel_id"] = parcel_id
+        return result
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
 # Network deferral optimiser (demo greedy heuristic)
 # ---------------------------------------------------------------------------
 
@@ -674,6 +727,221 @@ async def run_deferral_optimizer(
         "total_load_kw": total_load_kw,
         "total_gen_kw": total_gen_kw,
         "allocations": alloc,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Agentic analysis — orchestrates all models + Claude reasoning
+# ---------------------------------------------------------------------------
+
+def _deterministic_agent(ctx: dict) -> dict:
+    """Rule-based agent fallback when Claude API is unavailable."""
+    score = ctx.get("feasibility_score", 0)
+    comps = ctx.get("score_components", {})
+    overlays = ctx.get("overlays", [])
+    sub = ctx.get("nearest_substation", {})
+    sam = ctx.get("sam_physics") or {}
+    ml = ctx.get("ml_prediction") or {}
+    area = ctx.get("area_m2")
+    slope = ctx.get("mean_slope_deg")
+
+    # Verdict
+    if score >= 80:
+        verdict, conf = "GO", 0.8
+    elif score >= 40:
+        verdict, conf = "CAUTION", 0.6
+    else:
+        verdict, conf = "NO-GO", 0.7
+
+    # Risks
+    risks = []
+    if comps.get("grid", 0) == 0:
+        risks.append("No grid connection data — substation capacity and distance unknown")
+    elif comps.get("grid", 0) < 20:
+        risks.append(f"Weak grid connection (score {comps['grid']}/50)")
+    if "FloodZone:YES" in overlays:
+        risks.append("Site is in a flood risk zone — significant planning barrier")
+    if "AONB:YES" in overlays:
+        risks.append("Site overlaps Area of Outstanding Natural Beauty — planning restrictions apply")
+    if "SSSI:YES" in overlays:
+        risks.append("Site overlaps SSSI — likely planning refusal for solar development")
+    if slope and slope > 15:
+        risks.append(f"Steep terrain (mean slope {slope:.1f} deg) increases installation cost")
+    if sam.get("capacity_factor_pct") and sam["capacity_factor_pct"] < 9:
+        risks.append(f"Low capacity factor ({sam['capacity_factor_pct']}%) — marginal solar resource")
+    if not risks:
+        risks.append("No major risks identified from available data")
+
+    # Opportunities
+    opps = []
+    if "FloodZone:NO" in overlays and "AONB:NO" in overlays and "SSSI:NO" in overlays:
+        opps.append("No environmental designations — favourable planning outlook")
+    if sam.get("annual_energy_kwh"):
+        opps.append(f"SAM estimates {sam['annual_energy_kwh']:,.0f} kWh/yr at {ctx.get('capacity_kw', 100)} kW")
+    if ml.get("annual_estimate_kwh"):
+        opps.append(f"ML model corroborates with {ml['annual_estimate_kwh']:,.0f} kWh/yr estimate")
+    if area and area > 20000:
+        opps.append(f"Large site ({area:,.0f} m²) can accommodate significant capacity")
+    if comps.get("planning", 0) >= 25:
+        opps.append("Strong planning score — no statutory designation conflicts")
+
+    # Recommended capacity
+    rec_cap = ctx.get("capacity_kw", 100)
+    if area:
+        # ~10 W/m² for ground-mount solar
+        max_cap = area * 0.01  # kW
+        rec_cap = min(rec_cap, max_cap)
+
+    # ROI estimate
+    roi = None
+    if sam.get("annual_energy_kwh") and rec_cap:
+        # UK export tariff ~5p/kWh, install cost ~£800/kW
+        annual_revenue = sam["annual_energy_kwh"] * 0.05
+        install_cost = rec_cap * 800
+        if annual_revenue > 0:
+            roi = round(install_cost / annual_revenue, 1)
+
+    summary = (
+        f"Parcel scores {score}/120. "
+        f"{'Strong' if score >= 80 else 'Moderate' if score >= 40 else 'Weak'} feasibility "
+        f"with grid={comps.get('grid', 0)}, planning={comps.get('planning', 0)}, "
+        f"terrain={comps.get('terrain', 0)}."
+    )
+    if sam.get("capacity_factor_pct"):
+        summary += f" Capacity factor {sam['capacity_factor_pct']}%."
+
+    return {
+        "verdict": verdict,
+        "confidence": conf,
+        "summary": summary,
+        "risks": risks,
+        "opportunities": opps,
+        "recommended_capacity_kw": round(rec_cap, 1),
+        "estimated_roi_years": roi,
+        "next_steps": [
+            "Commission detailed grid connection study",
+            "Obtain topographical survey for slope verification",
+            "Submit pre-application planning enquiry to local authority",
+            "Compare quotes from at least 3 EPC-accredited installers",
+        ],
+    }
+
+
+@app.get("/site/{parcel_id}/agent_analysis")
+async def agent_analysis(
+    parcel_id: str,
+    capacity_kw: float = Query(100.0, ge=1, le=100000),
+    day_of_year: int = Query(172, ge=1, le=365),
+):
+    """
+    Comprehensive agentic analysis: gathers context, SAM, ML, slope
+    in parallel, then sends everything to Claude for structured reasoning.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    # Step 1: Gather parcel location + context (sequential — asyncpg single-conn)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon,
+                   area_m2
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        lat = float(row["lat"]) if row["lat"] is not None else 52.5
+        lon = float(row["lon"]) if row["lon"] is not None else -1.5
+        area_m2 = float(row["area_m2"]) if row["area_m2"] else None
+
+        context = await fetch_parcel_context(pid, conn)
+
+        geojson_row = await conn.fetchrow(
+            "SELECT ST_AsGeoJSON(geometry) AS geojson FROM parcels WHERE parcel_id = $1", pid
+        )
+        geojson = geojson_row["geojson"] if geojson_row else "{}"
+        slope_stats = await fetch_slope_stats(conn, geojson)
+
+    # SAM + ML can run outside the DB connection
+    sam_result = None
+    ml_result = None
+    try:
+        sam_result = await run_sam_subprocess(lat, lon, capacity_kw)
+    except Exception:
+        pass
+    try:
+        ml_result = ml_predict_24h(lat, lon, day_of_year, capacity_kw)
+    except Exception:
+        pass
+
+    # Step 3: Build comprehensive context for Claude
+    agent_context = {
+        "parcel_id": parcel_id,
+        "location": {"lat": lat, "lon": lon},
+        "area_m2": area_m2,
+        "feasibility_score": context.get("score_total"),
+        "score_components": context.get("score_components"),
+        "overlays": context.get("overlays"),
+        "mean_slope_deg": context.get("mean_slope_deg"),
+        "slope_stats": slope_stats,
+        "nearest_substation": context.get("nearest_substation"),
+        "sam_physics": {
+            "annual_energy_kwh": sam_result.get("annual_energy_kwh") if sam_result else None,
+            "capacity_factor_pct": sam_result.get("capacity_factor_pct") if sam_result else None,
+            "monthly_energy_kwh": sam_result.get("monthly_energy_kwh") if sam_result else None,
+        } if sam_result else None,
+        "ml_prediction": {
+            "daily_total_kwh": ml_result.get("daily_total_kwh") if ml_result else None,
+            "annual_estimate_kwh": ml_result.get("annual_estimate_kwh") if ml_result else None,
+        } if ml_result else None,
+        "capacity_kw": capacity_kw,
+    }
+
+    # Step 4: Send to Claude for agentic reasoning
+    try:
+        message = await claude.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=800,
+            temperature=0.0,
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"You are a solar energy feasibility analyst. Analyse this parcel data "
+                    f"and return a JSON object with these exact fields:\n"
+                    f'{{"verdict": "GO|CAUTION|NO-GO",'
+                    f'"confidence": 0.0-1.0,'
+                    f'"summary": "2-3 sentence assessment",'
+                    f'"risks": ["risk1", "risk2", ...],'
+                    f'"opportunities": ["opp1", "opp2", ...],'
+                    f'"recommended_capacity_kw": number,'
+                    f'"estimated_roi_years": number or null,'
+                    f'"next_steps": ["step1", "step2", ...]}}\n\n'
+                    f"Only output valid JSON. Use the data below — do not invent numbers.\n\n"
+                    f"Data:\n{json.dumps(agent_context, indent=2)}"
+                ),
+            }],
+        )
+        raw_text = message.content[0].text
+        # Extract JSON from response
+        start = raw_text.find("{")
+        end = raw_text.rfind("}") + 1
+        if start >= 0 and end > start:
+            agent_output = json.loads(raw_text[start:end])
+        else:
+            agent_output = {"verdict": "CAUTION", "summary": raw_text, "confidence": 0.5}
+    except Exception:
+        # Deterministic fallback agent when Claude is unavailable
+        agent_output = _deterministic_agent(agent_context)
+
+    return {
+        "parcel_id": parcel_id,
+        "context": agent_context,
+        "agent": agent_output,
     }
 
 
