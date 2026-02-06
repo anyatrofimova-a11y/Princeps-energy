@@ -23,6 +23,14 @@ EPC/
 energy-price-forecast/
 Energy-UK/
 planning-applications/
+UK-Energy-Modelling/
+Solar-System-Repositories-management/
+SolarBIPV/
+Theridian/
+
+# Runtime artifacts
+audit_logs/
+test-results/
 
 # Data
 data/

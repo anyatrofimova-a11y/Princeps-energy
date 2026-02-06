@@ -1,7 +1,13 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import MapView from "./components/MapView";
 import ThreeView from "./components/ThreeView";
 import EPCSummary from "./components/EPCSummary";
+import ComponentPalette from "./components/ComponentPalette";
+import LayoutEditor from "./components/LayoutEditor";
+import LayoutControls from "./components/LayoutControls";
+import AgentPanel from "./components/AgentPanel";
+import BIPVPanel from "./components/BIPVPanel";
+import GridDataPanel from "./components/GridDataPanel";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -29,9 +35,20 @@ export default function App() {
   const [energyPrice, setEnergyPrice] = useState(null);
   const [gridContext, setGridContext] = useState(null);
   const [planningApps, setPlanningApps] = useState(null);
+  const [energySystem, setEnergySystem] = useState(null);
+  const [siteBom, setSiteBom] = useState(null);
+  const [bomAvail, setBomAvail] = useState(null);
   const [agentResult, setAgentResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
+
+  // Layout mode state
+  const [layoutMode, setLayoutMode] = useState(false);
+  const [componentLayout, setComponentLayout] = useState([]);
+  const [selectedLayoutItem, setSelectedLayoutItem] = useState(null);
+  const [customBom, setCustomBom] = useState(null);
+  const [solarCatalogue, setSolarCatalogue] = useState(null);
+  const bomAbortRef = useRef(null);
 
   const [samCapacity, setSamCapacity] = useState(100);
   const [samDay, setSamDay] = useState(172);
@@ -54,7 +71,7 @@ export default function App() {
 
   // Overlay panel visibility
   const [panels, setPanels] = useState({
-    score: true, solar: false, terrain: false, agent: false, deferral: false, epc: false, price: false, grid: false, planning: false,
+    score: true, solar: false, terrain: false, agent: false, deferral: false, epc: false, price: false, grid: false, planning: false, energySys: false, inventory: false, bipv: false, gridData: false,
   });
   const togglePanel = useCallback((id) => {
     setPanels(p => ({ ...p, [id]: !p[id] }));
@@ -68,6 +85,59 @@ export default function App() {
   const toggleLayer = useCallback((id) => {
     setLayers(l => ({ ...l, [id]: !l[id] }));
   }, []);
+
+  // Fetch solar catalogue once on mount
+  useEffect(() => {
+    fetch("/inventory/catalogue")
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setSolarCatalogue(d); })
+      .catch(() => {});
+  }, []);
+
+  // Layout mode handlers
+  const handleComponentDrop = useCallback(({ component, x, y, z }) => {
+    const newItem = {
+      id: crypto.randomUUID(),
+      componentId: component.id,
+      x, y, z,
+      quantity: 1,
+      rotation: 0,
+    };
+    setComponentLayout((prev) => [...prev, newItem]);
+  }, []);
+
+  const handleUpdateLayoutItem = useCallback((id, updated) => {
+    setComponentLayout((prev) => prev.map((i) => (i.id === id ? updated : i)));
+  }, []);
+
+  const handleDeleteLayoutItem = useCallback((id) => {
+    setComponentLayout((prev) => prev.filter((i) => i.id !== id));
+    setSelectedLayoutItem(null);
+  }, []);
+
+  // Debounced custom BOM recalculation
+  useEffect(() => {
+    if (!layoutMode || !parcelId || componentLayout.length === 0) {
+      if (componentLayout.length === 0) setCustomBom(null);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      if (bomAbortRef.current) bomAbortRef.current.abort();
+      bomAbortRef.current = new AbortController();
+      try {
+        const res = await fetch(`/site/${encodeURIComponent(parcelId)}/bom/custom`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ layout: componentLayout }),
+          signal: bomAbortRef.current.signal,
+        });
+        if (res.ok) setCustomBom(await res.json());
+      } catch (err) {
+        if (err.name !== "AbortError") console.error(err);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [componentLayout, layoutMode, parcelId]);
 
   // Handle zone click → show EPC summary for neighbourhood
   const handleZoneClick = useCallback((lsoaId) => {
@@ -107,7 +177,7 @@ export default function App() {
     if (!id) return;
     setLoading(true);
     try {
-      const [hmRes, exRes, ssRes, syRes, shRes, mlRes, epRes, grRes, plRes] = await Promise.allSettled([
+      const [hmRes, exRes, ssRes, syRes, shRes, mlRes, epRes, grRes, plRes, esRes, bomRes, baRes] = await Promise.allSettled([
         fetch(`/site/${encodeURIComponent(id)}/heightmap?size=64`),
         fetch(`/site/${encodeURIComponent(id)}/explain`),
         fetch(`/site/${encodeURIComponent(id)}/slope_stats`),
@@ -117,6 +187,9 @@ export default function App() {
         fetch(`/site/${encodeURIComponent(id)}/energy_price?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
         fetch(`/site/${encodeURIComponent(id)}/grid_context?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
         fetch(`/planning/energy/summary`),
+        fetch(`/site/${encodeURIComponent(id)}/energy_system_context?capacity_kw=${samCapacity}`),
+        fetch(`/site/${encodeURIComponent(id)}/bom?capacity_kw=${samCapacity}`),
+        fetch(`/site/${encodeURIComponent(id)}/bom/availability?capacity_kw=${samCapacity}`),
       ]);
       setHeightmap(await safeJson(hmRes));
       setExplain(await safeJson(exRes));
@@ -127,6 +200,9 @@ export default function App() {
       setEnergyPrice(await safeJson(epRes));
       setGridContext(await safeJson(grRes));
       setPlanningApps(await safeJson(plRes));
+      setEnergySystem(await safeJson(esRes));
+      setSiteBom(await safeJson(bomRes));
+      setBomAvail(await safeJson(baRes));
       setPanels(p => ({ ...p, score: true }));
       // Auto-run deferral with current params
       runDeferral();
@@ -141,9 +217,11 @@ export default function App() {
     if (!parcelId) return;
     setAgentLoading(true);
     try {
-      const res = await fetch(
-        `/site/${encodeURIComponent(parcelId)}/agent_analysis?capacity_kw=${samCapacity}&day_of_year=${samDay}`
-      );
+      const res = await fetch(`/site/${encodeURIComponent(parcelId)}/agent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intent: "feasibility", capacity_kw: samCapacity, day_of_year: samDay }),
+      });
       if (res.ok) {
         const data = await res.json();
         setAgentResult(data.agent);
@@ -212,6 +290,16 @@ export default function App() {
         </button>
         <button className="btn-agent" onClick={runAgentAnalysis} disabled={agentLoading || !parcelId}>
           {agentLoading ? "Thinking..." : "Agent"}
+        </button>
+        <button
+          className={`btn-layout ${layoutMode ? "active" : ""}`}
+          onClick={() => {
+            setLayoutMode((p) => !p);
+            if (!layoutMode) setPanels((p) => ({ ...p, terrain: true, inventory: true }));
+          }}
+          disabled={!parcelId}
+        >
+          {layoutMode ? "Exit Layout" : "Layout"}
         </button>
       </div>
       {pickMode && (
@@ -320,6 +408,11 @@ export default function App() {
         )}
       </div>
 
+      {/* ── Component Palette (layout mode) ── */}
+      {layoutMode && solarCatalogue && (
+        <ComponentPalette catalogue={solarCatalogue} />
+      )}
+
       {/* ── Right overlays ── */}
       <div className="overlay-stack right-stack">
         <Overlay id="score" title="Feasibility Score" open={panels.score}
@@ -410,7 +503,26 @@ export default function App() {
                   })}
                 </div>
               )}
-              <ThreeView heightmap={heightmap} />
+              {layoutMode ? (
+                <LayoutEditor
+                  heightmap={heightmap}
+                  componentLayout={componentLayout}
+                  onDrop={handleComponentDrop}
+                  onSelectItem={setSelectedLayoutItem}
+                  selectedItem={selectedLayoutItem}
+                />
+              ) : (
+                <ThreeView heightmap={heightmap} />
+              )}
+              {layoutMode && (
+                <LayoutControls
+                  selectedItem={selectedLayoutItem}
+                  layout={componentLayout}
+                  onUpdate={handleUpdateLayoutItem}
+                  onDelete={handleDeleteLayoutItem}
+                  catalogue={solarCatalogue}
+                />
+              )}
             </div>
           ) : <span className="muted">No terrain data</span>}
         </Overlay>
@@ -616,56 +728,158 @@ export default function App() {
             </div>
           ) : <span className="muted">Click Analyse</span>}
         </Overlay>
+
+        <Overlay id="energySys" title="UK Energy System 2050" open={panels.energySys}
+          onToggle={togglePanel} position="right" color="#795548">
+          {energySystem ? (
+            <div>
+              <div className="section-label">Site Contribution</div>
+              <div className="stat-grid">
+                <div>Generation: <strong>{energySystem.site?.annual_generation_mwh?.toLocaleString()} MWh/yr</strong></div>
+                <div>CF: <strong>{(energySystem.site?.capacity_factor * 100)?.toFixed(1)}%</strong></div>
+              </div>
+              <div className="stat-grid">
+                <div>Homes powered: <strong>{energySystem.national_context?.homes_powered}</strong></div>
+                <div>CO2 avoided: <strong>{energySystem.national_context?.co2_avoided_tonnes_yr} t/yr</strong></div>
+              </div>
+              <div className="stat-grid">
+                <div>% of demand: <strong>{energySystem.national_context?.fraction_of_demand_pct?.toFixed(4)}%</strong></div>
+                <div>% of solar: <strong>{energySystem.national_context?.fraction_of_solar_capacity_pct?.toFixed(4)}%</strong></div>
+              </div>
+
+              <div className="section-label">Economics</div>
+              <div className="stat-grid">
+                <div>Solar LCOE: <strong>{energySystem.economics?.solar_lcoe_gbp_mwh}</strong> GBP/MWh</div>
+                <div>System LCOE: <strong>{energySystem.economics?.system_lcoe_gbp_mwh}</strong> GBP/MWh</div>
+              </div>
+              <div className="stat-inline">
+                Solar is <strong>{energySystem.economics?.solar_vs_system_lcoe_pct}%</strong> of system avg |
+                Annual value: <strong>GBP {energySystem.economics?.annual_value_at_system_lcoe_gbp?.toLocaleString()}</strong>
+              </div>
+
+              <div className="section-label">2050 Scenario ({energySystem.scenario_summary?.renewable_capacity_gw} GW renewables)</div>
+              <div className="stat-grid">
+                <div>Demand: <strong>{energySystem.scenario_summary?.demand_twh} TWh</strong></div>
+                <div>Generation: <strong>{energySystem.scenario_summary?.total_generation_twh} TWh</strong></div>
+              </div>
+              <div className="stat-inline">
+                Total system cost: <strong>GBP {energySystem.scenario_summary?.total_cost_bn} bn/yr</strong>
+              </div>
+            </div>
+          ) : <span className="muted">Click Analyse</span>}
+        </Overlay>
+
+        <Overlay id="inventory" title={layoutMode ? "Custom Layout BOM" : "Solar Inventory & BOM"} open={panels.inventory}
+          onToggle={togglePanel} position="right" color="#e65100">
+          {(layoutMode && customBom) ? (
+            <div>
+              <div className="section-label">Custom Layout — {customBom.layout_item_count} placed, {customBom.unique_components} types</div>
+              <div className="stat-grid">
+                <div>Total cost: <strong>GBP {customBom.totals?.total_cost_gbp?.toLocaleString()}</strong></div>
+                <div>Weight: <strong>{(customBom.totals?.total_weight_kg / 1000)?.toFixed(1)} t</strong></div>
+              </div>
+              {customBom.categories && (
+                <>
+                  <div className="section-label">By Category</div>
+                  <div className="planning-cats">
+                    {Object.entries(customBom.categories).map(([cat, data]) => (
+                      <div key={cat} className="planning-cat-item">
+                        <span className="planning-cat-name">{cat}</span>
+                        <span className="planning-cat-count" style={{ background: "#e65100" }}>
+                          GBP {data.subtotal_gbp?.toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {customBom.bom?.map((item) => (
+                <div key={item.component_id} className="stat-inline">
+                  {item.name}: <strong>{item.quantity}</strong> {item.unit} — GBP {item.total_cost_gbp?.toLocaleString()}
+                </div>
+              ))}
+            </div>
+          ) : siteBom ? (
+            <div>
+              <div className="section-label">Site BOM — {siteBom.capacity_kw} kW</div>
+              <div className="stat-grid">
+                <div>Panels: <strong>{siteBom.num_panels}</strong> ({siteBom.panel_type?.split(" ").slice(-2).join(" ")})</div>
+                <div>Inverters: <strong>{siteBom.num_inverters}</strong></div>
+              </div>
+              <div className="stat-grid">
+                <div>Strings: <strong>{siteBom.num_strings}</strong></div>
+                <div>Area: <strong>{siteBom.area_m2?.toLocaleString()} m²</strong></div>
+              </div>
+              <div className="stat-grid">
+                <div>Total cost: <strong>GBP {siteBom.totals?.total_cost_gbp?.toLocaleString()}</strong></div>
+                <div>Cost/kW: <strong>GBP {siteBom.totals?.cost_per_kw_gbp}</strong></div>
+              </div>
+              <div className="stat-inline">
+                Weight: <strong>{(siteBom.totals?.total_weight_kg / 1000)?.toFixed(1)} tonnes</strong> |
+                Components: <strong>{siteBom.totals?.component_count}</strong>
+              </div>
+
+              {siteBom.categories && (
+                <>
+                  <div className="section-label">Cost Breakdown</div>
+                  <div className="planning-cats">
+                    {Object.entries(siteBom.categories).map(([cat, data]) => (
+                      <div key={cat} className="planning-cat-item">
+                        <span className="planning-cat-name">{cat}</span>
+                        <span className="planning-cat-count" style={{ background: "#e65100" }}>
+                          GBP {data.subtotal_gbp?.toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {bomAvail && (
+                <>
+                  <div className="section-label">Supply Chain</div>
+                  <div className="stat-grid">
+                    <div>Fulfilment: <strong>{bomAvail.summary?.fulfilment_pct}%</strong></div>
+                    <div>Nearest depot: <strong>{bomAvail.nearest_distance_km} km</strong></div>
+                  </div>
+                  <div className="stat-grid three">
+                    <div style={{ color: "#4caf50" }}>In stock: {bomAvail.summary?.fully_available}</div>
+                    <div style={{ color: "#ff9800" }}>Partial: {bomAvail.summary?.partially_available}</div>
+                    <div style={{ color: "#f44336" }}>Unavail: {bomAvail.summary?.unavailable}</div>
+                  </div>
+                  <div className="stat-inline">
+                    Source: <strong>{bomAvail.nearest_repository}</strong>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : <span className="muted">Click Analyse</span>}
+        </Overlay>
+
+        <Overlay id="bipv" title="BIPV Analysis" open={panels.bipv}
+          onToggle={togglePanel} position="right" color="#00bcd4">
+          <BIPVPanel parcelId={parcelId} samCapacity={samCapacity} />
+        </Overlay>
+
+        <Overlay id="gridData" title="Grid Data Platform" open={panels.gridData}
+          onToggle={togglePanel} position="right" color="#607d8b">
+          <GridDataPanel parcelId={parcelId} samCapacity={samCapacity} />
+        </Overlay>
       </div>
 
       {/* ── Agent analysis overlay (bottom) ── */}
       {(panels.agent || agentResult) && (
-        <div className="agent-overlay">
-          <div className="overlay-header" onClick={() => togglePanel("agent")}
-            style={{ borderLeftColor: agentResult ? verdictColor(agentResult.verdict) : "#666" }}>
-            <span className="overlay-title">Agent Analysis</span>
-            <span className="overlay-toggle">{panels.agent ? "\u25BC" : "\u25B2"}</span>
-          </div>
-          {panels.agent && agentResult && (
-            <div className="overlay-body agent-body">
-              <div className="agent-verdict" style={{ background: verdictColor(agentResult.verdict) }}>
-                {agentResult.verdict}
-                <span className="agent-conf">
-                  {Math.round((agentResult.confidence || 0) * 100)}% conf
-                </span>
-              </div>
-              <p className="agent-summary">{agentResult.summary}</p>
-              <div className="agent-columns">
-                {agentResult.risks?.length > 0 && (
-                  <div className="agent-col">
-                    <div className="agent-col-title risk">Risks</div>
-                    <ul>{agentResult.risks.map((r, i) => <li key={i}>{r}</li>)}</ul>
-                  </div>
-                )}
-                {agentResult.opportunities?.length > 0 && (
-                  <div className="agent-col">
-                    <div className="agent-col-title opp">Opportunities</div>
-                    <ul>{agentResult.opportunities.map((o, i) => <li key={i}>{o}</li>)}</ul>
-                  </div>
-                )}
-                {agentResult.next_steps?.length > 0 && (
-                  <div className="agent-col">
-                    <div className="agent-col-title steps">Next Steps</div>
-                    <ol>{agentResult.next_steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
-                  </div>
-                )}
-              </div>
-              {agentResult.recommended_capacity_kw != null && (
-                <div className="agent-meta">
-                  Recommended capacity: <strong>{agentResult.recommended_capacity_kw} kW</strong>
-                  {agentResult.estimated_roi_years != null && (
-                    <> | Est. ROI: <strong>{agentResult.estimated_roi_years} years</strong></>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <AgentPanel
+          parcelId={parcelId}
+          samCapacity={samCapacity}
+          samDay={samDay}
+          agentResult={agentResult}
+          setAgentResult={setAgentResult}
+          agentLoading={agentLoading}
+          setAgentLoading={setAgentLoading}
+          open={panels.agent}
+          onToggle={() => togglePanel("agent")}
+        />
       )}
     </div>
   );

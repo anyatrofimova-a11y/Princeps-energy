@@ -443,3 +443,459 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 /* ── Range input ── */
 input[type="range"] { accent-color: #4caf50; }
+
+/* ── Component Palette (layout mode, left side) ── */
+.component-palette {
+  position: absolute;
+  top: 400px;
+  left: 12px;
+  z-index: 10;
+  background: var(--glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--glass-border);
+  width: 240px;
+  max-height: calc(100vh - 420px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.palette-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #555;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+
+.palette-body { padding: 6px; }
+
+.palette-category { margin-bottom: 2px; }
+
+.palette-cat-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #555;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-left: 3px solid #ccc;
+  border-radius: 2px;
+  user-select: none;
+}
+.palette-cat-title:hover { background: rgba(0,0,0,0.03); }
+.palette-cat-count {
+  font-size: 9px;
+  background: rgba(0,0,0,0.08);
+  padding: 1px 5px;
+  border-radius: 6px;
+  margin-left: auto;
+}
+.palette-cat-toggle { font-size: 8px; color: #aaa; }
+
+.palette-card {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 3px 0;
+  cursor: grab;
+  transition: all 0.12s;
+}
+.palette-card:hover {
+  background: #fff;
+  border-color: #4caf50;
+  box-shadow: 0 2px 8px rgba(76,175,80,0.15);
+}
+.palette-card:active { cursor: grabbing; }
+
+.palette-card-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 3px;
+}
+.palette-card-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.palette-card-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #333;
+  line-height: 1.2;
+}
+.palette-card-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 9px;
+  color: #888;
+}
+.palette-card-cost {
+  margin-left: auto;
+  font-weight: 700;
+  color: #4caf50;
+}
+
+/* ── Layout Editor (3D drop zone) ── */
+.layout-editor {
+  width: 100%;
+  max-width: 480px;
+  aspect-ratio: 1;
+  margin: 6px auto;
+  border: 2px dashed #4caf50;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: crosshair;
+}
+.layout-editor canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* ── Layout Controls (edit selected component) ── */
+.layout-controls {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(0,0,0,0.03);
+  border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+.layout-controls-empty {
+  margin-top: 8px;
+  padding: 10px;
+  text-align: center;
+  font-size: 11px;
+  color: #999;
+  background: rgba(0,0,0,0.02);
+  border-radius: 6px;
+}
+.layout-ctrl-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.layout-ctrl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.layout-ctrl-grid label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #555;
+}
+.layout-ctrl-grid input {
+  width: 64px;
+  padding: 3px 5px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 11px;
+  background: #fff;
+  text-align: right;
+}
+.layout-ctrl-cost {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(0,0,0,0.08);
+  font-size: 11px;
+  color: #666;
+}
+
+/* ── Layout mode button ── */
+.btn-layout {
+  padding: 5px 14px;
+  border: none;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: #2196f3;
+  color: #fff;
+  white-space: nowrap;
+}
+.btn-layout:hover { background: #1976d2; }
+.btn-layout.active { background: #ff9800; }
+.btn-layout.active:hover { background: #f57c00; }
+.btn-layout:disabled { opacity: 0.5; cursor: default; }
+
+.btn-delete {
+  background: #f44336;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-delete:hover { background: #d32f2f; }
+
+/* ── Agent Panel — intent selector, dev console, actions ── */
+.agent-controls {
+  margin-bottom: 10px;
+}
+
+.agent-intent-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.agent-intent-btn {
+  padding: 3px 10px;
+  border: 1.5px solid;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: transparent;
+}
+.agent-intent-btn:hover {
+  opacity: 0.85;
+}
+.agent-intent-btn.active {
+  color: #fff;
+}
+
+.agent-action-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.agent-dev-toggle {
+  padding: 4px 10px;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  font-size: 11px;
+  cursor: pointer;
+  background: #f8f9fa;
+  color: #666;
+  transition: all 0.15s;
+}
+.agent-dev-toggle:hover {
+  background: #e8e8e8;
+}
+
+.agent-dev-console {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.agent-dev-console pre {
+  margin: 0;
+  font-size: 10px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.agent-intent-tag {
+  font-size: 10px;
+  font-weight: 400;
+  margin-left: 8px;
+  background: rgba(255,255,255,0.25);
+  padding: 1px 6px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.agent-actions {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0,0,0,0.08);
+}
+
+.agent-action-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.agent-action-btn {
+  padding: 5px 12px;
+  border: 1.5px solid #7c4dff;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #fff;
+  color: #7c4dff;
+  transition: all 0.15s;
+  position: relative;
+}
+.agent-action-btn:hover {
+  background: #7c4dff;
+  color: #fff;
+}
+.agent-action-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.agent-action-status {
+  display: block;
+  font-size: 9px;
+  font-weight: 400;
+  color: #888;
+  margin-top: 2px;
+}
+
+/* ── BIPV Panel ── */
+.bipv-controls {
+  margin-bottom: 8px;
+}
+
+.bipv-ctrl-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+.bipv-ctrl-row label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #555;
+}
+.bipv-ctrl-row select,
+.bipv-ctrl-row input {
+  padding: 3px 5px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 10px;
+  background: #f8f9fa;
+}
+.bipv-ctrl-row button {
+  padding: 3px 10px;
+  border: 1px solid #00bcd4;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #00bcd4;
+  color: #fff;
+}
+.bipv-ctrl-row button:hover { background: #0097a7; }
+
+.bipv-module-info {
+  background: rgba(0,188,212,0.08);
+  border: 1px solid rgba(0,188,212,0.2);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+.bipv-module-name {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: #00838f;
+  margin-bottom: 2px;
+}
+.bipv-module-meta {
+  display: block;
+  font-size: 10px;
+  color: #555;
+  margin-bottom: 2px;
+}
+.bipv-module-desc {
+  display: block;
+  font-size: 10px;
+  color: #888;
+  font-style: italic;
+}
+
+/* ── Grid Data Platform ── */
+.grid-risk-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.grid-risk-badge {
+  padding: 2px 10px;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.grid-analyse-btn {
+  padding: 5px 14px;
+  border: none;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #607d8b;
+  color: #fff;
+  transition: background 0.15s;
+  width: 100%;
+}
+.grid-analyse-btn:hover { background: #455a64; }
+.grid-analyse-btn:disabled { opacity: 0.5; cursor: default; }
+
+.grid-sub-card {
+  background: rgba(96,125,139,0.08);
+  border: 1px solid rgba(96,125,139,0.2);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+}
+.grid-sub-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #37474f;
+  margin-bottom: 4px;
+}
+
+.grid-health-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 4px;
+}
+.grid-health-badge {
+  padding: 2px 10px;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+.grid-health-item {
+  font-size: 10px;
+  font-weight: 600;
+}

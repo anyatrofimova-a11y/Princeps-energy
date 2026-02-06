@@ -25,7 +25,32 @@ from utils.planning_energy import (
     query_energy_applications, energy_summary, applications_geojson,
     ENERGY_CATEGORIES,
 )
+from utils.uk_energy_scenario import system_scenario, site_in_national_context, capacity_sweep
+from utils.solar_inventory import (
+    generate_site_bom, repository_stock, check_bom_availability,
+    catalogue_summary, setup_inventory_table, REPOSITORIES as SOLAR_REPOS,
+    SOLAR_CATALOGUE,
+)
+from utils.grid_data_platform import (
+    UK_DATA_SOURCES, UK_SUBSTATIONS,
+    find_nearest_substation as gdp_nearest_sub,
+    substations_in_radius, connection_cost_estimate,
+    dashboard_stats as gdp_dashboard_stats,
+    health_check as gdp_health_check,
+    record_metric, query_metrics,
+)
+from utils.bipv_calculator import (
+    calculate_bipv, bipv_24h_profile, bipv_annual_estimate,
+    bipv_multi_surface, bipv_catalogue, sun_position, BIPV_MODULES, SURFACE_TYPES,
+)
 from agent_claude import get_structured_agent_output
+
+# Import sibling modules (app/ directory)
+_app_dir = os.path.dirname(__file__)
+if _app_dir not in sys.path:
+    sys.path.insert(0, _app_dir)
+from agent import run_structured_agent, INTENT_PROMPTS, _default_actions
+import jobs
 from pipeline import fetch_vibe_raster, clip_and_reproject, compute_slope, generate_tiles
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
@@ -57,6 +82,15 @@ async def lifespan(_app: FastAPI):
     async with pool.acquire() as conn:
         await planning_setup(conn)
         await planning_seed(conn)
+        await setup_inventory_table(conn)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS site_layouts (
+                parcel_id UUID PRIMARY KEY,
+                layout_data JSONB NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
     yield
     await pool.close()
 
@@ -1045,6 +1079,537 @@ async def planning_energy_geojson_endpoint(
         return await applications_geojson(conn, category=category)
 
 
+# ---------------------------------------------------------------------------
+# Solar Inventory & BOM (from Amr-Namora/Solar-System-Repositories-management)
+# ---------------------------------------------------------------------------
+
+@app.get("/inventory/catalogue")
+async def inventory_catalogue():
+    """Full solar component catalogue grouped by category."""
+    return catalogue_summary()
+
+
+@app.get("/inventory/repositories")
+async def inventory_repositories():
+    """List regional solar component repositories/warehouses."""
+    return {"repositories": SOLAR_REPOS}
+
+
+@app.get("/site/{parcel_id}/bom")
+async def site_bom(
+    parcel_id: str,
+    capacity_kw: float = Query(100.0, ge=1, le=100000),
+    mount_type: str = Query("ground_fixed"),
+    include_battery: bool = Query(False),
+    battery_hours: float = Query(2.0, ge=0.5, le=8),
+):
+    """
+    Generate a Bill of Materials for a solar site.
+    Auto-sizes panels, inverters, cables, transformers, and monitoring.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    # Get site area
+    area_m2 = None
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT area_m2 FROM parcels WHERE parcel_id = $1", pid
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        if row["area_m2"]:
+            area_m2 = float(row["area_m2"])
+
+    bom = generate_site_bom(capacity_kw, area_m2, mount_type, include_battery, battery_hours)
+    bom["parcel_id"] = parcel_id
+    return bom
+
+
+@app.get("/site/{parcel_id}/bom/availability")
+async def site_bom_availability(
+    parcel_id: str,
+    capacity_kw: float = Query(100.0, ge=1, le=100000),
+    mount_type: str = Query("ground_fixed"),
+    include_battery: bool = Query(False),
+):
+    """
+    Check BOM component availability across regional repositories.
+    Shows which items are in stock, partial, or need ordering.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    # Get site location and area
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT area_m2,
+                   ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        area_m2 = float(row["area_m2"]) if row["area_m2"] else None
+        lat = float(row["lat"]) if row["lat"] else 52.0
+        lon = float(row["lon"]) if row["lon"] else -1.5
+
+    bom = generate_site_bom(capacity_kw, area_m2, mount_type, include_battery)
+    stock = repository_stock(lat, lon)
+    avail = check_bom_availability(bom["bom"], stock)
+    avail["parcel_id"] = parcel_id
+    avail["nearest_repository"] = stock[0]["name"] if stock else None
+    avail["nearest_distance_km"] = stock[0]["distance_km"] if stock else None
+    return avail
+
+
+class CustomLayoutRequest(BaseModel):
+    layout: list[dict[str, Any]]
+
+
+@app.post("/site/{parcel_id}/bom/custom")
+async def custom_bom(parcel_id: str, req: CustomLayoutRequest):
+    """Generate BOM and cost summary from a user's manual component layout."""
+    try:
+        UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    # Aggregate quantities per component
+    counts: dict[str, int] = {}
+    for item in req.layout:
+        cid = item.get("componentId", "")
+        qty = item.get("quantity", 1)
+        counts[cid] = counts.get(cid, 0) + qty
+
+    bom = []
+    total_cost = 0.0
+    total_weight = 0.0
+    for comp_id, qty in counts.items():
+        comp = next((c for c in SOLAR_CATALOGUE if c["id"] == comp_id), None)
+        if not comp:
+            continue
+        cost = comp["unit_cost_gbp"] * qty
+        weight = comp.get("weight_kg", 0) * qty
+        total_cost += cost
+        total_weight += weight
+        bom.append({
+            "component_id": comp["id"],
+            "name": comp["name"],
+            "category": comp["category"],
+            "quantity": qty,
+            "unit": comp["unit"],
+            "unit_cost_gbp": comp["unit_cost_gbp"],
+            "total_cost_gbp": round(cost, 2),
+            "total_weight_kg": round(weight, 1),
+        })
+
+    categories: dict[str, dict] = {}
+    for item in bom:
+        cat = item["category"]
+        if cat not in categories:
+            categories[cat] = {"items": [], "subtotal_gbp": 0, "subtotal_weight_kg": 0}
+        categories[cat]["items"].append(item)
+        categories[cat]["subtotal_gbp"] = round(categories[cat]["subtotal_gbp"] + item["total_cost_gbp"], 2)
+        categories[cat]["subtotal_weight_kg"] = round(categories[cat]["subtotal_weight_kg"] + item["total_weight_kg"], 1)
+
+    return {
+        "parcel_id": parcel_id,
+        "layout_item_count": len(req.layout),
+        "unique_components": len(counts),
+        "bom": bom,
+        "categories": categories,
+        "totals": {
+            "total_cost_gbp": round(total_cost, 2),
+            "total_weight_kg": round(total_weight, 1),
+            "component_count": len(bom),
+        },
+    }
+
+
+@app.post("/site/{parcel_id}/layout/save")
+async def save_layout(parcel_id: str, req: CustomLayoutRequest):
+    """Persist component layout to database."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO site_layouts (parcel_id, layout_data, updated_at)
+            VALUES ($1, $2::jsonb, NOW())
+            ON CONFLICT (parcel_id) DO UPDATE
+            SET layout_data = $2::jsonb, updated_at = NOW()
+        """, pid, json.dumps(req.layout))
+
+    return {"ok": True, "parcel_id": parcel_id, "items": len(req.layout)}
+
+
+@app.get("/site/{parcel_id}/layout")
+async def get_layout(parcel_id: str):
+    """Retrieve saved layout for a parcel."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT layout_data FROM site_layouts WHERE parcel_id = $1", pid
+        )
+
+    if not row:
+        return {"layout": []}
+    return {"layout": json.loads(row["layout_data"])}
+
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Grid Data Platform — from owen-saunders/Theridian
+# ---------------------------------------------------------------------------
+
+@app.get("/grid/data_sources")
+async def list_data_sources():
+    """List UK DNO and grid data sources."""
+    return UK_DATA_SOURCES
+
+
+@app.get("/grid/substations")
+async def list_substations(
+    lat: float = Query(None),
+    lon: float = Query(None),
+    radius_km: float = Query(50, ge=1, le=500),
+    min_voltage_kv: int = Query(0, ge=0),
+):
+    """List UK substations, optionally filtered by proximity."""
+    if lat is not None and lon is not None:
+        return substations_in_radius(lat, lon, radius_km)
+    subs = UK_SUBSTATIONS
+    if min_voltage_kv > 0:
+        subs = [s for s in subs if s["voltage_kv"] >= min_voltage_kv]
+    return subs
+
+
+@app.get("/grid/substations/nearest")
+async def nearest_substation(
+    lat: float = Query(52.5),
+    lon: float = Query(-1.5),
+    min_voltage_kv: int = Query(0),
+):
+    """Find the nearest registered UK substation."""
+    result = gdp_nearest_sub(lat, lon, min_voltage_kv)
+    if not result:
+        raise HTTPException(status_code=404, detail="No matching substation found")
+    return result
+
+
+@app.get("/grid/connection_cost")
+async def grid_connection_cost(
+    distance_km: float = Query(2.0, ge=0.1),
+    capacity_kw: float = Query(100, ge=1),
+    voltage_kv: int = Query(33),
+):
+    """Estimate grid connection cost for a solar installation."""
+    return connection_cost_estimate(distance_km, capacity_kw, voltage_kv)
+
+
+@app.get("/site/{parcel_id}/grid/connection")
+async def site_grid_connection(
+    parcel_id: str,
+    capacity_kw: float = Query(100, ge=1),
+):
+    """Full grid connection analysis for a site — nearest substation + cost estimate."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        lat = float(row["lat"]) if row["lat"] is not None else 52.5
+        lon = float(row["lon"]) if row["lon"] is not None else -1.5
+
+    nearest = gdp_nearest_sub(lat, lon)
+    nearby = substations_in_radius(lat, lon, radius_km=30)
+
+    # Determine connection voltage based on capacity
+    if capacity_kw > 5000:
+        voltage_kv = 132
+    elif capacity_kw > 500:
+        voltage_kv = 33
+    else:
+        voltage_kv = 11
+
+    cost = connection_cost_estimate(
+        nearest["distance_km"] if nearest else 5.0,
+        capacity_kw,
+        voltage_kv,
+    )
+
+    # Record metric
+    record_metric("grid_connection_query", capacity_kw,
+                  labels={"parcel_id": parcel_id})
+
+    return {
+        "parcel_id": parcel_id,
+        "location": {"lat": lat, "lon": lon},
+        "nearest_substation": nearest,
+        "nearby_substations": nearby[:5],
+        "connection_estimate": cost,
+    }
+
+
+@app.get("/grid/dashboard")
+async def grid_dashboard():
+    """Grid data platform dashboard statistics."""
+    from app.jobs import list_jobs
+    return gdp_dashboard_stats(list_jobs())
+
+
+@app.get("/grid/health")
+async def grid_health():
+    """Multi-component system health check."""
+    return await gdp_health_check(pool)
+
+
+@app.get("/grid/metrics")
+async def grid_metrics(
+    name: str = Query(None),
+    metric_type: str = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Query collected grid/system metrics."""
+    return query_metrics(name=name, metric_type=metric_type, limit=limit)
+
+
+# ---------------------------------------------------------------------------
+# BIPV (Building-Integrated Photovoltaics) — from tejas-raskar/SolarBIPV
+# ---------------------------------------------------------------------------
+
+@app.get("/bipv/catalogue")
+async def get_bipv_catalogue():
+    """Return available BIPV module types and building surface types."""
+    return bipv_catalogue()
+
+
+@app.get("/bipv/sun_position")
+async def get_sun_pos(
+    lat: float = Query(52.5),
+    lon: float = Query(-1.5),
+    date: str = Query("2025-06-21"),
+    time_minutes: int = Query(720, ge=0, le=1439),
+):
+    """Get sun altitude/azimuth for a location, date, and time."""
+    from datetime import datetime as DT, timezone as TZ
+    hours = time_minutes // 60
+    mins = time_minutes % 60
+    dt = DT(
+        *map(int, date.split("-")), hours, mins, tzinfo=TZ.utc
+    )
+    return sun_position(lat, lon, dt)
+
+
+class BIPVCalcRequest(BaseModel):
+    lat: float = 52.5
+    lon: float = -1.5
+    date: str = "2025-06-21"
+    time_minutes: int = 720
+    area_m2: float = 100.0
+    module_type: str = "mono_roof_tile"
+    surface_type: str = "pitched_roof_south"
+    shadow_factor: float | None = None
+    efficiency: float | None = None
+
+
+@app.post("/bipv/calculate")
+async def bipv_instant(body: BIPVCalcRequest):
+    """Calculate instantaneous BIPV power output."""
+    from datetime import datetime as DT, timezone as TZ
+    hours = body.time_minutes // 60
+    mins = body.time_minutes % 60
+    dt = DT(
+        *map(int, body.date.split("-")), hours, mins, tzinfo=TZ.utc
+    )
+    return calculate_bipv(
+        body.lat, body.lon, dt, body.area_m2,
+        module_type=body.module_type,
+        surface_type=body.surface_type,
+        shadow_factor=body.shadow_factor,
+        efficiency_override=body.efficiency,
+    )
+
+
+@app.get("/site/{parcel_id}/bipv/profile")
+async def bipv_profile(
+    parcel_id: str,
+    date: str = Query("2025-06-21"),
+    area_m2: float = Query(100.0),
+    module_type: str = Query("mono_roof_tile"),
+    surface_type: str = Query("pitched_roof_south"),
+):
+    """24-hour BIPV power profile for a site."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        lat = float(row["lat"]) if row["lat"] is not None else 52.5
+        lon = float(row["lon"]) if row["lon"] is not None else -1.5
+
+    profile = bipv_24h_profile(lat, lon, date, area_m2,
+                               module_type=module_type, surface_type=surface_type)
+    return {"parcel_id": parcel_id, "date": date, **profile}
+
+
+@app.get("/site/{parcel_id}/bipv/annual")
+async def bipv_annual(
+    parcel_id: str,
+    area_m2: float = Query(100.0),
+    module_type: str = Query("mono_roof_tile"),
+    surface_type: str = Query("pitched_roof_south"),
+):
+    """Annual BIPV generation estimate with financial projections."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        lat = float(row["lat"]) if row["lat"] is not None else 52.5
+        lon = float(row["lon"]) if row["lon"] is not None else -1.5
+
+    result = bipv_annual_estimate(lat, lon, area_m2,
+                                  module_type=module_type, surface_type=surface_type)
+    return {"parcel_id": parcel_id, **result}
+
+
+class MultiSurfaceRequest(BaseModel):
+    surfaces: list[dict[str, Any]]
+    module_type: str = "mono_roof_tile"
+
+
+@app.post("/site/{parcel_id}/bipv/multi_surface")
+async def bipv_multi(parcel_id: str, body: MultiSurfaceRequest):
+    """Analyse multiple building surfaces for BIPV potential."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        lat = float(row["lat"]) if row["lat"] is not None else 52.5
+        lon = float(row["lon"]) if row["lon"] is not None else -1.5
+
+    result = bipv_multi_surface(lat, lon, body.surfaces, module_type=body.module_type)
+    return {"parcel_id": parcel_id, **result}
+
+
+# ---------------------------------------------------------------------------
+# UK Energy System 2050 scenario analysis (from samvanstroud/UK-Energy-Modelling)
+# ---------------------------------------------------------------------------
+
+@app.get("/energy_system/scenario")
+async def energy_system_scenario(
+    renewable_gw: float = Query(200.0, ge=50, le=600),
+):
+    """
+    2050 UK energy system scenario for a given renewable capacity.
+    Returns generation mix, costs, storage, carbon metrics.
+    """
+    return system_scenario(renewable_gw)
+
+
+@app.get("/site/{parcel_id}/energy_system_context")
+async def site_energy_system_context(
+    parcel_id: str,
+    capacity_kw: float = Query(100.0, ge=1, le=100000),
+    renewable_gw: float = Query(200.0, ge=50, le=600),
+):
+    """
+    Place a site in the national 2050 energy system context.
+    Shows contribution to demand, solar capacity, CO2 reduction.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    # Try to get site-specific capacity factor from SAM, default to national avg
+    site_cf = 0.108
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT capacity_factor_pct FROM solar_simulations
+            WHERE parcel_id = $1 ORDER BY created_at DESC LIMIT 1
+            """,
+            pid,
+        )
+        if row and row["capacity_factor_pct"]:
+            site_cf = float(row["capacity_factor_pct"]) / 100.0
+
+    return site_in_national_context(capacity_kw, site_cf, renewable_gw)
+
+
+@app.get("/energy_system/capacity_sweep")
+async def energy_system_sweep(
+    min_gw: float = Query(100, ge=50, le=400),
+    max_gw: float = Query(400, ge=100, le=600),
+    step_gw: float = Query(50, ge=10, le=100),
+):
+    """
+    Sweep renewable capacity to show cost-generation trade-offs.
+    """
+    return {"sweep": capacity_sweep(min_gw, max_gw, step_gw)}
+
+
 def _simulated_deferral(total_load_kw: float, total_gen_kw: float) -> dict[str, dict[str, float]]:
     """Simulated network deferral when no network_nodes table exists."""
     import random
@@ -1395,3 +1960,197 @@ async def site_positioning(parcel_id: str, body: ParcelContext):
     except Exception as e:
         logging.getLogger(__name__).exception("positioning failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Enhanced agentic analysis — intent-based with structured actions
+# ---------------------------------------------------------------------------
+
+class AgentRequest(BaseModel):
+    intent: str = "feasibility"
+    capacity_kw: float = 100.0
+    day_of_year: int = 172
+    notes: str = ""
+
+
+@app.post("/site/{parcel_id}/agent")
+async def enhanced_agent(parcel_id: str, body: AgentRequest):
+    """
+    Intent-based agentic analysis using Claude with structured output.
+    Returns verdict, confidence, risks, opportunities, next_steps, and
+    actionable endpoint suggestions.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    if body.intent not in INTENT_PROMPTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown intent '{body.intent}'. Valid: {list(INTENT_PROMPTS.keys())}",
+        )
+
+    # Gather context (reuse existing helpers)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon,
+                   area_m2
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        lat = float(row["lat"]) if row["lat"] is not None else 52.5
+        lon = float(row["lon"]) if row["lon"] is not None else -1.5
+        area_m2 = float(row["area_m2"]) if row["area_m2"] else None
+
+        context = await fetch_parcel_context(pid, conn)
+        geojson_row = await conn.fetchrow(
+            "SELECT ST_AsGeoJSON(geometry) AS geojson FROM parcels WHERE parcel_id = $1", pid
+        )
+        geojson = geojson_row["geojson"] if geojson_row else "{}"
+        slope_stats = await fetch_slope_stats(conn, geojson)
+
+    # SAM + ML
+    sam_result = None
+    ml_result = None
+    try:
+        sam_result = await run_sam_subprocess(lat, lon, body.capacity_kw)
+    except Exception:
+        pass
+    try:
+        ml_result = ml_predict_24h(lat, lon, body.day_of_year, body.capacity_kw)
+    except Exception:
+        pass
+
+    agent_context = {
+        "parcel_id": parcel_id,
+        "intent": body.intent,
+        "location": {"lat": lat, "lon": lon},
+        "area_m2": area_m2,
+        "feasibility_score": context.get("score_total"),
+        "score_components": context.get("score_components"),
+        "overlays": context.get("overlays"),
+        "mean_slope_deg": context.get("mean_slope_deg"),
+        "slope_stats": slope_stats,
+        "nearest_substation": context.get("nearest_substation"),
+        "sam_physics": {
+            "annual_energy_kwh": sam_result.get("annual_energy_kwh") if sam_result else None,
+            "capacity_factor_pct": sam_result.get("capacity_factor_pct") if sam_result else None,
+            "monthly_energy_kwh": sam_result.get("monthly_energy_kwh") if sam_result else None,
+        } if sam_result else None,
+        "ml_prediction": {
+            "daily_total_kwh": ml_result.get("daily_total_kwh") if ml_result else None,
+            "annual_estimate_kwh": ml_result.get("annual_estimate_kwh") if ml_result else None,
+        } if ml_result else None,
+        "capacity_kw": body.capacity_kw,
+        "notes": body.notes,
+    }
+
+    try:
+        agent_output = await run_structured_agent(
+            client=claude,
+            model=CLAUDE_MODEL,
+            context=agent_context,
+            intent=body.intent,
+        )
+    except Exception:
+        # Deterministic fallback
+        agent_output = _deterministic_agent(agent_context)
+        agent_output["intent"] = body.intent
+        agent_output["actions"] = _default_actions(body.intent, agent_context)
+
+    return {
+        "parcel_id": parcel_id,
+        "intent": body.intent,
+        "context": agent_context,
+        "agent": agent_output,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Background jobs — grid study, optimisation, etc.
+# ---------------------------------------------------------------------------
+
+class GridStudyRequest(BaseModel):
+    parcel_id: str
+    capacity_kw: float = 100.0
+
+
+@app.post("/job/grid_study")
+async def start_grid_study(body: GridStudyRequest):
+    """Submit a background grid connection study job."""
+
+    async def _run_grid_study(parcel_id: str, capacity_kw: float):
+        """Heavy grid study coroutine — runs SAM, deferral, and grid context."""
+        try:
+            pid = UUID(parcel_id)
+        except ValueError:
+            return {"error": "Invalid parcel_id"}
+
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                       ST_X(ST_Transform(centroid, 4326)) AS lon
+                FROM parcels WHERE parcel_id = $1
+                """,
+                pid,
+            )
+            if not row:
+                return {"error": "Parcel not found"}
+            lat = float(row["lat"]) if row["lat"] is not None else 52.5
+            lon = float(row["lon"]) if row["lon"] is not None else -1.5
+            context = await fetch_parcel_context(pid, conn)
+
+        # Run SAM
+        sam_result = None
+        try:
+            sam_result = await run_sam_subprocess(lat, lon, capacity_kw)
+        except Exception:
+            pass
+
+        # Grid context
+        grid = full_grid_context(172)
+
+        # Deferral
+        load_mw = capacity_kw / 1000
+        gen_mw = capacity_kw / 1000
+        try:
+            async with pool.acquire() as conn:
+                alloc = await greedy_allocate(conn, load_mw * 1000, gen_mw * 1000)
+        except Exception:
+            alloc = _simulated_deferral(load_mw * 1000, gen_mw * 1000)
+
+        return {
+            "parcel_id": parcel_id,
+            "capacity_kw": capacity_kw,
+            "sam": sam_result,
+            "grid_context": grid,
+            "deferral": alloc,
+            "substation": context.get("nearest_substation"),
+        }
+
+    job = await jobs.submit(
+        "grid_study", _run_grid_study, body.parcel_id, body.capacity_kw
+    )
+    return {"job_id": job.id, "status": job.status.value}
+
+
+@app.get("/job/{job_id}")
+async def get_job_status(job_id: str):
+    """Poll a background job for status and results."""
+    job = jobs.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job.to_dict()
+
+
+@app.get("/jobs")
+async def list_all_jobs(kind: str = None, limit: int = 50):
+    """List recent jobs, optionally filtered by kind."""
+    return jobs.list_jobs(kind=kind, limit=limit)
