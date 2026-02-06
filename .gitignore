@@ -17,6 +17,9 @@ GBDEM/
 uk-electricity-demand-risk/
 Machine-Learning-for-Solar-Energy-Prediction/
 PlaceBasedCarbonCalculator/
+PlaceBasedCarbonCalculator-inputdata/
+pbcc-site/
+EPC/
 
 # Data
 data/

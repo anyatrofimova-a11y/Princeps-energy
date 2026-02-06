@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import MapView from "./components/MapView";
 import ThreeView from "./components/ThreeView";
+import EPCSummary from "./components/EPCSummary";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -39,9 +40,18 @@ export default function App() {
   const [pickMode, setPickMode] = useState(false);
   const [pickedLocation, setPickedLocation] = useState(null);
 
+  // EPC / Retrofit state
+  const [selectedLsoa, setSelectedLsoa] = useState(null);
+
+  // EPC layer field selectors
+  const [epcZonesField, setEpcZonesField] = useState("epc_score_avg");
+  const [epcDomField, setEpcDomField] = useState("cur_rate");
+  const [epcNondomField, setEpcNondomField] = useState("band");
+  const [postcodesField, setPostcodesField] = useState("combined");
+
   // Overlay panel visibility
   const [panels, setPanels] = useState({
-    score: true, solar: false, terrain: false, agent: false, deferral: false,
+    score: true, solar: false, terrain: false, agent: false, deferral: false, epc: false,
   });
   const togglePanel = useCallback((id) => {
     setPanels(p => ({ ...p, [id]: !p[id] }));
@@ -50,9 +60,16 @@ export default function App() {
   // Layer visibility
   const [layers, setLayers] = useState({
     slope: true, carbon: false, la: false, transport: false, hillshade: true,
+    epcZones: false, epcDom: false, epcNondom: false, postcodes: false,
   });
   const toggleLayer = useCallback((id) => {
     setLayers(l => ({ ...l, [id]: !l[id] }));
+  }, []);
+
+  // Handle zone click → show EPC summary for neighbourhood
+  const handleZoneClick = useCallback((lsoaId) => {
+    setSelectedLsoa(lsoaId);
+    setPanels(p => ({ ...p, epc: true }));
   }, []);
 
   // Handle map click in pick mode → create parcel → run analysis
@@ -145,7 +162,9 @@ export default function App() {
     <div className="app-fullscreen">
       {/* ── Map fills viewport ── */}
       <MapView slopeOpacity={slopeOpacity} layers={layers}
-        pickMode={pickMode} onPick={handleMapPick} pickedLocation={pickedLocation} />
+        pickMode={pickMode} onPick={handleMapPick} pickedLocation={pickedLocation}
+        onZoneClick={handleZoneClick}
+        epcFields={{ epcZones: epcZonesField, epcDom: epcDomField, epcNondom: epcNondomField, postcodes: postcodesField }} />
 
       {/* ── Top bar ── */}
       <div className="topbar">
@@ -210,6 +229,83 @@ export default function App() {
               onChange={(e) => setSlopeOpacity(parseFloat(e.target.value))}
               style={{ width: "100%" }} />
           </div>
+        )}
+
+        <div className="layer-divider" />
+        <div className="layer-title">EPC / Retrofit</div>
+
+        <label className="layer-item">
+          <input type="checkbox" checked={layers.epcZones} onChange={() => toggleLayer("epcZones")} />
+          <span className="layer-dot" style={{ background: "#1a9850" }} />
+          Neighbourhoods
+        </label>
+        {layers.epcZones && (
+          <select className="layer-select" value={epcZonesField} onChange={(e) => setEpcZonesField(e.target.value)}>
+            <option value="epc_score_avg">Avg EPC Score</option>
+            <option value="floor_area_avg">Avg Floor Area</option>
+            <option value="modal_age">Building Age</option>
+            <option value="modal_wall">Wall Rating</option>
+            <option value="modal_roof">Roof Rating</option>
+            <option value="modal_heat">Heating Rating</option>
+            <option value="modal_window">Window Rating</option>
+            <option value="modal_mainheat">Heating Type</option>
+            <option value="modal_mainfuel">Fuel Type</option>
+            <option value="modal_floord">Floor Type</option>
+            <option value="modal_type">Building Type</option>
+            <option value="percent_EPC">% with EPC</option>
+          </select>
+        )}
+
+        <label className="layer-item">
+          <input type="checkbox" checked={layers.epcDom} onChange={() => toggleLayer("epcDom")} />
+          <span className="layer-dot" style={{ background: "#0e7e58" }} />
+          Domestic EPC
+        </label>
+        {layers.epcDom && (
+          <select className="layer-select" value={epcDomField} onChange={(e) => setEpcDomField(e.target.value)}>
+            <option value="cur_rate">EPC Rating</option>
+            <option value="b_type">Building Type</option>
+            <option value="p_type">Property Type</option>
+            <option value="age">Building Age</option>
+            <option value="year">Last Assessed</option>
+            <option value="area">Floor Area</option>
+            <option value="floor_ee">Floor Rating</option>
+            <option value="water_ee">Hot Water Rating</option>
+            <option value="wind_ee">Window Rating</option>
+            <option value="wall_ee">Wall Rating</option>
+            <option value="roof_ee">Roof Rating</option>
+            <option value="heat_ee">Heating Rating</option>
+            <option value="con_ee">Controls Rating</option>
+            <option value="light_ee">Lighting Rating</option>
+            <option value="sol_wat">Solar Thermal</option>
+          </select>
+        )}
+
+        <label className="layer-item">
+          <input type="checkbox" checked={layers.epcNondom} onChange={() => toggleLayer("epcNondom")} />
+          <span className="layer-dot" style={{ background: "#f6cc15" }} />
+          Non-Domestic EPC
+        </label>
+        {layers.epcNondom && (
+          <select className="layer-select" value={epcNondomField} onChange={(e) => setEpcNondomField(e.target.value)}>
+            <option value="band">Rating Band</option>
+            <option value="transaction">Transaction Type</option>
+            <option value="area">Floor Area</option>
+            <option value="year">Last Assessed</option>
+          </select>
+        )}
+
+        <label className="layer-item">
+          <input type="checkbox" checked={layers.postcodes} onChange={() => toggleLayer("postcodes")} />
+          <span className="layer-dot" style={{ background: "#4575b4" }} />
+          Postcodes Energy
+        </label>
+        {layers.postcodes && (
+          <select className="layer-select" value={postcodesField} onChange={(e) => setPostcodesField(e.target.value)}>
+            <option value="combined">Combined Emissions</option>
+            <option value="gas">Gas Emissions</option>
+            <option value="elec">Electricity Emissions</option>
+          </select>
         )}
       </div>
 
@@ -329,6 +425,11 @@ export default function App() {
               </table>
             </div>
           ) : <span className="muted">Click Run</span>}
+        </Overlay>
+
+        <Overlay id="epc" title={`EPC Retrofit${selectedLsoa ? ` — ${selectedLsoa}` : ""}`} open={panels.epc}
+          onToggle={togglePanel} position="right" color="#1a9850">
+          <EPCSummary lsoaId={selectedLsoa} />
         </Overlay>
       </div>
 
