@@ -3,3 +3,6 @@ uvicorn>=0.32
 asyncpg>=0.30
 anthropic>=0.40
 pydantic>=2.0
+requests>=2.31
+jsonschema>=4.20
+rasterio>=1.3

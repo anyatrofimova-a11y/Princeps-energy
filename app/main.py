@@ -17,6 +17,8 @@ import asyncpg
 # Allow importing from project root (for utils/)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.deferral import greedy_allocate, store_allocations
+from agent_claude import get_structured_agent_output
+from pipeline import fetch_vibe_raster, clip_and_reproject, compute_slope, generate_tiles
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel
@@ -673,3 +675,85 @@ async def run_deferral_optimizer(
         "total_gen_kw": total_gen_kw,
         "allocations": alloc,
     }
+
+
+# ---------------------------------------------------------------------------
+# VIBE pipeline + Claude agent positioning
+# ---------------------------------------------------------------------------
+
+class ParcelContext(BaseModel):
+    parcel_id: str
+    bbox_27700: list  # [minx, miny, maxx, maxy]
+    notes: str = ""
+
+
+@app.post("/site/{parcel_id}/positioning")
+async def site_positioning(parcel_id: str, body: ParcelContext):
+    """
+    Run ingestion (optional) and ask Claude to position the parcel.
+    Returns the validated JSON from the agent.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    try:
+        # 1) Optionally fetch VIBE DEM for the parcel and produce slope tiles
+        out_dir = os.environ.get("DATA_DIR", "/tmp/feasi_data")
+        dem_raw = os.path.join(out_dir, f"{parcel_id}_raw.tif")
+        dem_clipped = os.path.join(out_dir, f"{parcel_id}_dem_27700.tif")
+        slope_tif = os.path.join(out_dir, f"{parcel_id}_slope.tif")
+        tiles_dir = os.path.join(out_dir, "tiles", parcel_id)
+
+        # Example fetch; uncomment when VIBE endpoint is configured
+        # fetch_vibe_raster("DEM", body.bbox_27700, dem_raw)
+        # clip_and_reproject(dem_raw, dem_clipped, body.bbox_27700)
+        # compute_slope(dem_clipped, slope_tif)
+        # generate_tiles(slope_tif, tiles_dir)
+
+        # 2) Collect structured context from existing DB helpers
+        async with pool.acquire() as conn:
+            db_context = await fetch_parcel_context(pid, conn)
+            slope_stats = await fetch_slope_stats(
+                conn, (await conn.fetchval(
+                    "SELECT ST_AsGeoJSON(geometry) FROM parcels WHERE parcel_id = $1", pid
+                )) or "{}"
+            )
+
+        context = {
+            "parcel_id": parcel_id,
+            "terrain": {
+                "mean_slope_deg": db_context.get("mean_slope_deg"),
+                "std_slope_deg": slope_stats["stddev"] if slope_stats else None,
+                "max_slope_deg": slope_stats["max"] if slope_stats else None,
+            },
+            "solar_resource": {
+                "ghi_annual_kwh_m2": None,  # populate from SAM or external source
+                "dni": None,
+            },
+            "grid": {
+                "nearest_substation_km": db_context["nearest_substation"]["distance_km"],
+                "headroom_kw": db_context["nearest_substation"]["capacity_kw"],
+            },
+            "overlays": {
+                "flood_risk": "FloodZone:YES" in db_context.get("overlays", []),
+                "protected_area": (
+                    "AONB:YES" in db_context.get("overlays", [])
+                    or "SSSI:YES" in db_context.get("overlays", [])
+                ),
+            },
+            "score": db_context.get("score_total"),
+            "score_components": db_context.get("score_components"),
+            "notes": body.notes or "",
+        }
+
+        # 3) Ask Claude agent for a positioning recommendation
+        agent_output = get_structured_agent_output(context)
+        return {"ok": True, "agent": agent_output}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.getLogger(__name__).exception("positioning failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
