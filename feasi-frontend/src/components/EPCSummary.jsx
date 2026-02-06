@@ -36,27 +36,41 @@ function PieChart({ id, data, labels, colours }) {
   );
 }
 
-export default function EPCSummary({ lsoaId }) {
+export default function EPCSummary({ lsoaId, parcelId }) {
   const [data, setData] = React.useState(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
 
   useEffect(() => {
-    if (!lsoaId) return;
-    setLoading(true);
-    setError(null);
-    fetch(`${PBCC_DATA}/epc_dom/v3/${encodeURIComponent(lsoaId)}.json`)
-      .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then((json) => { setData(json[0] || json); setLoading(false); })
-      .catch((err) => { setError(err.message); setLoading(false); });
-  }, [lsoaId]);
+    // Try PBCC data first (if LSOA zone clicked), fall back to simulated endpoint
+    if (lsoaId) {
+      setLoading(true);
+      setError(null);
+      fetch(`${PBCC_DATA}/epc_dom/v3/${encodeURIComponent(lsoaId)}.json`)
+        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+        .then((json) => { setData(json[0] || json); setLoading(false); })
+        .catch((err) => { setError(err.message); setLoading(false); });
+    } else if (parcelId) {
+      setLoading(true);
+      setError(null);
+      fetch(`/site/${encodeURIComponent(parcelId)}/epc_summary`)
+        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+        .then((json) => { setData(json); setLoading(false); })
+        .catch((err) => { setError(err.message); setLoading(false); });
+    }
+  }, [lsoaId, parcelId]);
 
   if (loading) return <span className="muted">Loading EPC data...</span>;
   if (error) return <span className="muted">EPC data unavailable</span>;
-  if (!data) return <span className="muted">Click a neighbourhood zone to view EPC summary</span>;
+  if (!data) return <span className="muted">Analyse a site to view EPC summary</span>;
 
   return (
     <div className="epc-summary">
+      {data.total_properties && (
+        <div className="stat-inline" style={{ marginBottom: 8 }}>
+          <strong>{data.total_properties}</strong> properties | Avg EPC score: <strong>{data.epc_score_avg}</strong>
+        </div>
+      )}
       <div className="epc-section">
         <div className="section-label">EPC Ratings</div>
         <PieChart id="epc-rating"

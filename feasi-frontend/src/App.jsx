@@ -28,6 +28,7 @@ export default function App() {
   const [deferral, setDeferral] = useState(null);
   const [energyPrice, setEnergyPrice] = useState(null);
   const [gridContext, setGridContext] = useState(null);
+  const [planningApps, setPlanningApps] = useState(null);
   const [agentResult, setAgentResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
@@ -53,7 +54,7 @@ export default function App() {
 
   // Overlay panel visibility
   const [panels, setPanels] = useState({
-    score: true, solar: false, terrain: false, agent: false, deferral: false, epc: false, price: false, grid: false,
+    score: true, solar: false, terrain: false, agent: false, deferral: false, epc: false, price: false, grid: false, planning: false,
   });
   const togglePanel = useCallback((id) => {
     setPanels(p => ({ ...p, [id]: !p[id] }));
@@ -106,7 +107,7 @@ export default function App() {
     if (!id) return;
     setLoading(true);
     try {
-      const [hmRes, exRes, ssRes, syRes, shRes, mlRes, epRes, grRes] = await Promise.allSettled([
+      const [hmRes, exRes, ssRes, syRes, shRes, mlRes, epRes, grRes, plRes] = await Promise.allSettled([
         fetch(`/site/${encodeURIComponent(id)}/heightmap?size=64`),
         fetch(`/site/${encodeURIComponent(id)}/explain`),
         fetch(`/site/${encodeURIComponent(id)}/slope_stats`),
@@ -115,6 +116,7 @@ export default function App() {
         fetch(`/site/${encodeURIComponent(id)}/solar_yield_ml?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
         fetch(`/site/${encodeURIComponent(id)}/energy_price?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
         fetch(`/site/${encodeURIComponent(id)}/grid_context?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
+        fetch(`/planning/energy/summary`),
       ]);
       setHeightmap(await safeJson(hmRes));
       setExplain(await safeJson(exRes));
@@ -124,7 +126,10 @@ export default function App() {
       setMlSolar(await safeJson(mlRes));
       setEnergyPrice(await safeJson(epRes));
       setGridContext(await safeJson(grRes));
+      setPlanningApps(await safeJson(plRes));
       setPanels(p => ({ ...p, score: true }));
+      // Auto-run deferral with current params
+      runDeferral();
     } catch (err) {
       console.error(err);
     } finally {
@@ -422,10 +427,15 @@ export default function App() {
           {deferral ? (
             <div className="deferral-table-wrap">
               <table className="deferral-table">
-                <thead><tr><th>Node</th><th>Load kW</th><th>Gen kW</th></tr></thead>
+                <thead><tr><th>Node</th><th>Capacity</th><th>Load kW</th><th>Gen kW</th></tr></thead>
                 <tbody>
                   {Object.entries(deferral.allocations || {}).map(([nid, a]) => (
-                    <tr key={nid}><td>{nid}</td><td>{a.load_kw?.toFixed(1)}</td><td>{a.gen_kw?.toFixed(1)}</td></tr>
+                    <tr key={nid}>
+                      <td>{nid}</td>
+                      <td>{a.capacity_kw ? `${(a.capacity_kw/1000).toFixed(0)} MVA` : "—"}</td>
+                      <td>{a.load_kw?.toFixed(1)}</td>
+                      <td>{a.gen_kw?.toFixed(1)}</td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -435,7 +445,7 @@ export default function App() {
 
         <Overlay id="epc" title={`EPC Retrofit${selectedLsoa ? ` — ${selectedLsoa}` : ""}`} open={panels.epc}
           onToggle={togglePanel} position="right" color="#1a9850">
-          <EPCSummary lsoaId={selectedLsoa} />
+          <EPCSummary lsoaId={selectedLsoa} parcelId={parcelId} />
         </Overlay>
 
         <Overlay id="price" title="Energy Price Forecast" open={panels.price}
@@ -547,6 +557,60 @@ export default function App() {
                     })}
                   </div>
                   <div className="bar-labels">{MONTHS.map(m => <span key={m}>{m[0]}</span>)}</div>
+                </>
+              )}
+            </div>
+          ) : <span className="muted">Click Analyse</span>}
+        </Overlay>
+
+        <Overlay id="planning" title="Energy Planning Apps" open={panels.planning}
+          onToggle={togglePanel} position="right" color="#e91e63">
+          {planningApps ? (
+            <div>
+              <div className="stat-grid">
+                <div>Total: <strong>{planningApps.total_applications}</strong> apps</div>
+                <div>Capacity: <strong>{planningApps.total_capacity_mw?.toLocaleString()} MW</strong></div>
+              </div>
+              {planningApps.by_category && (
+                <>
+                  <div className="section-label">By Category</div>
+                  <div className="planning-cats">
+                    {Object.entries(planningApps.by_category).map(([cat, count]) => (
+                      <div key={cat} className="planning-cat-item">
+                        <span className="planning-cat-name">{cat.replace(/_/g, " ")}</span>
+                        <span className="planning-cat-count">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {planningApps.by_status && (
+                <>
+                  <div className="section-label">By Status</div>
+                  <div className="planning-cats">
+                    {Object.entries(planningApps.by_status).map(([status, count]) => (
+                      <div key={status} className="planning-cat-item">
+                        <span className="planning-cat-name">{status}</span>
+                        <span className="planning-cat-count">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {planningApps.by_decision && (
+                <>
+                  <div className="section-label">By Decision</div>
+                  <div className="planning-cats">
+                    {Object.entries(planningApps.by_decision).map(([dec, count]) => (
+                      <div key={dec} className="planning-cat-item">
+                        <span className="planning-cat-name">{dec}</span>
+                        <span className="planning-cat-count"
+                          style={{ background: dec === "Granted" ? "#4caf50" : dec === "Refused" ? "#f44336" : "#ff9800" }}>
+                          {count}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </>
               )}
             </div>
