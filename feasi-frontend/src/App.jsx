@@ -27,6 +27,7 @@ export default function App() {
   const [mlSolar, setMlSolar] = useState(null);
   const [deferral, setDeferral] = useState(null);
   const [energyPrice, setEnergyPrice] = useState(null);
+  const [gridContext, setGridContext] = useState(null);
   const [agentResult, setAgentResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
@@ -52,7 +53,7 @@ export default function App() {
 
   // Overlay panel visibility
   const [panels, setPanels] = useState({
-    score: true, solar: false, terrain: false, agent: false, deferral: false, epc: false, price: false,
+    score: true, solar: false, terrain: false, agent: false, deferral: false, epc: false, price: false, grid: false,
   });
   const togglePanel = useCallback((id) => {
     setPanels(p => ({ ...p, [id]: !p[id] }));
@@ -105,7 +106,7 @@ export default function App() {
     if (!id) return;
     setLoading(true);
     try {
-      const [hmRes, exRes, ssRes, syRes, shRes, mlRes, epRes] = await Promise.allSettled([
+      const [hmRes, exRes, ssRes, syRes, shRes, mlRes, epRes, grRes] = await Promise.allSettled([
         fetch(`/site/${encodeURIComponent(id)}/heightmap?size=64`),
         fetch(`/site/${encodeURIComponent(id)}/explain`),
         fetch(`/site/${encodeURIComponent(id)}/slope_stats`),
@@ -113,6 +114,7 @@ export default function App() {
         fetch(`/site/${encodeURIComponent(id)}/solar_hourly?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
         fetch(`/site/${encodeURIComponent(id)}/solar_yield_ml?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
         fetch(`/site/${encodeURIComponent(id)}/energy_price?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
+        fetch(`/site/${encodeURIComponent(id)}/grid_context?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
       ]);
       setHeightmap(await safeJson(hmRes));
       setExplain(await safeJson(exRes));
@@ -121,6 +123,7 @@ export default function App() {
       setSolarHourly(await safeJson(shRes));
       setMlSolar(await safeJson(mlRes));
       setEnergyPrice(await safeJson(epRes));
+      setGridContext(await safeJson(grRes));
       setPanels(p => ({ ...p, score: true }));
     } catch (err) {
       console.error(err);
@@ -473,6 +476,77 @@ export default function App() {
                     <div>Annual (market): <strong>GBP {energyPrice.revenue.annual_market_estimate_gbp?.toLocaleString()}</strong></div>
                     <div>Annual (fixed): <strong>GBP {energyPrice.revenue.annual_fixed_estimate_gbp?.toLocaleString()}</strong></div>
                   </div>
+                </>
+              )}
+            </div>
+          ) : <span className="muted">Click Analyse</span>}
+        </Overlay>
+
+        <Overlay id="grid" title="UK Grid Context" open={panels.grid}
+          onToggle={togglePanel} position="right" color="#00bcd4">
+          {gridContext ? (
+            <div>
+              <div className="stat-grid">
+                <div>Records: <strong>{gridContext.summary?.records?.toLocaleString()}</strong></div>
+                <div>Range: <strong>{gridContext.summary?.date_range?.[0]} to {gridContext.summary?.date_range?.[1]}</strong></div>
+              </div>
+              <div className="stat-grid">
+                <div>Avg demand: <strong>{gridContext.demand?.daily_avg?.toLocaleString()} MW</strong></div>
+                <div>Peak: <strong>{gridContext.demand?.peak_demand?.toLocaleString()} MW</strong> at {gridContext.demand?.peak_hour}:00</div>
+              </div>
+              <div className="section-label">24h Demand (MW) — day {gridContext.demand?.day_of_year}</div>
+              <div className="bar-chart small">
+                {gridContext.demand?.hourly_demand_mw?.map((v, i) => {
+                  const max = Math.max(...gridContext.demand.hourly_demand_mw) || 1;
+                  return <div key={i} className="bar" title={`${i}:00 ${v.toLocaleString()} MW`}
+                    style={{ height: `${(v/max)*100}%`, background: "#00bcd4", minHeight: 2 }} />;
+                })}
+              </div>
+              <div className="section-label">Embedded Solar (avg MW by hour)</div>
+              <div className="bar-chart small">
+                {gridContext.solar_generation?.hourly?.avg_solar_mw?.map((v, i) => {
+                  const max = Math.max(...gridContext.solar_generation.hourly.avg_solar_mw) || 1;
+                  return <div key={i} className="bar" title={`${i}:00 ${v} MW`}
+                    style={{ height: `${max > 0 ? (v/max)*100 : 0}%`, background: "#ff9800", minHeight: v > 0 ? 2 : 1 }} />;
+                })}
+              </div>
+              <div className="section-label">Curtailment Risk (0-1)</div>
+              <div className="bar-chart small">
+                {gridContext.curtailment?.hourly_risk?.map((v, i) => {
+                  return <div key={i} className="bar" title={`${i}:00 risk ${(v*100).toFixed(1)}%`}
+                    style={{ height: `${v*100}%`, background: v > 0.5 ? "#f44336" : v > 0.25 ? "#ff9800" : "#4caf50", minHeight: v > 0 ? 2 : 1 }} />;
+                })}
+              </div>
+              <div className="stat-grid">
+                <div>Avg risk: <strong>{(gridContext.curtailment?.avg_risk * 100)?.toFixed(1)}%</strong></div>
+                <div>Peak: <strong>{(gridContext.curtailment?.peak_risk * 100)?.toFixed(1)}%</strong> at {gridContext.curtailment?.peak_risk_hour}:00</div>
+              </div>
+              {gridContext.weather && (
+                <>
+                  <div className="section-label">Weather (day {gridContext.weather.day_of_year})</div>
+                  <div className="stat-grid three">
+                    <div>Temp: {gridContext.weather.temp_avg}C</div>
+                    <div>Cloud: {gridContext.weather.cloud_cover}%</div>
+                    <div>Solar: {gridContext.weather.solar_radiation} W/m2</div>
+                  </div>
+                  <div className="stat-grid three">
+                    <div>Wind: {gridContext.weather.wind_speed} km/h</div>
+                    <div>UV: {gridContext.weather.uv_index}</div>
+                    <div>Sun: {gridContext.weather.sunshine_hours}h</div>
+                  </div>
+                </>
+              )}
+              {gridContext.solar_generation?.monthly?.avg_solar_mw && (
+                <>
+                  <div className="section-label">Solar Generation by Month (avg MW)</div>
+                  <div className="bar-chart">
+                    {gridContext.solar_generation.monthly.avg_solar_mw.map((v, i) => {
+                      const max = Math.max(...gridContext.solar_generation.monthly.avg_solar_mw) || 1;
+                      return <div key={i} className="bar" title={`${MONTHS[i]}: ${v} MW`}
+                        style={{ height: `${(v/max)*100}%`, background: "#ff9800" }} />;
+                    })}
+                  </div>
+                  <div className="bar-labels">{MONTHS.map(m => <span key={m}>{m[0]}</span>)}</div>
                 </>
               )}
             </div>

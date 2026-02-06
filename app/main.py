@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.deferral import greedy_allocate, store_allocations
 from utils.ml_solar_predictor import predict_24h as ml_predict_24h, train_model as ml_train_model
 from utils.energy_price_forecast import predict_24h as price_predict_24h, estimate_revenue, train_model as price_train_model
+from utils.uk_grid_analysis import full_grid_context, demand_for_day, curtailment_risk
 from agent_claude import get_structured_agent_output
 from pipeline import fetch_vibe_raster, clip_and_reproject, compute_slope, generate_tiles
 from fastapi import FastAPI, HTTPException, Query
@@ -816,6 +817,55 @@ async def energy_price_forecast(
         "price": price_result,
         "revenue": revenue,
     }
+
+
+# ---------------------------------------------------------------------------
+# UK Grid context (from CarlosYazid/Energy-UK)
+# ---------------------------------------------------------------------------
+
+@app.get("/grid/context")
+async def grid_context(
+    day_of_year: int = Query(172, ge=1, le=365),
+):
+    """
+    UK grid demand, embedded generation, weather, and curtailment risk
+    for a given day of year. Based on 15 years of half-hourly grid data.
+    """
+    return full_grid_context(day_of_year)
+
+
+@app.get("/site/{parcel_id}/grid_context")
+async def site_grid_context(
+    parcel_id: str,
+    day_of_year: int = Query(172, ge=1, le=365),
+    capacity_kw: float = Query(100.0, ge=1, le=100000),
+):
+    """
+    Grid context with site-specific curtailment and demand impact analysis.
+    Combines national grid data with parcel solar output.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    ctx = full_grid_context(day_of_year)
+
+    # Add site-specific data: what fraction of demand this site meets
+    demand_profile = ctx["demand"]["hourly_demand_mw"]
+    site_mw = capacity_kw / 1000.0
+    site_pct_of_grid = [
+        round(site_mw / max(d, 1) * 100, 6)
+        for d in demand_profile
+    ]
+    ctx["site"] = {
+        "parcel_id": parcel_id,
+        "capacity_kw": capacity_kw,
+        "capacity_mw": round(site_mw, 3),
+        "pct_of_grid_demand": site_pct_of_grid,
+    }
+
+    return ctx
 
 
 # ---------------------------------------------------------------------------
