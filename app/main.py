@@ -18,6 +18,7 @@ import asyncpg
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from utils.deferral import greedy_allocate, store_allocations
 from utils.ml_solar_predictor import predict_24h as ml_predict_24h, train_model as ml_train_model
+from utils.energy_price_forecast import predict_24h as price_predict_24h, estimate_revenue, train_model as price_train_model
 from agent_claude import get_structured_agent_output
 from pipeline import fetch_vibe_raster, clip_and_reproject, compute_slope, generate_tiles
 from fastapi import FastAPI, HTTPException, Query
@@ -762,6 +763,59 @@ async def solar_yield_ml(
         return result
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Energy price forecast (XGBoost, from Perrupi/energy-price-forecast)
+# ---------------------------------------------------------------------------
+
+@app.get("/site/{parcel_id}/energy_price")
+async def energy_price_forecast(
+    parcel_id: str,
+    capacity_kw: float = Query(100.0, ge=1, le=100000),
+    day_of_year: int = Query(172, ge=1, le=365),
+):
+    """
+    Forecast 24h UK day-ahead electricity prices and estimate solar revenue.
+    Combines XGBoost price model with SAM/ML solar output for the site.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        lat = float(row["lat"]) if row["lat"] is not None else 52.5
+
+    # Get price forecast
+    price_result = price_predict_24h(day_of_year=day_of_year, lat=lat)
+
+    # Get solar output for revenue calculation
+    try:
+        solar_result = ml_predict_24h(lat, -1.5, day_of_year, capacity_kw)
+        solar_hourly = solar_result.get("hourly_kwh", [0] * 24)
+    except Exception:
+        solar_hourly = [0] * 24
+
+    # Calculate revenue
+    revenue = estimate_revenue(solar_hourly, price_result["hourly_price_gbp"])
+
+    return {
+        "parcel_id": parcel_id,
+        "day_of_year": day_of_year,
+        "price": price_result,
+        "revenue": revenue,
+    }
 
 
 # ---------------------------------------------------------------------------

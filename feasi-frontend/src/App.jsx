@@ -26,6 +26,7 @@ export default function App() {
   const [solarHourly, setSolarHourly] = useState(null);
   const [mlSolar, setMlSolar] = useState(null);
   const [deferral, setDeferral] = useState(null);
+  const [energyPrice, setEnergyPrice] = useState(null);
   const [agentResult, setAgentResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
@@ -51,7 +52,7 @@ export default function App() {
 
   // Overlay panel visibility
   const [panels, setPanels] = useState({
-    score: true, solar: false, terrain: false, agent: false, deferral: false, epc: false,
+    score: true, solar: false, terrain: false, agent: false, deferral: false, epc: false, price: false,
   });
   const togglePanel = useCallback((id) => {
     setPanels(p => ({ ...p, [id]: !p[id] }));
@@ -104,13 +105,14 @@ export default function App() {
     if (!id) return;
     setLoading(true);
     try {
-      const [hmRes, exRes, ssRes, syRes, shRes, mlRes] = await Promise.allSettled([
+      const [hmRes, exRes, ssRes, syRes, shRes, mlRes, epRes] = await Promise.allSettled([
         fetch(`/site/${encodeURIComponent(id)}/heightmap?size=64`),
         fetch(`/site/${encodeURIComponent(id)}/explain`),
         fetch(`/site/${encodeURIComponent(id)}/slope_stats`),
         fetch(`/site/${encodeURIComponent(id)}/solar_yield?capacity_kw=${samCapacity}`),
         fetch(`/site/${encodeURIComponent(id)}/solar_hourly?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
         fetch(`/site/${encodeURIComponent(id)}/solar_yield_ml?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
+        fetch(`/site/${encodeURIComponent(id)}/energy_price?capacity_kw=${samCapacity}&day_of_year=${samDay}`),
       ]);
       setHeightmap(await safeJson(hmRes));
       setExplain(await safeJson(exRes));
@@ -118,6 +120,7 @@ export default function App() {
       setSolarYield(await safeJson(syRes));
       setSolarHourly(await safeJson(shRes));
       setMlSolar(await safeJson(mlRes));
+      setEnergyPrice(await safeJson(epRes));
       setPanels(p => ({ ...p, score: true }));
     } catch (err) {
       console.error(err);
@@ -430,6 +433,50 @@ export default function App() {
         <Overlay id="epc" title={`EPC Retrofit${selectedLsoa ? ` — ${selectedLsoa}` : ""}`} open={panels.epc}
           onToggle={togglePanel} position="right" color="#1a9850">
           <EPCSummary lsoaId={selectedLsoa} />
+        </Overlay>
+
+        <Overlay id="price" title="Energy Price Forecast" open={panels.price}
+          onToggle={togglePanel} position="right" color="#7c4dff">
+          {energyPrice ? (
+            <div>
+              <div className="stat-grid">
+                <div>Avg: <strong>{energyPrice.price?.daily_avg}</strong> GBP/MWh</div>
+                <div>Peak: <strong>{energyPrice.price?.peak_price}</strong> at {energyPrice.price?.peak_hour}:00</div>
+              </div>
+              <div className="section-label">24h Price (GBP/MWh)</div>
+              <div className="bar-chart small">
+                {energyPrice.price?.hourly_price_gbp?.map((v, i) => {
+                  const max = Math.max(...energyPrice.price.hourly_price_gbp) || 1;
+                  return <div key={i} className="bar" title={`${i}:00 GBP ${v.toFixed(1)}/MWh`}
+                    style={{ height: `${(v/max)*100}%`, background: v > energyPrice.price.daily_avg ? "#f44336" : "#7c4dff", minHeight: 2 }} />;
+                })}
+              </div>
+              {energyPrice.revenue && (
+                <>
+                  <div className="section-label">Revenue Estimate</div>
+                  <div className="stat-grid">
+                    <div>Market: <strong>GBP {energyPrice.revenue.market_revenue_gbp}</strong>/day</div>
+                    <div>Fixed: <strong>GBP {energyPrice.revenue.fixed_tariff_revenue_gbp}</strong>/day</div>
+                  </div>
+                  <div className="stat-inline">
+                    Market premium: <strong>{energyPrice.revenue.premium_pct}%</strong> vs fixed SEG tariff
+                  </div>
+                  <div className="section-label">Hourly Revenue (GBP)</div>
+                  <div className="bar-chart small">
+                    {energyPrice.revenue.hourly_revenue_gbp?.map((v, i) => {
+                      const max = Math.max(...energyPrice.revenue.hourly_revenue_gbp) || 1;
+                      return <div key={i} className="bar" title={`${i}:00 GBP ${v.toFixed(3)}`}
+                        style={{ height: `${max > 0 ? (v/max)*100 : 0}%`, background: "#4caf50", minHeight: v > 0 ? 2 : 1 }} />;
+                    })}
+                  </div>
+                  <div className="stat-grid" style={{ marginTop: 6 }}>
+                    <div>Annual (market): <strong>GBP {energyPrice.revenue.annual_market_estimate_gbp?.toLocaleString()}</strong></div>
+                    <div>Annual (fixed): <strong>GBP {energyPrice.revenue.annual_fixed_estimate_gbp?.toLocaleString()}</strong></div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : <span className="muted">Click Analyse</span>}
         </Overlay>
       </div>
 
