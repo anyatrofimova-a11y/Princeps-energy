@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Protocol } from "pmtiles";
@@ -7,9 +7,10 @@ const PROXY = "pmtiles://http://localhost:3000/pmtiles-proxy";
 
 let protocolAdded = false;
 
-export default function MapView({ slopeOpacity = 0.6, layers = {} }) {
+export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = false, onPick, pickedLocation }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const markerRef = useRef(null);
 
   useEffect(() => {
     if (!protocolAdded) {
@@ -169,8 +170,9 @@ export default function MapView({ slopeOpacity = 0.6, layers = {} }) {
         layout: { visibility: layers.transport ? "visible" : "none" },
       });
 
-      // Carbon popup on click
+      // Carbon popup on click (only when not in pick mode)
       map.on("click", "carbon-fill", (e) => {
+        if (map._pickMode) return;
         if (!e.features?.length) return;
         const f = e.features[0].properties;
         const html = Object.entries(f)
@@ -184,9 +186,20 @@ export default function MapView({ slopeOpacity = 0.6, layers = {} }) {
           .addTo(map);
       });
 
-      // Cursor feedback
-      map.on("mouseenter", "carbon-fill", () => { map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", "carbon-fill", () => { map.getCanvas().style.cursor = ""; });
+      // Cursor feedback (only when not in pick mode)
+      map.on("mouseenter", "carbon-fill", () => {
+        if (!map._pickMode) map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", "carbon-fill", () => {
+        if (!map._pickMode) map.getCanvas().style.cursor = "";
+      });
+
+      // Location picker click handler
+      map.on("click", (e) => {
+        if (!map._pickMode || !map._onPick) return;
+        const { lng, lat } = e.lngLat;
+        map._onPick({ lat, lon: lng });
+      });
 
       map.addControl(new maplibregl.NavigationControl(), "top-left");
       map.addControl(
@@ -229,5 +242,32 @@ export default function MapView({ slopeOpacity = 0.6, layers = {} }) {
     }
   }, [slopeOpacity]);
 
-  return <div ref={containerRef} className="mapContainer" />;
+  // Pick mode: toggle crosshair cursor and store callbacks on map instance
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map._pickMode = pickMode;
+    map._onPick = onPick;
+    map.getCanvas().style.cursor = pickMode ? "crosshair" : "";
+  }, [pickMode, onPick]);
+
+  // Show/update marker at picked location
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (pickedLocation) {
+      if (markerRef.current) {
+        markerRef.current.setLngLat([pickedLocation.lon, pickedLocation.lat]);
+      } else {
+        markerRef.current = new maplibregl.Marker({ color: "#4caf50" })
+          .setLngLat([pickedLocation.lon, pickedLocation.lat])
+          .addTo(map);
+      }
+    } else if (markerRef.current) {
+      markerRef.current.remove();
+      markerRef.current = null;
+    }
+  }, [pickedLocation]);
+
+  return <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />;
 }

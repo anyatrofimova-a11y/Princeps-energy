@@ -291,6 +291,64 @@ async def explain_with_claude(context: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Location picker — create parcel from map click
+# ---------------------------------------------------------------------------
+
+class LocationInput(BaseModel):
+    lat: float
+    lon: float
+    area_m2: float = 50000.0  # default 5 hectares
+
+
+@app.post("/site/from-location")
+async def create_from_location(body: LocationInput):
+    """
+    Create a parcel from clicked map coordinates (WGS84 lat/lon).
+    Builds a square polygon in EPSG:27700 centred on the point.
+    Returns the new parcel_id for use with all other endpoints.
+    """
+    side = (body.area_m2 ** 0.5)  # square side in metres
+    half = side / 2.0
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            WITH pt AS (
+                SELECT ST_Transform(
+                    ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700
+                ) AS geom
+            ),
+            poly AS (
+                SELECT ST_MakeEnvelope(
+                    ST_X(pt.geom) - $3, ST_Y(pt.geom) - $3,
+                    ST_X(pt.geom) + $3, ST_Y(pt.geom) + $3,
+                    27700
+                ) AS geom,
+                pt.geom AS centroid
+                FROM pt
+            )
+            INSERT INTO parcels (source, area_m2, geometry, centroid)
+            SELECT 'map_pick', $4, poly.geom, poly.centroid
+            FROM poly
+            RETURNING parcel_id::text,
+                      ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                      ST_X(ST_Transform(centroid, 4326)) AS lon
+            """,
+            body.lon,
+            body.lat,
+            half,
+            body.area_m2,
+        )
+
+    return {
+        "parcel_id": row["parcel_id"],
+        "lat": float(row["lat"]),
+        "lon": float(row["lon"]),
+        "area_m2": body.area_m2,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 

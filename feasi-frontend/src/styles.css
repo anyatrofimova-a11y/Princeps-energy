@@ -331,6 +331,69 @@ html, body, #root { height: 100%; margin: 0; overflow: hidden; }
   border-top: 1px solid rgba(0,0,0,0.08);
 }
 
+/* ── Pick site button ── */
+.btn-pick {
+  padding: 5px 14px;
+  border: 2px solid #4caf50;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: #fff;
+  color: #4caf50;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-pick:hover { background: #e8f5e9; }
+.btn-pick.active {
+  background: #4caf50;
+  color: #fff;
+  animation: pulse-pick 1.5s infinite;
+}
+@keyframes pulse-pick {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(76, 175, 80, 0); }
+}
+
+.topbar-coords {
+  font-size: 11px;
+  font-family: monospace;
+  color: #333;
+  background: rgba(76, 175, 80, 0.1);
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.topbar-parcel {
+  font-size: 10px;
+  font-family: monospace;
+  color: #888;
+  white-space: nowrap;
+}
+
+.pick-banner {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: rgba(76, 175, 80, 0.95);
+  color: #fff;
+  padding: 6px 18px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.mapContainer.pick-mode { cursor: crosshair !important; }
+
 /* ── Buttons (generic) ── */
 button {
   cursor: pointer;

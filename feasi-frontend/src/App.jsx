@@ -17,7 +17,7 @@ function Overlay({ id, title, open, onToggle, position, children, color = "#fff"
 }
 
 export default function App() {
-  const [parcelId, setParcelId] = useState("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+  const [parcelId, setParcelId] = useState("");
   const [heightmap, setHeightmap] = useState(null);
   const [explain, setExplain] = useState(null);
   const [slopeStats, setSlopeStats] = useState(null);
@@ -35,6 +35,10 @@ export default function App() {
   const [genMw, setGenMw] = useState(4);
   const [slopeOpacity, setSlopeOpacity] = useState(0.6);
 
+  // Location picker state
+  const [pickMode, setPickMode] = useState(false);
+  const [pickedLocation, setPickedLocation] = useState(null);
+
   // Overlay panel visibility
   const [panels, setPanels] = useState({
     score: true, solar: false, terrain: false, agent: false, deferral: false,
@@ -51,12 +55,35 @@ export default function App() {
     setLayers(l => ({ ...l, [id]: !l[id] }));
   }, []);
 
+  // Handle map click in pick mode → create parcel → run analysis
+  const handleMapPick = useCallback(async ({ lat, lon }) => {
+    setPickMode(false);
+    setPickedLocation({ lat, lon });
+    setLoading(true);
+    try {
+      const res = await fetch("/site/from-location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat, lon, area_m2: 50000 }),
+      });
+      if (!res.ok) throw new Error("Failed to create parcel");
+      const data = await res.json();
+      setParcelId(data.parcel_id);
+      setPickedLocation({ lat: data.lat, lon: data.lon });
+      // Auto-run analysis with new parcel
+      await loadParcelById(data.parcel_id);
+    } catch (err) {
+      console.error(err);
+      setLoading(false);
+    }
+  }, [samCapacity, samDay]);
+
   const safeJson = async (res) => {
     try { return res.status === "fulfilled" && res.value.ok ? await res.value.json() : null; }
     catch { return null; }
   };
 
-  async function loadParcel(id) {
+  async function loadParcelById(id) {
     if (!id) return;
     setLoading(true);
     try {
@@ -117,18 +144,29 @@ export default function App() {
   return (
     <div className="app-fullscreen">
       {/* ── Map fills viewport ── */}
-      <MapView slopeOpacity={slopeOpacity} layers={layers} />
+      <MapView slopeOpacity={slopeOpacity} layers={layers}
+        pickMode={pickMode} onPick={handleMapPick} pickedLocation={pickedLocation} />
 
       {/* ── Top bar ── */}
       <div className="topbar">
         <div className="topbar-brand">Feasibly</div>
-        <input
-          value={parcelId}
-          onChange={(e) => setParcelId(e.target.value)}
-          placeholder="Parcel UUID"
-          className="topbar-input"
-          onKeyDown={(e) => e.key === "Enter" && loadParcel(parcelId)}
-        />
+        <button
+          className={`btn-pick ${pickMode ? "active" : ""}`}
+          onClick={() => setPickMode(p => !p)}
+          title="Click map to pick a site location"
+        >
+          {pickMode ? "Cancel" : "Pick Site"}
+        </button>
+        {pickedLocation && (
+          <span className="topbar-coords">
+            {pickedLocation.lat.toFixed(5)}, {pickedLocation.lon.toFixed(5)}
+          </span>
+        )}
+        {parcelId && (
+          <span className="topbar-parcel" title={parcelId}>
+            {parcelId.slice(0, 8)}...
+          </span>
+        )}
         <span className="topbar-param">
           <input type="number" value={samCapacity}
             onChange={(e) => setSamCapacity(Number(e.target.value))}
@@ -139,13 +177,16 @@ export default function App() {
             onChange={(e) => setSamDay(Number(e.target.value))}
             style={{ width: 45 }} min={1} max={365} />
         </span>
-        <button className="btn-primary" onClick={() => loadParcel(parcelId)} disabled={loading}>
+        <button className="btn-primary" onClick={() => loadParcelById(parcelId)} disabled={loading || !parcelId}>
           {loading ? "..." : "Analyse"}
         </button>
-        <button className="btn-agent" onClick={runAgentAnalysis} disabled={agentLoading}>
+        <button className="btn-agent" onClick={runAgentAnalysis} disabled={agentLoading || !parcelId}>
           {agentLoading ? "Thinking..." : "Agent"}
         </button>
       </div>
+      {pickMode && (
+        <div className="pick-banner">Click anywhere on the map to select a site location</div>
+      )}
 
       {/* ── Layer controls (left) ── */}
       <div className="layer-panel">
