@@ -83,6 +83,7 @@ export function SiteProvider({ children }) {
   const loadSite = useCallback(async (id, kw, day) => {
     if (!id) return;
     setLoading(true);
+    setAgentResult(null);
     try {
       const results = await Promise.allSettled([
         api.site.heightmap(id),
