@@ -67,4 +67,35 @@ INSERT INTO dno_params (load_growth_pct, dg_growth_pct, discount_rate_pct)
 VALUES (3.8, 11.4, 6.9)
 ON CONFLICT DO NOTHING;
 
+-- ── Node geometry (SRID 27700, tree layout centred near Birmingham) ──
+
+-- BSP (301) at top
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(430000, 285000), 27700) WHERE node_id = '301';
+-- Primary substation (1100) below BSP
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(430000, 283500), 27700) WHERE node_id = '1100';
+
+-- Main trunk running south-west
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(429200, 282500), 27700) WHERE node_id = '1115';
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(428400, 281600), 27700) WHERE node_id = '1116';
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(427600, 280800), 27700) WHERE node_id = '1117';
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(426800, 280000), 27700) WHERE node_id = '1118';
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(426000, 279200), 27700) WHERE node_id = '1119';
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(425200, 278400), 27700) WHERE node_id = '1120';
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(424400, 277600), 27700) WHERE node_id = '1121';
+
+-- Lateral branches (east of trunk)
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(429600, 281200), 27700) WHERE node_id = '1122';
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(428000, 279600), 27700) WHERE node_id = '1123';
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(427200, 278800), 27700) WHERE node_id = '1124';
+UPDATE network_nodes SET geom = ST_SetSRID(ST_MakePoint(425600, 277200), 27700) WHERE node_id = '1125';
+
+-- ── Component line geometry derived from node endpoints ──
+UPDATE network_components c
+SET geometry = ST_MakeLine(fn.geom, tn.geom)
+FROM network_nodes fn, network_nodes tn
+WHERE c.from_node = fn.node_id
+  AND c.to_node   = tn.node_id
+  AND fn.geom IS NOT NULL
+  AND tn.geom IS NOT NULL;
+
 COMMIT;

@@ -22,16 +22,16 @@ export default function AgentPanel({
   setAgentResult,
   agentLoading,
   setAgentLoading,
-  open,
-  onToggle,
 }) {
   const [intent, setIntent] = useState("feasibility");
   const [showDevConsole, setShowDevConsole] = useState(false);
   const [jobStatuses, setJobStatuses] = useState({});
+  const [error, setError] = useState(null);
 
   const runAgent = useCallback(async () => {
     if (!parcelId) return;
     setAgentLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/site/${encodeURIComponent(parcelId)}/agent`, {
         method: "POST",
@@ -45,9 +45,13 @@ export default function AgentPanel({
       if (res.ok) {
         const data = await res.json();
         setAgentResult(data.agent);
+      } else {
+        const errData = await res.json().catch(() => null);
+        setError(errData?.detail || `Server error (${res.status})`);
       }
     } catch (err) {
       console.error(err);
+      setError(err.message || "Network error");
     } finally {
       setAgentLoading(false);
     }
@@ -109,22 +113,8 @@ export default function AgentPanel({
   }, []);
 
   return (
-    <div className="agent-overlay">
-      <div
-        className="overlay-header"
-        onClick={onToggle}
-        style={{
-          borderLeftColor: agentResult
-            ? verdictColor(agentResult.verdict)
-            : "#7c4dff",
-        }}
-      >
-        <span className="overlay-title">Agent Analysis</span>
-        <span className="overlay-toggle">{open ? "\u25BC" : "\u25B2"}</span>
-      </div>
-
-      {open && (
-        <div className="overlay-body agent-body">
+    <div className="agent-panel-inner">
+        <div className="agent-body">
           {/* Intent selector + run button */}
           <div className="agent-controls">
             <div className="agent-intent-row">
@@ -259,13 +249,18 @@ export default function AgentPanel({
             </>
           )}
 
-          {!agentResult && !agentLoading && (
+          {error && (
+            <div style={{ color: "var(--danger, #ff4757)", fontSize: 12, marginTop: 8, padding: "6px 10px", background: "rgba(255,71,87,0.08)", borderRadius: 6, border: "1px solid rgba(255,71,87,0.2)" }}>
+              {error}
+            </div>
+          )}
+
+          {!agentResult && !agentLoading && !error && (
             <span className="muted">
               Select an intent and click Run Agent to start analysis
             </span>
           )}
         </div>
-      )}
     </div>
   );
 }

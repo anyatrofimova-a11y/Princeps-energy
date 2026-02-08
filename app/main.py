@@ -48,9 +48,16 @@ from utils.national_grid_live import fetch_all_live, live_data_to_geojson
 from utils.uk_grid_topology import topology_to_geojson
 from utils.energy_demand_predictor import get_demand_forecast, simulate_storage, optimize_storage
 from utils.agile_pricing import get_pricing_overview, fetch_all_regions_current, regional_prices_to_geojson
+from utils.weave_demand import setup_demand_table, seed_demand, demand_geojson
 from utils.bipv_calculator import (
     calculate_bipv, bipv_24h_profile, bipv_annual_estimate,
     bipv_multi_surface, bipv_catalogue, sun_position, BIPV_MODULES, SURFACE_TYPES,
+)
+from utils.nom_data import (
+    get_all_substations as nom_get_all,
+    get_substation_by_id as nom_get_by_id,
+    get_nom_geojson, get_nom_summary, get_licence_areas as nom_licence_areas,
+    get_local_authorities as nom_local_authorities,
 )
 from agent_claude import get_structured_agent_output
 
@@ -59,11 +66,12 @@ _app_dir = os.path.dirname(__file__)
 if _app_dir not in sys.path:
     sys.path.insert(0, _app_dir)
 from agent import run_structured_agent, INTENT_PROMPTS, _default_actions
+import chat as chat_module
 import jobs
 from pipeline import fetch_vibe_raster, clip_and_reproject, compute_slope, generate_tiles
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 import logging
@@ -123,6 +131,8 @@ async def lifespan(_app: FastAPI):
         await planning_setup(conn)
         await planning_seed(conn)
         await setup_inventory_table(conn)
+        await setup_demand_table(conn)
+        await seed_demand(conn)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS site_layouts (
                 parcel_id UUID PRIMARY KEY,
@@ -1616,6 +1626,13 @@ async def grid_agile_map():
     return regional_prices_to_geojson(region_prices)
 
 
+@app.get("/grid/demand-map")
+async def grid_demand_map():
+    """Return Weave smart meter demand data as GeoJSON FeatureCollection."""
+    async with pool.acquire() as conn:
+        return await demand_geojson(conn)
+
+
 # ---------------------------------------------------------------------------
 # BIPV (Building-Integrated Photovoltaics) — from tejas-raskar/SolarBIPV
 # ---------------------------------------------------------------------------
@@ -2298,6 +2315,79 @@ async def enhanced_agent(parcel_id: str, body: AgentRequest):
         "intent": body.intent,
         "context": agent_context,
         "agent": agent_output,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Agentic Chat — multi-turn conversational AI with tool use
+# ---------------------------------------------------------------------------
+
+class ChatSessionRequest(BaseModel):
+    parcel_id: str | None = None
+
+
+class ChatMessageRequest(BaseModel):
+    message: str
+
+
+@app.post("/chat/session")
+async def create_chat_session(body: ChatSessionRequest = ChatSessionRequest()):
+    """Create a new chat session, optionally linked to a parcel."""
+    session = chat_module.create_session(parcel_id=body.parcel_id)
+    return {"session_id": session.id, "parcel_id": session.parcel_id}
+
+
+@app.post("/chat/{session_id}/message")
+async def chat_message(session_id: str, body: ChatMessageRequest):
+    """Stream a chat response as SSE events (text deltas, tool calls, map layers)."""
+    session = chat_module.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    return StreamingResponse(
+        chat_module.stream_chat_response(
+            session,
+            body.message,
+            client=claude,
+            model=CLAUDE_MODEL,
+            pool=pool,
+            run_sam_subprocess=run_sam_subprocess,
+            fetch_parcel_context=fetch_parcel_context,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/chat/{session_id}/upload")
+async def chat_upload(session_id: str, file: UploadFile):
+    """Upload a file (CSV, Excel, PDF) to a chat session for analysis."""
+    session = chat_module.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    content = await file.read()
+    if len(content) > 20 * 1024 * 1024:  # 20 MB limit
+        raise HTTPException(status_code=413, detail="File too large (max 20 MB)")
+
+    filename = file.filename or "upload"
+    summary = chat_module.parse_uploaded_file(filename, content)
+    session.uploaded_files.append({
+        "filename": filename,
+        "content_bytes": content,
+        "summary": summary,
+        "type": summary.get("type", "unknown"),
+        "size_bytes": len(content),
+    })
+
+    return {
+        "filename": filename,
+        "size": len(content),
+        "type": summary.get("type", "unknown"),
+        "summary": summary,
     }
 
 
@@ -3060,3 +3150,68 @@ async def health_check():
     }
 
     return {"status": overall, "checks": checks}
+
+
+# ---------------------------------------------------------------------------
+# NOM — Network Opportunity Map
+# ---------------------------------------------------------------------------
+
+@app.get("/nom/substations")
+async def nom_substations(
+    type: str | None = None,
+    rag: str | None = None,
+    licence_area: str | None = None,
+    local_authority: str | None = None,
+    supply_type: str | None = None,
+    constraint: str | None = None,
+    search: str | None = None,
+    view: str = "connected",
+    map_type: str | None = None,
+):
+    return nom_get_all(
+        type_filter=type, rag_filter=rag, licence_area=licence_area,
+        local_authority=local_authority, supply_type=supply_type,
+        constraint=constraint, search=search, view=view, map_type=map_type,
+    )
+
+
+@app.get("/nom/substations/geojson")
+async def nom_substations_geojson(
+    type: str | None = None,
+    rag: str | None = None,
+    licence_area: str | None = None,
+    local_authority: str | None = None,
+    supply_type: str | None = None,
+    constraint: str | None = None,
+    search: str | None = None,
+    view: str = "connected",
+    map_type: str | None = None,
+):
+    return get_nom_geojson(
+        type_filter=type, rag_filter=rag, licence_area=licence_area,
+        local_authority=local_authority, supply_type=supply_type,
+        constraint=constraint, search=search, view=view, map_type=map_type,
+    )
+
+
+@app.get("/nom/substations/{sub_number}")
+async def nom_substation_detail(sub_number: str):
+    sub = nom_get_by_id(sub_number)
+    if not sub:
+        raise HTTPException(404, f"Substation {sub_number} not found")
+    return sub
+
+
+@app.get("/nom/summary")
+async def nom_summary():
+    return get_nom_summary()
+
+
+@app.get("/nom/licence-areas")
+async def nom_licence_areas_list():
+    return nom_licence_areas()
+
+
+@app.get("/nom/local-authorities")
+async def nom_local_authorities_list():
+    return nom_local_authorities()

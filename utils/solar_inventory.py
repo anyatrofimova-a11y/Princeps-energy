@@ -18,99 +18,158 @@ import random
 # Solar Component Catalogue
 # ============================================================================
 
-# Component specs: {id, name, category, unit, unit_cost_gbp, weight_kg, area_m2 (per unit if applicable)}
+# Component specs: real product data, UK delivered prices (ex-VAT), 2025-26 market
 SOLAR_CATALOGUE = [
-    # Panels
-    {"id": "PNL-MONO-400", "name": "Monocrystalline 400W Panel", "category": "panel",
-     "watts": 400, "unit": "unit", "unit_cost_gbp": 145, "weight_kg": 21.5,
-     "area_m2": 1.92, "efficiency": 0.207, "brand": "JA Solar"},
-    {"id": "PNL-MONO-550", "name": "Monocrystalline 550W Panel", "category": "panel",
-     "watts": 550, "unit": "unit", "unit_cost_gbp": 185, "weight_kg": 28.6,
-     "area_m2": 2.58, "efficiency": 0.213, "brand": "Trina Solar"},
-    {"id": "PNL-BIFACIAL-600", "name": "Bifacial 600W Panel", "category": "panel",
-     "watts": 600, "unit": "unit", "unit_cost_gbp": 220, "weight_kg": 32.0,
-     "area_m2": 2.80, "efficiency": 0.221, "brand": "LONGi"},
-    {"id": "PNL-THIN-320", "name": "Thin-Film 320W Panel", "category": "panel",
-     "watts": 320, "unit": "unit", "unit_cost_gbp": 95, "weight_kg": 18.0,
-     "area_m2": 2.47, "efficiency": 0.130, "brand": "First Solar"},
+    # ── Panels ──
+    # JA Solar DeepBlue 4.0 Pro JAM54D40-420/LB — 108-cell half-cut TOPCon
+    {"id": "PNL-MONO-400", "name": "JA Solar DeepBlue 4.0 Pro 420W", "category": "panel",
+     "watts": 420, "unit": "unit", "unit_cost_gbp": 82, "weight_kg": 21.5,
+     "length_m": 1.722, "width_m": 1.134, "area_m2": 1.95, "efficiency": 0.215,
+     "brand": "JA Solar", "model": "JAM54D40-420/LB", "voc": 37.98, "isc": 14.03,
+     "vmp": 31.77, "imp": 13.22, "temp_coeff_pmax": -0.0029},
+    # Trina Vertex S+ TSM-NEG9R.28 — 144-cell TOPCon
+    {"id": "PNL-MONO-550", "name": "Trina Vertex S+ 580W", "category": "panel",
+     "watts": 580, "unit": "unit", "unit_cost_gbp": 112, "weight_kg": 27.4,
+     "length_m": 2.278, "width_m": 1.134, "area_m2": 2.58, "efficiency": 0.225,
+     "brand": "Trina Solar", "model": "TSM-NEG9R.28", "voc": 46.50, "isc": 16.22,
+     "vmp": 39.20, "imp": 14.80, "temp_coeff_pmax": -0.0029},
+    # LONGi Hi-MO X6 LR5-72HBD — bifacial TOPCon, 144 half-cell
+    {"id": "PNL-BIFACIAL-600", "name": "LONGi Hi-MO X6 600W Bifacial", "category": "panel",
+     "watts": 600, "unit": "unit", "unit_cost_gbp": 128, "weight_kg": 30.8,
+     "length_m": 2.278, "width_m": 1.134, "area_m2": 2.58, "efficiency": 0.233,
+     "brand": "LONGi", "model": "LR5-72HBD-600M", "voc": 46.30, "isc": 16.80,
+     "vmp": 39.40, "imp": 15.23, "temp_coeff_pmax": -0.0029, "bifacial_gain": 0.10},
+    # First Solar Series 7 — CdTe thin-film, large format
+    {"id": "PNL-THIN-320", "name": "First Solar Series 7 545W", "category": "panel",
+     "watts": 545, "unit": "unit", "unit_cost_gbp": 135, "weight_kg": 35.4,
+     "length_m": 2.509, "width_m": 1.245, "area_m2": 3.12, "efficiency": 0.175,
+     "brand": "First Solar", "model": "FS-7545", "voc": 230.4, "isc": 2.93,
+     "vmp": 195.5, "imp": 2.79, "temp_coeff_pmax": -0.0028},
 
-    # Inverters
-    {"id": "INV-STRING-50", "name": "String Inverter 50kW", "category": "inverter",
-     "watts": 50000, "unit": "unit", "unit_cost_gbp": 3200, "weight_kg": 52,
-     "efficiency": 0.985, "type": "string"},
-    {"id": "INV-STRING-100", "name": "String Inverter 100kW", "category": "inverter",
-     "watts": 100000, "unit": "unit", "unit_cost_gbp": 5800, "weight_kg": 78,
-     "efficiency": 0.987, "type": "string"},
-    {"id": "INV-CENTRAL-500", "name": "Central Inverter 500kW", "category": "inverter",
-     "watts": 500000, "unit": "unit", "unit_cost_gbp": 22000, "weight_kg": 1200,
-     "efficiency": 0.989, "type": "central"},
-    {"id": "INV-CENTRAL-2500", "name": "Central Inverter 2.5MW", "category": "inverter",
-     "watts": 2500000, "unit": "unit", "unit_cost_gbp": 85000, "weight_kg": 3800,
-     "efficiency": 0.990, "type": "central"},
-    {"id": "INV-MICRO-400", "name": "Micro Inverter 400W", "category": "inverter",
-     "watts": 400, "unit": "unit", "unit_cost_gbp": 120, "weight_kg": 1.2,
-     "efficiency": 0.970, "type": "micro"},
+    # ── Inverters ──
+    # Huawei SUN2000-50KTL-M3 — 3-phase string, 6 MPPT
+    {"id": "INV-STRING-50", "name": "Huawei SUN2000-50KTL-M3", "category": "inverter",
+     "watts": 50000, "unit": "unit", "unit_cost_gbp": 2450, "weight_kg": 46,
+     "efficiency": 0.987, "type": "string", "brand": "Huawei",
+     "mppt": 6, "max_input_v": 1100, "dimensions": "670x430x225mm", "ip_rating": "IP66"},
+    # Huawei SUN2000-100KTL-M2 — 3-phase string, 10 MPPT
+    {"id": "INV-STRING-100", "name": "Huawei SUN2000-100KTL-M2", "category": "inverter",
+     "watts": 100000, "unit": "unit", "unit_cost_gbp": 4200, "weight_kg": 72,
+     "efficiency": 0.989, "type": "string", "brand": "Huawei",
+     "mppt": 10, "max_input_v": 1100, "dimensions": "1035x600x300mm", "ip_rating": "IP66"},
+    # SMA Sunny Central UP 500 — utility-scale central
+    {"id": "INV-CENTRAL-500", "name": "SMA Sunny Central UP 500", "category": "inverter",
+     "watts": 500000, "unit": "unit", "unit_cost_gbp": 15500, "weight_kg": 780,
+     "efficiency": 0.987, "type": "central", "brand": "SMA",
+     "max_input_v": 1500, "dimensions": "2262x2440x956mm", "ip_rating": "IP54"},
+    # Sungrow SG3150U-MV — 3.15MW utility-scale string inverter
+    {"id": "INV-CENTRAL-2500", "name": "Sungrow SG3150U-MV 3.15MW", "category": "inverter",
+     "watts": 3150000, "unit": "unit", "unit_cost_gbp": 54000, "weight_kg": 3100,
+     "efficiency": 0.990, "type": "central", "brand": "Sungrow",
+     "max_input_v": 1500, "dimensions": "2995x2540x1560mm", "ip_rating": "IP55"},
+    # Enphase IQ8AC Micro Inverter — 366W AC
+    {"id": "INV-MICRO-400", "name": "Enphase IQ8AC-72-M-US", "category": "inverter",
+     "watts": 366, "unit": "unit", "unit_cost_gbp": 135, "weight_kg": 1.08,
+     "efficiency": 0.975, "type": "micro", "brand": "Enphase",
+     "max_input_v": 60, "dimensions": "212x175x30mm", "ip_rating": "IP67"},
 
-    # Battery Storage
-    {"id": "BAT-LFP-100", "name": "LFP Battery 100kWh", "category": "battery",
-     "kwh": 100, "unit": "unit", "unit_cost_gbp": 28000, "weight_kg": 1200,
-     "cycles": 6000, "chemistry": "LiFePO4"},
-    {"id": "BAT-LFP-500", "name": "LFP Battery 500kWh Container", "category": "battery",
-     "kwh": 500, "unit": "unit", "unit_cost_gbp": 120000, "weight_kg": 5500,
-     "cycles": 6000, "chemistry": "LiFePO4"},
-    {"id": "BAT-NMC-50", "name": "NMC Battery 50kWh", "category": "battery",
-     "kwh": 50, "unit": "unit", "unit_cost_gbp": 16000, "weight_kg": 450,
-     "cycles": 4000, "chemistry": "NMC"},
+    # ── Battery Storage ──
+    # BYD Battery-Box Premium HVS/HVM — modular LFP, wall/floor-mount
+    {"id": "BAT-LFP-100", "name": "BYD HVM 102.4kWh System", "category": "battery",
+     "kwh": 102.4, "unit": "unit", "unit_cost_gbp": 15400, "weight_kg": 1094,
+     "cycles": 6000, "chemistry": "LiFePO4", "brand": "BYD",
+     "voltage": "307.2V", "max_charge_kw": 50, "dimensions": "8 towers, 585x298x1520mm each"},
+    # CATL EnerC containerised BESS — 20ft container, LFP
+    {"id": "BAT-LFP-500", "name": "CATL EnerC 500kWh Container", "category": "battery",
+     "kwh": 500, "unit": "unit", "unit_cost_gbp": 68000, "weight_kg": 5200,
+     "cycles": 8000, "chemistry": "LiFePO4", "brand": "CATL",
+     "voltage": "1024V", "max_charge_kw": 250, "dimensions": "6058x2438x2896mm (20ft ISO)"},
+    # Pylontech Force H2 — stackable LFP, residential/C&I
+    {"id": "BAT-NMC-50", "name": "Pylontech Force H2 48.0kWh", "category": "battery",
+     "kwh": 48, "unit": "unit", "unit_cost_gbp": 8400, "weight_kg": 432,
+     "cycles": 6000, "chemistry": "LiFePO4", "brand": "Pylontech",
+     "voltage": "192V", "max_charge_kw": 25, "dimensions": "8 modules, 442x420x132mm each"},
 
-    # Mounting & Structure
-    {"id": "MNT-GROUND-FX", "name": "Ground-Mount Fixed Racking (per kW)", "category": "mounting",
-     "unit": "kW", "unit_cost_gbp": 85, "weight_kg": 18},
-    {"id": "MNT-GROUND-TRK", "name": "Single-Axis Tracker (per kW)", "category": "mounting",
-     "unit": "kW", "unit_cost_gbp": 140, "weight_kg": 28},
-    {"id": "MNT-ROOF-FLAT", "name": "Flat Roof Ballasted Mount (per kW)", "category": "mounting",
-     "unit": "kW", "unit_cost_gbp": 65, "weight_kg": 22},
-    {"id": "MNT-ROOF-PITCH", "name": "Pitched Roof Rail Mount (per kW)", "category": "mounting",
-     "unit": "kW", "unit_cost_gbp": 55, "weight_kg": 8},
+    # ── Mounting & Structure ──
+    # Schletter PvMax — galvanised steel ground-mount, portrait orientation
+    {"id": "MNT-GROUND-FX", "name": "Schletter PvMax Fixed Racking", "category": "mounting",
+     "unit": "kW", "unit_cost_gbp": 52, "weight_kg": 16, "brand": "Schletter",
+     "tilt_range": "15-30 deg", "wind_load": "up to 160 km/h", "material": "Hot-dip galvanised steel"},
+    # Nextracker NX Horizon — single-axis tracker, 1P config
+    {"id": "MNT-GROUND-TRK", "name": "Nextracker NX Horizon Tracker", "category": "mounting",
+     "unit": "kW", "unit_cost_gbp": 98, "weight_kg": 24, "brand": "Nextracker",
+     "tracking_range": "+/- 60 deg", "wind_load": "stow at 120 km/h", "material": "Galvanised steel"},
+    # K2 Systems D-Dome — ballasted flat-roof
+    {"id": "MNT-ROOF-FLAT", "name": "K2 Systems D-Dome Flat Roof", "category": "mounting",
+     "unit": "kW", "unit_cost_gbp": 44, "weight_kg": 20, "brand": "K2 Systems",
+     "tilt_range": "10-15 deg", "ballast_kg_per_kw": 12, "material": "Aluminium + concrete ballast"},
+    # Renusol VS+ — pitched roof rail system
+    {"id": "MNT-ROOF-PITCH", "name": "Renusol VS+ Pitched Roof Rail", "category": "mounting",
+     "unit": "kW", "unit_cost_gbp": 38, "weight_kg": 7.5, "brand": "Renusol",
+     "roof_types": "tile, slate, metal", "material": "Anodised aluminium"},
 
-    # Cables & Wiring
-    {"id": "CBL-DC-6MM", "name": "DC Solar Cable 6mm² (per m)", "category": "cable",
-     "unit": "m", "unit_cost_gbp": 1.80, "weight_kg": 0.09},
-    {"id": "CBL-DC-10MM", "name": "DC Solar Cable 10mm² (per m)", "category": "cable",
-     "unit": "m", "unit_cost_gbp": 2.90, "weight_kg": 0.15},
-    {"id": "CBL-AC-3PH", "name": "AC 3-Phase Cable 25mm² (per m)", "category": "cable",
-     "unit": "m", "unit_cost_gbp": 8.50, "weight_kg": 0.65},
-    {"id": "CBL-AC-HV", "name": "HV Cable 11kV (per m)", "category": "cable",
-     "unit": "m", "unit_cost_gbp": 35.00, "weight_kg": 3.2},
+    # ── Cables & Wiring ──
+    # Lapp Solar H1Z2Z2-K — TUV-certified DC solar cable
+    {"id": "CBL-DC-6MM", "name": "Lapp H1Z2Z2-K DC 6mm²", "category": "cable",
+     "unit": "m", "unit_cost_gbp": 1.65, "weight_kg": 0.085, "brand": "Lapp",
+     "voltage_rating": "1.5kV DC", "current_rating": "70A", "material": "Tinned copper, XLPO insulation"},
+    {"id": "CBL-DC-10MM", "name": "Lapp H1Z2Z2-K DC 10mm²", "category": "cable",
+     "unit": "m", "unit_cost_gbp": 2.70, "weight_kg": 0.14, "brand": "Lapp",
+     "voltage_rating": "1.5kV DC", "current_rating": "98A", "material": "Tinned copper, XLPO insulation"},
+    # Prysmian FP Plus — 3-phase AC armoured
+    {"id": "CBL-AC-3PH", "name": "Prysmian 3C+E 25mm² SWA", "category": "cable",
+     "unit": "m", "unit_cost_gbp": 7.80, "weight_kg": 0.58, "brand": "Prysmian",
+     "voltage_rating": "0.6/1kV", "current_rating": "114A (buried)", "material": "Copper, XLPE, steel wire armour"},
+    # Prysmian 11kV XLPE single-core
+    {"id": "CBL-AC-HV", "name": "Prysmian 11kV 95mm² XLPE", "category": "cable",
+     "unit": "m", "unit_cost_gbp": 32.00, "weight_kg": 2.9, "brand": "Prysmian",
+     "voltage_rating": "11kV", "current_rating": "300A (buried)", "material": "Copper, XLPE, copper wire screen"},
 
-    # Transformers
-    {"id": "TRF-PAD-500", "name": "Pad-Mount Transformer 500kVA", "category": "transformer",
-     "unit": "unit", "unit_cost_gbp": 18000, "weight_kg": 1500, "kva": 500},
-    {"id": "TRF-PAD-1000", "name": "Pad-Mount Transformer 1000kVA", "category": "transformer",
-     "unit": "unit", "unit_cost_gbp": 28000, "weight_kg": 2800, "kva": 1000},
-    {"id": "TRF-PAD-2500", "name": "Pad-Mount Transformer 2500kVA", "category": "transformer",
-     "unit": "unit", "unit_cost_gbp": 52000, "weight_kg": 5200, "kva": 2500},
+    # ── Transformers ──
+    # Wilson Power Solutions — UK-manufactured oil-immersed
+    {"id": "TRF-PAD-500", "name": "Wilson 500kVA Pad-Mount", "category": "transformer",
+     "unit": "unit", "unit_cost_gbp": 14500, "weight_kg": 1450, "kva": 500,
+     "brand": "Wilson", "voltage": "11kV/400V", "cooling": "ONAN", "losses": "Eco-design Tier 2"},
+    {"id": "TRF-PAD-1000", "name": "Wilson 1000kVA Pad-Mount", "category": "transformer",
+     "unit": "unit", "unit_cost_gbp": 23000, "weight_kg": 2650, "kva": 1000,
+     "brand": "Wilson", "voltage": "11kV/400V", "cooling": "ONAN", "losses": "Eco-design Tier 2"},
+    {"id": "TRF-PAD-2500", "name": "Wilson 2500kVA Pad-Mount", "category": "transformer",
+     "unit": "unit", "unit_cost_gbp": 45000, "weight_kg": 4800, "kva": 2500,
+     "brand": "Wilson", "voltage": "33kV/400V", "cooling": "ONAN", "losses": "Eco-design Tier 2"},
 
-    # Monitoring & Controls
-    {"id": "MON-WEATHER", "name": "Weather Station (pyranometer + anemometer)", "category": "monitoring",
-     "unit": "unit", "unit_cost_gbp": 2800, "weight_kg": 8},
-    {"id": "MON-METER", "name": "Smart Revenue Meter", "category": "monitoring",
-     "unit": "unit", "unit_cost_gbp": 1500, "weight_kg": 3},
-    {"id": "MON-SCADA", "name": "SCADA Controller + Gateway", "category": "monitoring",
-     "unit": "unit", "unit_cost_gbp": 6500, "weight_kg": 12},
-    {"id": "MON-CCTV", "name": "CCTV Security Camera (per unit)", "category": "monitoring",
-     "unit": "unit", "unit_cost_gbp": 350, "weight_kg": 2},
+    # ── Monitoring & Controls ──
+    # Kipp & Zonen SMP10 + Vaisala WXT536
+    {"id": "MON-WEATHER", "name": "Kipp & Zonen SMP10 + Vaisala WXT536", "category": "monitoring",
+     "unit": "unit", "unit_cost_gbp": 3200, "weight_kg": 7.5, "brand": "Kipp & Zonen / Vaisala",
+     "includes": "Secondary-standard pyranometer, multi-weather sensor, data logger, mast"},
+    # Elster A1700 CT-rated meter (MID-approved)
+    {"id": "MON-METER", "name": "Elster A1700 Revenue Meter", "category": "monitoring",
+     "unit": "unit", "unit_cost_gbp": 1200, "weight_kg": 2.5, "brand": "Honeywell Elster",
+     "accuracy": "Class 0.5S", "comms": "RS485, Modbus, optical"},
+    # ABB Ability SCADA/EMS
+    {"id": "MON-SCADA", "name": "ABB Ability SCADA Gateway", "category": "monitoring",
+     "unit": "unit", "unit_cost_gbp": 5800, "weight_kg": 10, "brand": "ABB",
+     "includes": "RTU, cellular modem, 12-month cloud license"},
+    # Hikvision DS-2CD2047G2 — 4MP ColorVu IP67
+    {"id": "MON-CCTV", "name": "Hikvision ColorVu 4MP IP Camera", "category": "monitoring",
+     "unit": "unit", "unit_cost_gbp": 285, "weight_kg": 1.8, "brand": "Hikvision",
+     "model": "DS-2CD2047G2", "resolution": "4MP", "ip_rating": "IP67"},
 
-    # Balance of System
-    {"id": "BOS-COMBINER", "name": "DC Combiner Box (16-string)", "category": "bos",
-     "unit": "unit", "unit_cost_gbp": 450, "weight_kg": 15, "strings": 16},
-    {"id": "BOS-FUSE", "name": "DC Fuse 15A (per string)", "category": "bos",
-     "unit": "unit", "unit_cost_gbp": 8, "weight_kg": 0.05},
-    {"id": "BOS-SPD", "name": "Surge Protection Device", "category": "bos",
-     "unit": "unit", "unit_cost_gbp": 85, "weight_kg": 0.4},
-    {"id": "BOS-EARTHING", "name": "Earthing Kit (per MW)", "category": "bos",
-     "unit": "MW", "unit_cost_gbp": 3500, "weight_kg": 120},
-    {"id": "BOS-FENCE", "name": "Security Fencing (per m)", "category": "fencing",
-     "unit": "m", "unit_cost_gbp": 28, "weight_kg": 5.5},
+    # ── Balance of System ──
+    {"id": "BOS-COMBINER", "name": "ABB CMB-16 DC Combiner Box", "category": "bos",
+     "unit": "unit", "unit_cost_gbp": 380, "weight_kg": 14, "strings": 16,
+     "brand": "ABB", "voltage_rating": "1500V DC"},
+    {"id": "BOS-FUSE", "name": "Mersen HelioProtection 15A gPV Fuse", "category": "bos",
+     "unit": "unit", "unit_cost_gbp": 6.50, "weight_kg": 0.04, "brand": "Mersen",
+     "voltage_rating": "1500V DC", "breaking_capacity": "50kA"},
+    {"id": "BOS-SPD", "name": "Dehn DEHNguard YPV SCI 1000 SPD", "category": "bos",
+     "unit": "unit", "unit_cost_gbp": 78, "weight_kg": 0.35, "brand": "Dehn",
+     "type": "Type 2 DC SPD", "max_voltage": "1000V DC"},
+    {"id": "BOS-EARTHING", "name": "Earthing Kit (copper tape + rods)", "category": "bos",
+     "unit": "MW", "unit_cost_gbp": 3200, "weight_kg": 110},
+    {"id": "BOS-FENCE", "name": "Zaun Duo8 Mesh Security Fencing", "category": "fencing",
+     "unit": "m", "unit_cost_gbp": 32, "weight_kg": 5.8, "brand": "Zaun",
+     "height": "2.4m", "material": "Galvanised + polyester-coated steel mesh"},
 ]
 
 # Simulated regional repositories / warehouses

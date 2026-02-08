@@ -1,5 +1,5 @@
 {
-  "name": "feasi-frontend",
+  "name": "princeps-frontend",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "chart.js": "^4.5.1",
+    "maplibre-contour": "^0.1.0",
     "maplibre-gl": "^4.0.0",
     "pmtiles": "^4.4.0",
     "react": "^18.3.0",

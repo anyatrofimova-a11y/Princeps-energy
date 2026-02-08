@@ -51,6 +51,7 @@ const api = {
     agilePricing:   (region = "C", tariff) =>
       get(`/grid/agile-pricing?region=${region}${tariff ? `&tariff=${tariff}` : ""}`),
     agileMap:       () => get("/grid/agile-map"),
+    demandMap:      () => get("/grid/demand-map"),
     topology:       () => get("/grid/topology"),
     live:           () => get("/grid/live"),
     stability:      (params = {}) => {
@@ -74,6 +75,23 @@ const api = {
 
   tenders: {
     energy: () => get("/tenders/energy"),
+  },
+
+  nom: {
+    substations: (params = {}) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, v);
+      return get(`/nom/substations?${q}`);
+    },
+    geojson: (params = {}) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, v);
+      return get(`/nom/substations/geojson?${q}`);
+    },
+    detail: (subNumber) => get(`/nom/substations/${enc(subNumber)}`),
+    summary: () => get("/nom/summary"),
+    licenceAreas: () => get("/nom/licence-areas"),
+    localAuthorities: () => get("/nom/local-authorities"),
   },
 
   analytics: {

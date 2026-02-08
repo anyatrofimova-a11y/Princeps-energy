@@ -9,7 +9,7 @@ Provides:
   - Dashboard statistics aggregation
   - System health check
 
-All adapted for Feasibly's asyncpg + FastAPI architecture (no Django/Celery).
+All adapted for Princeps's asyncpg + FastAPI architecture (no Django/Celery).
 """
 
 from __future__ import annotations

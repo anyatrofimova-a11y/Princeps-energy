@@ -17,8 +17,36 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
+from pydantic import BaseModel as PydanticBaseModel, field_validator
 
 log = logging.getLogger(__name__)
+
+
+class AgentOutput(PydanticBaseModel):
+    """Validated schema for Claude agent responses."""
+    verdict: str = "CAUTION"
+    confidence: float = 0.5
+    summary: str = ""
+    risks: list[str] = []
+    opportunities: list[str] = []
+    recommended_capacity_kw: float | None = None
+    estimated_roi_years: float | None = None
+    next_steps: list[str] = []
+    actions: list[dict] = []
+    intent: str = "feasibility"
+
+    @field_validator("verdict")
+    @classmethod
+    def validate_verdict(cls, v: str) -> str:
+        v = v.upper().strip()
+        if v not in ("GO", "CAUTION", "NO-GO"):
+            return "CAUTION"
+        return v
+
+    @field_validator("confidence")
+    @classmethod
+    def clamp_confidence(cls, v: float) -> float:
+        return max(0.0, min(1.0, float(v)))
 
 AUDIT_DIR = Path(os.environ.get("AUDIT_DIR", "audit_logs"))
 
@@ -87,12 +115,14 @@ def _audit_log(entry: dict) -> None:
 
 
 def _extract_json(text: str) -> dict:
-    """Extract the first balanced JSON object from text."""
+    """Extract and validate the first balanced JSON object from text."""
     start = text.find("{")
     end = text.rfind("}") + 1
-    if start >= 0 and end > start:
-        return json.loads(text[start:end])
-    raise ValueError("No JSON object found in response")
+    if start < 0 or end <= start:
+        raise ValueError("No JSON object found in response")
+    raw = json.loads(text[start:end])
+    validated = AgentOutput(**raw)
+    return validated.model_dump()
 
 
 async def run_structured_agent(
@@ -155,8 +185,9 @@ async def run_structured_agent(
         )
         return agent_output
 
-    except Exception as exc:
+    except (anthropic.APIError, json.JSONDecodeError, ValueError, KeyError) as exc:
         elapsed = round(time.time() - t0, 2)
+        log.warning("Structured agent call failed: %s", exc)
         _audit_log(
             {
                 "ts": datetime.now(timezone.utc).isoformat(),

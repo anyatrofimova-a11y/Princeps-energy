@@ -95,7 +95,7 @@ const ASSET_COLOURS = {
 const EMPTY_FC = { type: "FeatureCollection", features: [] };
 
 export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = false, onPick, pickedLocation, onZoneClick, epcFields = {},
-  drawState, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex }) {
+  drawState, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex, chatLayers = [] }) {
   const { stabilityData } = useSite();
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -819,6 +819,96 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.on("mouseenter", "agile-price-glow", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "agile-price-glow", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
 
+      // ── Smart Meter Demand heatmap (Weave) ──
+      map.addSource("demand-heatmap", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+
+      // Demand glow (large blurred circles — magenta heatmap)
+      map.addLayer({
+        id: "demand-glow",
+        type: "circle",
+        source: "demand-heatmap",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"],
+            5, ["interpolate", ["linear"], ["get", "kwh_per_meter"], 0, 4, 5, 12, 15, 25],
+            9, ["interpolate", ["linear"], ["get", "kwh_per_meter"], 0, 8, 5, 25, 15, 50],
+          ],
+          "circle-color": ["interpolate", ["linear"], ["get", "kwh_per_meter"],
+            0, "#7b1fa2", 2, "#ab47bc", 5, "#e040fb", 8, "#ff6d00", 12, "#ff1744"],
+          "circle-blur": 0.7,
+          "circle-opacity": 0.5,
+        },
+        layout: { visibility: "none" },
+      });
+
+      // Demand circles (solid inner dots)
+      map.addLayer({
+        id: "demand-circles",
+        type: "circle",
+        source: "demand-heatmap",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"],
+            5, 3,
+            9, ["interpolate", ["linear"], ["get", "kwh_per_meter"], 0, 4, 5, 8, 15, 14],
+          ],
+          "circle-color": ["interpolate", ["linear"], ["get", "kwh_per_meter"],
+            0, "#ce93d8", 2, "#ab47bc", 5, "#e040fb", 8, "#ff6d00", 12, "#ff1744"],
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "rgba(255,255,255,0.6)",
+        },
+        layout: { visibility: "none" },
+        minzoom: 7,
+      });
+
+      // Demand labels
+      map.addLayer({
+        id: "demand-labels",
+        type: "symbol",
+        source: "demand-heatmap",
+        paint: {
+          "text-color": "#e040fb",
+          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-width": 1.2,
+        },
+        layout: {
+          "text-field": ["concat", ["get", "kwh_per_meter"], " kWh"],
+          "text-font": ["Noto Sans Bold"],
+          "text-size": 10,
+          "text-offset": [0, 1.4],
+          visibility: "none",
+        },
+        minzoom: 9,
+      });
+
+      // Demand click popup
+      map.on("click", "demand-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new maplibregl.Popup({ maxWidth: "260px" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="font-size:12px">` +
+            `<strong>${p.name || p.substation_id}</strong><br/>` +
+            `DNO: ${p.dno}<br/>` +
+            `Total: <strong>${p.total_kwh} kWh</strong><br/>` +
+            `Meters: ${p.meter_count}<br/>` +
+            `Per meter: <strong>${p.kwh_per_meter} kWh</strong>` +
+            `</div>`
+          )
+          .addTo(map);
+      });
+      map.on("mouseenter", "demand-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "demand-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // Fetch demand data
+      fetch("/grid/demand-map")
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data && map.getSource("demand-heatmap")) {
+            map.getSource("demand-heatmap").setData(data);
+          }
+        })
+        .catch(() => {});
+
       // Other geodata layers are lazy-loaded on toggle (see LAZY_RASTER_LAYERS)
 
       // Node glow (blurred halo — cyan bloom)
@@ -1230,6 +1320,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
                  "grid-live-ic-glow", "grid-live-ic-core", "grid-live-ic-dash", "grid-live-ic-labels",
                  "grid-live-gen-glow", "grid-live-gen-circles", "grid-live-gen-labels"],
       agilePricing: ["agile-price-glow", "agile-price-labels"],
+      demandOverlay: ["demand-glow", "demand-circles", "demand-labels"],
       aerial: ["aerial-layer"],
       epcZones: ["zones-fill"],
       epcDom: ["epc-dom-circles"],
@@ -1462,6 +1553,66 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     animId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animId);
   }, [layers.gridFlow]);
+
+  // Sync chat layers to map
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+
+    // Track which chat layer IDs currently exist on the map
+    const existingIds = new Set();
+    for (const src of Object.keys(map.style?.sourceCaches || {})) {
+      if (src.startsWith("chat-")) existingIds.add(src);
+    }
+
+    const wantedIds = new Set(chatLayers.map(l => l.id));
+
+    // Remove layers/sources no longer needed
+    for (const id of existingIds) {
+      if (!wantedIds.has(id)) {
+        if (map.getLayer(id + "-layer")) map.removeLayer(id + "-layer");
+        if (map.getSource(id)) map.removeSource(id);
+      }
+    }
+
+    // Add or update chat layers
+    for (const cl of chatLayers) {
+      const srcId = cl.id;
+      const layerId = cl.id + "-layer";
+      const geojson = cl.geojson || { type: "FeatureCollection", features: [] };
+
+      if (map.getSource(srcId)) {
+        map.getSource(srcId).setData(geojson);
+      } else {
+        map.addSource(srcId, { type: "geojson", data: geojson });
+
+        const layerType = cl.layer_type || "circle";
+        const color = cl.color || "#00e5ff";
+
+        if (layerType === "circle") {
+          map.addLayer({
+            id: layerId, type: "circle", source: srcId,
+            paint: { "circle-radius": 6, "circle-color": color, "circle-stroke-width": 1, "circle-stroke-color": "#fff", "circle-opacity": 0.85 },
+          });
+        } else if (layerType === "fill") {
+          map.addLayer({
+            id: layerId, type: "fill", source: srcId,
+            paint: { "fill-color": color, "fill-opacity": 0.3, "fill-outline-color": color },
+          });
+        } else if (layerType === "line") {
+          map.addLayer({
+            id: layerId, type: "line", source: srcId,
+            paint: { "line-color": color, "line-width": 2, "line-opacity": 0.8 },
+          });
+        } else if (layerType === "heatmap") {
+          map.addLayer({
+            id: layerId, type: "heatmap", source: srcId,
+            paint: { "heatmap-radius": 20, "heatmap-opacity": 0.7, "heatmap-intensity": 1 },
+          });
+        }
+      }
+    }
+  }, [chatLayers]);
 
   // Sync drawing state to map sources
   useEffect(() => {

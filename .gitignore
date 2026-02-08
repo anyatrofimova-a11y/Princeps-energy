@@ -27,6 +27,19 @@ UK-Energy-Modelling/
 Solar-System-Repositories-management/
 SolarBIPV/
 Theridian/
+AI-for-energy-sector/
+HA-NationalGrid/
+Predicting-UK-Energy-Demand/
+gb-dispatch-model/
+pypsa-eur/
+nebula.gl/
+octopus-agile-pi-prices/
+octopus-energy-rates-card/
+
+# Old/external frontend and build artifacts
+frontend/
+feasi-frontend/dist/
+pdal/
 
 # Runtime artifacts
 audit_logs/

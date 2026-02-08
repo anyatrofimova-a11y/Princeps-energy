@@ -53,6 +53,9 @@ export function SiteProvider({ children }) {
   const [epcNondomField, setEpcNondomField] = useState("band");
   const [postcodesField, setPostcodesField] = useState("combined");
 
+  // ── Chat layers (injected from ChatPanel) ──
+  const [chatLayers, setChatLayers] = useState([]);
+
   // ── UI ──
   const [activeTab, setActiveTab] = useState("score");
   const [panelOpen, setPanelOpen] = useState(true);
@@ -62,7 +65,7 @@ export function SiteProvider({ children }) {
   const [layers, setLayers] = useState({
     slope: true, carbon: false, la: false, transport: false, hillshade: true,
     contours: true, environment: true, gridFlow: true, agilePricing: false,
-    flowFocus: false,
+    demandOverlay: false, flowFocus: false,
     ndvi: false, satellite: false, aerial: true, lidarDtm: false, lidarDsm: false, landsat: false, viirs: false,
     epcZones: false, epcDom: false, epcNondom: false, postcodes: false,
   });
@@ -183,6 +186,8 @@ export function SiteProvider({ children }) {
     slopeOpacity, setSlopeOpacity,
     // Layers
     layers, setLayers, toggleLayer,
+    // Chat layers
+    chatLayers, setChatLayers,
     // Actions
     loadSite, runAgent, runDeferral,
   };
