@@ -325,6 +325,11 @@ export default function App() {
           <span className="layer-dot" style={{ background: "#00ffcc" }} />
           Flow Focus
         </label>
+        <label className="layer-item">
+          <input type="checkbox" checked={layers.osmPower} onChange={() => toggleLayer("osmPower")} />
+          <span className="layer-dot" style={{ background: "#B54EB2" }} />
+          Power Infrastructure (OSM)
+        </label>
 
         <div className="layer-divider" />
         <div className="layer-title">EPC / Retrofit</div>

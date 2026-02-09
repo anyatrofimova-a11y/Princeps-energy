@@ -611,6 +611,13 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.addSource("grid-live-interconnectors", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("grid-live-generation", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
 
+      // OSM power infrastructure sources
+      map.addSource("osm-power-lines", { type: "geojson", data: EMPTY_FC });
+      map.addSource("osm-power-substations", { type: "geojson", data: EMPTY_FC });
+      map.addSource("osm-power-towers", { type: "geojson", data: EMPTY_FC });
+      map.addSource("osm-power-generators", { type: "geojson", data: EMPTY_FC });
+      map.addSource("osm-power-plants", { type: "geojson", data: EMPTY_FC });
+
       // Flow glow (wide blurred line — FlowmapBlue cyan style)
       map.addLayer({
         id: "grid-flow-glow",
@@ -964,6 +971,238 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         },
         minzoom: 9,
       });
+
+      // ── OSM Power Infrastructure layers (OpenInfraMap-style) ──
+      // Voltage colour ramp matching OpenInfraMap
+      const osmVoltageColor = [
+        "case",
+        [">=", ["coalesce", ["get", "voltage_kv"], 0], 400], "#B54EB2",
+        [">=", ["coalesce", ["get", "voltage_kv"], 0], 275], "#C73030",
+        [">=", ["coalesce", ["get", "voltage_kv"], 0], 132], "#B55D00",
+        [">=", ["coalesce", ["get", "voltage_kv"], 0], 66], "#B59F10",
+        [">=", ["coalesce", ["get", "voltage_kv"], 0], 33], "#55B555",
+        [">=", ["coalesce", ["get", "voltage_kv"], 0], 11], "#6E97B8",
+        "#7A7A85",
+      ];
+
+      // Power line glow
+      map.addLayer({
+        id: "osm-power-line-glow",
+        type: "line",
+        source: "osm-power-lines",
+        paint: {
+          "line-color": osmVoltageColor,
+          "line-width": ["interpolate", ["linear"], ["zoom"],
+            5, ["interpolate", ["linear"], ["coalesce", ["get", "voltage_kv"], 0], 0, 3, 132, 6, 400, 10],
+            10, ["interpolate", ["linear"], ["coalesce", ["get", "voltage_kv"], 0], 0, 5, 132, 10, 400, 18],
+            14, ["interpolate", ["linear"], ["coalesce", ["get", "voltage_kv"], 0], 0, 8, 132, 16, 400, 28],
+          ],
+          "line-blur": 5,
+          "line-opacity": 0.35,
+        },
+        layout: { visibility: "none", "line-cap": "round" },
+      });
+
+      // Power line core
+      map.addLayer({
+        id: "osm-power-line-core",
+        type: "line",
+        source: "osm-power-lines",
+        paint: {
+          "line-color": osmVoltageColor,
+          "line-width": ["interpolate", ["linear"], ["zoom"],
+            5, ["interpolate", ["linear"], ["coalesce", ["get", "voltage_kv"], 0], 0, 0.5, 132, 1.5, 400, 3],
+            10, ["interpolate", ["linear"], ["coalesce", ["get", "voltage_kv"], 0], 0, 1, 132, 2.5, 400, 5],
+            14, ["interpolate", ["linear"], ["coalesce", ["get", "voltage_kv"], 0], 0, 1.5, 132, 4, 400, 7],
+          ],
+          "line-opacity": 0.85,
+        },
+        layout: { visibility: "none", "line-cap": "round" },
+      });
+
+      // Power line labels (voltage + name at zoom >= 10 for >= 132kV)
+      map.addLayer({
+        id: "osm-power-line-labels",
+        type: "symbol",
+        source: "osm-power-lines",
+        filter: [">=", ["coalesce", ["get", "voltage_kv"], 0], 132],
+        paint: {
+          "text-color": osmVoltageColor,
+          "text-halo-color": "rgba(255,255,255,0.85)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          "symbol-placement": "line",
+          "text-field": ["concat",
+            ["case", ["has", "voltage_kv"],
+              ["concat", ["to-string", ["round", ["get", "voltage_kv"]]], "kV"], ""],
+            ["case", ["has", "name"], ["concat", " ", ["get", "name"]], ""],
+          ],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": ["interpolate", ["linear"], ["zoom"], 10, 9, 14, 12],
+          "text-allow-overlap": false,
+          visibility: "none",
+        },
+        minzoom: 10,
+      });
+
+      // Substation circles
+      map.addLayer({
+        id: "osm-substation-circles",
+        type: "circle",
+        source: "osm-power-substations",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"],
+            5, ["interpolate", ["linear"], ["coalesce", ["get", "voltage_kv"], 0], 0, 2, 132, 4, 400, 7],
+            10, ["interpolate", ["linear"], ["coalesce", ["get", "voltage_kv"], 0], 0, 4, 132, 8, 400, 14],
+            14, ["interpolate", ["linear"], ["coalesce", ["get", "voltage_kv"], 0], 0, 6, 132, 12, 400, 20],
+          ],
+          "circle-color": osmVoltageColor,
+          "circle-opacity": 0.75,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "rgba(255,255,255,0.7)",
+        },
+        layout: { visibility: "none" },
+      });
+
+      // Substation labels
+      map.addLayer({
+        id: "osm-substation-labels",
+        type: "symbol",
+        source: "osm-power-substations",
+        paint: {
+          "text-color": "#333",
+          "text-halo-color": "rgba(255,255,255,0.9)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          "text-field": ["concat",
+            ["coalesce", ["get", "name"], "Substation"],
+            ["case", ["has", "voltage_kv"],
+              ["concat", "\n", ["to-string", ["round", ["get", "voltage_kv"]]], "kV"], ""],
+          ],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 10,
+          "text-offset": [0, 1.8],
+          "text-anchor": "top",
+          visibility: "none",
+        },
+        minzoom: 10,
+      });
+
+      // Tower dots (very numerous — only at zoom >= 12)
+      map.addLayer({
+        id: "osm-tower-dots",
+        type: "circle",
+        source: "osm-power-towers",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 2, 16, 5],
+          "circle-color": ["match", ["get", "tower_type"], "pole", "#8B6914", "portal", "#555", "#444"],
+          "circle-opacity": 0.7,
+          "circle-stroke-width": 0.5,
+          "circle-stroke-color": "rgba(255,255,255,0.5)",
+        },
+        layout: { visibility: "none" },
+        minzoom: 12,
+      });
+
+      // Generator circles — coloured by source
+      map.addLayer({
+        id: "osm-generator-circles",
+        type: "circle",
+        source: "osm-power-generators",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"],
+            8, 3, 12, 7, 16, 12],
+          "circle-color": [
+            "match", ["coalesce", ["get", "source"], "unknown"],
+            "solar", "#FDD835",
+            "wind", "#00B0FF",
+            "gas", "#FF8F00",
+            "nuclear", "#E53935",
+            "hydro", "#1565C0",
+            "biomass", "#8D6E63",
+            "oil", "#795548",
+            "coal", "#424242",
+            "battery", "#7CB342",
+            "waste", "#6D4C41",
+            "#888",
+          ],
+          "circle-opacity": 0.8,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "rgba(255,255,255,0.7)",
+        },
+        layout: { visibility: "none" },
+        minzoom: 8,
+      });
+
+      // Generator labels
+      map.addLayer({
+        id: "osm-generator-labels",
+        type: "symbol",
+        source: "osm-power-generators",
+        paint: {
+          "text-color": "#333",
+          "text-halo-color": "rgba(255,255,255,0.9)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          "text-field": ["concat",
+            ["coalesce", ["get", "name"], ["coalesce", ["get", "source"], "generator"]],
+            ["case", ["has", "output_kw"],
+              ["concat", "\n", ["to-string", ["round", ["get", "output_kw"]]], " kW"], ""],
+          ],
+          "text-font": ["Noto Sans Regular"],
+          "text-size": 9,
+          "text-offset": [0, 1.5],
+          "text-anchor": "top",
+          visibility: "none",
+        },
+        minzoom: 11,
+      });
+
+      // OSM power click popups
+      map.on("click", "osm-power-line-core", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        const vkv = p.voltage_kv ? `${Math.round(p.voltage_kv)} kV` : "Unknown voltage";
+        const typ = p.line_type || "line";
+        const op = p.operator ? `<br/>Operator: ${p.operator}` : "";
+        const nm = p.name ? `<strong>${p.name}</strong><br/>` : "";
+        const rf = p.ref ? `Ref: ${p.ref}<br/>` : "";
+        new maplibregl.Popup({ maxWidth: "260px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px">${nm}${rf}${vkv} ${typ}${op}</div>`)
+          .addTo(map);
+      });
+      map.on("click", "osm-substation-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        const nm = p.name || "Substation";
+        const vkv = p.voltage_kv ? `${Math.round(p.voltage_kv)} kV` : "";
+        const typ = p.substation_type ? `Type: ${p.substation_type}<br/>` : "";
+        const op = p.operator ? `Operator: ${p.operator}` : "";
+        new maplibregl.Popup({ maxWidth: "240px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px"><strong>${nm}</strong><br/>${vkv ? vkv + "<br/>" : ""}${typ}${op}</div>`)
+          .addTo(map);
+      });
+      map.on("click", "osm-generator-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        const nm = p.name || "Generator";
+        const src = p.source ? `Source: ${p.source}<br/>` : "";
+        const out = p.output_kw ? `Output: ${Math.round(p.output_kw)} kW` : "";
+        const op = p.operator ? `<br/>Operator: ${p.operator}` : "";
+        new maplibregl.Popup({ maxWidth: "240px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px"><strong>${nm}</strong><br/>${src}${out}${op}</div>`)
+          .addTo(map);
+      });
+      for (const lid of ["osm-power-line-core", "osm-substation-circles", "osm-generator-circles"]) {
+        map.on("mouseenter", lid, () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", lid, () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+      }
 
       // Grid flow click popups
       map.on("click", "grid-flow-core", (e) => {
@@ -1326,6 +1565,9 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       epcDom: ["epc-dom-circles"],
       epcNondom: ["epc-nondom-circles"],
       postcodes: ["postcodes-fill"],
+      osmPower: ["osm-power-line-glow", "osm-power-line-core", "osm-power-line-labels",
+                 "osm-substation-circles", "osm-substation-labels",
+                 "osm-tower-dots", "osm-generator-circles", "osm-generator-labels"],
     };
 
     // Handle lazy raster layers — add source+layer on first toggle on
@@ -1513,6 +1755,93 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
     return () => { cancelled = true; };
   }, [layers.gridFlow]);
+
+  // OSM power infrastructure — viewport-based loading with debounce
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.osmPower) return;
+
+    let abortCtrl = new AbortController();
+    let timer = null;
+
+    const loadOsmPower = () => {
+      abortCtrl.abort();
+      abortCtrl = new AbortController();
+      const bounds = map.getBounds();
+      const zoom = map.getZoom();
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+
+      // Zoom-dependent voltage filter
+      let minKv = 0;
+      if (zoom < 8) minKv = 275;
+      else if (zoom < 10) minKv = 132;
+      else if (zoom < 12) minKv = 33;
+
+      // Always fetch lines + substations
+      api.grid.osmLines(bbox, minKv).then(data => {
+        if (abortCtrl.signal.aborted || !data) return;
+        const src = map.getSource("osm-power-lines");
+        if (src) src.setData(data);
+      }).catch(() => {});
+
+      api.grid.osmSubstations(bbox).then(data => {
+        if (abortCtrl.signal.aborted || !data) return;
+        const src = map.getSource("osm-power-substations");
+        if (src) src.setData(data);
+      }).catch(() => {});
+
+      // Towers only at zoom >= 12
+      if (zoom >= 12) {
+        api.grid.osmTowers(bbox).then(data => {
+          if (abortCtrl.signal.aborted || !data) return;
+          const src = map.getSource("osm-power-towers");
+          if (src) src.setData(data);
+        }).catch(() => {});
+      } else {
+        const src = map.getSource("osm-power-towers");
+        if (src) src.setData(EMPTY_FC);
+      }
+
+      // Generators + plants at zoom >= 8
+      if (zoom >= 8) {
+        api.grid.osmGenerators(bbox).then(data => {
+          if (abortCtrl.signal.aborted || !data) return;
+          const src = map.getSource("osm-power-generators");
+          if (src) src.setData(data);
+        }).catch(() => {});
+        api.grid.osmPlants(bbox).then(data => {
+          if (abortCtrl.signal.aborted || !data) return;
+          const src = map.getSource("osm-power-plants");
+          if (src) src.setData(data);
+        }).catch(() => {});
+      } else {
+        const gs = map.getSource("osm-power-generators");
+        if (gs) gs.setData(EMPTY_FC);
+        const ps = map.getSource("osm-power-plants");
+        if (ps) ps.setData(EMPTY_FC);
+      }
+    };
+
+    const debouncedLoad = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loadOsmPower, 300);
+    };
+
+    // Load immediately on toggle + on every moveend
+    loadOsmPower();
+    map.on("moveend", debouncedLoad);
+
+    return () => {
+      abortCtrl.abort();
+      if (timer) clearTimeout(timer);
+      map.off("moveend", debouncedLoad);
+      // Clear sources when layer turned off
+      for (const id of ["osm-power-lines", "osm-power-substations", "osm-power-towers", "osm-power-generators", "osm-power-plants"]) {
+        const src = map.getSource(id);
+        if (src) src.setData(EMPTY_FC);
+      }
+    };
+  }, [layers.osmPower]);
 
   // Animate dash offset + node pulse when grid flow layer is visible
   useEffect(() => {

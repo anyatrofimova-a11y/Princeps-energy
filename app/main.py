@@ -59,6 +59,12 @@ from utils.nom_data import (
     get_nom_geojson, get_nom_summary, get_licence_areas as nom_licence_areas,
     get_local_authorities as nom_local_authorities,
 )
+from utils.osm_power_infra import (
+    setup_tables as osm_power_setup,
+    seed_power_infra as osm_power_seed,
+    power_lines_geojson, power_substations_geojson, power_towers_geojson,
+    power_generators_geojson, power_plants_geojson, power_infra_summary,
+)
 from agent_claude import get_structured_agent_output
 
 # Import sibling modules (app/ directory)
@@ -133,6 +139,7 @@ async def lifespan(_app: FastAPI):
         await setup_inventory_table(conn)
         await setup_demand_table(conn)
         await seed_demand(conn)
+        await osm_power_setup(conn)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS site_layouts (
                 parcel_id UUID PRIMARY KEY,
@@ -179,6 +186,8 @@ async def lifespan(_app: FastAPI):
                 FROM nearest n
                 WHERE parcels.parcel_id = n.parcel_id
             """)
+    # Launch OSM power infrastructure seeding in background (non-blocking)
+    asyncio.create_task(osm_power_seed(pool))
     yield
     await pool.close()
 
@@ -1631,6 +1640,68 @@ async def grid_demand_map():
     """Return Weave smart meter demand data as GeoJSON FeatureCollection."""
     async with pool.acquire() as conn:
         return await demand_geojson(conn)
+
+
+# ---------------------------------------------------------------------------
+# OSM Power Infrastructure — real power lines, substations, towers, generators
+# ---------------------------------------------------------------------------
+
+@app.get("/grid/osm/lines")
+async def grid_osm_lines(
+    west: float = Query(...), south: float = Query(...),
+    east: float = Query(...), north: float = Query(...),
+    min_voltage_kv: float = Query(0),
+):
+    """Return OSM power lines/cables as GeoJSON for the given bbox."""
+    async with pool.acquire() as conn:
+        return await power_lines_geojson(conn, (west, south, east, north), min_voltage_kv)
+
+
+@app.get("/grid/osm/substations")
+async def grid_osm_substations(
+    west: float = Query(...), south: float = Query(...),
+    east: float = Query(...), north: float = Query(...),
+):
+    """Return OSM power substations as GeoJSON for the given bbox."""
+    async with pool.acquire() as conn:
+        return await power_substations_geojson(conn, (west, south, east, north))
+
+
+@app.get("/grid/osm/towers")
+async def grid_osm_towers(
+    west: float = Query(...), south: float = Query(...),
+    east: float = Query(...), north: float = Query(...),
+):
+    """Return OSM power towers/poles as GeoJSON for the given bbox."""
+    async with pool.acquire() as conn:
+        return await power_towers_geojson(conn, (west, south, east, north))
+
+
+@app.get("/grid/osm/generators")
+async def grid_osm_generators(
+    west: float = Query(...), south: float = Query(...),
+    east: float = Query(...), north: float = Query(...),
+):
+    """Return OSM power generators as GeoJSON for the given bbox."""
+    async with pool.acquire() as conn:
+        return await power_generators_geojson(conn, (west, south, east, north))
+
+
+@app.get("/grid/osm/plants")
+async def grid_osm_plants(
+    west: float = Query(...), south: float = Query(...),
+    east: float = Query(...), north: float = Query(...),
+):
+    """Return OSM power plants as GeoJSON for the given bbox."""
+    async with pool.acquire() as conn:
+        return await power_plants_geojson(conn, (west, south, east, north))
+
+
+@app.get("/grid/osm/summary")
+async def grid_osm_summary():
+    """Return counts and voltage distribution for all OSM power data."""
+    async with pool.acquire() as conn:
+        return await power_infra_summary(conn)
 
 
 # ---------------------------------------------------------------------------

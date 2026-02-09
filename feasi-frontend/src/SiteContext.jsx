@@ -65,7 +65,7 @@ export function SiteProvider({ children }) {
   const [layers, setLayers] = useState({
     slope: true, carbon: false, la: false, transport: false, hillshade: true,
     contours: true, environment: true, gridFlow: true, agilePricing: false,
-    demandOverlay: false, flowFocus: false,
+    demandOverlay: false, flowFocus: false, osmPower: false,
     ndvi: false, satellite: false, aerial: true, lidarDtm: false, lidarDsm: false, landsat: false, viirs: false,
     epcZones: false, epcDom: false, epcNondom: false, postcodes: false,
   });
