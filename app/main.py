@@ -16,6 +16,7 @@ import sys
 
 import anthropic
 import asyncpg
+import httpx
 
 # Allow importing from project root (for utils/)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -59,11 +60,47 @@ from utils.nom_data import (
     get_nom_geojson, get_nom_summary, get_licence_areas as nom_licence_areas,
     get_local_authorities as nom_local_authorities,
 )
+from utils.legacy_asset_compliance import (
+    assess_asset_lifecycle, compliance_check,
+    setup_legacy_table, seed_sample_legacy_assets,
+    UK_ASSET_LIFECYCLES, DECOMMISSIONING_COSTS_PER_KW,
+)
+from utils.procurement_intelligence import (
+    classify_tender_technology, assess_bid_viability,
+    match_tenders_to_sites, procurement_pipeline_summary,
+    COST_BENCHMARKS as PROCUREMENT_COST_BENCHMARKS,
+)
+from utils.grid_efficiency_analyser import (
+    estimate_line_losses, analyse_network_efficiency,
+    identify_upgrade_opportunities, substation_health_assessment,
+)
+from utils.site_prospector import (
+    score_candidate_site, regional_scan, find_similar_sites,
+    UK_REGIONAL_RESOURCE,
+)
+from utils.bess_optimiser import (
+    score_bess_site, calculate_optimal_sizing,
+    model_revenue_stacking, bess_financial_model,
+    assess_colocation_value, bess_regional_scan,
+    BESS_CAPEX_GBP_PER_MWH, UK_REVENUE_STREAMS,
+)
 from utils.osm_power_infra import (
     setup_tables as osm_power_setup,
     seed_power_infra as osm_power_seed,
     power_lines_geojson, power_substations_geojson, power_towers_geojson,
     power_generators_geojson, power_plants_geojson, power_infra_summary,
+)
+from utils.nged_cim import (
+    setup_tables as nged_setup,
+    seed_cim_data as nged_seed,
+    find_opportunities as nged_opportunities,
+    find_opportunities_near as nged_opportunities_near,
+    opportunity_summary as nged_summary,
+    substations_geojson as nged_substations_geojson,
+    calc_headroom as nged_headroom,
+    substation_detail as nged_substation_detail,
+    get_transformers as nged_get_transformers,
+    get_line_segments as nged_get_line_segments,
 )
 from agent_claude import get_structured_agent_output
 
@@ -101,6 +138,8 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
 
+ELECTRICITYMAPS_API_KEY = os.environ.get("ELECTRICITYMAPS_API_KEY", "")
+
 _sam_default = os.path.join(os.path.dirname(__file__), "..", ".venv-sam", "bin", "python")
 SAM_PYTHON = os.environ.get("SAM_PYTHON", _sam_default)
 SAM_RUNNER = os.path.join(os.path.dirname(__file__), "..", "utils", "sam_runner.py")
@@ -114,6 +153,34 @@ if not _sam_runner_path.is_file():
     log.warning("SAM_RUNNER not found at %s", _sam_runner_path)
 SAM_PYTHON = str(_sam_path)
 SAM_RUNNER = str(_sam_runner_path)
+
+# GeeFlow (Google Earth Engine) — separate Python 3.12 venv
+_geeflow_default = os.path.join(os.path.dirname(__file__), "..", ".venv-geeflow", "bin", "python")
+GEEFLOW_PYTHON = os.environ.get("GEEFLOW_PYTHON", _geeflow_default)
+GEEFLOW_RUNNER = os.path.join(os.path.dirname(__file__), "..", "utils", "geeflow_runner.py")
+GEE_PROJECT = os.environ.get("GEE_PROJECT", "")
+
+_geeflow_path = pathlib.Path(GEEFLOW_PYTHON).absolute()
+if not _geeflow_path.is_file():
+    log.warning("GEEFLOW_PYTHON not found at %s — GeeFlow extractions will fail", _geeflow_path)
+_geeflow_runner_path = pathlib.Path(GEEFLOW_RUNNER).resolve()
+if not _geeflow_runner_path.is_file():
+    log.warning("GEEFLOW_RUNNER not found at %s", _geeflow_runner_path)
+GEEFLOW_PYTHON = str(_geeflow_path)
+GEEFLOW_RUNNER = str(_geeflow_runner_path)
+
+# GeoAI (opengeos/geoai) — uses same Python 3.12 venv as GeeFlow (torch compatible)
+_geoai_default = os.path.join(os.path.dirname(__file__), "..", ".venv-geeflow", "bin", "python")
+GEOAI_PYTHON = os.environ.get("GEOAI_PYTHON", _geoai_default)
+GEOAI_RUNNER = os.path.join(os.path.dirname(__file__), "..", "utils", "geoai_runner.py")
+_geoai_python_path = pathlib.Path(GEOAI_PYTHON).absolute()
+if not _geoai_python_path.is_file():
+    log.warning("GEOAI_PYTHON not found at %s — GeoAI analysis will use synthetic fallbacks", _geoai_python_path)
+_geoai_runner_path = pathlib.Path(GEOAI_RUNNER).resolve()
+if not _geoai_runner_path.is_file():
+    log.warning("GEOAI_RUNNER not found at %s", _geoai_runner_path)
+GEOAI_PYTHON = str(_geoai_python_path)
+GEOAI_RUNNER = str(_geoai_runner_path)
 
 if not DATABASE_URL:
     raise RuntimeError("Set DATABASE_URL env var")
@@ -140,6 +207,7 @@ async def lifespan(_app: FastAPI):
         await setup_demand_table(conn)
         await seed_demand(conn)
         await osm_power_setup(conn)
+        await nged_setup(conn)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS site_layouts (
                 parcel_id UUID PRIMARY KEY,
@@ -148,6 +216,26 @@ async def lifespan(_app: FastAPI):
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS geeflow_extractions (
+                extraction_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                parcel_id     UUID REFERENCES parcels(parcel_id) ON DELETE SET NULL,
+                lat           DOUBLE PRECISION NOT NULL,
+                lon           DOUBLE PRECISION NOT NULL,
+                radius_km     DOUBLE PRECISION DEFAULT 5.0,
+                mode          TEXT NOT NULL,
+                result_data   JSONB NOT NULL,
+                created_at    TIMESTAMPTZ DEFAULT NOW(),
+                geometry      GEOMETRY(Polygon, 4326)
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_geeflow_geom
+            ON geeflow_extractions USING GIST (geometry)
+        """)
+        # Legacy asset planning & compliance tables
+        await setup_legacy_table(conn)
+        await seed_sample_legacy_assets(conn)
         # Seed dno_substations from UK_SUBSTATIONS if empty
         sub_count = await conn.fetchval("SELECT count(*) FROM dno_substations")
         if sub_count == 0:
@@ -188,6 +276,8 @@ async def lifespan(_app: FastAPI):
             """)
     # Launch OSM power infrastructure seeding in background (non-blocking)
     asyncio.create_task(osm_power_seed(pool))
+    # Launch NGED CIM data seeding in background
+    asyncio.create_task(nged_seed(pool))
     yield
     await pool.close()
 
@@ -856,6 +946,636 @@ async def run_sam_subprocess(
             detail=f"SAM simulation failed: {stderr.decode()[:500]}",
         )
     return json.loads(stdout.decode())
+
+
+# ---------------------------------------------------------------------------
+# GeeFlow Earth Engine extraction (subprocess bridge, like SAM)
+# ---------------------------------------------------------------------------
+
+async def run_geeflow_subprocess(
+    mode: str, lat: float, lon: float,
+    radius_km: float = 5.0, year: int = 2024, timeout: int = 300,
+) -> dict[str, Any]:
+    """Run GeeFlow extraction in a subprocess (needs separate Python 3.12 venv)."""
+    if not GEE_PROJECT:
+        raise HTTPException(
+            status_code=500,
+            detail="GEE_PROJECT not configured — set in .env",
+        )
+    cmd = [
+        GEEFLOW_PYTHON, GEEFLOW_RUNNER,
+        "--mode", mode,
+        "--lat", str(lat),
+        "--lon", str(lon),
+        "--radius_km", str(radius_km),
+        "--year", str(year),
+        "--gee_project", GEE_PROJECT,
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    if proc.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"GeeFlow extraction failed: {stderr.decode()[:500]}",
+        )
+    return json.loads(stdout.decode())
+
+
+async def geeflow_with_cache(
+    mode: str, lat: float, lon: float, radius_km: float = 5.0,
+    year: int = 2024, parcel_id: str | None = None,
+) -> dict[str, Any]:
+    """Run GeeFlow extraction with PostGIS caching."""
+    # Cache TTL by mode (days)
+    ttl_days = {"land_use": 30, "vegetation": 30, "terrain": 90, "solar_resource": 7}
+    ttl = ttl_days.get(mode, 30)
+
+    # Check cache
+    async with pool.acquire() as conn:
+        cached = await conn.fetchrow(
+            """
+            SELECT result_data FROM geeflow_extractions
+            WHERE mode = $1
+              AND abs(lat - $2) < 0.01 AND abs(lon - $3) < 0.01
+              AND radius_km = $4
+              AND created_at > NOW() - make_interval(days => $5::int)
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            mode, lat, lon, float(radius_km), ttl,
+        )
+        if cached:
+            return json.loads(cached["result_data"]) if isinstance(cached["result_data"], str) else cached["result_data"]
+
+    # Run extraction
+    result = await run_geeflow_subprocess(mode, lat, lon, radius_km, year)
+
+    # Store in cache
+    pid = None
+    if parcel_id:
+        try:
+            pid = UUID(parcel_id)
+        except ValueError:
+            pass
+
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO geeflow_extractions (parcel_id, lat, lon, radius_km, mode, result_data, geometry)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb,
+                    ST_Buffer(ST_SetSRID(ST_MakePoint($7, $8), 4326)::geography, $9)::geometry)
+            """,
+            pid, lat, lon, float(radius_km), mode, json.dumps(result),
+            lon, lat, float(radius_km) * 1000,
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# GeoAI analysis (subprocess bridge to opengeos/geoai)
+# ---------------------------------------------------------------------------
+
+GEOAI_MODES = [
+    "building_footprints", "solar_panel_detect", "change_detection",
+    "land_cover", "canopy_height", "asset_condition",
+]
+
+async def run_geoai_subprocess(
+    mode: str, lat: float, lon: float,
+    radius_km: float = 2.0, asset_type: str = "solar_farm",
+    year_before: int = 2020, year_after: int = 2024,
+    timeout: int = 120,
+) -> dict[str, Any]:
+    """Run GeoAI analysis in a subprocess."""
+    cmd = [
+        GEOAI_PYTHON, GEOAI_RUNNER,
+        "--mode", mode,
+        "--lat", str(lat),
+        "--lon", str(lon),
+        "--radius_km", str(radius_km),
+        "--asset_type", asset_type,
+        "--year_before", str(year_before),
+        "--year_after", str(year_after),
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    if proc.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"GeoAI analysis failed: {stderr.decode()[:500]}",
+        )
+    return json.loads(stdout.decode())
+
+
+@app.get("/geoai/analyse")
+async def geoai_analyse(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    mode: str = Query("asset_condition"),
+    radius_km: float = Query(2.0, ge=0.5, le=20),
+    asset_type: str = Query("solar_farm"),
+    year_before: int = Query(2020),
+    year_after: int = Query(2024),
+):
+    """Run GeoAI geospatial analysis (building detection, solar panels, change detection, etc.)."""
+    if mode not in GEOAI_MODES:
+        raise HTTPException(status_code=400, detail=f"Unknown mode. Choose from: {GEOAI_MODES}")
+    return await run_geoai_subprocess(mode, lat, lon, radius_km, asset_type, year_before, year_after)
+
+
+@app.get("/geoai/modes")
+async def geoai_modes():
+    """List available GeoAI analysis modes."""
+    return {
+        "modes": GEOAI_MODES,
+        "descriptions": {
+            "building_footprints": "Detect building footprints from aerial imagery",
+            "solar_panel_detect": "Detect existing solar panel installations",
+            "change_detection": "Bi-temporal land use / structural change detection",
+            "land_cover": "High-resolution land cover classification",
+            "canopy_height": "Vegetation canopy height estimation",
+            "asset_condition": "Composite asset condition assessment (multi-model)",
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Legacy Asset Planning & Compliance
+# ---------------------------------------------------------------------------
+
+@app.get("/legacy/assets")
+async def get_legacy_assets(
+    lat: float = Query(None),
+    lon: float = Query(None),
+    radius_km: float = Query(25, ge=1, le=100),
+    asset_type: str = Query(None),
+    status: str = Query(None),
+):
+    """Query legacy energy assets, optionally filtered by location/type/status."""
+    async with pool.acquire() as conn:
+        conditions = []
+        params: list = []
+        idx = 1
+
+        if lat is not None and lon is not None:
+            conditions.append(
+                f"ST_DWithin(geometry, ST_Transform(ST_SetSRID(ST_MakePoint(${idx}, ${idx+1}), 4326), 27700), ${idx+2})"
+            )
+            params.extend([lon, lat, radius_km * 1000])
+            idx += 3
+
+        if asset_type:
+            conditions.append(f"asset_type = ${idx}")
+            params.append(asset_type)
+            idx += 1
+
+        if status:
+            conditions.append(f"status = ${idx}")
+            params.append(status)
+            idx += 1
+
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        rows = await conn.fetch(f"""
+            SELECT asset_id, name, asset_type, capacity_kw, commissioning,
+                   status, condition_score, owner, notes,
+                   ST_X(ST_Transform(geometry, 4326)) as lon,
+                   ST_Y(ST_Transform(geometry, 4326)) as lat
+            FROM legacy_assets
+            {where}
+            ORDER BY name
+            LIMIT 200
+        """, *params)
+
+        return {
+            "count": len(rows),
+            "assets": [
+                {
+                    "asset_id": str(r["asset_id"]),
+                    "name": r["name"],
+                    "asset_type": r["asset_type"],
+                    "capacity_kw": r["capacity_kw"],
+                    "commissioning": r["commissioning"].isoformat() if r["commissioning"] else None,
+                    "status": r["status"],
+                    "condition_score": r["condition_score"],
+                    "owner": r["owner"],
+                    "lat": round(r["lat"], 6) if r["lat"] else None,
+                    "lon": round(r["lon"], 6) if r["lon"] else None,
+                }
+                for r in rows
+            ],
+        }
+
+
+@app.get("/legacy/assets/geojson")
+async def get_legacy_assets_geojson(
+    asset_type: str = Query(None),
+    status: str = Query(None),
+):
+    """Return legacy assets as GeoJSON for map display."""
+    async with pool.acquire() as conn:
+        conditions = []
+        params: list = []
+        idx = 1
+        if asset_type:
+            conditions.append(f"asset_type = ${idx}")
+            params.append(asset_type)
+            idx += 1
+        if status:
+            conditions.append(f"status = ${idx}")
+            params.append(status)
+            idx += 1
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        rows = await conn.fetch(f"""
+            SELECT asset_id, name, asset_type, capacity_kw, commissioning,
+                   status, condition_score,
+                   ST_AsGeoJSON(ST_Transform(geometry, 4326))::json as geojson
+            FROM legacy_assets
+            {where}
+            LIMIT 500
+        """, *params)
+
+        features = []
+        for r in rows:
+            features.append({
+                "type": "Feature",
+                "geometry": r["geojson"] if isinstance(r["geojson"], dict) else json.loads(r["geojson"]),
+                "properties": {
+                    "asset_id": str(r["asset_id"]),
+                    "name": r["name"],
+                    "asset_type": r["asset_type"],
+                    "capacity_kw": r["capacity_kw"],
+                    "status": r["status"],
+                    "condition_score": r["condition_score"],
+                },
+            })
+        return {"type": "FeatureCollection", "features": features}
+
+
+@app.get("/legacy/lifecycle")
+async def get_lifecycle_assessment(
+    asset_type: str = Query("solar_farm"),
+    commissioning_date: str = Query("2015-01-01"),
+    capacity_kw: float = Query(100),
+    condition_score: float = Query(None),
+):
+    """Assess asset lifecycle position, compliance milestones, repowering, and decommissioning."""
+    return assess_asset_lifecycle(asset_type, commissioning_date, capacity_kw, condition_score)
+
+
+@app.get("/legacy/compliance")
+async def get_compliance_check(
+    asset_type: str = Query("solar_farm"),
+    capacity_kw: float = Query(100),
+    commissioning_date: str = Query("2015-01-01"),
+    has_consent: bool = Query(True),
+):
+    """Run UK regulatory compliance check for an energy asset."""
+    return compliance_check(asset_type, capacity_kw, commissioning_date, has_planning_consent=has_consent)
+
+
+@app.get("/legacy/asset-types")
+async def get_asset_types():
+    """List supported asset types with lifecycle parameters."""
+    return {
+        "types": UK_ASSET_LIFECYCLES,
+        "decommissioning_costs_per_kw": DECOMMISSIONING_COSTS_PER_KW,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Procurement Intelligence
+# ---------------------------------------------------------------------------
+
+@app.get("/procurement/pipeline")
+async def procurement_pipeline():
+    """Get procurement pipeline analytics from all tender sources."""
+    tenders = await fetch_all_tenders()
+    return procurement_pipeline_summary(tenders)
+
+
+@app.post("/procurement/bid-viability")
+async def bid_viability(req: Request):
+    """Assess viability of bidding on a specific tender."""
+    body = await req.json()
+    tender = body.get("tender", body)
+    return assess_bid_viability(
+        tender,
+        site_score=body.get("site_score"),
+        grid_headroom_mw=body.get("grid_headroom_mw"),
+        distance_to_grid_km=body.get("distance_to_grid_km"),
+        planning_success_rate=body.get("planning_success_rate"),
+    )
+
+
+@app.post("/procurement/match-sites")
+async def match_tender_sites(req: Request):
+    """Match tenders to available scored sites."""
+    body = await req.json()
+    tenders = body.get("tenders", [])
+    sites = body.get("sites", [])
+    return match_tenders_to_sites(tenders, sites, max_matches=body.get("max_matches", 5))
+
+
+@app.get("/procurement/cost-benchmarks")
+async def procurement_cost_benchmarks():
+    """Get UK energy procurement cost benchmarks by technology."""
+    return PROCUREMENT_COST_BENCHMARKS
+
+
+# ---------------------------------------------------------------------------
+# Grid Efficiency Analysis
+# ---------------------------------------------------------------------------
+
+@app.post("/grid-efficiency/line-losses")
+async def api_line_losses(req: Request):
+    """Estimate transmission/distribution line losses."""
+    body = await req.json()
+    return estimate_line_losses(
+        distance_km=body.get("distance_km", 10),
+        voltage_kv=body.get("voltage_kv", 132),
+        load_mw=body.get("load_mw", 10),
+        capacity_mva=body.get("capacity_mva"),
+    )
+
+
+@app.post("/grid-efficiency/network")
+async def api_network_efficiency(req: Request):
+    """Analyse efficiency across a grid topology."""
+    body = await req.json()
+    return analyse_network_efficiency(body)
+
+
+@app.post("/grid-efficiency/upgrade-opportunities")
+async def api_upgrade_opportunities(req: Request):
+    """Identify grid upgrade opportunities from topology."""
+    body = await req.json()
+    topology = body.get("topology", body)
+    min_congestion = body.get("min_congestion_pct", 70)
+    return identify_upgrade_opportunities(topology, min_congestion_pct=min_congestion)
+
+
+@app.post("/grid-efficiency/substation-health")
+async def api_substation_health(req: Request):
+    """Assess substation health from data + optional GeoAI condition."""
+    body = await req.json()
+    substations = body.get("substations", [])
+    geoai_condition = body.get("geoai_condition")
+    return substation_health_assessment(substations, geoai_condition)
+
+
+# ---------------------------------------------------------------------------
+# Site Prospector
+# ---------------------------------------------------------------------------
+
+@app.get("/prospector/score")
+async def api_score_site(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    technology: str = Query("solar"),
+):
+    """Score a candidate site for energy development potential."""
+    return score_candidate_site(lat, lon, technology)
+
+
+@app.get("/prospector/scan")
+async def api_regional_scan(
+    region: str = Query("south_west"),
+    technology: str = Query("solar"),
+    grid_points: int = Query(25, ge=4, le=100),
+):
+    """Scan a UK region for new site opportunities."""
+    return regional_scan(region, technology, grid_points)
+
+
+@app.get("/prospector/similar")
+async def api_find_similar(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_km: float = Query(50, ge=5, le=200),
+    technology: str = Query("solar"),
+    num_candidates: int = Query(20, ge=5, le=50),
+):
+    """Find sites similar to a reference location."""
+    return find_similar_sites(lat, lon, radius_km, num_candidates, technology)
+
+
+@app.get("/prospector/regions")
+async def api_regions():
+    """List UK regions with resource data."""
+    return UK_REGIONAL_RESOURCE
+
+
+# ---------------------------------------------------------------------------
+# BESS Optimiser
+# ---------------------------------------------------------------------------
+
+@app.get("/bess/score")
+async def api_bess_score(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    land_area_m2: float = Query(None),
+    grid_distance_km: float = Query(None),
+    grid_headroom_mw: float = Query(None),
+    grid_voltage_kv: float = Query(None),
+):
+    """Score a site for BESS deployment suitability."""
+    grid_data = {}
+    if grid_distance_km is not None:
+        grid_data["distance_km"] = grid_distance_km
+    if grid_headroom_mw is not None:
+        grid_data["headroom_mw"] = grid_headroom_mw
+    if grid_voltage_kv is not None:
+        grid_data["voltage_kv"] = grid_voltage_kv
+    return score_bess_site(lat, lon, grid_data or None, land_area_m2)
+
+
+class BESSSizingRequest(BaseModel):
+    capacity_mw: float
+    revenue_strategy: str = "hybrid"
+    grid_constraint_mw: float | None = None
+    duration_options: list[int] | None = None
+
+
+@app.post("/bess/sizing")
+async def api_bess_sizing(req: BESSSizingRequest):
+    """Calculate optimal BESS sizing across duration options."""
+    return calculate_optimal_sizing(
+        req.capacity_mw, req.duration_options, req.revenue_strategy, req.grid_constraint_mw,
+    )
+
+
+class BESSRevenueRequest(BaseModel):
+    power_mw: float
+    energy_mwh: float
+    strategy: str = "hybrid"
+
+
+@app.post("/bess/revenue")
+async def api_bess_revenue(req: BESSRevenueRequest):
+    """Model revenue stacking for a BESS configuration."""
+    return model_revenue_stacking(req.power_mw, req.energy_mwh, req.strategy)
+
+
+class BESSFinancialRequest(BaseModel):
+    capex_gbp: float
+    annual_revenue_gbp: float
+    opex_pct: float | None = None
+    years: int = 20
+    discount_rate: float = 0.08
+
+
+@app.post("/bess/financial")
+async def api_bess_financial(req: BESSFinancialRequest):
+    """Run BESS financial model (NPV, IRR, payback, LCOES)."""
+    kwargs = {"capex_gbp": req.capex_gbp, "annual_revenue_gbp": req.annual_revenue_gbp,
+              "years": req.years, "discount_rate": req.discount_rate}
+    if req.opex_pct is not None:
+        kwargs["opex_pct"] = req.opex_pct
+    return bess_financial_model(**kwargs)
+
+
+@app.get("/bess/colocation")
+async def api_bess_colocation(
+    solar_kw: float = Query(...),
+    lat: float = Query(52.5),
+    lon: float = Query(-1.5),
+):
+    """Assess value-add from co-locating BESS with solar PV."""
+    return assess_colocation_value(solar_kw, location_data={"lat": lat, "lon": lon})
+
+
+@app.get("/bess/scan")
+async def api_bess_scan(
+    region: str = Query("south_west"),
+    min_mw: float = Query(10, ge=1),
+    max_mw: float = Query(100, le=500),
+):
+    """Scan a UK region for BESS deployment opportunities."""
+    return bess_regional_scan(region, min_mw, max_mw)
+
+
+@app.get("/bess/benchmarks")
+async def api_bess_benchmarks():
+    """Return UK BESS market benchmarks."""
+    return {
+        "capex_gbp_per_mwh": BESS_CAPEX_GBP_PER_MWH,
+        "revenue_streams": UK_REVENUE_STREAMS,
+    }
+
+
+@app.get("/geeflow/extract/{mode}")
+async def geeflow_extract(
+    mode: str,
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_km: float = Query(5.0, ge=0.5, le=50),
+    year: int = Query(2024, ge=2017, le=2026),
+    parcel_id: str = Query(None),
+):
+    """Extract Earth observation data for a location using GeeFlow."""
+    valid_modes = ["land_use", "terrain", "solar_resource", "vegetation", "change_detection", "site_composite"]
+    if mode not in valid_modes:
+        raise HTTPException(400, f"Invalid mode. Choose from: {valid_modes}")
+    return await geeflow_with_cache(mode, lat, lon, radius_km, year, parcel_id)
+
+
+class GeeFlowAnalysisRequest(BaseModel):
+    lat: float
+    lon: float
+    radius_km: float = 5.0
+    year: int = 2024
+    modes: list[str] = ["land_use", "terrain", "solar_resource", "vegetation"]
+    parcel_id: str | None = None
+
+
+@app.post("/job/geeflow_analysis")
+async def start_geeflow_analysis(body: GeeFlowAnalysisRequest):
+    """Submit a background multi-mode GeeFlow analysis job."""
+
+    async def _run_geeflow_analysis(lat, lon, radius_km, year, modes, parcel_id):
+        results = {}
+        for mode in modes:
+            try:
+                results[mode] = await geeflow_with_cache(mode, lat, lon, radius_km, year, parcel_id)
+            except Exception as exc:
+                log.warning("GeeFlow mode %s failed: %s", mode, exc)
+                results[mode] = {"error": str(exc)[:300]}
+
+        # Fetch grid data — nearest substation + NGED headroom
+        grid_data = None
+        try:
+            nearest = gdp_nearest_sub(lat, lon)
+            if nearest:
+                grid_data = {
+                    "distance_km": nearest.get("distance_km"),
+                    "name": nearest.get("name"),
+                    "voltage_kv": nearest.get("voltage_kv"),
+                }
+            # Try NGED CIM for headroom data
+            async with pool.acquire() as conn:
+                from utils.nged_cim import find_opportunities_near
+                opp = await find_opportunities_near(conn, lat, lon, radius_km=15, min_headroom_mw=0)
+                if opp.get("results"):
+                    best = opp["results"][0]  # sorted by headroom DESC
+                    if grid_data is None:
+                        grid_data = {}
+                    grid_data["headroom_mw"] = best["headroom_mw"]
+                    if grid_data.get("distance_km") is None:
+                        grid_data["distance_km"] = best["distance_km"]
+        except Exception as exc:
+            log.warning("Grid data fetch failed: %s", exc)
+
+        # Fetch planning data — nearby energy applications
+        planning_data = None
+        try:
+            async with pool.acquire() as conn:
+                from utils.planning_energy import query_energy_applications
+                # Build bbox ~10km around point
+                delta = 0.1  # ~10km at UK latitudes
+                bbox = (lon - delta, lat - delta, lon + delta, lat + delta)
+                apps = await query_energy_applications(conn, category="solar", bbox=bbox, limit=100)
+                if apps:
+                    approved = sum(1 for a in apps if a.get("application_decision") in ("Approved", "Granted", "Permitted"))
+                    total = len(apps)
+                    planning_data = {
+                        "nearby_energy_apps": total,
+                        "approval_rate": approved / total if total > 0 else None,
+                    }
+        except Exception as exc:
+            log.warning("Planning data fetch failed: %s", exc)
+
+        # Compute site score with all available data
+        from utils.geeflow_site_scorer import compute_site_score
+        score = compute_site_score(
+            terrain_data=results.get("terrain"),
+            land_use_data=results.get("land_use"),
+            solar_data=results.get("solar_resource"),
+            grid_data=grid_data,
+            planning_data=planning_data,
+        )
+
+        return {
+            "lat": lat, "lon": lon, "radius_km": radius_km,
+            "extractions": results,
+            "grid_data": grid_data,
+            "planning_data": planning_data,
+            "site_score": score,
+        }
+
+    job = await jobs.submit(
+        "geeflow_analysis",
+        _run_geeflow_analysis,
+        body.lat, body.lon, body.radius_km, body.year, body.modes, body.parcel_id,
+    )
+    return {"job_id": job.id, "status": job.status.value}
 
 
 @app.get("/site/{parcel_id}/solar_yield")
@@ -2393,6 +3113,96 @@ async def enhanced_agent(parcel_id: str, body: AgentRequest):
 # Agentic Chat — multi-turn conversational AI with tool use
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Electricity Maps proxy
+# ---------------------------------------------------------------------------
+_EMAPS_BASE = "https://api.electricitymap.org/v3"
+_emaps_cache: dict[str, tuple[float, Any]] = {}
+_EMAPS_CACHE_TTL = 300  # 5 minutes
+
+EUROPEAN_ZONES = [
+    "AT", "BE", "BG", "CH", "CZ", "DE", "DK-DK1", "DK-DK2", "EE", "ES",
+    "FI", "FR", "GB", "GR", "HR", "HU", "IE", "IT-NO", "IT-CNO", "IT-CSO",
+    "IT-SO", "IT-SAR", "IT-SIC", "LT", "LU", "LV", "NL", "NO-NO1", "NO-NO2",
+    "NO-NO3", "NO-NO4", "NO-NO5", "PL", "PT", "RO", "RS", "SE-SE1", "SE-SE2",
+    "SE-SE3", "SE-SE4", "SI", "SK", "UA",
+]
+
+
+async def _emaps_get(path: str) -> dict | None:
+    """Fetch from Electricity Maps API with caching."""
+    now = _time.time()
+    if path in _emaps_cache:
+        cached_time, cached_data = _emaps_cache[path]
+        if now - cached_time < _EMAPS_CACHE_TTL:
+            return cached_data
+    if not ELECTRICITYMAPS_API_KEY:
+        return {"error": "ELECTRICITYMAPS_API_KEY not configured"}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{_EMAPS_BASE}{path}",
+                headers={"auth-token": ELECTRICITYMAPS_API_KEY},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                _emaps_cache[path] = (now, data)
+                return data
+            return {"error": f"Electricity Maps API returned {resp.status_code}"}
+    except Exception as exc:
+        log.warning("Electricity Maps API error: %s", exc)
+        return {"error": str(exc)[:200]}
+
+
+@app.get("/electricity/carbon-intensity/{zone}")
+async def electricity_carbon_intensity(zone: str):
+    """Proxy to Electricity Maps carbon intensity for a zone."""
+    data = await _emaps_get(f"/carbon-intensity/latest?zone={zone}")
+    if not data:
+        raise HTTPException(status_code=502, detail="Failed to fetch from Electricity Maps")
+    return data
+
+
+@app.get("/electricity/power-breakdown/{zone}")
+async def electricity_power_breakdown(zone: str):
+    """Proxy to Electricity Maps power generation breakdown for a zone."""
+    data = await _emaps_get(f"/power-breakdown/latest?zone={zone}")
+    if not data:
+        raise HTTPException(status_code=502, detail="Failed to fetch from Electricity Maps")
+    return data
+
+
+@app.get("/electricity/carbon-intensity-all")
+async def electricity_carbon_intensity_all():
+    """Batch query carbon intensity for all European zones."""
+    now = _time.time()
+    cache_key = "__all_european__"
+    if cache_key in _emaps_cache:
+        cached_time, cached_data = _emaps_cache[cache_key]
+        if now - cached_time < _EMAPS_CACHE_TTL:
+            return cached_data
+
+    tasks = [_emaps_get(f"/carbon-intensity/latest?zone={z}") for z in EUROPEAN_ZONES]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    zones_data = {}
+    for zone, result in zip(EUROPEAN_ZONES, results):
+        if isinstance(result, Exception):
+            zones_data[zone] = {"error": str(result)[:200]}
+        elif result and "error" not in result:
+            zones_data[zone] = result
+        else:
+            zones_data[zone] = result or {"error": "No data"}
+
+    response = {"zones": zones_data, "timestamp": now}
+    _emaps_cache[cache_key] = (now, response)
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Chat — conversational AI panel
+# ---------------------------------------------------------------------------
+
 class ChatSessionRequest(BaseModel):
     parcel_id: str | None = None
 
@@ -2424,6 +3234,8 @@ async def chat_message(session_id: str, body: ChatMessageRequest):
             pool=pool,
             run_sam_subprocess=run_sam_subprocess,
             fetch_parcel_context=fetch_parcel_context,
+            run_geeflow_subprocess=run_geeflow_subprocess,
+            run_geoai_subprocess=run_geoai_subprocess,
         ),
         media_type="text/event-stream",
         headers={
@@ -3286,3 +4098,91 @@ async def nom_licence_areas_list():
 @app.get("/nom/local-authorities")
 async def nom_local_authorities_list():
     return nom_local_authorities()
+
+
+# ---------------------------------------------------------------------------
+# NGED CIM Distribution Network (from LTDS Common Information Model)
+# ---------------------------------------------------------------------------
+
+@app.get("/nged/substations")
+async def nged_substations(
+    west: float = Query(...), south: float = Query(...),
+    east: float = Query(...), north: float = Query(...),
+):
+    """GeoJSON of NGED substations with headroom properties in bbox."""
+    async with pool.acquire() as conn:
+        return await nged_substations_geojson(conn, west, south, east, north)
+
+
+@app.get("/nged/opportunities")
+async def nged_opportunities_endpoint(
+    west: float = Query(...), south: float = Query(...),
+    east: float = Query(...), north: float = Query(...),
+    min_headroom_mw: float = Query(1.0, ge=0),
+):
+    """Substations with spare capacity in bbox."""
+    async with pool.acquire() as conn:
+        return await nged_opportunities(conn, west, south, east, north, min_headroom_mw)
+
+
+@app.get("/nged/substation/{sub_id}")
+async def nged_substation_detail_endpoint(sub_id: str):
+    """Single substation detail with transformers, consumers, and headroom."""
+    async with pool.acquire() as conn:
+        detail = await nged_substation_detail(conn, sub_id)
+        if not detail:
+            raise HTTPException(404, f"NGED substation {sub_id} not found")
+        return detail
+
+
+@app.get("/nged/substation/{sub_id}/headroom")
+async def nged_substation_headroom(sub_id: str):
+    """Headroom calculation for a substation."""
+    async with pool.acquire() as conn:
+        return await nged_headroom(conn, sub_id)
+
+
+@app.get("/nged/summary")
+async def nged_summary_endpoint():
+    """Regional counts, total headroom, top opportunities."""
+    async with pool.acquire() as conn:
+        return await nged_summary(conn)
+
+
+@app.get("/nged/transformers")
+async def nged_transformers(substation_id: str = Query(...)):
+    """Transformers at a substation."""
+    async with pool.acquire() as conn:
+        return await nged_get_transformers(conn, substation_id)
+
+
+@app.get("/nged/lines")
+async def nged_lines(
+    substation_id: str = Query(None),
+    region: str = Query(None),
+):
+    """Line segments, optionally filtered by region."""
+    async with pool.acquire() as conn:
+        return await nged_get_line_segments(conn, substation_id, region)
+
+
+# ---------------------------------------------------------------------------
+# Static frontend serving (production / ngrok demo)
+# ---------------------------------------------------------------------------
+
+_DIST_DIR = pathlib.Path(__file__).resolve().parent.parent / "feasi-frontend" / "dist"
+
+if _DIST_DIR.is_dir():
+    from starlette.staticfiles import StaticFiles
+    from starlette.responses import FileResponse
+
+    # Serve built assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=_DIST_DIR / "assets"), name="static-assets")
+
+    # SPA fallback — serve index.html for any non-API route
+    @app.get("/{full_path:path}")
+    async def spa_fallback(full_path: str):
+        file_path = _DIST_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(_DIST_DIR / "index.html")

@@ -78,6 +78,63 @@ INTENT_PROMPTS: dict[str, str] = {
         "Assess planning permission likelihood, relevant NPPF policies, "
         "local plan alignment, and pre-application strategy."
     ),
+    "grid_opportunity": (
+        "You are a UK distribution network connections specialist. "
+        "Analyse NGED substation headroom data to identify the best connection "
+        "opportunities for solar PV. Consider transformer capacity, existing load, "
+        "available headroom, voltage level, and proximity to the proposed site. "
+        "Rank substations by connection attractiveness."
+    ),
+    "satellite_analysis": (
+        "You are a geospatial intelligence analyst specialising in renewable energy "
+        "site assessment using satellite Earth observation data. Analyse DynamicWorld "
+        "land cover, terrain (NASADEM), solar resource (ERA5), and vegetation (Sentinel-2 NDVI) "
+        "to assess site suitability for solar PV, battery storage, or wind development. "
+        "Provide a composite suitability score and GO / CAUTION / NO-GO recommendation "
+        "based on terrain feasibility, land use compatibility, solar resource quality, "
+        "and environmental constraints."
+    ),
+    "legacy_compliance": (
+        "You are a UK energy infrastructure asset management and compliance specialist. "
+        "Assess legacy asset condition, regulatory compliance status, and lifecycle position. "
+        "Evaluate repowering opportunities considering technology improvements since commissioning. "
+        "Review planning consent conditions, environmental obligations (BNG, EIA monitoring), "
+        "grid connection compliance (G99/G100), and health & safety requirements (CDM 2015). "
+        "Identify decommissioning liabilities and estimate costs. Consider GeoAI satellite-derived "
+        "condition indicators including vegetation encroachment, structural changes, and land use "
+        "changes around the asset. Provide a GO / CAUTION / NO-GO verdict on continued operation "
+        "with clear compliance remediation actions."
+    ),
+    "procurement": (
+        "You are a UK energy procurement strategist specialising in tender analysis and bid strategy. "
+        "Assess tender viability considering technology match, contract value, deadline, site suitability, "
+        "grid capacity, and planning history. Classify tenders by energy technology (solar PV, battery storage, "
+        "wind, EV charging, etc.) and match to available sites. Analyse cost benchmarks against tender values. "
+        "Provide STRONG_BID / CONDITIONAL_BID / NO_BID recommendation with supporting factors."
+    ),
+    "grid_efficiency": (
+        "You are a UK power systems engineer specialising in grid efficiency and network optimisation. "
+        "Analyse transmission and distribution losses by voltage level, identify congested lines, "
+        "assess substation health and utilisation. Recommend grid upgrade interventions (line reinforcement, "
+        "BESS peak shaving) with cost-benefit analysis and payback periods. Consider satellite-derived "
+        "infrastructure condition where available."
+    ),
+    "site_prospecting": (
+        "You are a UK renewable energy site acquisition specialist. "
+        "Identify and rank new sites for solar PV, wind, or battery storage development using "
+        "multi-criteria analysis: solar/wind resource quality, terrain suitability, land use compatibility, "
+        "grid access (substation proximity and headroom), and planning/environmental constraints. "
+        "Provide HIGH_PRIORITY / PROMISING / MARGINAL / UNSUITABLE recommendations with composite scores."
+    ),
+    "bess_optimisation": (
+        "You are a UK battery energy storage system (BESS) specialist. "
+        "Assess site suitability for BESS deployment considering grid connection capacity, "
+        "land availability, and planning constraints. Calculate optimal sizing (MW/MWh) "
+        "based on UK revenue opportunities: frequency response (FFR/DC/DM), capacity market, "
+        "arbitrage (Agile/wholesale), and DNO peak shaving. Model revenue stacking, financial "
+        "returns (NPV, IRR, payback), degradation impacts, and co-location benefits with solar PV. "
+        "Provide a GO / CAUTION / NO-GO verdict with confidence score."
+    ),
 }
 
 OUTPUT_SCHEMA = """\
@@ -96,7 +153,7 @@ Return ONLY a valid JSON object with these exact fields:
   ]
 }
 
-The "actions" array lists concrete API calls the user can trigger.
+The "actions" array should be EMPTY — actions are generated server-side.
 Only output valid JSON — no markdown, no explanation text.
 Use the data below — do not invent numbers.\
 """
@@ -166,9 +223,8 @@ async def run_structured_agent(
         agent_output.setdefault("intent", intent)
         elapsed = round(time.time() - t0, 2)
 
-        # Suggest actions based on intent if none provided
-        if not agent_output.get("actions"):
-            agent_output["actions"] = _default_actions(intent, context)
+        # Always use validated actions — Claude hallucinates endpoints
+        agent_output["actions"] = _default_actions(intent, context)
 
         _audit_log(
             {
@@ -204,36 +260,46 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
     """Generate sensible default actions based on intent."""
     pid = ctx.get("parcel_id", "")
     cap = ctx.get("capacity_kw", 100)
+    loc = ctx.get("location", {})
+    lat = loc.get("lat", ctx.get("lat", 52.5))
+    lon = loc.get("lon", ctx.get("lon", -1.5))
     actions = []
 
     if intent == "feasibility":
         actions = [
             {
-                "label": "Run Grid Study",
-                "endpoint": f"/job/grid_study",
+                "label": "Request Grid Connection Quote",
+                "endpoint": "/job/grid_study",
                 "method": "POST",
                 "payload": {"parcel_id": pid, "capacity_kw": cap},
             },
             {
-                "label": "Generate BOM",
-                "endpoint": f"/site/{pid}/bom?capacity_kw={cap}",
-                "method": "GET",
-                "payload": {},
+                "label": "Initiate Planning Pre-App",
+                "endpoint": f"/site/{pid}/agent",
+                "method": "POST",
+                "payload": {"intent": "planning", "capacity_kw": cap},
             },
             {
-                "label": "Financial Analysis",
+                "label": "Generate Financial Model",
                 "endpoint": f"/site/{pid}/agent",
                 "method": "POST",
                 "payload": {"intent": "financial", "capacity_kw": cap},
             },
+            {
+                "label": "Generate Bill of Materials",
+                "endpoint": f"/site/{pid}/bom?capacity_kw={cap}",
+                "method": "GET",
+                "payload": {},
+            },
         ]
     elif intent == "grid_study":
+        load_mw = cap / 1000
         actions = [
             {
                 "label": "Run Deferral Optimiser",
-                "endpoint": "/opt/run",
+                "endpoint": f"/opt/run?plan_name=agent_grid&load_mw={load_mw}&gen_mw={load_mw}",
                 "method": "POST",
-                "payload": {"plan_name": "agent_grid", "load_mw": cap / 1000, "gen_mw": cap / 1000},
+                "payload": {},
             },
         ]
     elif intent == "financial":
@@ -260,5 +326,174 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "payload": {},
             },
         ]
+    elif intent == "grid_opportunity":
+        actions = [
+            {
+                "label": "View NGED Substations",
+                "endpoint": "/nged/summary",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Find Opportunities Near Site",
+                "endpoint": "/nged/opportunities?west=-3&south=51&east=-2&north=52&min_headroom_mw=1",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+    elif intent == "satellite_analysis":
+        actions = [
+            {
+                "label": "Run Satellite Analysis",
+                "endpoint": "/job/geeflow_analysis",
+                "method": "POST",
+                "payload": {"lat": lat, "lon": lon, "radius_km": 5,
+                            "modes": ["land_use", "terrain", "solar_resource", "vegetation"]},
+            },
+        ]
+
+    elif intent == "legacy_compliance":
+        actions = [
+            {
+                "label": "Run GeoAI Asset Condition Scan",
+                "endpoint": f"/geoai/analyse?lat={lat}&lon={lon}&mode=asset_condition",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Query Legacy Assets Near Site",
+                "endpoint": f"/legacy/assets?lat={lat}&lon={lon}&radius_km=10",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Run Compliance Check",
+                "endpoint": f"/legacy/compliance?asset_type=solar_farm&capacity_kw={cap}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View Planning Applications",
+                "endpoint": "/planning/energy/summary",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "procurement":
+        actions = [
+            {
+                "label": "View Procurement Pipeline",
+                "endpoint": "/procurement/pipeline",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Get Cost Benchmarks",
+                "endpoint": "/procurement/cost-benchmarks",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Score Candidate Site",
+                "endpoint": f"/prospector/score?lat={lat}&lon={lon}&technology=solar",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "grid_efficiency":
+        actions = [
+            {
+                "label": "Estimate Line Losses",
+                "endpoint": "/grid-efficiency/line-losses",
+                "method": "POST",
+                "payload": {"distance_km": 10, "voltage_kv": 132, "load_mw": 10},
+            },
+            {
+                "label": "Assess Substation Health",
+                "endpoint": "/grid-efficiency/substation-health",
+                "method": "POST",
+                "payload": {"substations": []},
+            },
+            {
+                "label": "View NGED Substations",
+                "endpoint": "/nged/summary",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "site_prospecting":
+        actions = [
+            {
+                "label": "Score This Site",
+                "endpoint": f"/prospector/score?lat={lat}&lon={lon}&technology=solar",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Scan Region for Sites",
+                "endpoint": "/prospector/scan?region=south_west&technology=solar&grid_points=25",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Find Similar Sites",
+                "endpoint": f"/prospector/similar?lat={lat}&lon={lon}&radius_km=50&technology=solar",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View UK Regions",
+                "endpoint": "/prospector/regions",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "bess_optimisation":
+        actions = [
+            {
+                "label": "Score Site for BESS",
+                "endpoint": f"/bess/score?lat={lat}&lon={lon}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Calculate Optimal Sizing",
+                "endpoint": "/bess/sizing",
+                "method": "POST",
+                "payload": {"capacity_mw": 50, "revenue_strategy": "hybrid", "grid_constraint_mw": 100},
+            },
+            {
+                "label": "Model Revenue Stacking",
+                "endpoint": "/bess/revenue",
+                "method": "POST",
+                "payload": {"power_mw": 50, "energy_mwh": 100, "strategy": "hybrid"},
+            },
+            {
+                "label": "Assess Co-location with Solar",
+                "endpoint": f"/bess/colocation?solar_kw={cap}&lat={lat}&lon={lon}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View UK BESS Benchmarks",
+                "endpoint": "/bess/benchmarks",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    # Add satellite analysis as secondary action for feasibility and grid_opportunity
+    if intent in ("feasibility", "grid_opportunity"):
+        actions.append({
+            "label": "Run Satellite Analysis",
+            "endpoint": "/job/geeflow_analysis",
+            "method": "POST",
+            "payload": {"lat": lat, "lon": lon, "radius_km": 5,
+                        "modes": ["land_use", "terrain", "solar_resource", "vegetation"]},
+        })
 
     return actions

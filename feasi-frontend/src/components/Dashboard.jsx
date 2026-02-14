@@ -20,6 +20,13 @@ import InventoryCard from "./cards/InventoryCard";
 import TendersCard from "./cards/TendersCard";
 import StabilityCard from "./cards/StabilityCard";
 import EnergyAnalyticsCard from "./cards/EnergyAnalyticsCard";
+import NGEDOpportunityCard from "./cards/NGEDOpportunityCard";
+import SatelliteCard from "./cards/SatelliteCard";
+import LegacyAssetCard from "./cards/LegacyAssetCard";
+import ProcurementCard from "./cards/ProcurementCard";
+import GridEfficiencyCard from "./cards/GridEfficiencyCard";
+import SiteProspectorCard from "./cards/SiteProspectorCard";
+import BESSOptimizerCard from "./cards/BESSOptimizerCard";
 
 /**
  * Dashboard — vertically scrollable card-based layout replacing 13-tab panel.
@@ -48,7 +55,14 @@ export default function Dashboard() {
     { id: "planning", label: "Planning", color: "#e91e63" },
     { id: "stability", label: "Stability", color: "#f44336" },
     { id: "tenders", label: "Tenders", color: "#ff9800" },
+    { id: "satellite", label: "Satellite", color: "#1565c0" },
+    { id: "nged", label: "NGED", color: "#1b5e20" },
     { id: "epc", label: "EPC", color: "#1a9850" },
+    { id: "legacy", label: "Legacy", color: "#ef6c00" },
+    { id: "procurement", label: "Procurement", color: "#ff5722" },
+    { id: "gridEff", label: "Grid Eff.", color: "#795548" },
+    { id: "prospector", label: "Prospector", color: "#009688" },
+    { id: "bess", label: "BESS", color: "#4caf50" },
     { id: "analytics", label: "AI Energy", color: "#00e5ff" },
     { id: "agent", label: "Analysis", color: "#7c4dff" },
   ];
@@ -106,8 +120,25 @@ export default function Dashboard() {
           )}
           {activeTab === "stability" && <StabilityCard onStabilityData={setStabilityData} />}
           {activeTab === "tenders" && <TendersCard />}
+          {activeTab === "satellite" && <SatelliteCard />}
+          {activeTab === "nged" && <NGEDOpportunityCard />}
           {activeTab === "epc" && (
             <EPCSummary lsoaId={selectedLsoa} parcelId={parcelId} />
+          )}
+          {activeTab === "legacy" && (
+            <ErrorBoundary name="Legacy"><LegacyAssetCard /></ErrorBoundary>
+          )}
+          {activeTab === "procurement" && (
+            <ErrorBoundary name="Procurement"><ProcurementCard /></ErrorBoundary>
+          )}
+          {activeTab === "gridEff" && (
+            <ErrorBoundary name="Grid Efficiency"><GridEfficiencyCard /></ErrorBoundary>
+          )}
+          {activeTab === "prospector" && (
+            <ErrorBoundary name="Prospector"><SiteProspectorCard /></ErrorBoundary>
+          )}
+          {activeTab === "bess" && (
+            <ErrorBoundary name="BESS"><BESSOptimizerCard /></ErrorBoundary>
           )}
           {activeTab === "analytics" && (
             <ErrorBoundary name="Analytics"><EnergyAnalyticsCard /></ErrorBoundary>
