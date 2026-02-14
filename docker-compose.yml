@@ -2,7 +2,7 @@ services:
   postgis:
     image: postgis/postgis:16-3.4
     environment:
-      POSTGRES_DB: feasibly
+      POSTGRES_DB: princeps
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
@@ -16,7 +16,7 @@ services:
     depends_on:
       - postgis
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgis:5432/feasibly
+      DATABASE_URL: postgresql://postgres:postgres@postgis:5432/princeps
       CLAUDE_API_KEY: ${CLAUDE_API_KEY}
       CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-5-20250929}
     ports:

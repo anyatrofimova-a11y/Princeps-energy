@@ -283,3 +283,13 @@ if __name__ == "__main__":
     curt = curtailment_risk(172)
     print(f"  Avg risk: {curt['avg_risk']:.3f}")
     print(f"  Peak risk: {curt['peak_risk']:.3f} at {curt['peak_risk_hour']}:00")
+
+
+def enhanced_grid_context(day_of_year: int = 172, geeflow_data: dict | None = None) -> dict:
+    """
+    Merge standard grid context with satellite-derived data for
+    a comprehensive grid connection assessment.
+    """
+    from utils.geeflow_grid_analysis import enhanced_grid_context as _enhance
+    base = full_grid_context(day_of_year)
+    return _enhance(base, geeflow_data)

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useCallback } from "react";
-import maplibregl from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
 const EMPTY_FC = { type: "FeatureCollection", features: [] };
 
@@ -17,10 +19,11 @@ export default function NOMMap({ geojsonData, selectedSub, onSelectSubstation })
 
   // Initialize map
   useEffect(() => {
-    const map = new maplibregl.Map({
+    const map = new mapboxgl.Map({
       container: containerRef.current,
       style: {
         version: 8,
+        glyphs: "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
         sources: {
           "carto-light": {
             type: "raster",
@@ -45,7 +48,7 @@ export default function NOMMap({ geojsonData, selectedSub, onSelectSubstation })
       attributionControl: false,
     });
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
 
     map.on("load", () => {
       // NOM substations source
@@ -133,7 +136,7 @@ export default function NOMMap({ geojsonData, selectedSub, onSelectSubstation })
           const rag = f.properties.display_rag;
 
           if (popupRef.current) popupRef.current.remove();
-          popupRef.current = new maplibregl.Popup({
+          popupRef.current = new mapboxgl.Popup({
             closeButton: false,
             closeOnClick: false,
             className: "nom-tooltip",

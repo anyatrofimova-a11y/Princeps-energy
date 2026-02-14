@@ -9,7 +9,7 @@ import api from "../services/api";
 
 // ── Top Banner: AI Threat/Opportunity Assessment ──
 export function AITopBanner() {
-  const { agentResult, parcelId, solarYield, gridContext, stabilityData, explain } = useSite();
+  const { agentResult, parcelId, solarYield, gridContext, stabilityData, explain, geeflowData } = useSite();
   const [solarForecast, setSolarForecast] = useState(null);
   const [gridStab, setGridStab] = useState(null);
   const fetchedRef = useRef(false);
@@ -78,6 +78,15 @@ export function AITopBanner() {
           <span className="ai-metric-label">SITE SCORE</span>
           <span className="ai-metric-value" style={{ color: "#7c4dff" }}>
             {explain?.score?.total != null ? `${explain.score.total}/120` : "--"}
+          </span>
+        </div>
+        <div className="ai-metric-sep" />
+        <div className="ai-metric">
+          <span className="ai-metric-label">LAND SCORE</span>
+          <span className="ai-metric-value" style={{ color: "#1565c0" }}>
+            {geeflowData?.site_score?.total_score != null
+              ? `${geeflowData.site_score.total_score}/100`
+              : "--"}
           </span>
         </div>
       </div>

@@ -22,6 +22,9 @@ const TOOL_LABELS = {
   create_map_layer: "Map Layer",
   process_uploaded_file: "File Analysis",
   query_energy_scenario: "Energy Scenario",
+  get_electricity_map: "Electricity Map",
+  run_satellite_analysis: "Satellite Analysis",
+  score_tender_sites: "Tender Site Scoring",
 };
 
 export default function ChatPanel({ onMapLayer }) {
@@ -100,12 +103,45 @@ export default function ChatPanel({ onMapLayer }) {
 
     try {
       abortRef.current = new AbortController();
-      const res = await fetch(`/chat/${sid}/message`, {
+      let res = await fetch(`/chat/${sid}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
         signal: abortRef.current.signal,
       });
+
+      // Session lost (server restart) — recreate and retry once
+      if (res.status === 404) {
+        setSessionId(null);
+        try {
+          const sessRes = await fetch("/chat/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ parcel_id: parcelId || null }),
+          });
+          const sessData = await sessRes.json();
+          if (sessData.session_id) {
+            setSessionId(sessData.session_id);
+            res = await fetch(`/chat/${sessData.session_id}/message`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ message: text }),
+              signal: abortRef.current.signal,
+            });
+          }
+        } catch { /* fall through to error handling below */ }
+      }
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        setMessages(prev => {
+          const copy = [...prev];
+          copy[copy.length - 1] = { ...copy[copy.length - 1], content: `[Error ${res.status}: ${errText.slice(0, 120) || "request failed"}]` };
+          return copy;
+        });
+        setStreaming(false);
+        return;
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -236,7 +272,7 @@ export default function ChatPanel({ onMapLayer }) {
 
   if (!open) {
     return (
-      <button className="chat-toggle-btn" onClick={() => setOpen(true)} title="Open Feasibly AI Chat">
+      <button className="chat-toggle-btn" onClick={() => setOpen(true)} title="Open Princeps AI Chat">
         AI
       </button>
     );
@@ -246,7 +282,7 @@ export default function ChatPanel({ onMapLayer }) {
     <div className="chat-panel">
       {/* Header */}
       <div className="chat-header">
-        <span className="chat-header-title">Feasibly AI</span>
+        <span className="chat-header-title">Princeps AI</span>
         <button className="chat-close-btn" onClick={() => setOpen(false)} title="Close">
           &times;
         </button>
@@ -256,7 +292,7 @@ export default function ChatPanel({ onMapLayer }) {
       <div className="chat-messages">
         {messages.length === 0 && (
           <div className="chat-welcome">
-            <div className="chat-welcome-title">Feasibly AI</div>
+            <div className="chat-welcome-title">Princeps AI</div>
             <div className="chat-welcome-sub">
               Ask about solar yield, grid connections, energy pricing, or upload data for analysis.
             </div>

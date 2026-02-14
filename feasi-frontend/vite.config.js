@@ -18,8 +18,10 @@ export default defineConfig({
       "/tenders": "http://localhost:8000",
       "/chat": "http://localhost:8000",
       "/health": "http://localhost:8000",
+      "/electricity": "http://localhost:8000",
       "/job": "http://localhost:8000",
       "/jobs": "http://localhost:8000",
+      "/geeflow": "http://localhost:8000",
       "/pmtiles-proxy": {
         target: "https://pbcc.blob.core.windows.net",
         changeOrigin: true,

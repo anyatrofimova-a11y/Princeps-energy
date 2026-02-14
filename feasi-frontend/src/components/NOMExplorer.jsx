@@ -186,7 +186,7 @@ export default function NOMExplorer({ onExit, onAnalyseSubstation }) {
 
           {/* Back button */}
           <button className="nom-back-btn" onClick={onExit}>
-            &larr; Back to Feasibly
+            &larr; Back to Princeps
           </button>
         </div>
       </div>

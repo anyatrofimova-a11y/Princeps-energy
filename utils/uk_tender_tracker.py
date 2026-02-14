@@ -30,7 +30,7 @@ KEYWORD_QUERY = " OR ".join(f'"{k}"' for k in KEYWORDS[:6])  # API query limit
 def _fetch_json(url: str, timeout: int = 15) -> Optional[dict]:
     """Fetch JSON from a URL, return None on failure."""
     try:
-        req = Request(url, headers={"Accept": "application/json", "User-Agent": "Feasibly/1.0"})
+        req = Request(url, headers={"Accept": "application/json", "User-Agent": "Princeps/1.0"})
         with urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode())
     except Exception:
@@ -240,3 +240,39 @@ def fetch_all_tenders() -> dict:
     _cache["data"] = result
     _cache["ts"] = time.time()
     return result
+
+
+def score_tender_locations(tenders: list[dict], geeflow_scores: dict | None = None) -> list[dict]:
+    """
+    Enrich tenders with GeeFlow satellite suitability scores.
+
+    Args:
+        tenders: list of tender dicts (from fetch_all_tenders)
+        geeflow_scores: dict mapping (lat, lon) tuples to site score dicts
+
+    Returns:
+        Tenders enriched with 'satellite_score' field, sorted by score.
+    """
+    if not geeflow_scores:
+        return tenders
+
+    enriched = []
+    for t in tenders:
+        tender = dict(t)
+        lat = t.get("lat")
+        lon = t.get("lon")
+        if lat is not None and lon is not None:
+            key = (round(lat, 2), round(lon, 2))
+            score = geeflow_scores.get(key)
+            if score:
+                tender["satellite_score"] = score.get("total_score")
+                tender["satellite_recommendation"] = score.get("recommendation")
+                tender["satellite_summary"] = score.get("summary", "")[:200]
+        enriched.append(tender)
+
+    # Sort: scored tenders first (highest score), then unscored
+    enriched.sort(
+        key=lambda t: (t.get("satellite_score") is not None, t.get("satellite_score", 0)),
+        reverse=True,
+    )
+    return enriched

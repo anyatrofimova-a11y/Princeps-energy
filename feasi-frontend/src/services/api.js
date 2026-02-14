@@ -65,6 +65,10 @@ const api = {
     osmGenerators: (bbox) => get(`/grid/osm/generators?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
     osmPlants: (bbox) => get(`/grid/osm/plants?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
     osmSummary: () => get("/grid/osm/summary"),
+    ngedSubstations: (bbox) => get(`/nged/substations?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
+    ngedOpportunities: (bbox, minMw = 1) => get(`/nged/opportunities?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}&min_headroom_mw=${minMw}`),
+    ngedSummary: () => get("/nged/summary"),
+    ngedSubstation: (id) => get(`/nged/substation/${enc(id)}`),
   },
 
   planning: {
@@ -83,6 +87,12 @@ const api = {
     energy: () => get("/tenders/energy"),
   },
 
+  electricity: {
+    carbonIntensity: (zone) => get(`/electricity/carbon-intensity/${enc(zone)}`),
+    powerBreakdown: (zone) => get(`/electricity/power-breakdown/${enc(zone)}`),
+    carbonIntensityAll: () => get("/electricity/carbon-intensity-all"),
+  },
+
   nom: {
     substations: (params = {}) => {
       const q = new URLSearchParams();
@@ -98,6 +108,14 @@ const api = {
     summary: () => get("/nom/summary"),
     licenceAreas: () => get("/nom/licence-areas"),
     localAuthorities: () => get("/nom/local-authorities"),
+  },
+
+  geeflow: {
+    extract: (mode, lat, lon, radiusKm = 5, year = 2024) =>
+      get(`/geeflow/extract/${enc(mode)}?lat=${lat}&lon=${lon}&radius_km=${radiusKm}&year=${year}`),
+    submitAnalysis: (lat, lon, radiusKm = 5, modes = ["land_use", "terrain", "solar_resource", "vegetation"]) =>
+      post("/job/geeflow_analysis", { lat, lon, radius_km: radiusKm, modes }),
+    jobStatus: (jobId) => get(`/job/${enc(jobId)}`),
   },
 
   analytics: {

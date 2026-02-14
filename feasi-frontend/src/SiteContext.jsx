@@ -1,9 +1,51 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from "react";
 import api from "./services/api";
 
 const SiteContext = createContext(null);
 
+const SETTINGS_DEFAULTS = {
+  // Map & Display
+  mapStyle: "dark",
+  defaultSlopeOpacity: 0.6,
+  defaultLayers: ["hillshade", "contours", "environment", "aerial"],
+  theme: "dark",
+  // API & Connections
+  mapboxToken: "",
+  geeProjectId: "",
+  backendUrl: "",
+  // Profile & Notifications
+  displayName: "",
+  email: "",
+  exportFormat: "csv",
+  notifications: true,
+};
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem("princeps_settings");
+    if (raw) return { ...SETTINGS_DEFAULTS, ...JSON.parse(raw) };
+  } catch { /* ignore corrupt data */ }
+  return { ...SETTINGS_DEFAULTS };
+}
+
 export function SiteProvider({ children }) {
+  // ── Settings ──
+  const [settings, setSettings] = useState(loadSettings);
+  const [settingsForm, setSettingsForm] = useState(loadSettings);
+
+  const saveSettings = useCallback((form) => {
+    setSettings(form);
+    setSettingsForm(form);
+    localStorage.setItem("princeps_settings", JSON.stringify(form));
+  }, []);
+
+  const resetSettingsForm = useCallback(() => {
+    setSettingsForm(settings);
+  }, [settings]);
+
+  const updateSettingsForm = useCallback((updates) => {
+    setSettingsForm(prev => ({ ...prev, ...updates }));
+  }, []);
   // ── Site identity ──
   const [parcelId, setParcelId] = useState("");
   const [pickedLocation, setPickedLocation] = useState(null);
@@ -33,6 +75,11 @@ export function SiteProvider({ children }) {
   const [demandForecast, setDemandForecast] = useState(null);
   const [agilePricing, setAgilePricing] = useState(null);
   const [stabilityData, setStabilityData] = useState(null);
+
+  // ── GeeFlow / Satellite ──
+  const [geeflowData, setGeeflowData] = useState(null);
+  const [geeflowLoading, setGeeflowLoading] = useState(false);
+  const [geeflowJobId, setGeeflowJobId] = useState(null);
 
   // ── Loading flags ──
   const [loading, setLoading] = useState(false);
@@ -67,6 +114,10 @@ export function SiteProvider({ children }) {
     contours: true, environment: true, gridFlow: true, agilePricing: false,
     demandOverlay: false, flowFocus: false, osmPower: false,
     ndvi: false, satellite: false, aerial: true, lidarDtm: false, lidarDsm: false, landsat: false, viirs: false,
+    ngedSubs: false,
+    geeflowLandUse: false,
+    geeflowOpportunities: false,
+    electricityZones: false,
     epcZones: false, epcDom: false, epcNondom: false, postcodes: false,
   });
   const toggleLayer = useCallback((id) => {
@@ -165,6 +216,10 @@ export function SiteProvider({ children }) {
     demandForecast, setDemandForecast,
     agilePricing, setAgilePricing,
     stabilityData, setStabilityData,
+    // GeeFlow
+    geeflowData, setGeeflowData,
+    geeflowLoading, setGeeflowLoading,
+    geeflowJobId, setGeeflowJobId,
     // Loading
     loading, agentLoading,
     // Layout
@@ -190,6 +245,9 @@ export function SiteProvider({ children }) {
     chatLayers, setChatLayers,
     // Actions
     loadSite, runAgent, runDeferral,
+    // Settings
+    settings, settingsForm,
+    saveSettings, resetSettingsForm, updateSettingsForm,
   };
 
   return <SiteContext.Provider value={value}>{children}</SiteContext.Provider>;

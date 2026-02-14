@@ -201,6 +201,20 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "search_nged_network",
+        "description": "Search NGED distribution network for substations with available connection headroom near a location. Returns substations ranked by spare capacity.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Centre latitude"},
+                "lon": {"type": "number", "description": "Centre longitude"},
+                "radius_km": {"type": "number", "description": "Search radius in km", "default": 15},
+                "min_headroom_mw": {"type": "number", "description": "Minimum spare capacity in MW", "default": 1.0},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
         "name": "create_map_layer",
         "description": "Create a GeoJSON layer to display on the map. Use this to visualise analysis results geographically.",
         "input_schema": {
@@ -214,7 +228,7 @@ TOOLS: list[dict] = [
                 "layer_type": {
                     "type": "string",
                     "enum": ["circle", "fill", "line", "heatmap"],
-                    "description": "MapLibre layer type",
+                    "description": "Map layer type",
                     "default": "circle",
                 },
                 "color": {"type": "string", "description": "Primary colour for the layer", "default": "#00e5ff"},
@@ -244,6 +258,208 @@ TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "name": "get_electricity_map",
+        "description": "Get real-time electricity carbon intensity and power generation breakdown for a European zone from Electricity Maps. Useful for comparing grid cleanliness across countries.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "zone": {"type": "string", "description": "Electricity Maps zone code (e.g. 'GB', 'DE', 'FR', 'ES', 'NL', 'DK-DK1', 'NO-NO1')"},
+                "metric": {"type": "string", "enum": ["carbon_intensity", "power_breakdown", "both"], "description": "Which data to fetch", "default": "both"},
+            },
+            "required": ["zone"],
+        },
+    },
+    {
+        "name": "run_satellite_analysis",
+        "description": "Run satellite Earth observation analysis using Google Earth Engine (GeeFlow). Extracts land use classification (DynamicWorld 10m), terrain (NASADEM), solar resource (ERA5), and vegetation (Sentinel-2 NDVI) for a location. Returns a background job ID for polling.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "radius_km": {"type": "number", "description": "Analysis radius in km", "default": 5},
+                "modes": {
+                    "type": "array",
+                    "items": {"type": "string", "enum": ["land_use", "terrain", "solar_resource", "vegetation", "change_detection", "site_composite"]},
+                    "description": "Extraction modes to run",
+                    "default": ["land_use", "terrain", "solar_resource", "vegetation"],
+                },
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "score_tender_sites",
+        "description": "Score multiple candidate sites for a tender using satellite data, grid connection data, and planning records. Returns sites ranked by composite suitability score (0-100) with GO/CAUTION/NO-GO recommendations.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sites": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Site name or identifier"},
+                            "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                            "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                        },
+                        "required": ["name", "lat", "lon"],
+                    },
+                    "description": "List of candidate sites to score",
+                },
+                "technology": {"type": "string", "enum": ["solar", "battery", "wind"], "description": "Target technology", "default": "solar"},
+            },
+            "required": ["sites"],
+        },
+    },
+    {
+        "name": "query_legacy_assets",
+        "description": "Query legacy energy assets (solar farms, wind farms, substations, batteries) near a location. Returns asset details, condition scores, and lifecycle status.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "radius_km": {"type": "number", "description": "Search radius in km", "default": 25},
+                "asset_type": {"type": "string", "description": "Filter by type: solar_farm, wind_farm, battery_storage, substation"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "run_geoai_analysis",
+        "description": "Run GeoAI geospatial analysis: building footprint detection, solar panel detection, change detection, land cover classification, canopy height estimation, or composite asset condition assessment.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "mode": {
+                    "type": "string",
+                    "enum": ["building_footprints", "solar_panel_detect", "change_detection", "land_cover", "canopy_height", "asset_condition"],
+                    "description": "Analysis mode",
+                    "default": "asset_condition",
+                },
+                "radius_km": {"type": "number", "description": "Analysis radius in km", "default": 2.0},
+                "asset_type": {"type": "string", "description": "Asset type for condition assessment", "default": "solar_farm"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "assess_asset_lifecycle",
+        "description": "Get lifecycle assessment for an energy asset including compliance milestones, repowering analysis, and decommissioning estimate.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "asset_type": {"type": "string", "enum": ["solar_farm", "wind_farm", "battery_storage", "substation", "transformer", "inverter"], "default": "solar_farm"},
+                "commissioning_date": {"type": "string", "description": "Commissioning date (YYYY-MM-DD)"},
+                "capacity_kw": {"type": "number", "description": "Installed capacity in kW", "default": 100},
+            },
+            "required": ["commissioning_date"],
+        },
+    },
+    {
+        "name": "score_candidate_site_prospector",
+        "description": "Score a candidate site for energy development potential using multi-criteria analysis (resource quality, terrain, land use, grid access, planning/environment). Returns 0-100 score with component breakdown and recommendation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "technology": {"type": "string", "enum": ["solar", "solar_pv", "wind", "wind_onshore", "battery"], "default": "solar"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "scan_region_for_sites",
+        "description": "Scan a UK region for new energy site opportunities. Generates and scores a grid of candidate points. Returns ranked list with top sites.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "region": {"type": "string", "enum": ["south_east", "south_west", "east_anglia", "midlands", "wales", "north_west", "north_east", "scotland_central", "scotland_north"], "default": "south_west"},
+                "technology": {"type": "string", "enum": ["solar", "wind", "battery"], "default": "solar"},
+                "grid_points": {"type": "integer", "description": "Number of candidate points to evaluate", "default": 25},
+            },
+        },
+    },
+    {
+        "name": "find_similar_sites",
+        "description": "Find sites similar to a reference location for energy development. Uses multi-dimensional feature matching across terrain, resource, and grid access.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Reference latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Reference longitude (WGS84)"},
+                "radius_km": {"type": "number", "description": "Search radius in km", "default": 50},
+                "technology": {"type": "string", "enum": ["solar", "wind", "battery"], "default": "solar"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "estimate_grid_losses",
+        "description": "Estimate transmission/distribution line losses for a grid connection. Considers voltage level, distance, and loading factor.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "distance_km": {"type": "number", "description": "Line distance in km"},
+                "voltage_kv": {"type": "number", "description": "Voltage level in kV (e.g. 11, 33, 132, 275, 400)"},
+                "load_mw": {"type": "number", "description": "Power flow in MW"},
+                "capacity_mva": {"type": "number", "description": "Line capacity in MVA"},
+            },
+            "required": ["distance_km", "voltage_kv", "load_mw"],
+        },
+    },
+    {
+        "name": "assess_substation_health",
+        "description": "Assess health of substations using age, utilisation, and satellite condition data. Returns health score and issues.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "substations": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "capacity_mva": {"type": "number"},
+                            "headroom_mw": {"type": "number"},
+                            "age_years": {"type": "number"},
+                        },
+                    },
+                    "description": "List of substations to assess",
+                },
+            },
+            "required": ["substations"],
+        },
+    },
+    {
+        "name": "get_procurement_pipeline",
+        "description": "Get procurement pipeline analytics — tender counts by technology, total value, urgent deadlines, and cost benchmarks.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "assess_bid_viability",
+        "description": "Assess viability of bidding on an energy tender. Returns score (0-100) with STRONG_BID / CONDITIONAL_BID / NO_BID recommendation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Tender title"},
+                "description": {"type": "string", "description": "Tender description"},
+                "value_gbp": {"type": "number", "description": "Contract value in GBP"},
+                "deadline": {"type": "string", "description": "Tender deadline (ISO date)"},
+                "site_score": {"type": "number", "description": "Site suitability score (0-100)"},
+                "grid_headroom_mw": {"type": "number", "description": "Available grid headroom in MW"},
+            },
+            "required": ["title"],
+        },
+    },
 ]
 
 
@@ -259,6 +475,8 @@ async def execute_tool(
     pool,                    # asyncpg pool
     run_sam_subprocess,      # from main.py
     fetch_parcel_context,    # from main.py
+    run_geeflow_subprocess=None,  # from main.py (optional)
+    run_geoai_subprocess=None,   # from main.py (optional)
 ) -> Any:
     """Execute a tool call and return the result dict."""
     try:
@@ -429,6 +647,15 @@ async def execute_tool(
             from utils.national_grid_live import fetch_all_live
             return await fetch_all_live()
 
+        elif name == "search_nged_network":
+            from utils.nged_cim import find_opportunities_near
+            async with pool.acquire() as conn:
+                return await find_opportunities_near(
+                    conn, args["lat"], args["lon"],
+                    args.get("radius_km", 15),
+                    args.get("min_headroom_mw", 1.0),
+                )
+
         elif name == "create_map_layer":
             layer_id = f"chat-{uuid.uuid4().hex[:8]}"
             layer = {
@@ -455,6 +682,196 @@ async def execute_tool(
             scenario = system_scenario()
             site_ctx = site_in_national_context(cap_kw, tech)
             return {"national_scenario": scenario, "site_context": site_ctx}
+
+        elif name == "get_electricity_map":
+            import httpx
+            zone = args["zone"]
+            metric = args.get("metric", "both")
+            api_key = os.environ.get("ELECTRICITYMAPS_API_KEY", "")
+            if not api_key:
+                return {"error": "ELECTRICITYMAPS_API_KEY not configured"}
+            base = "https://api.electricitymap.org/v3"
+            headers = {"auth-token": api_key}
+            result = {"zone": zone}
+            async with httpx.AsyncClient(timeout=15) as client:
+                if metric in ("carbon_intensity", "both"):
+                    resp = await client.get(f"{base}/carbon-intensity/latest?zone={zone}", headers=headers)
+                    if resp.status_code == 200:
+                        result["carbon_intensity"] = resp.json()
+                    else:
+                        result["carbon_intensity_error"] = f"HTTP {resp.status_code}"
+                if metric in ("power_breakdown", "both"):
+                    resp = await client.get(f"{base}/power-breakdown/latest?zone={zone}", headers=headers)
+                    if resp.status_code == 200:
+                        result["power_breakdown"] = resp.json()
+                    else:
+                        result["power_breakdown_error"] = f"HTTP {resp.status_code}"
+            return result
+
+        elif name == "run_satellite_analysis":
+            if not run_geeflow_subprocess:
+                return {"error": "GeeFlow not configured — set GEE_PROJECT and GEEFLOW_PYTHON in .env"}
+            lat, lon = args["lat"], args["lon"]
+            radius_km = args.get("radius_km", 5)
+            modes = args.get("modes", ["land_use", "terrain", "solar_resource", "vegetation"])
+            # Submit as background job via main.py's job system
+            import jobs
+            async def _satellite_job():
+                results = {}
+                for mode in modes:
+                    try:
+                        results[mode] = await run_geeflow_subprocess(mode, lat, lon, radius_km)
+                    except Exception as exc:
+                        results[mode] = {"error": str(exc)[:200]}
+                from utils.geeflow_site_scorer import compute_site_score
+                score = compute_site_score(
+                    terrain_data=results.get("terrain"),
+                    land_use_data=results.get("land_use"),
+                    solar_data=results.get("solar_resource"),
+                )
+                return {"lat": lat, "lon": lon, "radius_km": radius_km,
+                        "extractions": results, "site_score": score}
+            job = await jobs.submit("geeflow_analysis", _satellite_job)
+            return {"job_id": job.id, "status": job.status.value,
+                    "message": f"Satellite analysis started for ({lat}, {lon}). Poll /job/{job.id} for results."}
+
+        elif name == "score_tender_sites":
+            from utils.geeflow_site_scorer import score_multiple_sites
+            sites = args["sites"]
+            technology = args.get("technology", "solar")
+            # For each site, try to get cached GeeFlow data
+            enriched = []
+            for site in sites:
+                site_data = dict(site)
+                # Check for cached satellite data
+                async with pool.acquire() as conn:
+                    cached = await conn.fetchrow(
+                        """
+                        SELECT result_data, mode FROM geeflow_extractions
+                        WHERE abs(lat - $1) < 0.01 AND abs(lon - $2) < 0.01
+                          AND created_at > NOW() - INTERVAL '30 days'
+                        ORDER BY created_at DESC LIMIT 1
+                        """,
+                        site["lat"], site["lon"],
+                    )
+                    if cached:
+                        geeflow = {}
+                        rd = cached["result_data"]
+                        if isinstance(rd, str):
+                            rd = json.loads(rd)
+                        if cached["mode"] == "site_composite":
+                            geeflow = rd.get("components", {})
+                        else:
+                            geeflow[cached["mode"]] = rd
+                        site_data["geeflow_data"] = geeflow
+                enriched.append(site_data)
+            return score_multiple_sites(enriched, technology)
+
+        elif name == "query_legacy_assets":
+            lat, lon = args["lat"], args["lon"]
+            radius_km = args.get("radius_km", 25)
+            asset_type = args.get("asset_type")
+            async with pool.acquire() as conn:
+                conditions = [
+                    "ST_DWithin(geometry, ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700), $3)"
+                ]
+                params = [lon, lat, radius_km * 1000]
+                idx = 4
+                if asset_type:
+                    conditions.append(f"asset_type = ${idx}")
+                    params.append(asset_type)
+                where = " AND ".join(conditions)
+                rows = await conn.fetch(f"""
+                    SELECT name, asset_type, capacity_kw, commissioning, status,
+                           condition_score,
+                           ST_X(ST_Transform(geometry, 4326)) as lon,
+                           ST_Y(ST_Transform(geometry, 4326)) as lat
+                    FROM legacy_assets WHERE {where}
+                    ORDER BY name LIMIT 50
+                """, *params)
+                return {
+                    "count": len(rows),
+                    "assets": [
+                        {
+                            "name": r["name"],
+                            "asset_type": r["asset_type"],
+                            "capacity_kw": r["capacity_kw"],
+                            "commissioning": r["commissioning"].isoformat() if r["commissioning"] else None,
+                            "status": r["status"],
+                            "condition_score": r["condition_score"],
+                            "lat": round(r["lat"], 5),
+                            "lon": round(r["lon"], 5),
+                        }
+                        for r in rows
+                    ],
+                }
+
+        elif name == "run_geoai_analysis":
+            lat, lon = args["lat"], args["lon"]
+            mode = args.get("mode", "asset_condition")
+            radius_km = args.get("radius_km", 2.0)
+            asset_type = args.get("asset_type", "solar_farm")
+            if run_geoai_subprocess:
+                return await run_geoai_subprocess(mode, lat, lon, radius_km, asset_type)
+            return {"error": "GeoAI subprocess not available"}
+
+        elif name == "assess_asset_lifecycle":
+            from utils.legacy_asset_compliance import assess_asset_lifecycle as _assess
+            asset_type = args.get("asset_type", "solar_farm")
+            comm_date = args.get("commissioning_date", "2015-01-01")
+            capacity_kw = args.get("capacity_kw", 100)
+            return _assess(asset_type, comm_date, capacity_kw)
+
+        elif name == "score_candidate_site_prospector":
+            from utils.site_prospector import score_candidate_site as _score_site
+            return _score_site(args["lat"], args["lon"], args.get("technology", "solar"))
+
+        elif name == "scan_region_for_sites":
+            from utils.site_prospector import regional_scan as _regional_scan
+            return _regional_scan(
+                args.get("region", "south_west"),
+                args.get("technology", "solar"),
+                args.get("grid_points", 25),
+            )
+
+        elif name == "find_similar_sites":
+            from utils.site_prospector import find_similar_sites as _find_similar
+            return _find_similar(
+                args["lat"], args["lon"],
+                args.get("radius_km", 50),
+                technology=args.get("technology", "solar"),
+            )
+
+        elif name == "estimate_grid_losses":
+            from utils.grid_efficiency_analyser import estimate_line_losses as _line_losses
+            return _line_losses(
+                args["distance_km"], args["voltage_kv"], args["load_mw"],
+                args.get("capacity_mva"),
+            )
+
+        elif name == "assess_substation_health":
+            from utils.grid_efficiency_analyser import substation_health_assessment as _sub_health
+            return _sub_health(args.get("substations", []))
+
+        elif name == "get_procurement_pipeline":
+            from utils.uk_tender_tracker import fetch_all_tenders as _fetch_tenders
+            from utils.procurement_intelligence import procurement_pipeline_summary as _pipeline
+            tenders = await _fetch_tenders()
+            return _pipeline(tenders)
+
+        elif name == "assess_bid_viability":
+            from utils.procurement_intelligence import assess_bid_viability as _bid_viability
+            tender = {
+                "title": args.get("title", ""),
+                "description": args.get("description", ""),
+                "value_gbp": args.get("value_gbp"),
+                "deadline": args.get("deadline"),
+            }
+            return _bid_viability(
+                tender,
+                site_score=args.get("site_score"),
+                grid_headroom_mw=args.get("grid_headroom_mw"),
+            )
 
         else:
             return {"error": f"Unknown tool: {name}"}
@@ -529,13 +946,57 @@ def parse_uploaded_file(filename: str, content: bytes) -> dict:
 # System prompt
 # ---------------------------------------------------------------------------
 
+def _compact_tool_result(result: Any, max_chars: int = 4000) -> str:
+    """Compact a tool result for conversation history storage.
+
+    The full result is already sent to Claude for the *current* turn.
+    For history we keep key metrics and drop large arrays/blobs so
+    accumulated tool results don't blow past the context window.
+    """
+    def _strip_large(obj, depth=0):
+        if depth > 3:
+            return obj
+        if isinstance(obj, dict):
+            out = {}
+            for k, v in obj.items():
+                if isinstance(v, list) and len(v) > 30:
+                    out[k] = f"[{len(v)} items omitted]"
+                else:
+                    out[k] = _strip_large(v, depth + 1)
+            return out
+        if isinstance(obj, list) and len(obj) > 30:
+            return f"[{len(obj)} items omitted]"
+        return obj
+
+    compact = _strip_large(result)
+    result_str = json.dumps(compact, default=str)
+    if len(result_str) > max_chars:
+        return result_str[:max_chars - 40] + ' ... [truncated]"}'
+    return result_str
+
+
+def _prune_history(messages: list[dict], max_chars: int = 300_000) -> list[dict]:
+    """Drop oldest message pairs when serialised history exceeds *max_chars*.
+
+    Always keeps the most recent user message so the conversation stays
+    coherent.  Drops from the front in pairs (user+assistant) to maintain
+    valid message ordering.
+    """
+    total = sum(len(json.dumps(m, default=str)) for m in messages)
+    while total > max_chars and len(messages) > 2:
+        dropped = messages.pop(0)
+        total -= len(json.dumps(dropped, default=str))
+    return messages
+
+
 def build_system_prompt(session: ChatSession) -> str:
     parts = [
-        "You are Feasibly AI, an expert energy analyst and solar site feasibility assistant.",
+        "You are Princeps AI, an expert energy analyst and solar site feasibility assistant.",
         "You help users analyse sites for renewable energy projects across the UK.",
         "You have access to tools for solar simulation (NREL SAM/PvWatts v8), grid connection analysis,",
         "energy pricing (Octopus Agile), demand forecasting, planning applications, BIPV analysis,",
-        "bill of materials generation, and live National Grid data.",
+        "bill of materials generation, live National Grid data, European electricity zone carbon intensity (Electricity Maps),",
+        "and satellite Earth observation analysis (Google Earth Engine — land use, terrain, solar resource, vegetation via GeeFlow).",
         "",
         "Guidelines:",
         "- Use tools proactively when they can provide concrete data to support your analysis.",
@@ -574,6 +1035,8 @@ async def stream_chat_response(
     pool,
     run_sam_subprocess,
     fetch_parcel_context,
+    run_geeflow_subprocess=None,
+    run_geoai_subprocess=None,
 ):
     """
     Async generator yielding SSE events for the chat response.
@@ -593,6 +1056,9 @@ async def stream_chat_response(
     max_turns = 10  # prevent infinite tool loops
 
     for turn in range(max_turns):
+        # Prune old messages so accumulated tool results don't exceed context
+        session.messages = _prune_history(session.messages)
+
         try:
             async with client.messages.stream(
                 model=model,
@@ -660,6 +1126,8 @@ async def stream_chat_response(
                         pool=pool,
                         run_sam_subprocess=run_sam_subprocess,
                         fetch_parcel_context=fetch_parcel_context,
+                        run_geeflow_subprocess=run_geeflow_subprocess,
+                        run_geoai_subprocess=run_geoai_subprocess,
                     )
 
                     # Emit tool_result event
@@ -676,7 +1144,7 @@ async def stream_chat_response(
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
-                        "content": json.dumps(result, default=str),
+                        "content": _compact_tool_result(result),
                     })
 
             # Store assistant message + tool results for next turn

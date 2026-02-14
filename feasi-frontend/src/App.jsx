@@ -6,8 +6,10 @@ import ComponentPalette from "./components/ComponentPalette";
 import Dashboard from "./components/Dashboard";
 import ChatPanel from "./components/ChatPanel";
 import DrawingToolbar from "./components/DrawingToolbar";
+import CameraToolbar from "./components/CameraToolbar";
 import ErrorBoundary from "./components/ErrorBoundary";
 import NOMExplorer from "./components/NOMExplorer";
+import SettingsPage from "./components/SettingsPage";
 import { AITopBanner, AIBottomBar } from "./components/AIIntelStrip";
 import {
   MODES, createDrawState, handleClick as drawHandleClick, handleDoubleClick as drawHandleDoubleClick,
@@ -47,6 +49,9 @@ export default function App() {
     setSelectedLsoa,
   } = useSite();
 
+  // Map instance ref for camera controls
+  const [mapInstance, setMapInstance] = useState(null);
+
   // Handle map layers from chat
   const handleChatMapLayer = useCallback((layer) => {
     setChatLayers(prev => [...prev, layer]);
@@ -58,6 +63,9 @@ export default function App() {
 
   // NOM Explorer mode
   const [nomMode, setNomMode] = useState(false);
+
+  // Settings mode
+  const [settingsMode, setSettingsMode] = useState(false);
 
   const handleNomAnalyse = useCallback((sub) => {
     setNomMode(false);
@@ -108,6 +116,17 @@ export default function App() {
   const handleMapPick = async ({ lat, lon }) => {
     setPickMode(false);
     setPickedLocation({ lat, lon });
+    // Fly to picked site at inspection angle
+    if (mapInstance) {
+      mapInstance.flyTo({
+        center: [lon, lat],
+        zoom: 14,
+        pitch: 60,
+        bearing: 0,
+        duration: 3000,
+        essential: true,
+      });
+    }
     try {
       const data = await api.site.fromLocation(lat, lon);
       if (data?.parcel_id) {
@@ -201,6 +220,10 @@ export default function App() {
     );
   }
 
+  if (settingsMode) {
+    return <SettingsPage onExit={() => setSettingsMode(false)} />;
+  }
+
   return (
     <div className={`app-fullscreen${layers.flowFocus ? " flow-focus" : ""}`}>
       {/* Map fills viewport */}
@@ -220,15 +243,19 @@ export default function App() {
           onDrawSelectFeature={handleDrawSelectFeature}
           onDrawDragVertex={handleDrawDragVertex}
           chatLayers={chatLayers}
+          onMapReady={setMapInstance}
         />
       </ErrorBoundary>
+
+      {/* Camera / view controls */}
+      <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
 
       {/* AI Intelligence Banner (top) */}
       <AITopBanner />
 
       {/* Top bar */}
       <div className="topbar">
-        <div className="topbar-brand">Feasibly</div>
+        <div className="topbar-brand">Princeps</div>
         <button
           className={`btn-pick ${pickMode ? "active" : ""}`}
           onClick={() => setPickMode(p => !p)}
@@ -271,6 +298,16 @@ export default function App() {
           disabled={!parcelId}
         >
           {layoutMode ? "Exit Layout" : "Layout"}
+        </button>
+        <button
+          className="btn-settings"
+          onClick={() => setSettingsMode(true)}
+          title="Settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
         </button>
       </div>
       {pickMode && (
@@ -329,6 +366,26 @@ export default function App() {
           <input type="checkbox" checked={layers.osmPower} onChange={() => toggleLayer("osmPower")} />
           <span className="layer-dot" style={{ background: "#B54EB2" }} />
           Power Infrastructure (OSM)
+        </label>
+        <label className="layer-item">
+          <input type="checkbox" checked={layers.ngedSubs} onChange={() => toggleLayer("ngedSubs")} />
+          <span className="layer-dot" style={{ background: "#1b5e20" }} />
+          NGED Substations (CIM)
+        </label>
+        <label className="layer-item">
+          <input type="checkbox" checked={layers.geeflowLandUse} onChange={() => toggleLayer("geeflowLandUse")} />
+          <span className="layer-dot" style={{ background: "#1565c0" }} />
+          Land Use (GeeFlow)
+        </label>
+        <label className="layer-item">
+          <input type="checkbox" checked={layers.geeflowOpportunities} onChange={() => toggleLayer("geeflowOpportunities")} />
+          <span className="layer-dot" style={{ background: "#ff6f00" }} />
+          Grid Opportunities (EO)
+        </label>
+        <label className="layer-item">
+          <input type="checkbox" checked={layers.electricityZones} onChange={() => toggleLayer("electricityZones")} />
+          <span className="layer-dot" style={{ background: "#4caf50" }} />
+          Electricity Zones (CO₂)
         </label>
 
         <div className="layer-divider" />

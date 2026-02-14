@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useCallback } from "react";
-import maplibregl from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import { Protocol } from "pmtiles";
-import mlcontour from "maplibre-contour";
 import { getTentativeGuides, getModifyGuides, getCursor } from "../lib/draw-modes";
+
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 import { useSite } from "../SiteContext";
 import api from "../services/api";
+import electricityZonesGeoJSON from "../data/electricity-zones.json";
 
 const PROXY = "pmtiles://http://localhost:3000/pmtiles-proxy";
 
@@ -95,7 +97,7 @@ const ASSET_COLOURS = {
 const EMPTY_FC = { type: "FeatureCollection", features: [] };
 
 export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = false, onPick, pickedLocation, onZoneClick, epcFields = {},
-  drawState, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex, chatLayers = [] }) {
+  drawState, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex, chatLayers = [], onMapReady }) {
   const { stabilityData } = useSite();
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -103,25 +105,23 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
   useEffect(() => {
     if (!protocolAdded) {
-      const protocol = new Protocol();
-      maplibregl.addProtocol("pmtiles", protocol.tile);
+      try {
+        const protocol = new Protocol();
+        if (typeof mapboxgl.addProtocol === "function") {
+          mapboxgl.addProtocol("pmtiles", protocol.tile);
+        }
+        // mapbox-gl v3 doesn't support addProtocol — PMTiles layers will be skipped
+      } catch (e) {
+        console.warn("PMTiles protocol registration skipped:", e.message);
+      }
       protocolAdded = true;
     }
 
-    // Create contour source using maplibre-contour
-    const demUrl = `${PROXY}/DTM.pmtiles`.replace("pmtiles://", "");
-    const contourSource = new mlcontour.DemSource({
-      url: demUrl,
-      encoding: "mapbox",
-      maxzoom: 14,
-      worker: true,
-    });
-    contourSource.setupMaplibre(maplibregl);
-
-    const map = new maplibregl.Map({
+    const map = new mapboxgl.Map({
       container: containerRef.current,
       style: {
         version: 8,
+        glyphs: "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
         sources: {
           // Light basemap
           "carto-light": {
@@ -151,20 +151,6 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
             minzoom: 0,
             maxzoom: 11,
             encoding: "mapbox",
-          },
-          contourSourceFeet: {
-            type: "vector",
-            tiles: [
-              contourSource.contourProtocolUrl({
-                multiplier: 1,
-                overzoom: 1,
-                thresholds: { 11: [50, 200], 12: [25, 100], 13: [10, 50], 14: [5, 25] },
-                elevationKey: "ele",
-                levelKey: "level",
-                contourLayer: "contours",
-              }),
-            ],
-            maxzoom: 16,
           },
         },
         layers: [
@@ -197,50 +183,32 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     mapRef.current = map;
 
     map.on("load", () => {
-      // ── Contour lines (green glow) ──
+      // ── Sky atmosphere ──
       map.addLayer({
-        id: "contour-lines",
-        type: "line",
-        source: "contourSourceFeet",
-        "source-layer": "contours",
+        id: "sky",
+        type: "sky",
         paint: {
-          "line-color": [
-            "interpolate", ["linear"], ["get", "level"],
-            0, "rgba(46, 125, 50, 0.2)",
-            1, "rgba(46, 125, 50, 0.5)",
-          ],
-          "line-width": ["interpolate", ["linear"], ["get", "level"], 0, 0.5, 1, 1.2],
-          "line-blur": 1,
+          "sky-type": "atmosphere",
+          "sky-atmosphere-sun": [0, 15],
+          "sky-atmosphere-sun-intensity": 5,
+          "sky-atmosphere-color": "#88ccff",
         },
-        layout: {
-          visibility: layers.contours !== false ? "visible" : "none",
-        },
-        minzoom: 9,
       });
 
-      // Contour labels
-      map.addLayer({
-        id: "contour-labels",
-        type: "symbol",
-        source: "contourSourceFeet",
-        "source-layer": "contours",
-        filter: ["==", ["get", "level"], 1],
-        paint: {
-          "text-color": "rgba(46, 125, 50, 0.7)",
-          "text-halo-color": "rgba(255, 255, 255, 0.8)",
-          "text-halo-width": 1.5,
-        },
-        layout: {
-          "symbol-placement": "line",
-          "text-field": ["concat", ["get", "ele"], "m"],
-          "text-font": ["Noto Sans Regular"],
-          "text-size": ["interpolate", ["linear"], ["zoom"], 11, 8, 14, 10],
-          visibility: layers.contours !== false ? "visible" : "none",
-        },
-        minzoom: 11,
+      // ── Fog (aerial perspective) ──
+      map.setFog({
+        range: [1, 12],
+        color: "rgba(200, 210, 230, 0.9)",
+        "high-color": "#add8e6",
+        "space-color": "#0b1026",
+        "horizon-blend": 0.05,
+        "star-intensity": 0.1,
       });
 
-      // Labels layer (above contours, below data layers)
+      // Expose map instance to parent
+      if (onMapReady) onMapReady(map);
+
+      // Labels layer (above hillshade, below data layers)
       map.addLayer({ id: "base-labels", type: "raster", source: "carto-labels" });
 
       // ── ESRI Aerial imagery (inserted early so data layers draw on top) ──
@@ -395,7 +363,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         const operator = p.operator ? `<br/>Operator: ${p.operator}` : "";
         const voltage = p.voltage_kv ? `<br/>Voltage: ${p.voltage_kv} kV` : "";
         const echelon = p.echelon_symbol ? ` <span style="font-weight:bold;opacity:0.6">[${p.echelon_symbol}]</span>` : "";
-        new maplibregl.Popup({ maxWidth: "260px" })
+        new mapboxgl.Popup({ maxWidth: "260px" })
           .setLngLat(e.lngLat)
           .setHTML(
             `<div style="font-size:12px">` +
@@ -618,6 +586,9 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.addSource("osm-power-generators", { type: "geojson", data: EMPTY_FC });
       map.addSource("osm-power-plants", { type: "geojson", data: EMPTY_FC });
 
+      // NGED CIM substations source
+      map.addSource("nged-substations", { type: "geojson", data: EMPTY_FC });
+
       // Flow glow (wide blurred line — FlowmapBlue cyan style)
       map.addLayer({
         id: "grid-flow-glow",
@@ -818,7 +789,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.on("click", "agile-price-glow", (e) => {
         if (map._pickMode) return;
         const p = e.features[0].properties;
-        new maplibregl.Popup({ maxWidth: "220px" })
+        new mapboxgl.Popup({ maxWidth: "220px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px"><strong>${p.label}</strong><br/>Agile price: <strong>${p.price_pence}p/kWh</strong><br/>Category: ${p.price_category}</div>`)
           .addTo(map);
@@ -890,7 +861,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.on("click", "demand-circles", (e) => {
         if (map._pickMode) return;
         const p = e.features[0].properties;
-        new maplibregl.Popup({ maxWidth: "260px" })
+        new mapboxgl.Popup({ maxWidth: "260px" })
           .setLngLat(e.lngLat)
           .setHTML(
             `<div style="font-size:12px">` +
@@ -1170,7 +1141,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         const op = p.operator ? `<br/>Operator: ${p.operator}` : "";
         const nm = p.name ? `<strong>${p.name}</strong><br/>` : "";
         const rf = p.ref ? `Ref: ${p.ref}<br/>` : "";
-        new maplibregl.Popup({ maxWidth: "260px" })
+        new mapboxgl.Popup({ maxWidth: "260px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px">${nm}${rf}${vkv} ${typ}${op}</div>`)
           .addTo(map);
@@ -1182,7 +1153,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         const vkv = p.voltage_kv ? `${Math.round(p.voltage_kv)} kV` : "";
         const typ = p.substation_type ? `Type: ${p.substation_type}<br/>` : "";
         const op = p.operator ? `Operator: ${p.operator}` : "";
-        new maplibregl.Popup({ maxWidth: "240px" })
+        new mapboxgl.Popup({ maxWidth: "240px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px"><strong>${nm}</strong><br/>${vkv ? vkv + "<br/>" : ""}${typ}${op}</div>`)
           .addTo(map);
@@ -1194,7 +1165,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         const src = p.source ? `Source: ${p.source}<br/>` : "";
         const out = p.output_kw ? `Output: ${Math.round(p.output_kw)} kW` : "";
         const op = p.operator ? `<br/>Operator: ${p.operator}` : "";
-        new maplibregl.Popup({ maxWidth: "240px" })
+        new mapboxgl.Popup({ maxWidth: "240px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px"><strong>${nm}</strong><br/>${src}${out}${op}</div>`)
           .addTo(map);
@@ -1204,13 +1175,229 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         map.on("mouseleave", lid, () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
       }
 
+      // NGED CIM substation circles — RAG coloured by headroom
+      map.addLayer({
+        id: "nged-sub-circles",
+        type: "circle",
+        source: "nged-substations",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"],
+            5, ["interpolate", ["linear"], ["coalesce", ["get", "rated_mva"], 0], 0, 3, 20, 5, 100, 9],
+            10, ["interpolate", ["linear"], ["coalesce", ["get", "rated_mva"], 0], 0, 5, 20, 9, 100, 16],
+            14, ["interpolate", ["linear"], ["coalesce", ["get", "rated_mva"], 0], 0, 7, 20, 12, 100, 22],
+          ],
+          "circle-color": [
+            "match", ["coalesce", ["get", "rag"], "gray"],
+            "green", "#4caf50",
+            "amber", "#ff9800",
+            "red", "#f44336",
+            "#999"
+          ],
+          "circle-opacity": 0.8,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "rgba(255,255,255,0.7)",
+        },
+        layout: { visibility: "none" },
+      });
+
+      // NGED substation labels
+      map.addLayer({
+        id: "nged-sub-labels",
+        type: "symbol",
+        source: "nged-substations",
+        paint: {
+          "text-color": "#333",
+          "text-halo-color": "rgba(255,255,255,0.9)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["get", "name"], "\n", ["to-string", ["get", "headroom_mw"]], " MW"],
+          "text-size": 10,
+          "text-offset": [0, 1.5],
+          "text-anchor": "top",
+          "text-optional": true,
+        },
+        minzoom: 10,
+      });
+
+      // NGED substation click popup
+      map.on("click", "nged-sub-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        const name = p.name || "Substation";
+        const region = p.region ? `<br/>Region: ${p.region.replace(/_/g, " ")}` : "";
+        const voltage = p.voltage_kv ? `<br/>Voltage: ${p.voltage_kv} kV` : "";
+        const rated = p.rated_mva ? `<br/>Rated: ${p.rated_mva} MVA` : "";
+        const load = p.connected_load_mw != null ? `<br/>Load: ${p.connected_load_mw} MW` : "";
+        const headroom = p.headroom_mw != null ? `<br/><strong>Headroom: ${p.headroom_mw} MW</strong>` : "";
+        const confidence = p.osm_match_score ? `<br/><span style="opacity:0.6">Match: ${Math.round(p.osm_match_score * 100)}%</span>` : "";
+        new mapboxgl.Popup({ maxWidth: "260px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px"><strong>${name}</strong>${region}${voltage}${rated}${load}${headroom}${confidence}</div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "nged-sub-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "nged-sub-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── GeeFlow Land Use / Opportunity layers ──
+      map.addSource("geeflow-landuse", { type: "geojson", data: EMPTY_FC });
+      map.addSource("geeflow-opportunities", { type: "geojson", data: EMPTY_FC });
+
+      map.addLayer({
+        id: "geeflow-landuse-fill",
+        type: "fill",
+        source: "geeflow-landuse",
+        paint: {
+          "fill-color": [
+            "match", ["get", "class"],
+            "water", "#2196f3",
+            "trees", "#2e7d32",
+            "grass", "#8bc34a",
+            "crops", "#ffc107",
+            "built", "#9e9e9e",
+            "bare", "#d7ccc8",
+            "shrub_and_scrub", "#795548",
+            "#666"
+          ],
+          "fill-opacity": 0.5,
+        },
+        layout: { visibility: "none" },
+      });
+
+      map.addLayer({
+        id: "geeflow-opp-circles",
+        type: "circle",
+        source: "geeflow-opportunities",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 4, 12, 10],
+          "circle-color": [
+            "match", ["get", "suitability"],
+            "high", "#4caf50",
+            "moderate", "#ff9800",
+            "low", "#f44336",
+            "#999"
+          ],
+          "circle-opacity": 0.8,
+          "circle-stroke-color": "#fff",
+          "circle-stroke-width": 1,
+        },
+        layout: { visibility: "none" },
+      });
+
+      map.addLayer({
+        id: "geeflow-opp-labels",
+        type: "symbol",
+        source: "geeflow-opportunities",
+        paint: {
+          "text-color": "#fff",
+          "text-halo-color": "rgba(0,0,0,0.7)",
+          "text-halo-width": 1.2,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["get", "substation"], "\n", ["get", "suitability"]],
+          "text-size": 10,
+          "text-offset": [0, 1.5],
+          "text-anchor": "top",
+          "text-optional": true,
+        },
+        minzoom: 9,
+      });
+
+      // ── Electricity Zones (Carbon Intensity) ──
+      map.addSource("electricity-zones", { type: "geojson", data: EMPTY_FC });
+
+      // Fill layer — colored by carbon intensity (green → yellow → red)
+      map.addLayer({
+        id: "electricity-zones-fill",
+        type: "fill",
+        source: "electricity-zones",
+        paint: {
+          "fill-color": [
+            "interpolate", ["linear"],
+            ["coalesce", ["get", "carbonIntensity"], 200],
+            0, "rgba(76, 175, 80, 0.6)",     // green — very clean
+            100, "rgba(139, 195, 74, 0.6)",
+            200, "rgba(255, 235, 59, 0.6)",   // yellow — moderate
+            400, "rgba(255, 152, 0, 0.6)",    // orange
+            600, "rgba(244, 67, 54, 0.6)",    // red — dirty
+            800, "rgba(183, 28, 28, 0.6)",
+          ],
+          "fill-opacity": 0.55,
+        },
+        layout: { visibility: "none" },
+      });
+
+      // Border lines
+      map.addLayer({
+        id: "electricity-zones-line",
+        type: "line",
+        source: "electricity-zones",
+        paint: {
+          "line-color": "rgba(255, 255, 255, 0.7)",
+          "line-width": 1,
+        },
+        layout: { visibility: "none" },
+      });
+
+      // Zone labels with CO2 values
+      map.addLayer({
+        id: "electricity-zones-labels",
+        type: "symbol",
+        source: "electricity-zones",
+        paint: {
+          "text-color": "#212121",
+          "text-halo-color": "rgba(255, 255, 255, 0.9)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          "text-field": [
+            "concat",
+            ["get", "zoneName"],
+            "\n",
+            ["case",
+              ["has", "carbonIntensity"],
+              ["concat", ["to-string", ["round", ["get", "carbonIntensity"]]], " gCO\u2082"],
+              "—"
+            ],
+          ],
+          "text-font": ["Noto Sans Bold"],
+          "text-size": 11,
+          visibility: "none",
+        },
+        minzoom: 4,
+      });
+
+      // Zone click popup
+      map.on("click", "electricity-zones-fill", (e) => {
+        if (map._pickMode || !e.features?.length) return;
+        const p = e.features[0].properties;
+        const ci = p.carbonIntensity != null ? `${Math.round(p.carbonIntensity)} gCO\u2082/kWh` : "No data";
+        const fossil = p.fossilFreePercentage != null ? `${Math.round(p.fossilFreePercentage)}%` : "—";
+        const renewable = p.renewablePercentage != null ? `${Math.round(p.renewablePercentage)}%` : "—";
+        new mapboxgl.Popup({ maxWidth: "240px" })
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="font-size:12px">` +
+            `<strong>${p.zoneName || p.countryName || "Zone"}</strong><br/>` +
+            `Carbon Intensity: <strong>${ci}</strong><br/>` +
+            `Fossil-free: ${fossil}<br/>` +
+            `Renewable: ${renewable}` +
+            `</div>`
+          )
+          .addTo(map);
+      });
+      map.on("mouseenter", "electricity-zones-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "electricity-zones-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
       // Grid flow click popups
       map.on("click", "grid-flow-core", (e) => {
         if (map._pickMode) return;
         const p = e.features[0].properties;
         const pct = ((p.utilization || 0) * 100).toFixed(1);
         const vkv = p.voltage_kv ? ` (${p.voltage_kv}kV)` : "";
-        new maplibregl.Popup({ maxWidth: "260px" })
+        new mapboxgl.Popup({ maxWidth: "260px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px"><strong>${p.from_node} → ${p.to_node}</strong>${vkv}<br/>Flow: ${p.flow_mw} MW<br/>Capacity: ${p.capacity_mva} MVA<br/>Utilization: <strong>${pct}%</strong></div>`)
           .addTo(map);
@@ -1220,7 +1407,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         const p = e.features[0].properties;
         const name = p.name || p.node_id;
         const vkv = p.voltage_kv ? `${p.voltage_kv}kV ` : "";
-        new maplibregl.Popup({ maxWidth: "220px" })
+        new mapboxgl.Popup({ maxWidth: "220px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px"><strong>${name}</strong><br/>${vkv}${(p.node_type || "").toUpperCase()}<br/>Demand: ${p.demand_mw || p.load_mw || 0} MW</div>`)
           .addTo(map);
@@ -1229,7 +1416,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.on("click", "grid-live-ic-core", (e) => {
         if (map._pickMode) return;
         const p = e.features[0].properties;
-        new maplibregl.Popup({ maxWidth: "240px" })
+        new mapboxgl.Popup({ maxWidth: "240px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px"><strong>${p.label}</strong><br/>Flow: ${p.flow_mw} MW (${p.direction})</div>`)
           .addTo(map);
@@ -1237,7 +1424,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.on("click", "grid-live-gen-circles", (e) => {
         if (map._pickMode) return;
         const p = e.features[0].properties;
-        new maplibregl.Popup({ maxWidth: "200px" })
+        new mapboxgl.Popup({ maxWidth: "200px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px"><strong>${p.label}</strong><br/>Generation: ${p.generation_mw} MW</div>`)
           .addTo(map);
@@ -1263,7 +1450,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           ["Heating", `${p.heat_d || ""} (${p.heat_ee || ""})`],
           ["Fuel", p.fuel], ["Solar PV", p.pv], ["Solar Thermal", p.sol_wat],
         ].filter(([, v]) => v && v !== " ()").map(([k, v]) => `<tr><td style="font-weight:600;padding:2px 6px">${k}</td><td style="padding:2px 6px">${v}</td></tr>`).join("");
-        new maplibregl.Popup({ maxWidth: "320px" })
+        new mapboxgl.Popup({ maxWidth: "320px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:11px"><h4 style="margin:0 0 4px;font-size:13px">Domestic EPC</h4><div style="font-size:10px;color:#6b7c8d;margin-bottom:4px">${p.addr || ""}</div><table>${rows}</table></div>`)
           .addTo(map);
@@ -1278,7 +1465,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           ["Type", p.type], ["Transaction", p.transaction],
           ["Area", p.area ? `${p.area} m\u00B2` : ""], ["Fuel", p.fuel], ["Year", p.year],
         ].filter(([, v]) => v).map(([k, v]) => `<tr><td style="font-weight:600;padding:2px 6px">${k}</td><td style="padding:2px 6px">${v}</td></tr>`).join("");
-        new maplibregl.Popup({ maxWidth: "300px" })
+        new mapboxgl.Popup({ maxWidth: "300px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:11px"><h4 style="margin:0 0 4px;font-size:13px">Non-Domestic EPC</h4><div style="font-size:10px;color:#6b7c8d;margin-bottom:4px">${p.adr2 || p.adr1 || ""}</div><table>${rows}</table></div>`)
           .addTo(map);
@@ -1309,7 +1496,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           .slice(0, 8)
           .map(([k, v]) => `<strong>${k}:</strong> ${v}`)
           .join("<br>");
-        new maplibregl.Popup({ maxWidth: "280px" })
+        new mapboxgl.Popup({ maxWidth: "280px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px;line-height:1.6">${html}</div>`)
           .addTo(map);
@@ -1492,11 +1679,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         }
       });
 
-      map.addControl(new maplibregl.NavigationControl(), "top-left");
-      map.addControl(
-        new maplibregl.TerrainControl({ source: "terrainSource", exaggeration: 2.0 }),
-        "top-right"
-      );
+      map.addControl(new mapboxgl.NavigationControl(), "top-left");
     });
 
     return () => map.remove();
@@ -1553,7 +1736,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       la: ["la-line", "la-fill"],
       transport: ["transport-fill", "transport-line"],
       hillshade: ["hillshade"],
-      contours: ["contour-lines", "contour-labels"],
+      // contours removed (maplibre-contour not available with Mapbox GL)
       environment: ["energy-assets-circle", "energy-assets-echelon", "energy-assets-labels", "energy-assets-sub-labels"],
       gridFlow: ["grid-flow-glow", "grid-flow-core", "grid-flow-dash", "grid-node-glow", "grid-node-circles", "grid-node-labels",
                  "grid-live-ic-glow", "grid-live-ic-core", "grid-live-ic-dash", "grid-live-ic-labels",
@@ -1568,6 +1751,10 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       osmPower: ["osm-power-line-glow", "osm-power-line-core", "osm-power-line-labels",
                  "osm-substation-circles", "osm-substation-labels",
                  "osm-tower-dots", "osm-generator-circles", "osm-generator-labels"],
+      ngedSubs: ["nged-sub-circles", "nged-sub-labels"],
+      geeflowLandUse: ["geeflow-landuse-fill"],
+      geeflowOpportunities: ["geeflow-opp-circles", "geeflow-opp-labels"],
+      electricityZones: ["electricity-zones-fill", "electricity-zones-line", "electricity-zones-labels"],
     };
 
     // Handle lazy raster layers — add source+layer on first toggle on
@@ -1711,7 +1898,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       if (markerRef.current) {
         markerRef.current.setLngLat([pickedLocation.lon, pickedLocation.lat]);
       } else {
-        markerRef.current = new maplibregl.Marker({ color: "#2e7d32" })
+        markerRef.current = new mapboxgl.Marker({ color: "#2e7d32" })
           .setLngLat([pickedLocation.lon, pickedLocation.lat])
           .addTo(map);
       }
@@ -1842,6 +2029,99 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       }
     };
   }, [layers.osmPower]);
+
+  // NGED CIM substations — viewport-based loading with debounce
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.ngedSubs) return;
+
+    let abortCtrl = new AbortController();
+    let timer = null;
+
+    const loadNgedSubs = () => {
+      if (abortCtrl.signal.aborted) return;
+      const bounds = map.getBounds();
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+
+      api.grid.ngedSubstations(bbox).then(data => {
+        if (abortCtrl.signal.aborted || !data) return;
+        const src = map.getSource("nged-substations");
+        if (src) src.setData(data);
+      }).catch(() => {});
+    };
+
+    const debouncedLoad = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loadNgedSubs, 300);
+    };
+
+    loadNgedSubs();
+    map.on("moveend", debouncedLoad);
+
+    return () => {
+      abortCtrl.abort();
+      if (timer) clearTimeout(timer);
+      map.off("moveend", debouncedLoad);
+      const src = map.getSource("nged-substations");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [layers.ngedSubs]);
+
+  // Electricity zones — load zone boundaries + fetch live carbon intensity data
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.electricityZones) return;
+
+    let cancelled = false;
+    let refreshTimer = null;
+
+    const refreshElectricityZones = async () => {
+      try {
+        const data = await api.electricity.carbonIntensityAll();
+        if (cancelled || !data?.zones) return;
+
+        // Merge live data into GeoJSON features
+        const enriched = {
+          ...electricityZonesGeoJSON,
+          features: electricityZonesGeoJSON.features.map(f => {
+            const zone = f.properties.zoneName;
+            const live = data.zones[zone];
+            if (live && !live.error) {
+              return {
+                ...f,
+                properties: {
+                  ...f.properties,
+                  carbonIntensity: live.carbonIntensity,
+                  fossilFreePercentage: live.fossilFreePercentage,
+                  renewablePercentage: live.renewablePercentage,
+                },
+              };
+            }
+            return f;
+          }),
+        };
+
+        const src = map.getSource("electricity-zones");
+        if (src) src.setData(enriched);
+      } catch (err) {
+        console.warn("Failed to fetch electricity zone data:", err);
+        // Still show boundaries without live data
+        const src = map.getSource("electricity-zones");
+        if (src) src.setData(electricityZonesGeoJSON);
+      }
+    };
+
+    // Load immediately + set up 5-minute auto-refresh
+    refreshElectricityZones();
+    refreshTimer = setInterval(refreshElectricityZones, 300000);
+
+    return () => {
+      cancelled = true;
+      if (refreshTimer) clearInterval(refreshTimer);
+      const src = map.getSource("electricity-zones");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [layers.electricityZones]);
 
   // Animate dash offset + node pulse when grid flow layer is visible
   useEffect(() => {

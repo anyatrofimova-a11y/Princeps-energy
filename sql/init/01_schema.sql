@@ -1,4 +1,4 @@
--- Feasibly schema — requires PostGIS
+-- Princeps schema — requires PostGIS
 CREATE EXTENSION IF NOT EXISTS postgis;
 CREATE EXTENSION IF NOT EXISTS postgis_raster;  -- required for slope raster queries
 

@@ -6,6 +6,10 @@ const INTENTS = [
   { value: "financial", label: "Financial", color: "#ff9800" },
   { value: "environmental", label: "Environmental", color: "#66bb6a" },
   { value: "planning", label: "Planning", color: "#e91e63" },
+  { value: "legacy_compliance", label: "Legacy / Compliance", color: "#ef6c00" },
+  { value: "procurement", label: "Procurement", color: "#ff5722" },
+  { value: "grid_efficiency", label: "Grid Efficiency", color: "#795548" },
+  { value: "site_prospecting", label: "Site Prospecting", color: "#009688" },
 ];
 
 function verdictColor(v) {
@@ -81,10 +85,12 @@ export default function AgentPanel({
             setJobStatuses((prev) => ({ ...prev, [key]: "done" }));
           }
         } else {
-          setJobStatuses((prev) => ({ ...prev, [key]: "failed" }));
+          const errText = await res.text().catch(() => "");
+          const detail = errText ? `: ${errText.slice(0, 80)}` : "";
+          setJobStatuses((prev) => ({ ...prev, [key]: `${res.status} error${detail}` }));
         }
-      } catch {
-        setJobStatuses((prev) => ({ ...prev, [key]: "failed" }));
+      } catch (err) {
+        setJobStatuses((prev) => ({ ...prev, [key]: `error: ${err.message || "network"}` }));
       }
     },
     []
