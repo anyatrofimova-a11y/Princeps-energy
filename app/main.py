@@ -65,6 +65,18 @@ from utils.legacy_asset_compliance import (
     setup_legacy_table, seed_sample_legacy_assets,
     UK_ASSET_LIFECYCLES, DECOMMISSIONING_COSTS_PER_KW,
 )
+from utils.infrastructure_retrofit import (
+    match_storage_technologies, assess_retrofit_feasibility,
+    assess_grid_flexibility as retrofit_grid_flexibility,
+    assess_circularity as retrofit_circularity,
+    assess_socioeconomic_impact as retrofit_socioeconomic,
+    assess_security as retrofit_security,
+    generate_disruption_plan,
+    setup_retrofit_table, seed_sample_retrofit_sites,
+    INFRASTRUCTURE_TYPES as RETROFIT_INFRA_TYPES,
+    STORAGE_TECHNOLOGIES as RETROFIT_STORAGE_TECHS,
+    INFRASTRUCTURE_STORAGE_COMPATIBILITY,
+)
 from utils.procurement_intelligence import (
     classify_tender_technology, assess_bid_viability,
     match_tenders_to_sites, procurement_pipeline_summary,
@@ -116,7 +128,7 @@ from agent import run_structured_agent, INTENT_PROMPTS, _default_actions
 import chat as chat_module
 import jobs
 from pipeline import fetch_vibe_raster, clip_and_reproject, compute_slope, generate_tiles
-from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi import Body, FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
@@ -272,6 +284,9 @@ async def lifespan(_app: FastAPI):
         # Legacy asset planning & compliance tables
         await setup_legacy_table(conn)
         await seed_sample_legacy_assets(conn)
+        # Infrastructure retrofit & energy storage tables
+        await setup_retrofit_table(conn)
+        await seed_sample_retrofit_sites(conn)
         # Seed dno_substations from UK_SUBSTATIONS if empty
         sub_count = await conn.fetchval("SELECT count(*) FROM dno_substations")
         if sub_count == 0:
@@ -1679,6 +1694,78 @@ async def api_classify_taxonomy():
     return ENRICHED_TAXONOMY
 
 
+# ── Infrastructure Retrofit & Energy Storage ─────────────────────────────
+
+@app.post("/retrofit/assess")
+async def api_retrofit_assess(body: dict = Body(...)):
+    """Run full retrofit feasibility assessment."""
+    return assess_retrofit_feasibility(
+        infrastructure_type=body.get("infrastructure_type", "coal_power_plant"),
+        storage_technology=body.get("storage_technology", "li_ion_bess"),
+        capacity_mw=body.get("capacity_mw", 50),
+        duration_hours=body.get("duration_hours", 4),
+        structural_condition_score=body.get("structural_condition_score", 70),
+        grid_connection_kv=body.get("grid_connection_kv", 132),
+        grid_headroom_mw=body.get("grid_headroom_mw", 30),
+        distance_to_grid_km=body.get("distance_to_grid_km", 1.0),
+        environmental_overlays=body.get("environmental_overlays"),
+        site_area_m2=body.get("site_area_m2", 50000),
+        existing_remediation=body.get("existing_remediation", False),
+        lat=body.get("lat", 52.5),
+        lon=body.get("lon", -1.5),
+    )
+
+
+@app.post("/retrofit/match-storage")
+async def api_retrofit_match_storage(body: dict = Body(...)):
+    """Match compatible storage technologies to infrastructure type."""
+    techs = match_storage_technologies(
+        infrastructure_type=body.get("infrastructure_type", "coal_power_plant"),
+        capacity_mw=body.get("capacity_mw", 50),
+        duration_hours=body.get("duration_hours", 4),
+        grid_connection_kv=body.get("grid_connection_kv", 132),
+        site_area_m2=body.get("site_area_m2", 50000),
+        structural_condition_score=body.get("structural_condition_score", 70),
+    )
+    return {"infrastructure_type": body.get("infrastructure_type"), "technologies": techs}
+
+
+@app.post("/retrofit/disruption-plan")
+async def api_retrofit_disruption_plan(body: dict = Body(...)):
+    """Generate phased disruption plan for retrofit."""
+    return generate_disruption_plan(
+        infra_type=body.get("infrastructure_type", "coal_power_plant"),
+        storage_tech=body.get("storage_technology", "li_ion_bess"),
+        capacity_mw=body.get("capacity_mw", 50),
+        phased=body.get("phased", True),
+    )
+
+
+@app.get("/retrofit/technologies")
+async def api_retrofit_technologies():
+    """Return infrastructure types, storage technologies, and compatibility matrix."""
+    return {
+        "infrastructure_types": RETROFIT_INFRA_TYPES,
+        "storage_technologies": RETROFIT_STORAGE_TECHS,
+        "compatibility": INFRASTRUCTURE_STORAGE_COMPATIBILITY,
+    }
+
+
+@app.post("/retrofit/circularity")
+async def api_retrofit_circularity(body: dict = Body(...)):
+    """Combined circularity, socioeconomic, security, and grid flexibility assessment."""
+    infra = body.get("infrastructure_type", "coal_power_plant")
+    tech = body.get("storage_technology", "li_ion_bess")
+    cap = body.get("capacity_mw", 50)
+    dur = body.get("duration_hours", 4)
+    return {
+        "circularity": retrofit_circularity(infra, tech, cap),
+        "socioeconomic": retrofit_socioeconomic(infra, tech, cap),
+        "security": retrofit_security(tech, cap),
+        "grid_flexibility": retrofit_grid_flexibility(tech, cap, dur),
+    }
+
+
 @app.get("/geeflow/extract/{mode}")
 async def geeflow_extract(
     mode: str,
@@ -1769,6 +1856,7 @@ async def start_geeflow_analysis(body: GeeFlowAnalysisRequest):
             solar_data=results.get("solar_resource"),
             grid_data=grid_data,
             planning_data=planning_data,
+            flood_data=results.get("flood_risk"),
         )
 
         return {
@@ -3296,6 +3384,26 @@ async def enhanced_agent(parcel_id: str, body: AgentRequest):
         "capacity_kw": body.capacity_kw,
         "notes": body.notes,
     }
+
+    # Intent-specific context enrichment
+    if body.intent == "infrastructure_retrofit":
+        async with pool.acquire() as conn2:
+            nearby = await conn2.fetch("""
+                SELECT asset_id, name, asset_type, capacity_kw, condition_score,
+                       ST_X(ST_Transform(geometry, 4326)) as lon,
+                       ST_Y(ST_Transform(geometry, 4326)) as lat
+                FROM legacy_assets
+                WHERE ST_DWithin(geometry,
+                    ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700), 25000)
+                ORDER BY name LIMIT 20
+            """, lon, lat)
+            agent_context["nearby_legacy_assets"] = [
+                {"name": r["name"], "type": r["asset_type"],
+                 "capacity_kw": r["capacity_kw"], "condition": r["condition_score"]}
+                for r in nearby
+            ]
+        agent_context["infrastructure_types"] = list(RETROFIT_INFRA_TYPES.keys())
+        agent_context["storage_technologies"] = list(RETROFIT_STORAGE_TECHS.keys())
 
     try:
         agent_output = await run_structured_agent(

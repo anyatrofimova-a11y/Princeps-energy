@@ -6,10 +6,12 @@ const INTENTS = [
   { value: "financial", label: "Financial", color: "#ff9800" },
   { value: "environmental", label: "Environmental", color: "#66bb6a" },
   { value: "planning", label: "Planning", color: "#e91e63" },
+  { value: "satellite_analysis", label: "Satellite / DL", color: "#1565c0" },
   { value: "legacy_compliance", label: "Legacy / Compliance", color: "#ef6c00" },
   { value: "procurement", label: "Procurement", color: "#ff5722" },
   { value: "grid_efficiency", label: "Grid Efficiency", color: "#795548" },
   { value: "site_prospecting", label: "Site Prospecting", color: "#009688" },
+  { value: "infrastructure_retrofit", label: "Infra Retrofit", color: "#607d8b" },
 ];
 
 function verdictColor(v) {

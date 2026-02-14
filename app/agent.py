@@ -154,6 +154,19 @@ INTENT_PROMPTS: dict[str, str] = {
         "rooftop solar potential. Analyse land use change trends and forecast future development "
         "pressure. Provide a GO / CAUTION / NO-GO verdict on retrofitting potential."
     ),
+    "infrastructure_retrofit": (
+        "You are an EU energy infrastructure retrofitting specialist aligned with HORIZON Europe "
+        "call HORIZON-CL5-2027-07-D3-27 and the BRIDGE initiative. Assess the feasibility of "
+        "retrofitting obsolete infrastructure (dams, power plants, mines, industrial sites, fossil "
+        "fuel infrastructure) with energy storage technologies (pumped hydro, CAES, gravity, BESS, "
+        "flow batteries, thermal, hydrogen, flywheels). Evaluate cost-effectiveness comparing "
+        "retrofit vs greenfield, circularity and EU Battery Regulation 2023/1542 compliance, grid "
+        "flexibility contribution (frequency response, capacity firming, arbitrage), environmental "
+        "and social sustainability (brownfield remediation, just transition, community benefit), and "
+        "NIS2 secure-by-design compliance. Minimise disruption through phased construction planning. "
+        "Reference BRIDGE initiative KPIs and EU Taxonomy Activity 4.10 criteria. Provide a GO / "
+        "CAUTION / NO-GO verdict with confidence score."
+    ),
 }
 
 OUTPUT_SCHEMA = """\
@@ -555,6 +568,43 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "endpoint": f"/classify/forecast?lat={lat}&lon={lon}",
                 "method": "GET",
                 "payload": {},
+            },
+        ]
+
+    elif intent == "infrastructure_retrofit":
+        actions = [
+            {
+                "label": "Assess Retrofit Feasibility",
+                "endpoint": "/retrofit/assess",
+                "method": "POST",
+                "payload": {"infrastructure_type": "coal_power_plant", "storage_technology": "li_ion_bess",
+                            "capacity_mw": cap / 1000 if cap > 100 else 50},
+            },
+            {
+                "label": "Match Storage Technologies",
+                "endpoint": "/retrofit/match-storage",
+                "method": "POST",
+                "payload": {"infrastructure_type": "coal_power_plant", "capacity_mw": cap / 1000 if cap > 100 else 50},
+            },
+            {
+                "label": "Generate Disruption Plan",
+                "endpoint": "/retrofit/disruption-plan",
+                "method": "POST",
+                "payload": {"infrastructure_type": "coal_power_plant", "storage_technology": "li_ion_bess",
+                            "capacity_mw": cap / 1000 if cap > 100 else 50},
+            },
+            {
+                "label": "View Storage Technologies",
+                "endpoint": "/retrofit/technologies",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Circularity Assessment",
+                "endpoint": "/retrofit/circularity",
+                "method": "POST",
+                "payload": {"infrastructure_type": "coal_power_plant", "storage_technology": "li_ion_bess",
+                            "capacity_mw": cap / 1000 if cap > 100 else 50},
             },
         ]
 
