@@ -70,8 +70,11 @@ INTENT_PROMPTS: dict[str, str] = {
     ),
     "environmental": (
         "You are an environmental impact assessment specialist. "
-        "Evaluate ecological constraints: flood risk, AONB/SSSI designations, "
-        "biodiversity net gain requirements, and mitigation measures."
+        "Evaluate ecological constraints: flood risk from JRC satellite data (water occurrence, "
+        "seasonality, risk classification), AONB/SSSI designations, biodiversity net gain requirements, "
+        "and mitigation measures. Assess vegetation trend analysis using multi-year NDVI stability "
+        "(greening/browning/stable trends), and enhanced change detection confidence for land use "
+        "compliance monitoring."
     ),
     "planning": (
         "You are a UK planning consultant specialising in renewable energy. "
@@ -87,12 +90,15 @@ INTENT_PROMPTS: dict[str, str] = {
     ),
     "satellite_analysis": (
         "You are a geospatial intelligence analyst specialising in renewable energy "
-        "site assessment using satellite Earth observation data. Analyse DynamicWorld "
-        "land cover, terrain (NASADEM), solar resource (ERA5), and vegetation (Sentinel-2 NDVI) "
-        "to assess site suitability for solar PV, battery storage, or wind development. "
-        "Provide a composite suitability score and GO / CAUTION / NO-GO recommendation "
-        "based on terrain feasibility, land use compatibility, solar resource quality, "
-        "and environmental constraints."
+        "site assessment using satellite Earth observation and deep learning. Analyse DynamicWorld "
+        "land cover, terrain (NASADEM), solar resource (ERA5), vegetation (Sentinel-2 NDVI), "
+        "SAR backscatter (Sentinel-1 all-weather ground conditions), flood risk (JRC Global Surface Water), "
+        "and NDVI timeseries (multi-year vegetation stability). Leverage deep learning capabilities: "
+        "OmniCloudMask cloud-free assessment, OpenSR super-resolution imagery, Prithvi foundation "
+        "embeddings for site fingerprinting, GroundedSAM infrastructure detection, and torchange "
+        "enhanced change detection. Provide a composite suitability score and GO / CAUTION / NO-GO "
+        "recommendation based on terrain feasibility, land use compatibility, solar resource quality, "
+        "flood risk, ground conditions, and environmental constraints."
     ),
     "legacy_compliance": (
         "You are a UK energy infrastructure asset management and compliance specialist. "
@@ -100,7 +106,9 @@ INTENT_PROMPTS: dict[str, str] = {
         "Evaluate repowering opportunities considering technology improvements since commissioning. "
         "Review planning consent conditions, environmental obligations (BNG, EIA monitoring), "
         "grid connection compliance (G99/G100), and health & safety requirements (CDM 2015). "
-        "Identify decommissioning liabilities and estimate costs. Consider GeoAI satellite-derived "
+        "Identify decommissioning liabilities and estimate costs. Leverage GroundedSAM infrastructure "
+        "detection for pylon/substation/panel identification, and torchange enhanced change detection "
+        "for construction/demolition/vegetation/surface change categorisation. Consider GeoAI satellite-derived "
         "condition indicators including vegetation encroachment, structural changes, and land use "
         "changes around the asset. Provide a GO / CAUTION / NO-GO verdict on continued operation "
         "with clear compliance remediation actions."
@@ -124,6 +132,9 @@ INTENT_PROMPTS: dict[str, str] = {
         "Identify and rank new sites for solar PV, wind, or battery storage development using "
         "multi-criteria analysis: solar/wind resource quality, terrain suitability, land use compatibility, "
         "grid access (substation proximity and headroom), and planning/environmental constraints. "
+        "Leverage Prithvi EO embedding-based similarity search and multi-modal site fingerprinting "
+        "(Prithvi + DINOv3 + scalar features) for finding sites with similar characteristics. "
+        "Consider temporal NDVI stability scoring for land use risk assessment. "
         "Provide HIGH_PRIORITY / PROMISING / MARGINAL / UNSUITABLE recommendations with composite scores."
     ),
     "bess_optimisation": (
@@ -134,6 +145,14 @@ INTENT_PROMPTS: dict[str, str] = {
         "arbitrage (Agile/wholesale), and DNO peak shaving. Model revenue stacking, financial "
         "returns (NPV, IRR, payback), degradation impacts, and co-location benefits with solar PV. "
         "Provide a GO / CAUTION / NO-GO verdict with confidence score."
+    ),
+    "land_classification": (
+        "You are a geospatial land use classification specialist for UK energy infrastructure. "
+        "Analyse the enriched 21-class land use classification (based on UC Merced taxonomy) to "
+        "assess site composition, identify areas suitable for solar PV, BESS, EV charging, and "
+        "other energy infrastructure retrofitting. Evaluate building types and densities for "
+        "rooftop solar potential. Analyse land use change trends and forecast future development "
+        "pressure. Provide a GO / CAUTION / NO-GO verdict on retrofitting potential."
     ),
 }
 
@@ -344,11 +363,30 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
     elif intent == "satellite_analysis":
         actions = [
             {
-                "label": "Run Satellite Analysis",
+                "label": "Run Full Satellite Analysis",
                 "endpoint": "/job/geeflow_analysis",
                 "method": "POST",
                 "payload": {"lat": lat, "lon": lon, "radius_km": 5,
-                            "modes": ["land_use", "terrain", "solar_resource", "vegetation"]},
+                            "modes": ["land_use", "terrain", "solar_resource", "vegetation",
+                                      "sar_backscatter", "flood_risk", "ndvi_timeseries"]},
+            },
+            {
+                "label": "Cloud Assessment",
+                "endpoint": f"/geoai/analyse?lat={lat}&lon={lon}&mode=cloud_mask",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Generate Embeddings",
+                "endpoint": f"/geoai/analyse?lat={lat}&lon={lon}&mode=foundation_embeddings",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Detect Infrastructure",
+                "endpoint": f"/geoai/analyse?lat={lat}&lon={lon}&mode=infrastructure_detect",
+                "method": "GET",
+                "payload": {},
             },
         ]
 
@@ -439,8 +477,14 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "payload": {},
             },
             {
-                "label": "Find Similar Sites",
+                "label": "Find Similar Sites (Embedding)",
                 "endpoint": f"/prospector/similar?lat={lat}&lon={lon}&radius_km=50&technology=solar",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Generate Site Caption",
+                "endpoint": f"/geoai/analyse?lat={lat}&lon={lon}&mode=site_caption",
                 "method": "GET",
                 "payload": {},
             },
@@ -481,6 +525,34 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
             {
                 "label": "View UK BESS Benchmarks",
                 "endpoint": "/bess/benchmarks",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "land_classification":
+        actions = [
+            {
+                "label": "Run Land Classification",
+                "endpoint": f"/classify/land-use?lat={lat}&lon={lon}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View Map Overlay",
+                "endpoint": f"/classify/map-overlay?lat={lat}&lon={lon}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Assess Retrofitting",
+                "endpoint": f"/classify/retrofitting?lat={lat}&lon={lon}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Forecast Land Use",
+                "endpoint": f"/classify/forecast?lat={lat}&lon={lon}",
                 "method": "GET",
                 "payload": {},
             },

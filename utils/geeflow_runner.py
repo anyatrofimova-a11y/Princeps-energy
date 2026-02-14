@@ -365,6 +365,250 @@ def extract_change_detection(lat: float, lon: float, radius_km: float, year: int
 
 
 # ---------------------------------------------------------------------------
+# Mode: sar_backscatter — Sentinel-1 C-band SAR
+# ---------------------------------------------------------------------------
+
+def extract_sar_backscatter(lat: float, lon: float, radius_km: float, year: int) -> dict:
+    """Extract Sentinel-1 SAR backscatter statistics (VV/VH polarisation)."""
+    aoi = make_buffer(lat, lon, radius_km)
+
+    start = f"{year}-01-01"
+    end = f"{year}-12-31"
+
+    s1 = (ee.ImageCollection("COPERNICUS/S1_GRD")
+          .filterDate(start, end)
+          .filterBounds(aoi)
+          .filter(ee.Filter.eq("instrumentMode", "IW"))
+          .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VV"))
+          .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH")))
+
+    scene_count = s1.size().getInfo()
+
+    # Mean and std for VV and VH
+    vv_stats = s1.select("VV").reduce(
+        ee.Reducer.mean().combine(ee.Reducer.stdDev(), sharedInputs=True)
+    ).reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=aoi, scale=10, maxPixels=1e9,
+    ).getInfo()
+
+    vh_stats = s1.select("VH").reduce(
+        ee.Reducer.mean().combine(ee.Reducer.stdDev(), sharedInputs=True)
+    ).reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=aoi, scale=10, maxPixels=1e9,
+    ).getInfo()
+
+    vv_mean = round(vv_stats.get("VV_mean_mean", -12) or -12, 2)
+    vh_mean = round(vh_stats.get("VH_mean_mean", -18) or -18, 2)
+    vv_std = round(vv_stats.get("VV_stdDev_mean", 3) or 3, 2)
+    vh_std = round(vh_stats.get("VH_stdDev_mean", 3) or 3, 2)
+
+    # VV/VH ratio (cross-pol ratio) — indicator of surface roughness / vegetation
+    vv_vh_ratio = round(vv_mean - vh_mean, 2)  # in dB
+
+    # Soil moisture indicator based on VV backscatter
+    if vv_mean > -8:
+        moisture = "wet"
+    elif vv_mean > -14:
+        moisture = "moderate"
+    else:
+        moisture = "dry"
+
+    # Surface roughness from VV standard deviation
+    if vv_std > 4:
+        roughness = "high"
+    elif vv_std > 2:
+        roughness = "moderate"
+    else:
+        roughness = "smooth"
+
+    return {
+        "mode": "sar_backscatter",
+        "source": "Sentinel-1 GRD (C-band, 10m)",
+        "year": year,
+        "scene_count": scene_count,
+        "backscatter": {
+            "vv_mean_db": vv_mean,
+            "vv_std_db": vv_std,
+            "vh_mean_db": vh_mean,
+            "vh_std_db": vh_std,
+            "vv_vh_ratio_db": vv_vh_ratio,
+        },
+        "indicators": {
+            "soil_moisture": moisture,
+            "surface_roughness": roughness,
+        },
+        "value": "All-weather ground assessment — UK cloud cover makes optical unreliable",
+        "radius_km": radius_km,
+        "lat": lat,
+        "lon": lon,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Mode: flood_risk — JRC Global Surface Water
+# ---------------------------------------------------------------------------
+
+def extract_flood_risk(lat: float, lon: float, radius_km: float) -> dict:
+    """Extract flood risk indicators from JRC Global Surface Water dataset."""
+    aoi = make_buffer(lat, lon, radius_km)
+
+    gsw = ee.Image("JRC/GSW1_4/GlobalSurfaceWater")
+
+    # Water occurrence (% of time water was present 1984-2021)
+    occurrence = gsw.select("occurrence")
+    occ_stats = occurrence.reduceRegion(
+        reducer=ee.Reducer.mean().combine(ee.Reducer.max(), sharedInputs=True),
+        geometry=aoi, scale=30, maxPixels=1e8,
+    ).getInfo()
+
+    # Seasonality (months water is present)
+    seasonality = gsw.select("seasonality")
+    seas_stats = seasonality.reduceRegion(
+        reducer=ee.Reducer.mean().combine(ee.Reducer.max(), sharedInputs=True),
+        geometry=aoi, scale=30, maxPixels=1e8,
+    ).getInfo()
+
+    # Max extent
+    max_extent = gsw.select("max_extent")
+    extent_stats = max_extent.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=aoi, scale=30, maxPixels=1e8,
+    ).getInfo()
+
+    # Recurrence
+    recurrence = gsw.select("recurrence")
+    rec_stats = recurrence.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=aoi, scale=30, maxPixels=1e8,
+    ).getInfo()
+
+    occ_pct = round(occ_stats.get("occurrence_mean", 0) or 0, 2)
+    occ_max = round(occ_stats.get("occurrence_max", 0) or 0, 2)
+    seas_mean = round(seas_stats.get("seasonality_mean", 0) or 0, 1)
+    seas_max = round(seas_stats.get("seasonality_max", 0) or 0, 0)
+    extent_pct = round((extent_stats.get("max_extent_mean", 0) or 0) * 100, 1)
+    rec_pct = round(rec_stats.get("recurrence_mean", 0) or 0, 1)
+
+    # Risk classification
+    if occ_pct > 25:
+        risk_level = "HIGH"
+        flood_risk_score = min(100, int(occ_pct * 3))
+        environmental_constraint = True
+    elif occ_pct > 5:
+        risk_level = "MEDIUM"
+        flood_risk_score = min(100, int(occ_pct * 4))
+        environmental_constraint = False
+    else:
+        risk_level = "LOW"
+        flood_risk_score = max(0, int(occ_pct * 5))
+        environmental_constraint = False
+
+    return {
+        "mode": "flood_risk",
+        "source": "JRC Global Surface Water v1.4 (30m, 1984-2021)",
+        "water_occurrence_pct": occ_pct,
+        "water_occurrence_max_pct": occ_max,
+        "seasonality_months_mean": seas_mean,
+        "seasonality_months_max": int(seas_max),
+        "max_extent_pct": extent_pct,
+        "recurrence_pct": rec_pct,
+        "risk_level": risk_level,
+        "flood_risk_score": flood_risk_score,
+        "environmental_constraint": environmental_constraint,
+        "radius_km": radius_km,
+        "lat": lat,
+        "lon": lon,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Mode: ndvi_timeseries — Multi-year Sentinel-2 NDVI trends
+# ---------------------------------------------------------------------------
+
+def extract_ndvi_timeseries(lat: float, lon: float, radius_km: float,
+                             year: int, lookback_years: int = 3) -> dict:
+    """Extract multi-year NDVI trend analysis from Sentinel-2."""
+    aoi = make_buffer(lat, lon, radius_km)
+
+    start_year = year - lookback_years
+    annual_ndvi = []
+
+    for y in range(start_year, year + 1):
+        s2 = (ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+              .filterDate(f"{y}-01-01", f"{y}-12-31")
+              .filterBounds(aoi)
+              .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 30)))
+
+        def add_ndvi(image):
+            ndvi = image.normalizedDifference(["B8", "B4"]).rename("NDVI")
+            return image.addBands(ndvi)
+
+        median_ndvi = s2.map(add_ndvi).select("NDVI").median()
+        stats = median_ndvi.reduceRegion(
+            reducer=ee.Reducer.mean().combine(ee.Reducer.stdDev(), sharedInputs=True),
+            geometry=aoi, scale=10, maxPixels=1e9,
+        ).getInfo()
+
+        annual_ndvi.append({
+            "year": y,
+            "ndvi_mean": round(stats.get("NDVI_mean", 0) or 0, 4),
+            "ndvi_std": round(stats.get("NDVI_stdDev", 0) or 0, 4),
+        })
+
+    # Linear trend analysis
+    values = [a["ndvi_mean"] for a in annual_ndvi]
+    n = len(values)
+    if n >= 2:
+        x_mean = (n - 1) / 2
+        y_mean = sum(values) / n
+        num = sum((i - x_mean) * (v - y_mean) for i, v in enumerate(values))
+        den = sum((i - x_mean) ** 2 for i in range(n))
+        slope = num / den if den > 0 else 0
+
+        if slope > 0.005:
+            direction = "greening"
+        elif slope < -0.005:
+            direction = "browning"
+        else:
+            direction = "stable"
+
+        inter_annual_std = (sum((v - y_mean) ** 2 for v in values) / n) ** 0.5
+
+        # Stability score: low std + stable trend = high stability
+        stability_score = max(0, min(100, int(100 - inter_annual_std * 500 - abs(slope) * 2000)))
+    else:
+        slope = 0
+        direction = "insufficient_data"
+        inter_annual_std = 0
+        stability_score = 50
+
+    return {
+        "mode": "ndvi_timeseries",
+        "source": "Sentinel-2 SR Harmonized (10m)",
+        "period": f"{start_year}-{year}",
+        "lookback_years": lookback_years,
+        "annual_data": annual_ndvi,
+        "trend": {
+            "slope": round(slope, 5),
+            "direction": direction,
+            "inter_annual_std": round(inter_annual_std, 4),
+            "stability_score": stability_score,
+        },
+        "interpretation": (
+            f"NDVI trend is {direction} over {n} years. "
+            f"{'Stable vegetation = lower regulatory risk.' if direction == 'stable' else ''}"
+            f"{'Greening trend may indicate rewilding or agricultural intensification.' if direction == 'greening' else ''}"
+            f"{'Browning trend may indicate degradation or development pressure.' if direction == 'browning' else ''}"
+        ).strip(),
+        "radius_km": radius_km,
+        "lat": lat,
+        "lon": lon,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Mode: site_composite — all modes combined
 # ---------------------------------------------------------------------------
 
@@ -404,6 +648,9 @@ MODE_MAP = {
     "vegetation": extract_vegetation,
     "change_detection": extract_change_detection,
     "site_composite": extract_site_composite,
+    "sar_backscatter": extract_sar_backscatter,
+    "flood_risk": extract_flood_risk,
+    "ndvi_timeseries": extract_ndvi_timeseries,
 }
 
 
@@ -427,6 +674,10 @@ def main():
         result = extract_change_detection(args.lat, args.lon, args.radius_km, args.year, args.lookback_years)
     elif mode == "site_composite":
         result = extract_site_composite(args.lat, args.lon, args.radius_km, args.year)
+    elif mode == "flood_risk":
+        result = extract_flood_risk(args.lat, args.lon, args.radius_km)
+    elif mode == "ndvi_timeseries":
+        result = extract_ndvi_timeseries(args.lat, args.lon, args.radius_km, args.year, args.lookback_years)
     else:
         func = MODE_MAP[mode]
         result = func(args.lat, args.lon, args.radius_km, args.year)

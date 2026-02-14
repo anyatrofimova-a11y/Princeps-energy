@@ -205,12 +205,38 @@ def score_planning(planning_data: dict | None) -> dict:
     return {"score": round(score), "max": 10, "notes": notes}
 
 
+def score_flood_risk(flood_data: dict | None) -> dict:
+    """Score flood risk penalty (0 to -10 deduction)."""
+    if not flood_data or flood_data.get("error"):
+        return {"penalty": 0, "notes": "No flood data available"}
+
+    risk_level = flood_data.get("risk_level", "LOW")
+    occ_pct = flood_data.get("water_occurrence_pct", 0)
+    notes = []
+
+    if risk_level == "HIGH":
+        penalty = -10
+        notes.append(f"HIGH flood risk ({occ_pct}% water occurrence) — severe constraint")
+    elif risk_level == "MEDIUM":
+        penalty = -5
+        notes.append(f"MEDIUM flood risk ({occ_pct}% water occurrence) — mitigation needed")
+    else:
+        penalty = 0
+        notes.append(f"LOW flood risk ({occ_pct}% water occurrence)")
+
+    if flood_data.get("environmental_constraint"):
+        notes.append("Environmental constraint flagged — may require EA consent")
+
+    return {"penalty": penalty, "notes": notes}
+
+
 def compute_site_score(
     terrain_data: dict | None = None,
     land_use_data: dict | None = None,
     solar_data: dict | None = None,
     grid_data: dict | None = None,
     planning_data: dict | None = None,
+    flood_data: dict | None = None,
 ) -> dict:
     """
     Compute composite site suitability score (0-100).
@@ -231,7 +257,13 @@ def compute_site_score(
         "planning": score_planning(planning_data),
     }
 
-    total = sum(v["score"] for v in breakdown.values())
+    # Flood risk penalty
+    flood = score_flood_risk(flood_data)
+    breakdown["flood_risk"] = flood
+
+    total = sum(v["score"] for v in breakdown.values() if "score" in v)
+    total += flood["penalty"]
+    total = max(0, total)
 
     if total >= 70:
         recommendation = "GO"

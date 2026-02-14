@@ -84,6 +84,10 @@ from utils.bess_optimiser import (
     assess_colocation_value, bess_regional_scan,
     BESS_CAPEX_GBP_PER_MWH, UK_REVENUE_STREAMS,
 )
+from utils.land_classifier import (
+    classify_grid, assess_retrofitting, forecast_land_use,
+    classification_to_map_geojson, ENRICHED_TAXONOMY,
+)
 from utils.osm_power_infra import (
     setup_tables as osm_power_setup,
     seed_power_infra as osm_power_seed,
@@ -233,6 +237,38 @@ async def lifespan(_app: FastAPI):
             CREATE INDEX IF NOT EXISTS idx_geeflow_geom
             ON geeflow_extractions USING GIST (geometry)
         """)
+        # pgvector extension for embeddings (optional — gracefully degrade if not installed)
+        try:
+            await conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            log.info("pgvector extension enabled")
+            # Add embedding columns (safe to run repeatedly — IF NOT EXISTS via DO block)
+            await conn.execute("""
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='geeflow_extractions' AND column_name='embedding') THEN
+                        ALTER TABLE geeflow_extractions ADD COLUMN embedding vector(768);
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                                   WHERE table_name='geeflow_extractions' AND column_name='fingerprint') THEN
+                        ALTER TABLE geeflow_extractions ADD COLUMN fingerprint vector(1809);
+                    END IF;
+                END $$;
+            """)
+            # IVFFlat indexes for cosine similarity KNN
+            try:
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_geeflow_embedding
+                    ON geeflow_extractions USING ivfflat (embedding vector_cosine_ops) WITH (lists = 10)
+                """)
+                await conn.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_geeflow_fingerprint
+                    ON geeflow_extractions USING ivfflat (fingerprint vector_cosine_ops) WITH (lists = 10)
+                """)
+            except Exception:
+                log.info("IVFFlat indexes deferred — need more rows")
+        except Exception as e:
+            log.warning("pgvector not available (install with: brew install pgvector): %s", e)
         # Legacy asset planning & compliance tables
         await setup_legacy_table(conn)
         await seed_sample_legacy_assets(conn)
@@ -1042,6 +1078,9 @@ async def geeflow_with_cache(
 GEOAI_MODES = [
     "building_footprints", "solar_panel_detect", "change_detection",
     "land_cover", "canopy_height", "asset_condition",
+    "cloud_mask", "super_resolution", "foundation_embeddings",
+    "patch_similarity", "site_caption", "infrastructure_detect",
+    "enhanced_change",
 ]
 
 async def run_geoai_subprocess(
@@ -1049,6 +1088,7 @@ async def run_geoai_subprocess(
     radius_km: float = 2.0, asset_type: str = "solar_farm",
     year_before: int = 2020, year_after: int = 2024,
     timeout: int = 120,
+    **extra_args,
 ) -> dict[str, Any]:
     """Run GeoAI analysis in a subprocess."""
     cmd = [
@@ -1061,6 +1101,10 @@ async def run_geoai_subprocess(
         "--year_before", str(year_before),
         "--year_after", str(year_after),
     ]
+    # Pass through extra mode-specific args
+    for key, val in extra_args.items():
+        if val is not None and val != "":
+            cmd.extend([f"--{key}", str(val)])
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -1084,11 +1128,22 @@ async def geoai_analyse(
     asset_type: str = Query("solar_farm"),
     year_before: int = Query(2020),
     year_after: int = Query(2024),
+    satellite: str = Query("sentinel2"),
+    model_size: str = Query("100M-TL"),
+    ref_lat: float = Query(0),
+    ref_lon: float = Query(0),
+    targets: str = Query("pylons,substations,solar_panels,wind_turbines"),
+    questions: str = Query(""),
 ):
     """Run GeoAI geospatial analysis (building detection, solar panels, change detection, etc.)."""
     if mode not in GEOAI_MODES:
         raise HTTPException(status_code=400, detail=f"Unknown mode. Choose from: {GEOAI_MODES}")
-    return await run_geoai_subprocess(mode, lat, lon, radius_km, asset_type, year_before, year_after)
+    return await run_geoai_subprocess(
+        mode, lat, lon, radius_km, asset_type, year_before, year_after,
+        satellite=satellite, model_size=model_size,
+        ref_lat=ref_lat, ref_lon=ref_lon,
+        targets=targets, questions=questions,
+    )
 
 
 @app.get("/geoai/modes")
@@ -1103,6 +1158,13 @@ async def geoai_modes():
             "land_cover": "High-resolution land cover classification",
             "canopy_height": "Vegetation canopy height estimation",
             "asset_condition": "Composite asset condition assessment (multi-model)",
+            "cloud_mask": "OmniCloudMask cloud/shadow assessment for imagery usability",
+            "super_resolution": "OpenSR 4x image enhancement (10m → 2.5m)",
+            "foundation_embeddings": "Prithvi EO 2.0 site embedding extraction (768-dim)",
+            "patch_similarity": "DINOv3 patch-level site comparison (cosine similarity)",
+            "site_caption": "Moondream VLM natural language site description + VQA",
+            "infrastructure_detect": "GroundedSAM text-guided infrastructure detection",
+            "enhanced_change": "torchange AnyChange enhanced bitemporal change detection",
         },
     }
 
@@ -1374,6 +1436,99 @@ async def api_regions():
 
 
 # ---------------------------------------------------------------------------
+# Embedding Similarity Search (pgvector)
+# ---------------------------------------------------------------------------
+
+@app.get("/sites/similar")
+async def api_sites_similar(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    k: int = Query(5, ge=1, le=50),
+):
+    """Find similar sites using pgvector KNN on foundation embeddings."""
+    # Check if pgvector is available
+    async with pool.acquire() as conn:
+        has_vector = await conn.fetchval(
+            "SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname='vector')"
+        )
+        if not has_vector:
+            return {
+                "error": "pgvector extension not installed. Install with: brew install pgvector && psql -d feasibly -c 'CREATE EXTENSION vector;'",
+                "fallback": f"/prospector/similar?lat={lat}&lon={lon}&radius_km=50&technology=solar",
+            }
+        # First get or generate reference embedding
+        ref = await conn.fetchrow(
+            """
+            SELECT embedding FROM geeflow_extractions
+            WHERE embedding IS NOT NULL
+              AND abs(lat - $1) < 0.02 AND abs(lon - $2) < 0.02
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            lat, lon,
+        )
+        if not ref or ref["embedding"] is None:
+            return {
+                "error": "No embedding found for reference location. Run foundation_embeddings GeoAI mode first.",
+                "hint": f"/geoai/analyse?lat={lat}&lon={lon}&mode=foundation_embeddings",
+            }
+
+        # KNN search using cosine distance
+        rows = await conn.fetch(
+            """
+            SELECT lat, lon, radius_km, mode, result_data, created_at,
+                   embedding <=> $1::vector AS distance
+            FROM geeflow_extractions
+            WHERE embedding IS NOT NULL
+              AND NOT (abs(lat - $2) < 0.02 AND abs(lon - $3) < 0.02)
+            ORDER BY embedding <=> $1::vector
+            LIMIT $4
+            """,
+            str(ref["embedding"]), lat, lon, k,
+        )
+        results = []
+        for r in rows:
+            rd = r["result_data"]
+            if isinstance(rd, str):
+                rd = json.loads(rd)
+            results.append({
+                "lat": r["lat"],
+                "lon": r["lon"],
+                "cosine_distance": round(float(r["distance"]), 4),
+                "similarity": round(1 - float(r["distance"]), 4),
+                "mode": r["mode"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+            })
+        return {
+            "reference": {"lat": lat, "lon": lon},
+            "k": k,
+            "matches": results,
+            "method": "pgvector cosine KNN on Prithvi-768 embeddings",
+        }
+
+
+@app.get("/scoring/learned")
+async def api_learned_scoring(
+    lat: float = Query(...),
+    lon: float = Query(...),
+):
+    """Get both rule-based and learned site scores."""
+    from utils.learned_scorer import learned_score, extract_features
+
+    # Rule-based score from site_prospector
+    rule_based = score_candidate_site(lat, lon, "solar")
+
+    # Learned score (XGBoost + SHAP)
+    learned = learned_score(lat, lon)
+
+    return {
+        "lat": lat,
+        "lon": lon,
+        "rule_based": rule_based,
+        "learned": learned,
+    }
+
+
+# ---------------------------------------------------------------------------
 # BESS Optimiser
 # ---------------------------------------------------------------------------
 
@@ -1471,6 +1626,59 @@ async def api_bess_benchmarks():
     }
 
 
+# ── Land Classification ──────────────────────────────────────────────────
+
+@app.get("/classify/land-use")
+async def api_classify_land_use(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_km: float = Query(2.0, ge=0.5, le=20),
+    grid_size: int = Query(10, ge=3, le=30),
+):
+    """Run enriched 21-class land use classification over a grid."""
+    result = classify_grid(lat, lon, radius_km, grid_size)
+    return result
+
+
+@app.get("/classify/map-overlay")
+async def api_classify_map_overlay(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_km: float = Query(2.0, ge=0.5, le=20),
+):
+    """Get Mapbox-ready GeoJSON with labels and energy badges."""
+    classification = classify_grid(lat, lon, radius_km)
+    return classification_to_map_geojson(classification, include_labels=True)
+
+
+@app.get("/classify/retrofitting")
+async def api_classify_retrofitting(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_km: float = Query(2.0, ge=0.5, le=20),
+):
+    """Assess retrofitting potential for solar/BESS/EV."""
+    classification = classify_grid(lat, lon, radius_km)
+    return assess_retrofitting(classification)
+
+
+@app.get("/classify/forecast")
+async def api_classify_forecast(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_km: float = Query(2.0, ge=0.5, le=20),
+    forecast_years: int = Query(5, ge=1, le=15),
+):
+    """Forecast land use change trends."""
+    return forecast_land_use(lat, lon, radius_km, forecast_years=forecast_years)
+
+
+@app.get("/classify/taxonomy")
+async def api_classify_taxonomy():
+    """Return the enriched 21-class taxonomy with energy tags."""
+    return ENRICHED_TAXONOMY
+
+
 @app.get("/geeflow/extract/{mode}")
 async def geeflow_extract(
     mode: str,
@@ -1481,7 +1689,8 @@ async def geeflow_extract(
     parcel_id: str = Query(None),
 ):
     """Extract Earth observation data for a location using GeeFlow."""
-    valid_modes = ["land_use", "terrain", "solar_resource", "vegetation", "change_detection", "site_composite"]
+    valid_modes = ["land_use", "terrain", "solar_resource", "vegetation", "change_detection", "site_composite",
+                    "sar_backscatter", "flood_risk", "ndvi_timeseries"]
     if mode not in valid_modes:
         raise HTTPException(400, f"Invalid mode. Choose from: {valid_modes}")
     return await geeflow_with_cache(mode, lat, lon, radius_km, year, parcel_id)

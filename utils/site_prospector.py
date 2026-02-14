@@ -262,9 +262,14 @@ def find_similar_sites(
     search_radius_km: float = 50,
     num_candidates: int = 20,
     technology: str = "solar",
+    embedding_neighbors: list[dict] | None = None,
 ) -> dict:
     """
     Find sites similar to a reference location using multi-criteria matching.
+
+    If embedding_neighbors is provided (from pgvector KNN search on Prithvi/DINOv3
+    embeddings), those are used as the candidate set instead of random generation.
+    Otherwise falls back to geographic random sampling with resource-profile matching.
 
     Inspired by AlphaEarth satellite embeddings similarity search concept
     from Geo_AI_compendium — uses multi-dimensional feature matching across
@@ -273,7 +278,39 @@ def find_similar_sites(
     ref_region = get_region(reference_lat, reference_lon)
     ref_resource = UK_REGIONAL_RESOURCE.get(ref_region, UK_REGIONAL_RESOURCE["midlands"])
 
-    # Generate candidate points in a ring around reference
+    # If embedding neighbors provided, use those as candidates
+    if embedding_neighbors:
+        candidates = []
+        for neighbor in embedding_neighbors:
+            clat = neighbor.get("lat", reference_lat)
+            clon = neighbor.get("lon", reference_lon)
+            score = score_candidate_site(clat, clon, technology)
+
+            # Use embedding similarity directly if available
+            emb_sim = neighbor.get("similarity", 0)
+            score["similarity_pct"] = round(emb_sim * 100, 1)
+            score["similarity_method"] = "embedding_cosine"
+            dist = _haversine(reference_lat, reference_lon, clat, clon)
+            score["distance_from_reference_km"] = round(dist, 1)
+            if "cosine_distance" in neighbor:
+                score["cosine_distance"] = neighbor["cosine_distance"]
+            candidates.append(score)
+
+        candidates.sort(
+            key=lambda c: c["total_score"] * 0.5 + c["similarity_pct"] * 0.5,
+            reverse=True,
+        )
+
+        return {
+            "reference": {"lat": reference_lat, "lon": reference_lon, "region": ref_region},
+            "search_radius_km": search_radius_km,
+            "technology": technology,
+            "method": "embedding_knn",
+            "candidates_scanned": len(candidates),
+            "top_matches": candidates[:num_candidates],
+        }
+
+    # Fallback: Generate candidate points in a ring around reference
     candidates = []
     for i in range(num_candidates * 3):
         angle = random.uniform(0, 2 * math.pi)
@@ -296,6 +333,7 @@ def find_similar_sites(
         similarity = round((ghi_sim + wind_sim) / 2 * 100, 1)
 
         score["similarity_pct"] = similarity
+        score["similarity_method"] = "resource_profile"
         score["distance_from_reference_km"] = round(dist, 1)
         candidates.append(score)
 
@@ -309,6 +347,7 @@ def find_similar_sites(
         "reference": {"lat": reference_lat, "lon": reference_lon, "region": ref_region},
         "search_radius_km": search_radius_km,
         "technology": technology,
+        "method": "geographic_random",
         "candidates_scanned": len(candidates),
         "top_matches": candidates[:num_candidates],
     }

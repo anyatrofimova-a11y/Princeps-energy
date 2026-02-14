@@ -272,7 +272,7 @@ TOOLS: list[dict] = [
     },
     {
         "name": "run_satellite_analysis",
-        "description": "Run satellite Earth observation analysis using Google Earth Engine (GeeFlow). Extracts land use classification (DynamicWorld 10m), terrain (NASADEM), solar resource (ERA5), and vegetation (Sentinel-2 NDVI) for a location. Returns a background job ID for polling.",
+        "description": "Run satellite Earth observation analysis using Google Earth Engine (GeeFlow). Extracts land use (DynamicWorld 10m), terrain (NASADEM), solar resource (ERA5), vegetation (Sentinel-2 NDVI), SAR backscatter (Sentinel-1), flood risk (JRC), and NDVI timeseries for a location. Returns a background job ID for polling.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -281,7 +281,7 @@ TOOLS: list[dict] = [
                 "radius_km": {"type": "number", "description": "Analysis radius in km", "default": 5},
                 "modes": {
                     "type": "array",
-                    "items": {"type": "string", "enum": ["land_use", "terrain", "solar_resource", "vegetation", "change_detection", "site_composite"]},
+                    "items": {"type": "string", "enum": ["land_use", "terrain", "solar_resource", "vegetation", "change_detection", "site_composite", "sar_backscatter", "flood_risk", "ndvi_timeseries"]},
                     "description": "Extraction modes to run",
                     "default": ["land_use", "terrain", "solar_resource", "vegetation"],
                 },
@@ -329,7 +329,7 @@ TOOLS: list[dict] = [
     },
     {
         "name": "run_geoai_analysis",
-        "description": "Run GeoAI geospatial analysis: building footprint detection, solar panel detection, change detection, land cover classification, canopy height estimation, or composite asset condition assessment.",
+        "description": "Run GeoAI deep learning analysis: building footprints, solar panels, change detection, land cover, canopy height, asset condition, cloud masking, super-resolution, foundation embeddings (Prithvi), patch similarity (DINOv3), site captioning (Moondream), infrastructure detection (GroundedSAM), or enhanced change detection (torchange).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -337,12 +337,18 @@ TOOLS: list[dict] = [
                 "lon": {"type": "number", "description": "Longitude (WGS84)"},
                 "mode": {
                     "type": "string",
-                    "enum": ["building_footprints", "solar_panel_detect", "change_detection", "land_cover", "canopy_height", "asset_condition"],
+                    "enum": ["building_footprints", "solar_panel_detect", "change_detection", "land_cover", "canopy_height", "asset_condition", "cloud_mask", "super_resolution", "foundation_embeddings", "patch_similarity", "site_caption", "infrastructure_detect", "enhanced_change"],
                     "description": "Analysis mode",
                     "default": "asset_condition",
                 },
                 "radius_km": {"type": "number", "description": "Analysis radius in km", "default": 2.0},
                 "asset_type": {"type": "string", "description": "Asset type for condition assessment", "default": "solar_farm"},
+                "satellite": {"type": "string", "enum": ["sentinel2", "landsat8"], "description": "Satellite for cloud_mask mode", "default": "sentinel2"},
+                "model_size": {"type": "string", "enum": ["tiny", "small", "base", "100M-TL", "300M-TL", "600M-TL"], "description": "Prithvi model size for foundation_embeddings", "default": "100M-TL"},
+                "ref_lat": {"type": "number", "description": "Reference latitude for patch_similarity mode"},
+                "ref_lon": {"type": "number", "description": "Reference longitude for patch_similarity mode"},
+                "targets": {"type": "string", "description": "Comma-separated detection targets for infrastructure_detect", "default": "pylons,substations,solar_panels,wind_turbines"},
+                "questions": {"type": "string", "description": "Comma-separated questions for site_caption VQA"},
             },
             "required": ["lat", "lon"],
         },
@@ -728,6 +734,7 @@ async def execute_tool(
                     terrain_data=results.get("terrain"),
                     land_use_data=results.get("land_use"),
                     solar_data=results.get("solar_resource"),
+                    flood_data=results.get("flood_risk"),
                 )
                 return {"lat": lat, "lon": lon, "radius_km": radius_km,
                         "extractions": results, "site_score": score}
@@ -811,8 +818,31 @@ async def execute_tool(
             mode = args.get("mode", "asset_condition")
             radius_km = args.get("radius_km", 2.0)
             asset_type = args.get("asset_type", "solar_farm")
+            extra = {}
+            for k in ("satellite", "model_size", "ref_lat", "ref_lon", "targets", "questions"):
+                if k in args and args[k] is not None:
+                    extra[k] = args[k]
             if run_geoai_subprocess:
-                return await run_geoai_subprocess(mode, lat, lon, radius_km, asset_type)
+                result = await run_geoai_subprocess(mode, lat, lon, radius_km, asset_type, **extra)
+                # Store embeddings in DB if foundation_embeddings mode
+                if mode == "foundation_embeddings" and pool and result.get("embedding"):
+                    try:
+                        emb = result["embedding"]
+                        dim = result.get("embedding_dim", len(emb))
+                        async with pool.acquire() as conn:
+                            await conn.execute(
+                                """
+                                INSERT INTO geeflow_extractions (lat, lon, radius_km, mode, result_data, geometry)
+                                VALUES ($1, $2, $3, $4, $5::jsonb,
+                                        ST_Buffer(ST_SetSRID(ST_MakePoint($6, $7), 4326)::geography, $8)::geometry)
+                                """,
+                                lat, lon, radius_km, "foundation_embeddings",
+                                json.dumps(result, default=str),
+                                lon, lat, radius_km * 1000,
+                            )
+                    except Exception as e:
+                        log.warning("Failed to store embedding: %s", e)
+                return result
             return {"error": "GeoAI subprocess not available"}
 
         elif name == "assess_asset_lifecycle":
