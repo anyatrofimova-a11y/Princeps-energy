@@ -6652,200 +6652,581 @@ input[type="range"] { accent-color: var(--accent); }
   letter-spacing: 0.3px;
 }
 
-/* ─────────────────────────────────────────────────────
-   Chained Workflows — triggers, stepper, result tabs
-   ───────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════
+   CHAINED WORKFLOWS — Complete UI System
+   ═══════════════════════════════════════════════════════ */
 
-/* Sub-nav divider */
+/* ── Header: Sub-nav enhancements ── */
 .subnav-divider {
   width: 1px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.15);
-  margin: 0 4px;
+  height: 18px;
+  background: linear-gradient(180deg, transparent, rgba(255,255,255,0.15), transparent);
+  margin: 0 6px;
   flex-shrink: 0;
 }
 
-/* Verdict dot on study sub-nav buttons */
 .subnav-verdict-dot {
   display: inline-block;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  margin-right: 4px;
+  margin-right: 3px;
   flex-shrink: 0;
+  box-shadow: 0 0 6px currentColor;
 }
 
-/* Spinner on sub-nav for active workflow step */
 .subnav-spinner {
   display: inline-block;
   width: 8px;
   height: 8px;
-  border: 1.5px solid rgba(255, 255, 255, 0.3);
-  border-top-color: #fff;
+  border: 1.5px solid rgba(255,255,255,0.2);
+  border-top-color: var(--cds-interactive, #0f62fe);
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: spin 0.6s linear infinite;
   margin-right: 3px;
 }
 
 .study-subnav-btn.running {
-  opacity: 0.8;
-  animation: pulse-glow 1.5s ease-in-out infinite;
+  background: rgba(15, 98, 254, 0.1);
+  border-color: rgba(15, 98, 254, 0.3);
+  color: var(--cds-interactive);
 }
 
-/* Workflow trigger buttons */
-.workflow-trigger-btn {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border: 1.5px solid;
-  border-radius: 4px;
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
+.study-subnav-btn.completed {
+  border-color: rgba(255,255,255,0.15);
 }
 
-.workflow-trigger-btn:hover:not(:disabled) {
-  filter: brightness(1.3);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.workflow-trigger-btn:disabled,
-.workflow-trigger-btn.disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* Workflow stepper (in AgentVerdict) */
-.workflow-stepper {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-}
-
-.workflow-step {
+/* ── Workflow trigger buttons ── */
+.wf-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border: 1.5px solid rgba(15, 98, 254, 0.4);
+  border-radius: 3px;
+  background: linear-gradient(135deg, rgba(15,98,254,0.08), rgba(15,98,254,0.02));
+  color: var(--cds-interactive, #4589ff);
   cursor: pointer;
-  transition: all 0.15s ease;
-  font-size: 0;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  font-family: var(--mono);
 }
 
-button.workflow-step {
-  font-size: 0;
-}
-
-.workflow-step:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.workflow-step.active {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.workflow-step.running {
-  animation: pulse-glow 1.5s ease-in-out infinite;
-}
-
-.workflow-step-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
+.wf-trigger svg {
+  opacity: 0.7;
   flex-shrink: 0;
 }
 
-.workflow-step-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  color: var(--cds-text-secondary, rgba(255, 255, 255, 0.7));
+.wf-trigger:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(15,98,254,0.2), rgba(15,98,254,0.08));
+  border-color: var(--cds-interactive);
+  box-shadow: 0 0 12px rgba(15, 98, 254, 0.15);
 }
 
-.workflow-step-spinner {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border: 1.5px solid rgba(255, 255, 255, 0.2);
-  border-top-color: var(--cds-interactive, #4589ff);
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+.wf-trigger.active {
+  background: linear-gradient(135deg, rgba(15,98,254,0.25), rgba(15,98,254,0.12));
+  border-color: var(--cds-interactive);
+  box-shadow: 0 0 16px rgba(15, 98, 254, 0.25);
+  animation: wf-pulse 2s ease-in-out infinite;
 }
 
-/* Workflow summary bar (in AgentVerdict) */
-.workflow-summary-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 6px;
-  padding: 4px 0;
+.wf-trigger:disabled,
+.wf-trigger.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
-/* Workflow result tabs (in AgentPanel) */
-.workflow-result-tabs {
-  display: flex;
-  gap: 3px;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.workflow-result-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--cds-text-secondary, rgba(255, 255, 255, 0.7));
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.workflow-result-tab:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.workflow-result-tab.active {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.25);
+.wf-trigger-progress {
+  font-variant-numeric: tabular-nums;
   color: #fff;
 }
 
-.workflow-result-tab.running {
-  cursor: default;
-  opacity: 0.6;
+/* ── KPI verdict pill ── */
+.kpi-verdict-pill {
+  font-size: 10px;
+  font-weight: 800;
+  font-family: var(--mono);
+  letter-spacing: 1px;
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+.kpi-verdict-go { background: rgba(36,161,72,0.15); color: #24a148; }
+.kpi-verdict-caution { background: rgba(241,194,27,0.15); color: #f1c21b; }
+.kpi-verdict-nogo { background: rgba(218,30,40,0.15); color: #da1e28; }
+
+/* ── Settings icon button ── */
+.btn-topbar-icon {
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid var(--cds-border-subtle);
+  border-radius: 2px;
+  color: var(--cds-text-helper);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+}
+.btn-topbar-icon:hover {
+  color: var(--cds-text-primary);
+  border-color: var(--cds-interactive);
 }
 
-.wf-tab-dot {
+/* ═══════════════════════════════════════════════════════
+   AgentVerdict — Workflow Stepper
+   ═══════════════════════════════════════════════════════ */
+
+.verdict-hero.wf-mode {
+  padding: 12px 16px;
+}
+
+/* Progress bar track */
+.wf-progress-track {
+  height: 2px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 1px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.wf-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cds-interactive, #0f62fe), #a56eff);
+  border-radius: 1px;
+  transition: width 0.6s ease;
+}
+
+/* Step pills container */
+.wf-stepper {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+/* Individual step pill */
+.wf-step-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--mono);
+}
+
+.wf-step-pill:hover {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.wf-step-pill.active {
+  background: rgba(15,98,254,0.1);
+  border-color: rgba(15,98,254,0.3);
+}
+
+.wf-step-pill.running {
+  border-color: rgba(15,98,254,0.3);
+  animation: wf-pulse 2s ease-in-out infinite;
+}
+
+.wf-step-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-/* Workflow summary card (in AgentPanel) */
-.workflow-summary-card {
-  margin-top: 10px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+.wf-step-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cds-text-secondary, rgba(255,255,255,0.6));
+  letter-spacing: 0.3px;
 }
+
+.wf-step-verdict {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 0 4px;
+  border-radius: 2px;
+}
+.wf-step-verdict.verdict-go { background: rgba(36,161,72,0.15); color: #24a148; }
+.wf-step-verdict.verdict-caution { background: rgba(241,194,27,0.15); color: #f1c21b; }
+.wf-step-verdict.verdict-nogo { background: rgba(218,30,40,0.15); color: #da1e28; }
+
+.wf-step-meta {
+  font-size: 9px;
+  color: var(--cds-text-helper);
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-step-spinner {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid rgba(255,255,255,0.15);
+  border-top-color: var(--cds-interactive, #0f62fe);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+/* Overall workflow verdict bar */
+.wf-overall {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 6px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  margin-top: 4px;
+}
+
+.wf-overall-conf {
+  font-size: 11px;
+  color: var(--cds-text-secondary);
+  font-family: var(--mono);
+}
+
+.wf-overall-steps {
+  font-size: 10px;
+  color: var(--cds-text-helper);
+}
+
+/* Current step detail */
+.wf-current-detail {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  margin-top: 4px;
+}
+
+.wf-current-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.wf-current-intent {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--cds-text-secondary);
+  font-family: var(--mono);
+}
+
+.wf-current-conf {
+  font-size: 11px;
+  color: var(--cds-text-helper);
+  font-family: var(--mono);
+}
+
+/* Smaller verdict badge variant */
+.verdict-badge.sm {
+  font-size: 11px;
+  padding: 2px 10px;
+}
+
+.verdict-spinner.sm {
+  width: 12px;
+  height: 12px;
+  border-width: 1.5px;
+}
+
+/* Verdict row for single-intent mode */
+.verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.verdict-conf {
+  font-size: 12px;
+  color: var(--cds-text-helper);
+  font-family: var(--mono);
+}
+
+.verdict-intent-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--cds-text-helper);
+  font-family: var(--mono);
+}
+
+/* ═══════════════════════════════════════════════════════
+   AgentPanel — Workflow Results
+   ═══════════════════════════════════════════════════════ */
+
+.ap-workflow-section {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+}
+
+/* Tabs row */
+.ap-wf-tabs {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.ap-wf-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.02);
+  color: var(--cds-text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--mono);
+}
+
+.ap-wf-tab:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+}
+
+.ap-wf-tab.active {
+  background: rgba(15,98,254,0.1);
+  border-color: rgba(15,98,254,0.3);
+  color: #fff;
+}
+
+.ap-wf-tab.running {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ap-wf-tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ap-wf-tab-label {
+  letter-spacing: 0.3px;
+}
+
+.ap-wf-tab-verdict {
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  padding: 0 3px;
+  border-radius: 2px;
+}
+.ap-wf-tab-verdict.verdict-go { background: rgba(36,161,72,0.15); color: #24a148; }
+.ap-wf-tab-verdict.verdict-caution { background: rgba(241,194,27,0.15); color: #f1c21b; }
+.ap-wf-tab-verdict.verdict-nogo { background: rgba(218,30,40,0.15); color: #da1e28; }
+
+/* Workflow summary in AgentPanel */
+.ap-wf-summary {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.ap-wf-summary-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ap-wf-summary-meta {
+  font-size: 11px;
+  color: var(--cds-text-helper);
+  font-family: var(--mono);
+}
+
+.ap-wf-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.ap-wf-summary-col ul {
+  margin: 4px 0 0;
+  padding-left: 14px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--cds-text-secondary);
+}
+
+.ap-wf-col-title {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: var(--mono);
+}
+.ap-wf-col-title.risk { color: #da1e28; }
+.ap-wf-col-title.opp { color: #24a148; }
+
+/* Agent result header */
+.agent-result-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.agent-elapsed {
+  font-size: 9px;
+  color: var(--cds-text-helper);
+  font-family: var(--mono);
+}
+
+.agent-error {
+  color: #da1e28;
+  font-size: 12px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(218,30,40,0.06);
+  border-radius: 4px;
+  border: 1px solid rgba(218,30,40,0.15);
+}
+
+/* ═══════════════════════════════════════════════════════
+   FloatingCards — Workflow indicator
+   ═══════════════════════════════════════════════════════ */
+
+.fc-wf-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: linear-gradient(135deg, rgba(15,98,254,0.08), rgba(165,110,255,0.05));
+  border: 1px solid rgba(15,98,254,0.2);
+  border-radius: 6px;
+  font-family: var(--mono);
+}
+
+.fc-wf-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cds-interactive, #4589ff);
+  letter-spacing: 0.3px;
+}
+
+.fc-wf-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(15,98,254,0.2);
+  border-top-color: var(--cds-interactive, #0f62fe);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SiteDashboard — Workflow section
+   ═══════════════════════════════════════════════════════ */
+
+.sd-workflow-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sd-workflow-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+  color: var(--cds-text-primary, #fff);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.sd-workflow-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.05);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+
+.sd-workflow-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sd-workflow-btn.running {
+  border-color: var(--cds-interactive) !important;
+  animation: wf-pulse 2s ease-in-out infinite;
+}
+
+.sd-wf-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sd-wf-label {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--mono);
+  letter-spacing: 0.5px;
+}
+
+.sd-wf-desc {
+  font-size: 10px;
+  color: var(--cds-text-helper);
+  margin-top: 2px;
+}
+
+.sd-wf-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.sd-wf-summary-verdict {
+  font-size: 14px;
+  font-weight: 800;
+  font-family: var(--mono);
+  letter-spacing: 2px;
+}
+
+.sd-wf-summary-meta {
+  font-size: 11px;
+  color: var(--cds-text-helper);
+  font-family: var(--mono);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Animations
+   ═══════════════════════════════════════════════════════ */
 
 @keyframes pulse-glow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+
+@keyframes wf-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 98, 254, 0.15); }
+  50% { box-shadow: 0 0 12px 2px rgba(15, 98, 254, 0.25); }
 }

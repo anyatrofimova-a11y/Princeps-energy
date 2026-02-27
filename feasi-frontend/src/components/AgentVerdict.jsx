@@ -8,11 +8,11 @@ function verdictClass(v) {
 }
 
 function verdictDotColor(v) {
-  if (v === "GO") return "#4caf50";
-  if (v === "CAUTION") return "#ff9800";
-  if (v === "NO-GO") return "#f44336";
+  if (v === "GO") return "#24a148";
+  if (v === "CAUTION") return "#f1c21b";
+  if (v === "NO-GO") return "#da1e28";
   if (v === "ERROR") return "#795548";
-  return "var(--cds-text-helper)";
+  return "rgba(255,255,255,0.2)";
 }
 
 const INTENT_LABELS = {
@@ -34,12 +34,10 @@ export default function AgentVerdict() {
     parcelId, agentResult, agentLoading, runAgent,
     samCapacity, samDay, activeIntent, setActiveIntent,
     workflowStage,
-    // Chained workflows
     workflowResults, workflowSummary, workflowRunning, workflowProgress,
     setAgentResult, setStudySubStep,
   } = useSite();
 
-  // Auto-run agent when parcelId is set and no result yet (only in study stage)
   useEffect(() => {
     if (parcelId && !agentResult && !agentLoading && workflowStage === "study" && !workflowRunning) {
       setActiveIntent("feasibility");
@@ -47,7 +45,7 @@ export default function AgentVerdict() {
     }
   }, [parcelId, workflowStage]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const hasWorkflowResults = Object.keys(workflowResults).length > 0;
+  const hasWorkflow = Object.keys(workflowResults).length > 0;
 
   const handleStepClick = (intent) => {
     const result = workflowResults[intent];
@@ -60,81 +58,109 @@ export default function AgentVerdict() {
 
   if (!parcelId) return null;
 
-  return (
-    <div className="verdict-hero">
-      {/* Workflow progress stepper */}
-      {(workflowRunning || hasWorkflowResults) && (
-        <div className="workflow-stepper">
-          {Object.entries(workflowResults).map(([intent, result], idx) => {
-            const isActive = workflowProgress?.intent === intent;
-            return (
-              <button
-                key={intent}
-                className={`workflow-step${activeIntent === intent ? " active" : ""}${isActive ? " running" : ""}`}
-                onClick={() => handleStepClick(intent)}
-                title={`${INTENT_LABELS[intent] || intent}: ${result.verdict}`}
-              >
-                <span
-                  className="workflow-step-dot"
-                  style={{ background: verdictDotColor(result.verdict) }}
-                />
-                <span className="workflow-step-label">
-                  {INTENT_LABELS[intent] || intent}
-                </span>
-              </button>
-            );
-          })}
+  // Workflow stepper mode
+  if (workflowRunning || hasWorkflow) {
+    const completedSteps = Object.entries(workflowResults);
+    const totalSteps = workflowProgress?.total || completedSteps.length;
+    const progress = totalSteps > 0 ? (completedSteps.length / totalSteps) * 100 : 0;
+
+    return (
+      <div className="verdict-hero wf-mode">
+        {/* Progress bar */}
+        <div className="wf-progress-track">
+          <div
+            className="wf-progress-fill"
+            style={{ width: `${workflowRunning ? Math.max(progress, 5) : 100}%` }}
+          />
+        </div>
+
+        {/* Step pills */}
+        <div className="wf-stepper">
+          {completedSteps.map(([intent, result], idx) => (
+            <button
+              key={intent}
+              className={`wf-step-pill${activeIntent === intent ? " active" : ""}`}
+              onClick={() => handleStepClick(intent)}
+              title={`${INTENT_LABELS[intent] || intent}: ${result.verdict} (${Math.round((result.confidence || 0) * 100)}%)`}
+            >
+              <span className="wf-step-dot" style={{ background: verdictDotColor(result.verdict) }} />
+              <span className="wf-step-name">{INTENT_LABELS[intent] || intent}</span>
+              <span className={`wf-step-verdict ${verdictClass(result.verdict)}`}>{result.verdict}</span>
+            </button>
+          ))}
+
+          {/* Currently running step */}
           {workflowRunning && workflowProgress && !workflowResults[workflowProgress.intent] && (
-            <span className="workflow-step running">
-              <span className="workflow-step-spinner" />
-              <span className="workflow-step-label">
-                {INTENT_LABELS[workflowProgress.intent] || workflowProgress.intent}
-              </span>
+            <span className="wf-step-pill running">
+              <span className="wf-step-spinner" />
+              <span className="wf-step-name">{INTENT_LABELS[workflowProgress.intent] || workflowProgress.intent}</span>
+              <span className="wf-step-meta">{workflowProgress.step}/{workflowProgress.total}</span>
             </span>
           )}
         </div>
-      )}
 
-      {/* Workflow summary */}
-      {workflowSummary && !workflowRunning && (
-        <div className="workflow-summary-bar">
-          <span className={`verdict-badge ${verdictClass(workflowSummary.overall_verdict)}`}>
-            {workflowSummary.overall_verdict}
-          </span>
-          <span style={{ fontSize: 12, color: "var(--cds-text-helper)" }}>
-            {Math.round(workflowSummary.average_confidence * 100)}% avg confidence
-          </span>
-          <span style={{ fontSize: 11, color: "var(--cds-text-helper)" }}>
-            {workflowSummary.steps_completed} steps completed
-          </span>
-        </div>
-      )}
+        {/* Overall summary when done */}
+        {workflowSummary && !workflowRunning && (
+          <div className="wf-overall">
+            <span className={`verdict-badge ${verdictClass(workflowSummary.overall_verdict)}`}>
+              {workflowSummary.overall_verdict}
+            </span>
+            <span className="wf-overall-conf">
+              {Math.round(workflowSummary.average_confidence * 100)}% avg confidence
+            </span>
+            <span className="wf-overall-steps">
+              {workflowSummary.steps_completed} analyses complete
+            </span>
+          </div>
+        )}
 
-      {/* Current step verdict */}
-      {agentLoading && !agentResult && !workflowRunning ? (
+        {/* Current step detail */}
+        {agentResult && (
+          <div className="wf-current-detail">
+            <div className="wf-current-header">
+              <span className={`verdict-badge sm ${verdictClass(agentResult.verdict)}`}>
+                {agentResult.verdict}
+              </span>
+              <span className="wf-current-intent">{INTENT_LABELS[agentResult.intent] || agentResult.intent}</span>
+              <span className="wf-current-conf">{Math.round((agentResult.confidence || 0) * 100)}%</span>
+              {(agentLoading || workflowRunning) && <span className="verdict-spinner sm" />}
+            </div>
+            <p className="verdict-summary">{agentResult.summary}</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Single-intent mode (original)
+  if (agentLoading && !agentResult) {
+    return (
+      <div className="verdict-hero">
         <div className="verdict-loading">
           <div className="verdict-spinner" />
           Analysing site...
         </div>
-      ) : agentResult ? (
-        <>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className={`verdict-badge ${verdictClass(agentResult.verdict)}`}>
-              {agentResult.verdict}
-            </span>
-            <span style={{ fontSize: 12, color: "var(--cds-text-helper)" }}>
-              {Math.round((agentResult.confidence || 0) * 100)}% confidence
-            </span>
-            {agentResult.intent && (
-              <span style={{ fontSize: 10, color: "var(--cds-text-helper)", textTransform: "uppercase", letterSpacing: 1 }}>
-                {agentResult.intent}
-              </span>
-            )}
-            {(agentLoading || workflowRunning) && <div className="verdict-spinner" />}
-          </div>
-          <div className="verdict-summary">{agentResult.summary}</div>
-        </>
-      ) : null}
+      </div>
+    );
+  }
+
+  if (!agentResult) return null;
+
+  return (
+    <div className="verdict-hero">
+      <div className="verdict-row">
+        <span className={`verdict-badge ${verdictClass(agentResult.verdict)}`}>
+          {agentResult.verdict}
+        </span>
+        <span className="verdict-conf">
+          {Math.round((agentResult.confidence || 0) * 100)}% confidence
+        </span>
+        {agentResult.intent && (
+          <span className="verdict-intent-label">{agentResult.intent}</span>
+        )}
+        {agentLoading && <div className="verdict-spinner sm" />}
+      </div>
+      <p className="verdict-summary">{agentResult.summary}</p>
     </div>
   );
 }
