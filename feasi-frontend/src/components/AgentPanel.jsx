@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from "react";
+import { useSite } from "../SiteContext";
 
 const INTENTS = [
   { value: "feasibility", label: "Feasibility", color: "#4caf50" },
@@ -11,6 +12,7 @@ const INTENTS = [
   { value: "procurement", label: "Procurement", color: "#ff5722" },
   { value: "grid_efficiency", label: "Grid Efficiency", color: "#795548" },
   { value: "site_prospecting", label: "Site Prospecting", color: "#009688" },
+  { value: "home_retrofit", label: "Home Retrofit", color: "#8e24aa" },
   { value: "infrastructure_retrofit", label: "Infra Retrofit", color: "#607d8b" },
 ];
 
@@ -29,15 +31,35 @@ export default function AgentPanel({
   agentLoading,
   setAgentLoading,
 }) {
+  const {
+    workflowResults, workflowRunning, workflowSummary,
+    setActiveIntent, setStudySubStep,
+  } = useSite();
+
   const [intent, setIntent] = useState("feasibility");
   const [showDevConsole, setShowDevConsole] = useState(false);
   const [jobStatuses, setJobStatuses] = useState({});
   const [error, setError] = useState(null);
+  const [activeResultTab, setActiveResultTab] = useState(null);
+
+  const hasWorkflowResults = Object.keys(workflowResults).length > 0;
+
+  // Show a specific workflow result
+  const showWorkflowResult = useCallback((wfIntent) => {
+    const result = workflowResults[wfIntent];
+    if (result) {
+      setActiveResultTab(wfIntent);
+      setAgentResult(result);
+      setActiveIntent(wfIntent);
+      setStudySubStep(wfIntent);
+    }
+  }, [workflowResults, setAgentResult, setActiveIntent, setStudySubStep]);
 
   const runAgent = useCallback(async () => {
     if (!parcelId) return;
     setAgentLoading(true);
     setError(null);
+    setActiveResultTab(null);
     try {
       const res = await fetch(`/site/${encodeURIComponent(parcelId)}/agent`, {
         method: "POST",
@@ -76,7 +98,6 @@ export default function AgentPanel({
         const res = await fetch(action.endpoint, opts);
         if (res.ok) {
           const data = await res.json();
-          // If it returned a job_id, poll for it
           if (data.job_id) {
             setJobStatuses((prev) => ({
               ...prev,
@@ -123,6 +144,29 @@ export default function AgentPanel({
   return (
     <div className="agent-panel-inner">
         <div className="agent-body">
+          {/* Workflow results tabs */}
+          {hasWorkflowResults && (
+            <div className="workflow-result-tabs">
+              {Object.entries(workflowResults).map(([wfIntent, result]) => (
+                <button
+                  key={wfIntent}
+                  className={`workflow-result-tab${activeResultTab === wfIntent ? " active" : ""}`}
+                  style={{ borderColor: verdictColor(result.verdict) }}
+                  onClick={() => showWorkflowResult(wfIntent)}
+                >
+                  <span className="wf-tab-dot" style={{ background: verdictColor(result.verdict) }} />
+                  {INTENTS.find(i => i.value === wfIntent)?.label || wfIntent}
+                </button>
+              ))}
+              {workflowRunning && (
+                <span className="workflow-result-tab running">
+                  <span className="verdict-spinner" style={{ width: 10, height: 10 }} />
+                  Running...
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Intent selector + run button */}
           <div className="agent-controls">
             <div className="agent-intent-row">
@@ -257,13 +301,40 @@ export default function AgentPanel({
             </>
           )}
 
+          {/* Workflow summary card */}
+          {workflowSummary && !workflowRunning && (
+            <div className="workflow-summary-card">
+              <div className="section-label">Workflow Summary</div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+                <span className="agent-verdict" style={{ background: verdictColor(workflowSummary.overall_verdict), fontSize: 13, padding: "3px 10px" }}>
+                  {workflowSummary.overall_verdict}
+                </span>
+                <span style={{ fontSize: 11, color: "var(--cds-text-helper)" }}>
+                  {Math.round(workflowSummary.average_confidence * 100)}% avg | {workflowSummary.steps_completed} steps
+                </span>
+              </div>
+              {workflowSummary.top_risks?.length > 0 && (
+                <div style={{ fontSize: 11, marginBottom: 4 }}>
+                  <span style={{ color: "#f44336" }}>Top risks: </span>
+                  {workflowSummary.top_risks.slice(0, 3).join(" | ")}
+                </div>
+              )}
+              {workflowSummary.top_opportunities?.length > 0 && (
+                <div style={{ fontSize: 11 }}>
+                  <span style={{ color: "#4caf50" }}>Opportunities: </span>
+                  {workflowSummary.top_opportunities.slice(0, 3).join(" | ")}
+                </div>
+              )}
+            </div>
+          )}
+
           {error && (
             <div style={{ color: "var(--danger, #ff4757)", fontSize: 12, marginTop: 8, padding: "6px 10px", background: "rgba(255,71,87,0.08)", borderRadius: 6, border: "1px solid rgba(255,71,87,0.2)" }}>
               {error}
             </div>
           )}
 
-          {!agentResult && !agentLoading && !error && (
+          {!agentResult && !agentLoading && !error && !hasWorkflowResults && (
             <span className="muted">
               Select an intent and click Run Agent to start analysis
             </span>

@@ -1,13 +1,15 @@
 import asyncio
+import base64
 import csv
 import math
 import os
 import json
+import struct
 import subprocess
 from contextlib import asynccontextmanager
-from io import StringIO
+from io import BytesIO, StringIO
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -100,6 +102,14 @@ from utils.land_classifier import (
     classify_grid, assess_retrofitting, forecast_land_use,
     classification_to_map_geojson, ENRICHED_TAXONOMY,
 )
+from utils.home_retrofit_engine import (
+    run_assessment as home_retrofit_assess,
+    setup_home_retrofit_tables, seed_exemplar_cases as seed_home_retrofit_cases,
+    build_case_library_from_rows as build_home_case_library,
+    UK_HOUSE_ARCHETYPES, RETROFIT_INTERVENTIONS, UK_RETROFIT_COSTS,
+    estimate_solar_potential as home_solar_potential,
+    assess_heat_pump_suitability as home_heat_pump,
+)
 from utils.osm_power_infra import (
     setup_tables as osm_power_setup,
     seed_power_infra as osm_power_seed,
@@ -118,6 +128,16 @@ from utils.nged_cim import (
     get_transformers as nged_get_transformers,
     get_line_segments as nged_get_line_segments,
 )
+from utils.graph_topology import (
+    init_driver as neo4j_init,
+    close_driver as neo4j_close,
+    seed_from_postgres as neo4j_seed,
+    get_circuit_topology,
+    get_shortest_path as neo4j_shortest_path,
+    get_downstream_assets as neo4j_downstream,
+    graph_health_check as neo4j_health,
+    driver_available as neo4j_available,
+)
 from agent_claude import get_structured_agent_output
 
 # Import sibling modules (app/ directory)
@@ -125,6 +145,7 @@ _app_dir = os.path.dirname(__file__)
 if _app_dir not in sys.path:
     sys.path.insert(0, _app_dir)
 from agent import run_structured_agent, INTENT_PROMPTS, _default_actions
+from workflows import WORKFLOW_PRESETS, stream_workflow
 import chat as chat_module
 import jobs
 from pipeline import fetch_vibe_raster, clip_and_reproject, compute_slope, generate_tiles
@@ -155,6 +176,7 @@ CLAUDE_API_KEY = os.environ.get("CLAUDE_API_KEY")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
 
 ELECTRICITYMAPS_API_KEY = os.environ.get("ELECTRICITYMAPS_API_KEY", "")
+MAPBOX_TOKEN = os.environ.get("VITE_MAPBOX_TOKEN", os.environ.get("MAPBOX_TOKEN", ""))
 
 _sam_default = os.path.join(os.path.dirname(__file__), "..", ".venv-sam", "bin", "python")
 SAM_PYTHON = os.environ.get("SAM_PYTHON", _sam_default)
@@ -281,12 +303,52 @@ async def lifespan(_app: FastAPI):
                 log.info("IVFFlat indexes deferred — need more rows")
         except Exception as e:
             log.warning("pgvector not available (install with: brew install pgvector): %s", e)
+        # Vision AI analyses table
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS vision_analyses (
+                analysis_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                parcel_id        UUID REFERENCES parcels(parcel_id) ON DELETE SET NULL,
+                upload_id        TEXT,
+                lat              DOUBLE PRECISION,
+                lon              DOUBLE PRECISION,
+                image_type       TEXT,
+                source           TEXT,
+                analysis_tier    TEXT,
+                suitability_score INTEGER,
+                verdict          TEXT,
+                findings         JSONB,
+                domain_contributions JSONB,
+                deep_results     JSONB,
+                image_metadata   JSONB,
+                created_at       TIMESTAMPTZ DEFAULT NOW(),
+                geometry         GEOMETRY(Point, 4326)
+            )
+        """)
+        await conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_vision_geom
+            ON vision_analyses USING GIST (geometry)
+        """)
+        # Grid topology models registry
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS grid_models (
+                model_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                name TEXT NOT NULL,
+                source TEXT DEFAULT 'nged_cim',
+                neo4j_label_prefix TEXT,
+                asset_count INTEGER DEFAULT 0,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
         # Legacy asset planning & compliance tables
         await setup_legacy_table(conn)
         await seed_sample_legacy_assets(conn)
         # Infrastructure retrofit & energy storage tables
         await setup_retrofit_table(conn)
         await seed_sample_retrofit_sites(conn)
+        # Home retrofit CBR tables
+        await setup_home_retrofit_tables(conn)
+        await seed_home_retrofit_cases(conn)
         # Seed dno_substations from UK_SUBSTATIONS if empty
         sub_count = await conn.fetchval("SELECT count(*) FROM dno_substations")
         if sub_count == 0:
@@ -329,7 +391,15 @@ async def lifespan(_app: FastAPI):
     asyncio.create_task(osm_power_seed(pool))
     # Launch NGED CIM data seeding in background
     asyncio.create_task(nged_seed(pool))
+    # Neo4j graph topology (graceful degradation — app works without it)
+    try:
+        await neo4j_init()
+        if neo4j_available():
+            asyncio.create_task(neo4j_seed(pool))
+    except Exception as e:
+        log.warning("Neo4j init skipped — graph features disabled: %s", e)
     yield
+    await neo4j_close()
     await pool.close()
 
 
@@ -3385,6 +3455,26 @@ async def enhanced_agent(parcel_id: str, body: AgentRequest):
         "notes": body.notes,
     }
 
+    # Vision AI context enrichment — inject latest vision analysis if available
+    try:
+        async with pool.acquire() as conn_v:
+            vision_row = await conn_v.fetchrow("""
+                SELECT suitability_score, verdict, findings, domain_contributions, analysis_tier
+                FROM vision_analyses
+                WHERE parcel_id = $1
+                ORDER BY created_at DESC LIMIT 1
+            """, pid)
+            if vision_row:
+                agent_context["vision_analysis"] = {
+                    "suitability_score": vision_row["suitability_score"],
+                    "verdict": vision_row["verdict"],
+                    "tier": vision_row["analysis_tier"],
+                    "findings": json.loads(vision_row["findings"]) if vision_row["findings"] else None,
+                    "domain_contributions": json.loads(vision_row["domain_contributions"]) if vision_row["domain_contributions"] else None,
+                }
+    except Exception as exc:
+        log.debug("Vision context lookup skipped: %s", exc)
+
     # Intent-specific context enrichment
     if body.intent == "infrastructure_retrofit":
         async with pool.acquire() as conn2:
@@ -3424,6 +3514,135 @@ async def enhanced_agent(parcel_id: str, body: AgentRequest):
         "context": agent_context,
         "agent": agent_output,
     }
+
+
+# ---------------------------------------------------------------------------
+# Chained Workflows — multi-step agent analysis as a single SSE stream
+# ---------------------------------------------------------------------------
+
+class WorkflowRequest(BaseModel):
+    preset: str = "full_feasibility"
+    capacity_kw: float = 100.0
+    day_of_year: int = 172
+
+
+@app.get("/workflows")
+async def list_workflows():
+    """List available workflow presets."""
+    return {
+        k: {"label": v["label"], "description": v["description"], "steps": v["steps"]}
+        for k, v in WORKFLOW_PRESETS.items()
+    }
+
+
+@app.post("/site/{parcel_id}/workflow")
+async def run_workflow(parcel_id: str, body: WorkflowRequest):
+    """
+    Run a chained agent workflow as an SSE stream.
+    Each step's result is compacted and passed as context to the next step.
+    """
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="parcel_id must be a valid UUID")
+
+    if body.preset not in WORKFLOW_PRESETS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown preset '{body.preset}'. Valid: {list(WORKFLOW_PRESETS.keys())}",
+        )
+
+    # Gather base context (same as agent endpoint)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon,
+                   area_m2
+            FROM parcels WHERE parcel_id = $1
+            """,
+            pid,
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        lat = float(row["lat"]) if row["lat"] is not None else 52.5
+        lon = float(row["lon"]) if row["lon"] is not None else -1.5
+        area_m2 = float(row["area_m2"]) if row["area_m2"] else None
+
+        context = await fetch_parcel_context(pid, conn)
+        geojson_row = await conn.fetchrow(
+            "SELECT ST_AsGeoJSON(geometry) AS geojson FROM parcels WHERE parcel_id = $1", pid
+        )
+        geojson = geojson_row["geojson"] if geojson_row else "{}"
+        slope_stats = await fetch_slope_stats(conn, geojson)
+
+    # SAM + ML
+    async def _safe_sam():
+        try:
+            return await run_sam_subprocess(lat, lon, body.capacity_kw)
+        except (OSError, asyncio.TimeoutError, json.JSONDecodeError, subprocess.SubprocessError):
+            return None
+
+    async def _safe_ml():
+        try:
+            return ml_predict_24h(lat, lon, body.day_of_year, body.capacity_kw)
+        except (ValueError, KeyError, TypeError):
+            return None
+
+    sam_result, ml_result = await asyncio.gather(_safe_sam(), _safe_ml())
+
+    base_context = {
+        "parcel_id": parcel_id,
+        "location": {"lat": lat, "lon": lon},
+        "area_m2": area_m2,
+        "feasibility_score": context.get("score_total"),
+        "score_components": context.get("score_components"),
+        "overlays": context.get("overlays"),
+        "mean_slope_deg": context.get("mean_slope_deg"),
+        "slope_stats": slope_stats,
+        "nearest_substation": context.get("nearest_substation"),
+        "sam_physics": {
+            "annual_energy_kwh": sam_result.get("annual_energy_kwh") if sam_result else None,
+            "capacity_factor_pct": sam_result.get("capacity_factor_pct") if sam_result else None,
+            "monthly_energy_kwh": sam_result.get("monthly_energy_kwh") if sam_result else None,
+        } if sam_result else None,
+        "ml_prediction": {
+            "daily_total_kwh": ml_result.get("daily_total_kwh") if ml_result else None,
+            "annual_estimate_kwh": ml_result.get("annual_estimate_kwh") if ml_result else None,
+        } if ml_result else None,
+        "capacity_kw": body.capacity_kw,
+    }
+
+    # Vision context
+    try:
+        async with pool.acquire() as conn_v:
+            vision_row = await conn_v.fetchrow("""
+                SELECT suitability_score, verdict, findings, domain_contributions, analysis_tier
+                FROM vision_analyses
+                WHERE parcel_id = $1
+                ORDER BY created_at DESC LIMIT 1
+            """, pid)
+            if vision_row:
+                base_context["vision_analysis"] = {
+                    "suitability_score": vision_row["suitability_score"],
+                    "verdict": vision_row["verdict"],
+                    "tier": vision_row["analysis_tier"],
+                    "findings": json.loads(vision_row["findings"]) if vision_row["findings"] else None,
+                    "domain_contributions": json.loads(vision_row["domain_contributions"]) if vision_row["domain_contributions"] else None,
+                }
+    except Exception:
+        pass
+
+    return StreamingResponse(
+        stream_workflow(
+            client=claude,
+            model=CLAUDE_MODEL,
+            base_context=base_context,
+            preset_key=body.preset,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3589,6 +3808,644 @@ async def chat_upload(session_id: str, file: UploadFile):
         "type": summary.get("type", "unknown"),
         "summary": summary,
     }
+
+
+# ---------------------------------------------------------------------------
+# Vision AI — image upload, Claude Vision analysis, deep GeoAI pipeline
+# ---------------------------------------------------------------------------
+
+_vision_uploads: dict[str, dict] = {}
+
+_VISION_ALLOWED = {"image/jpeg", "image/png", "image/tiff", "image/webp"}
+
+VISION_PROMPT = """\
+You are an expert site suitability analyst. Analyse this image of a potential \
+energy infrastructure site and return ONLY a JSON object with these exact fields:
+
+{
+  "terrain_flatness": 0-100,
+  "shading_risk": 0-100,
+  "access_routes": 0-100,
+  "flood_indicators": 0-100,
+  "vegetation_density": 0-100,
+  "existing_infrastructure": 0-100,
+  "usable_area_pct": 0-100,
+  "exclusion_zones": [{"type": "string", "reason": "string"}],
+  "suitability_score": 0-100,
+  "verdict": "GO" | "CAUTION" | "NO-GO",
+  "confidence": 0.0-1.0,
+  "summary": "2-3 sentence assessment",
+  "domain_contributions": {
+    "terrain": {"adjustment": -10 to +10, "note": "string"},
+    "environmental": {"adjustment": -10 to +10, "note": "string"},
+    "planning": {"adjustment": -10 to +10, "note": "string"},
+    "grid": {"adjustment": -10 to +10, "note": "string"}
+  }
+}
+
+Score meanings: terrain_flatness 100=perfectly flat, shading_risk 100=heavily shaded, \
+access_routes 100=excellent access, flood_indicators 100=high flood risk, \
+vegetation_density 100=dense vegetation, existing_infrastructure 100=significant structures present.
+Only output valid JSON — no markdown, no explanation text.
+"""
+
+
+@app.post("/vision/upload")
+async def vision_upload(
+    file: UploadFile,
+    lat: float = Query(None),
+    lon: float = Query(None),
+    parcel_id: str = Query(None),
+):
+    """Upload an image for Vision AI analysis."""
+    content_type = file.content_type or ""
+    if content_type not in _VISION_ALLOWED:
+        raise HTTPException(status_code=400, detail=f"Unsupported type {content_type}. Accepted: JPEG, PNG, TIFF, WebP")
+
+    content = await file.read()
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
+
+    upload_id = uuid4().hex[:16]
+    filename = file.filename or "image"
+
+    # Extract dimensions via PIL if available
+    dims = {"w": 0, "h": 0}
+    geo_meta = {"lat": lat, "lon": lon, "altitude_m": None}
+    try:
+        from PIL import Image
+        from PIL.ExifTags import TAGS, GPSTAGS
+        img = Image.open(BytesIO(content))
+        dims = {"w": img.width, "h": img.height}
+        # Extract EXIF GPS
+        exif = img._getexif() or {}
+        gps_info = {}
+        for tag_id, val in exif.items():
+            tag = TAGS.get(tag_id, tag_id)
+            if tag == "GPSInfo":
+                for gps_tag_id, gps_val in val.items():
+                    gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
+                    gps_info[gps_tag] = gps_val
+        if "GPSLatitude" in gps_info and "GPSLongitude" in gps_info:
+            def _dms_to_dd(dms, ref):
+                d, m, s = [float(x) for x in dms]
+                dd = d + m / 60 + s / 3600
+                return -dd if ref in ("S", "W") else dd
+            exif_lat = _dms_to_dd(gps_info["GPSLatitude"], gps_info.get("GPSLatitudeRef", "N"))
+            exif_lon = _dms_to_dd(gps_info["GPSLongitude"], gps_info.get("GPSLongitudeRef", "E"))
+            if geo_meta["lat"] is None:
+                geo_meta["lat"] = exif_lat
+            if geo_meta["lon"] is None:
+                geo_meta["lon"] = exif_lon
+        if "GPSAltitude" in gps_info:
+            geo_meta["altitude_m"] = float(gps_info["GPSAltitude"])
+    except Exception:
+        pass
+
+    _vision_uploads[upload_id] = {
+        "bytes": content,
+        "filename": filename,
+        "content_type": content_type,
+        "dims": dims,
+        "geo_metadata": geo_meta,
+        "parcel_id": parcel_id,
+    }
+
+    return {
+        "upload_id": upload_id,
+        "filename": filename,
+        "size_bytes": len(content),
+        "content_type": content_type,
+        "dimensions": dims,
+        "geo_metadata": geo_meta,
+    }
+
+
+class VisionInstantRequest(BaseModel):
+    upload_id: str
+    lat: float | None = None
+    lon: float | None = None
+    parcel_id: str | None = None
+    image_type: str = "satellite"  # drone, satellite, street_level, aerial
+
+
+@app.post("/vision/analyse/instant")
+async def vision_analyse_instant(body: VisionInstantRequest):
+    """Run Claude Vision instant analysis on an uploaded image (~10s)."""
+    upload = _vision_uploads.get(body.upload_id)
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found — upload image first via /vision/upload")
+
+    img_bytes = upload["bytes"]
+    ct = upload["content_type"]
+    media_type = ct if ct in ("image/jpeg", "image/png", "image/webp") else "image/jpeg"
+    b64 = base64.b64encode(img_bytes).decode()
+
+    lat = body.lat or (upload["geo_metadata"] or {}).get("lat")
+    lon = body.lon or (upload["geo_metadata"] or {}).get("lon")
+
+    user_context = f"Image type: {body.image_type}."
+    if lat and lon:
+        user_context += f" Location: {lat:.5f}, {lon:.5f}."
+
+    try:
+        msg = await claude.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1200,
+            temperature=0.0,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                    {"type": "text", "text": f"{VISION_PROMPT}\n\n{user_context}"},
+                ],
+            }],
+        )
+        raw = msg.content[0].text
+        # Parse JSON from response
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        if start < 0 or end <= start:
+            raise ValueError("No JSON object in Vision response")
+        findings = json.loads(raw[start:end])
+    except (anthropic.APIError, json.JSONDecodeError, ValueError) as exc:
+        log.warning("Claude Vision instant analysis failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"Vision analysis failed: {exc}")
+
+    # Store in DB
+    pid = body.parcel_id or upload.get("parcel_id")
+    analysis_id = None
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                INSERT INTO vision_analyses
+                    (parcel_id, upload_id, lat, lon, image_type, source, analysis_tier,
+                     suitability_score, verdict, findings, domain_contributions, image_metadata, geometry)
+                VALUES ($1, $2, $3, $4, $5, $6, 'instant', $7, $8, $9, $10, $11,
+                        CASE WHEN $3 IS NOT NULL AND $4 IS NOT NULL
+                             THEN ST_SetSRID(ST_MakePoint($4, $3), 4326) END)
+                RETURNING analysis_id
+            """,
+                UUID(pid) if pid else None,
+                body.upload_id,
+                lat, lon,
+                body.image_type,
+                "upload",
+                findings.get("suitability_score"),
+                findings.get("verdict"),
+                json.dumps(findings),
+                json.dumps(findings.get("domain_contributions", {})),
+                json.dumps(upload.get("geo_metadata", {})),
+            )
+            analysis_id = str(row["analysis_id"]) if row else None
+    except Exception as exc:
+        log.warning("Failed to store vision analysis: %s", exc)
+
+    return {
+        "analysis_id": analysis_id,
+        "upload_id": body.upload_id,
+        "tier": "instant",
+        "suitability_score": findings.get("suitability_score"),
+        "verdict": findings.get("verdict"),
+        "confidence": findings.get("confidence"),
+        "summary": findings.get("summary"),
+        "findings": findings,
+        "domain_contributions": findings.get("domain_contributions", {}),
+    }
+
+
+@app.get("/vision/site/{parcel_id}/analyses")
+async def vision_list_analyses(parcel_id: str, limit: int = Query(20, le=100)):
+    """List vision analyses for a parcel."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid parcel_id")
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT analysis_id, upload_id, image_type, source, analysis_tier,
+                   suitability_score, verdict, findings, domain_contributions,
+                   deep_results, created_at
+            FROM vision_analyses
+            WHERE parcel_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2
+        """, pid, limit)
+
+    return [
+        {
+            "analysis_id": str(r["analysis_id"]),
+            "upload_id": r["upload_id"],
+            "image_type": r["image_type"],
+            "source": r["source"],
+            "tier": r["analysis_tier"],
+            "suitability_score": r["suitability_score"],
+            "verdict": r["verdict"],
+            "findings": json.loads(r["findings"]) if r["findings"] else None,
+            "domain_contributions": json.loads(r["domain_contributions"]) if r["domain_contributions"] else None,
+            "deep_results": json.loads(r["deep_results"]) if r["deep_results"] else None,
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+        }
+        for r in rows
+    ]
+
+
+class SatelliteFetchRequest(BaseModel):
+    lat: float
+    lon: float
+    radius_km: float = 2.0
+
+
+@app.post("/vision/fetch/satellite")
+async def vision_fetch_satellite(body: SatelliteFetchRequest):
+    """Fetch Mapbox satellite screenshots for a location."""
+    if not MAPBOX_TOKEN:
+        raise HTTPException(status_code=503, detail="MAPBOX_TOKEN not configured")
+
+    upload_ids = []
+    async with httpx.AsyncClient(timeout=30) as hx:
+        for zoom in (16, 13):
+            url = (
+                f"https://api.mapbox.com/styles/v1/mapbox/satellite-v9/static/"
+                f"{body.lon},{body.lat},{zoom},0/1280x1280@2x"
+                f"?access_token={MAPBOX_TOKEN}"
+            )
+            try:
+                resp = await hx.get(url)
+                resp.raise_for_status()
+                img_bytes = resp.content
+                uid = uuid4().hex[:16]
+                _vision_uploads[uid] = {
+                    "bytes": img_bytes,
+                    "filename": f"satellite_z{zoom}_{body.lat:.4f}_{body.lon:.4f}.jpg",
+                    "content_type": "image/jpeg",
+                    "dims": {"w": 2560, "h": 2560},
+                    "geo_metadata": {"lat": body.lat, "lon": body.lon, "altitude_m": None},
+                    "parcel_id": None,
+                }
+                upload_ids.append(uid)
+            except Exception as exc:
+                log.warning("Satellite fetch failed at zoom %d: %s", zoom, exc)
+
+    return {"upload_ids": upload_ids, "lat": body.lat, "lon": body.lon}
+
+
+class DeepAnalysisRequest(BaseModel):
+    upload_id: str | None = None
+    lat: float
+    lon: float
+    parcel_id: str | None = None
+    modes: list[str] = ["building_footprints", "land_cover", "canopy_height", "infrastructure_detect"]
+
+
+@app.post("/vision/analyse/deep")
+async def vision_analyse_deep(body: DeepAnalysisRequest):
+    """Submit a deep GeoAI analysis as a background job."""
+
+    async def _run_deep_vision(lat: float, lon: float, parcel_id: str | None, modes: list[str], upload_id: str | None):
+        results = {}
+        for mode in modes:
+            try:
+                r = await run_geoai_subprocess(mode, lat, lon, radius_km=2.0)
+                results[mode] = r
+            except Exception as exc:
+                log.warning("Deep vision GeoAI mode %s failed: %s", mode, exc)
+                results[mode] = {"error": str(exc)}
+
+        # Aggregate into domain findings
+        aggregated = _aggregate_deep_findings(results)
+
+        # Store in DB
+        try:
+            pid = UUID(parcel_id) if parcel_id else None
+            async with pool.acquire() as conn:
+                await conn.execute("""
+                    INSERT INTO vision_analyses
+                        (parcel_id, upload_id, lat, lon, image_type, source, analysis_tier,
+                         suitability_score, verdict, findings, deep_results, geometry)
+                    VALUES ($1, $2, $3, $4, 'satellite', 'geoai', 'deep',
+                            $5, $6, $7, $8,
+                            ST_SetSRID(ST_MakePoint($4, $3), 4326))
+                """,
+                    pid, upload_id, lat, lon,
+                    aggregated.get("suitability_score"),
+                    aggregated.get("verdict"),
+                    json.dumps(aggregated),
+                    json.dumps(results),
+                )
+        except Exception as exc:
+            log.warning("Failed to store deep vision results: %s", exc)
+
+        return {"aggregated": aggregated, "mode_results": results}
+
+    job = await jobs.submit(
+        "deep_vision",
+        _run_deep_vision,
+        body.lat, body.lon, body.parcel_id, body.modes, body.upload_id,
+    )
+    return {"job_id": job.id, "status": "pending", "modes": body.modes}
+
+
+def _aggregate_deep_findings(mode_results: dict) -> dict:
+    """Merge GeoAI mode outputs into an aggregated suitability assessment."""
+    score = 65  # baseline
+    notes = []
+
+    bf = mode_results.get("building_footprints", {})
+    if isinstance(bf, dict) and not bf.get("error"):
+        count = bf.get("building_count", bf.get("count", 0))
+        if count > 20:
+            score -= 10
+            notes.append(f"Dense buildings detected ({count})")
+        elif count < 5:
+            score += 5
+            notes.append("Low building density — clear site")
+
+    lc = mode_results.get("land_cover", {})
+    if isinstance(lc, dict) and not lc.get("error"):
+        dom = lc.get("dominant_class", "")
+        if "crop" in dom.lower() or "grass" in dom.lower():
+            score += 5
+            notes.append(f"Favourable land cover: {dom}")
+        elif "forest" in dom.lower() or "tree" in dom.lower():
+            score -= 8
+            notes.append(f"Forested area may require clearing: {dom}")
+
+    ch = mode_results.get("canopy_height", {})
+    if isinstance(ch, dict) and not ch.get("error"):
+        avg_h = ch.get("mean_height_m", ch.get("avg_height", 0))
+        if avg_h > 10:
+            score -= 5
+            notes.append(f"Tall canopy ({avg_h:.1f}m avg) — shading risk")
+
+    infra = mode_results.get("infrastructure_detect", {})
+    if isinstance(infra, dict) and not infra.get("error"):
+        detections = infra.get("detections", [])
+        if any(d.get("type") == "substation" for d in detections if isinstance(d, dict)):
+            score += 5
+            notes.append("Substation detected nearby — grid access advantage")
+
+    score = max(0, min(100, score))
+    verdict = "GO" if score >= 65 else "CAUTION" if score >= 40 else "NO-GO"
+    return {
+        "suitability_score": score,
+        "verdict": verdict,
+        "notes": notes,
+        "modes_completed": [m for m in mode_results if not (isinstance(mode_results[m], dict) and mode_results[m].get("error"))],
+    }
+
+
+class StreetViewRequest(BaseModel):
+    lat: float
+    lon: float
+
+
+@app.post("/vision/fetch/street_view")
+async def vision_fetch_street_view(body: StreetViewRequest):
+    """Street-level imagery — placeholder for future Mapillary integration."""
+    return {
+        "status": "not_yet_available",
+        "providers": ["mapillary", "google_street_view"],
+        "lat": body.lat,
+        "lon": body.lon,
+    }
+
+
+@app.get("/vision/twin/{parcel_id}")
+async def vision_twin_data(parcel_id: str, radius_m: float = Query(500, ge=100, le=2000)):
+    """Assemble 3D digital twin data for a parcel."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid parcel_id")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon
+            FROM parcels WHERE parcel_id = $1
+        """, pid)
+        if not row:
+            raise HTTPException(status_code=404, detail="Parcel not found")
+        lat, lon = float(row["lat"]), float(row["lon"])
+
+        # Heightmap from DEM elevation raster (actual grid, not slope stats)
+        hm_size = 64
+        geojson_row = await conn.fetchrow(
+            "SELECT ST_AsGeoJSON(geometry) AS geojson FROM parcels WHERE parcel_id = $1", pid
+        )
+        geojson = geojson_row["geojson"] if geojson_row else None
+        heightmap = None
+        if geojson:
+            try:
+                hm_result = await conn.fetchrow("""
+                    WITH geom AS (
+                        SELECT ST_SetSRID(ST_GeomFromGeoJSON($1), 27700) AS g
+                    ),
+                    clipped AS (
+                        SELECT ST_Union(ST_Clip(d.rast, geom.g)) AS rast
+                        FROM dem_elev d, geom
+                        WHERE ST_Intersects(d.rast, geom.g)
+                    ),
+                    resized AS (
+                        SELECT ST_Resize(rast, $2, $2) AS rast FROM clipped
+                        WHERE rast IS NOT NULL
+                    )
+                    SELECT (ST_DumpValues(rast, 1)).valarray AS vals,
+                           ST_Width(rast) AS width,
+                           ST_Height(rast) AS height
+                    FROM resized
+                """, geojson, hm_size)
+                if hm_result and hm_result["vals"] is not None:
+                    heightmap = {
+                        "width": hm_result["width"],
+                        "height": hm_result["height"],
+                        "values": hm_result["vals"],
+                    }
+            except Exception:
+                pass
+        # Fallback: synthetic heightmap when no DEM raster
+        if heightmap is None:
+            import random as _rng_mod
+            rng = _rng_mod.Random(hash(parcel_id))
+            base_elev = rng.uniform(20, 150)
+            sx, sy = rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3)
+            vals = []
+            for r in range(hm_size):
+                row_vals = []
+                for c in range(hm_size):
+                    e = base_elev + sx * (c - hm_size / 2) + sy * (r - hm_size / 2) + rng.gauss(0, 1.5)
+                    row_vals.append(round(e, 1))
+                vals.append(row_vals)
+            heightmap = {"width": hm_size, "height": hm_size, "values": vals}
+
+        # Solar layout
+        layout_row = await conn.fetchrow(
+            "SELECT layout_data FROM site_layouts WHERE parcel_id = $1", pid
+        )
+        solar_layout = json.loads(layout_row["layout_data"]) if layout_row else None
+
+        # Latest vision detections
+        vision_row = await conn.fetchrow("""
+            SELECT findings, deep_results
+            FROM vision_analyses
+            WHERE parcel_id = $1
+            ORDER BY created_at DESC LIMIT 1
+        """, pid)
+        vision_detections = None
+        if vision_row:
+            vision_detections = {
+                "findings": json.loads(vision_row["findings"]) if vision_row["findings"] else None,
+                "deep_results": json.loads(vision_row["deep_results"]) if vision_row["deep_results"] else None,
+            }
+
+        # Building footprints from latest deep analysis or empty
+        buildings = None
+        if vision_row and vision_row["deep_results"]:
+            dr = json.loads(vision_row["deep_results"])
+            bf = dr.get("building_footprints", {})
+            if isinstance(bf, dict) and bf.get("geojson"):
+                buildings = bf["geojson"]
+
+        # Home retrofit geometry from latest assessment
+        retrofit_geometry = None
+        retro_row = await conn.fetchrow(
+            """
+            SELECT retrofit_geometry FROM home_retrofit_assessments
+            WHERE parcel_id = $1 ORDER BY created_at DESC LIMIT 1
+            """,
+            pid,
+        )
+        if retro_row and retro_row["retrofit_geometry"]:
+            rg = retro_row["retrofit_geometry"]
+            retrofit_geometry = json.loads(rg) if isinstance(rg, str) else rg
+
+    # Sun path calculation (simplified solar geometry)
+    sun_path = _compute_sun_paths(lat, lon)
+
+    # Satellite imagery tile URL for terrain texture
+    # Compute zoom level and tile coords for the parcel centre
+    _sat_zoom = 17  # ~1.2m/px — good for site-level detail
+    _n = 2 ** _sat_zoom
+    _tx = int((lon + 180) / 360 * _n)
+    _ty = int((1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * _n)
+    satellite_tile = {
+        "url": f"https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{_sat_zoom}/{_ty}/{_tx}",
+        "zoom": _sat_zoom,
+        "tile_x": _tx,
+        "tile_y": _ty,
+        "bbox": {
+            "west": _tx / _n * 360 - 180,
+            "east": (_tx + 1) / _n * 360 - 180,
+            "north": math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * _ty / _n)))),
+            "south": math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (_ty + 1) / _n)))),
+        },
+    }
+
+    return {
+        "parcel_id": parcel_id,
+        "lat": lat,
+        "lon": lon,
+        "radius_m": radius_m,
+        "heightmap": heightmap,
+        "buildings": buildings,
+        "solar_layout": solar_layout,
+        "vision_detections": vision_detections,
+        "retrofit_geometry": retrofit_geometry,
+        "sun_path": sun_path,
+        "satellite_tile": satellite_tile,
+    }
+
+
+def _compute_sun_paths(lat: float, lon: float) -> dict:
+    """Compute simplified sun path arcs for 3 key dates."""
+    paths = {}
+    for label, day_of_year in [("summer", 172), ("winter", 355), ("equinox", 80)]:
+        hourly = []
+        decl = 23.45 * math.sin(math.radians(360 / 365 * (day_of_year - 81)))
+        for hour in range(5, 21):
+            hour_angle = 15 * (hour - 12)
+            sin_alt = (math.sin(math.radians(lat)) * math.sin(math.radians(decl)) +
+                       math.cos(math.radians(lat)) * math.cos(math.radians(decl)) *
+                       math.cos(math.radians(hour_angle)))
+            altitude = math.degrees(math.asin(max(-1, min(1, sin_alt))))
+            cos_az = ((math.sin(math.radians(decl)) -
+                        math.sin(math.radians(lat)) * sin_alt) /
+                       max(0.001, math.cos(math.radians(lat)) * math.cos(math.radians(altitude))))
+            azimuth = math.degrees(math.acos(max(-1, min(1, cos_az))))
+            if hour_angle > 0:
+                azimuth = 360 - azimuth
+            if altitude > 0:
+                hourly.append({"hour": hour, "altitude": round(altitude, 1), "azimuth": round(azimuth, 1)})
+        paths[label] = hourly
+    return paths
+
+
+@app.get("/vision/layers/{parcel_id}")
+async def vision_layers(parcel_id: str):
+    """Convert vision analysis results to map-injectable GeoJSON layers."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid parcel_id")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT findings, deep_results, lat, lon
+            FROM vision_analyses
+            WHERE parcel_id = $1
+            ORDER BY created_at DESC LIMIT 1
+        """, pid)
+
+    if not row:
+        return {"layers": []}
+
+    layers = []
+    lat, lon = row["lat"] or 0, row["lon"] or 0
+
+    # Deep results → building footprints, exclusion zones
+    if row["deep_results"]:
+        dr = json.loads(row["deep_results"])
+        bf = dr.get("building_footprints", {})
+        if isinstance(bf, dict) and bf.get("geojson"):
+            layers.append({
+                "id": f"vision-buildings-{parcel_id[:8]}",
+                "layer_type": "fill",
+                "color": "#78909c",
+                "geojson": bf["geojson"],
+            })
+
+    # Instant findings → exclusion zones + usable area as point markers
+    if row["findings"]:
+        findings = json.loads(row["findings"])
+        exclusions = findings.get("exclusion_zones", [])
+        if exclusions and lat and lon:
+            features = []
+            for i, ez in enumerate(exclusions):
+                # Create small polygon around point for exclusion zone
+                offset = 0.001 * (i + 1)
+                features.append({
+                    "type": "Feature",
+                    "properties": {"type": ez.get("type", "exclusion"), "reason": ez.get("reason", "")},
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[
+                            [lon - offset, lat - offset], [lon + offset, lat - offset],
+                            [lon + offset, lat + offset], [lon - offset, lat + offset],
+                            [lon - offset, lat - offset],
+                        ]],
+                    },
+                })
+            if features:
+                layers.append({
+                    "id": f"vision-exclusions-{parcel_id[:8]}",
+                    "layer_type": "fill",
+                    "color": "#da1e28",
+                    "geojson": {"type": "FeatureCollection", "features": features},
+                })
+
+    return {"layers": layers}
 
 
 # ---------------------------------------------------------------------------
@@ -4481,6 +5338,265 @@ async def nged_lines(
     """Line segments, optionally filtered by region."""
     async with pool.acquire() as conn:
         return await nged_get_line_segments(conn, substation_id, region)
+
+
+# ---------------------------------------------------------------------------
+# CIM Graph Topology (Neo4j Bus-Branch model)
+# ---------------------------------------------------------------------------
+
+@app.get("/grid/cim/circuit/{substation_id}")
+async def cim_circuit(substation_id: str, depth: int = Query(3, ge=1, le=5)):
+    """Circuit topology around a substation for React Flow diagram."""
+    if not neo4j_available():
+        raise HTTPException(503, "Neo4j graph database is not available")
+    return await get_circuit_topology(substation_id, depth)
+
+
+@app.get("/grid/cim/search")
+async def cim_search(q: str = Query(..., min_length=1)):
+    """Search NGED substations by name (queries PostgreSQL)."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, name, region, voltage_kv
+            FROM nged_substation
+            WHERE name ILIKE $1
+            ORDER BY name
+            LIMIT 20
+            """,
+            f"%{q}%",
+        )
+        return [dict(r) for r in rows]
+
+
+@app.get("/grid/cim/path")
+async def cim_path(from_id: str = Query(...), to_id: str = Query(...)):
+    """Shortest electrical path between two assets."""
+    if not neo4j_available():
+        raise HTTPException(503, "Neo4j graph database is not available")
+    return await neo4j_shortest_path(from_id, to_id)
+
+
+@app.get("/grid/cim/downstream/{substation_id}")
+async def cim_downstream(substation_id: str):
+    """All assets downstream of a substation (impact analysis)."""
+    if not neo4j_available():
+        raise HTTPException(503, "Neo4j graph database is not available")
+    return await neo4j_downstream(substation_id)
+
+
+@app.get("/grid/cim/health")
+async def cim_health():
+    """Neo4j graph health — node/relationship counts."""
+    return await neo4j_health()
+
+
+# ---------------------------------------------------------------------------
+# Home Retrofit — UK residential CBR retrofit design
+# ---------------------------------------------------------------------------
+
+class HomeRetrofitRequest(BaseModel):
+    house_type: str = "1930s_semi"
+    plot_width_m: float = 8.0
+    plot_depth_m: float = 25.0
+    storeys: int = 2
+    epc_rating: str = "D"
+    heating: str = "gas_boiler"
+    conservation: bool = False
+    listed: str | None = None
+    budget_gbp: float | None = None
+    lat: float = 52.5
+    lon: float = -1.5
+    gfa_m2: float | None = None
+    parcel_id: str | None = None
+
+
+@app.post("/home-retrofit/assess")
+async def home_retrofit_assess_endpoint(req: HomeRetrofitRequest):
+    """Full CBR home retrofit assessment — encode, match, generate options."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM home_retrofit_cases WHERE house_type = $1 OR TRUE ORDER BY house_type LIMIT 200",
+            req.house_type,
+        )
+        case_library = build_home_case_library(rows)
+
+    result = home_retrofit_assess(
+        house_type=req.house_type,
+        plot_width_m=req.plot_width_m,
+        plot_depth_m=req.plot_depth_m,
+        storeys=req.storeys,
+        epc_rating=req.epc_rating,
+        heating=req.heating,
+        conservation=req.conservation,
+        listed=req.listed,
+        budget_gbp=req.budget_gbp,
+        lat=req.lat,
+        lon=req.lon,
+        gfa_m2=req.gfa_m2,
+        case_library=case_library,
+    )
+
+    # Store assessment
+    if req.parcel_id:
+        try:
+            pid = UUID(req.parcel_id)
+            best = result["options"][0] if result["options"] else {}
+            last = result["options"][-1] if result["options"] else {}
+            geometries = []
+            for opt in result["options"]:
+                geometries.extend(opt.get("geometries", []))
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO home_retrofit_assessments
+                        (parcel_id, house_type, property_encoding, matched_cases,
+                         options, total_cost_gbp, energy_saving_kwh_yr, co2_saving_kg_yr,
+                         epc_before, epc_after, planning_route, retrofit_geometry,
+                         lat, lon, geometry)
+                    VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, $8,
+                            $9, $10, $11, $12::jsonb, $13, $14,
+                            ST_Transform(ST_SetSRID(ST_MakePoint($15, $16), 4326), 27700))
+                    """,
+                    pid, req.house_type,
+                    json.dumps(result["property_encoding"]),
+                    json.dumps(result["matched_cases"], default=str),
+                    json.dumps(result["options"], default=str),
+                    last.get("total_cost_gbp", 0),
+                    last.get("energy", {}).get("energy_saving_kwh", 0),
+                    last.get("energy", {}).get("co2_saving_kg", 0),
+                    best.get("energy", {}).get("epc_before", ""),
+                    last.get("energy", {}).get("epc_after", ""),
+                    last.get("planning", {}).get("route", ""),
+                    json.dumps(geometries, default=str),
+                    req.lat, req.lon, req.lon, req.lat,
+                )
+        except Exception as e:
+            log.warning("Failed to store home retrofit assessment: %s", e)
+
+    return result
+
+
+@app.get("/home-retrofit/options/{parcel_id}")
+async def home_retrofit_options(parcel_id: str):
+    """Retrieve stored home retrofit assessment for a parcel."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid parcel_id")
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT house_type, property_encoding, matched_cases, options,
+                   total_cost_gbp, energy_saving_kwh_yr, co2_saving_kg_yr,
+                   epc_before, epc_after, planning_route, retrofit_geometry,
+                   lat, lon, created_at
+            FROM home_retrofit_assessments
+            WHERE parcel_id = $1
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            pid,
+        )
+    if not row:
+        raise HTTPException(404, "No assessment found for this parcel")
+    return {
+        "house_type": row["house_type"],
+        "options": json.loads(row["options"]) if isinstance(row["options"], str) else row["options"],
+        "matched_cases": json.loads(row["matched_cases"]) if isinstance(row["matched_cases"], str) else row["matched_cases"],
+        "total_cost_gbp": row["total_cost_gbp"],
+        "energy_saving_kwh_yr": row["energy_saving_kwh_yr"],
+        "co2_saving_kg_yr": row["co2_saving_kg_yr"],
+        "epc_before": row["epc_before"],
+        "epc_after": row["epc_after"],
+        "planning_route": row["planning_route"],
+        "retrofit_geometry": json.loads(row["retrofit_geometry"]) if isinstance(row["retrofit_geometry"], str) else row["retrofit_geometry"],
+        "lat": row["lat"],
+        "lon": row["lon"],
+    }
+
+
+@app.get("/home-retrofit/precedents/{parcel_id}")
+async def home_retrofit_precedents(parcel_id: str, radius_km: float = Query(10, ge=1, le=50)):
+    """Find planning precedents for home retrofit near a parcel."""
+    try:
+        pid = UUID(parcel_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid parcel_id")
+    async with pool.acquire() as conn:
+        parcel = await conn.fetchrow(
+            "SELECT ST_Y(ST_Transform(centroid, 4326)) AS lat, ST_X(ST_Transform(centroid, 4326)) AS lon FROM parcels WHERE parcel_id = $1",
+            pid,
+        )
+        if not parcel:
+            raise HTTPException(404, "Parcel not found")
+        lat, lon = float(parcel["lat"]), float(parcel["lon"])
+        rows = await conn.fetch(
+            """
+            SELECT case_ref, house_type, house_form, era, interventions,
+                   planning_ref, planning_route, planning_authority, planning_outcome, planning_date,
+                   cost_actual_gbp, epc_before, epc_after,
+                   ST_Distance(geometry, ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700)) / 1000 AS distance_km
+            FROM home_retrofit_cases
+            WHERE ST_DWithin(geometry, ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700), $3)
+              AND planning_outcome IN ('approved', 'approved_with_conditions')
+            ORDER BY ST_Distance(geometry, ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700))
+            LIMIT 20
+            """,
+            lon, lat, radius_km * 1000,
+        )
+    return {
+        "count": len(rows),
+        "lat": lat,
+        "lon": lon,
+        "radius_km": radius_km,
+        "precedents": [
+            {
+                "case_ref": r["case_ref"],
+                "house_type": r["house_type"],
+                "era": r["era"],
+                "interventions": json.loads(r["interventions"]) if isinstance(r["interventions"], str) else r["interventions"],
+                "planning_ref": r["planning_ref"],
+                "planning_route": r["planning_route"],
+                "planning_authority": r["planning_authority"],
+                "planning_outcome": r["planning_outcome"],
+                "planning_date": r["planning_date"].isoformat() if r["planning_date"] else None,
+                "cost_gbp": r["cost_actual_gbp"],
+                "epc_before": r["epc_before"],
+                "epc_after": r["epc_after"],
+                "distance_km": round(r["distance_km"], 1),
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.get("/home-retrofit/archetypes")
+async def home_retrofit_archetypes():
+    """Return UK house archetype library."""
+    return {
+        "count": len(UK_HOUSE_ARCHETYPES),
+        "archetypes": {
+            k: {**v, "id": k}
+            for k, v in UK_HOUSE_ARCHETYPES.items()
+        },
+    }
+
+
+@app.get("/home-retrofit/interventions")
+async def home_retrofit_interventions():
+    """Return intervention library with costs."""
+    items = {}
+    for k, intv in RETROFIT_INTERVENTIONS.items():
+        cost = UK_RETROFIT_COSTS.get(k, {})
+        items[k] = {
+            **intv,
+            "id": k,
+            "cost_low": cost.get("low"),
+            "cost_mid": cost.get("mid"),
+            "cost_high": cost.get("high"),
+            "cost_unit": cost.get("unit"),
+        }
+    return {"count": len(items), "interventions": items}
 
 
 # ---------------------------------------------------------------------------

@@ -81,6 +81,13 @@ export function SiteProvider({ children }) {
   const [geeflowLoading, setGeeflowLoading] = useState(false);
   const [geeflowJobId, setGeeflowJobId] = useState(null);
 
+  // ── Vision AI ──
+  const [visionData, setVisionData] = useState(null);
+  const [visionLoading, setVisionLoading] = useState(false);
+  const [visionUploads, setVisionUploads] = useState([]);
+  const [digitalTwinOpen, setDigitalTwinOpen] = useState(false);
+  const [twinData, setTwinData] = useState(null);
+
   // ── Loading flags ──
   const [loading, setLoading] = useState(false);
   const [agentLoading, setAgentLoading] = useState(false);
@@ -107,6 +114,33 @@ export function SiteProvider({ children }) {
   const [activeTab, setActiveTab] = useState("score");
   const [panelOpen, setPanelOpen] = useState(true);
   const [slopeOpacity, setSlopeOpacity] = useState(0.6);
+
+  // ── Intent-driven UI ──
+  const [activeIntent, setActiveIntent] = useState("overview");
+  const [commandCollapsed, setCommandCollapsed] = useState(false);
+  const [analyticsCollapsed, setAnalyticsCollapsed] = useState(false);
+
+  // ── Workflow ──
+  const [workflowStage, setWorkflowStage] = useState("site"); // site | study | plan | act
+  const [studySubStep, setStudySubStep] = useState("feasibility");
+  const [workflowHistory, setWorkflowHistory] = useState(["site"]);
+  const [dashboardOpen, setDashboardOpen] = useState(false);
+
+  // ── Chained Workflows ──
+  const [workflowResults, setWorkflowResults] = useState({});  // intent → agent result
+  const [workflowSummary, setWorkflowSummary] = useState(null);
+  const [workflowRunning, setWorkflowRunning] = useState(false);
+  const [workflowProgress, setWorkflowProgress] = useState(null); // { step, total, intent, preset }
+  const workflowAbortRef = useRef(null);
+
+  const navigateWorkflow = useCallback((stage) => {
+    setWorkflowStage(stage);
+    setWorkflowHistory(prev => prev.includes(stage) ? prev : [...prev, stage]);
+    if (stage === "site") { setPickMode(true); setLayoutMode(false); }
+    if (stage === "plan") { setLayoutMode(true); }
+    if (stage === "study") { setLayoutMode(false); setStudySubStep("feasibility"); setActiveIntent("feasibility"); }
+    if (stage === "act") { setLayoutMode(false); }
+  }, [setPickMode, setLayoutMode, setActiveIntent]);
 
   // ── Layers ──
   const [layers, setLayers] = useState({
@@ -138,6 +172,7 @@ export function SiteProvider({ children }) {
     if (!id) return;
     setLoading(true);
     setAgentResult(null);
+    setActiveIntent("feasibility");
     try {
       const results = await Promise.allSettled([
         api.site.heightmap(id),
@@ -168,6 +203,31 @@ export function SiteProvider({ children }) {
       setBomAvail(val(results[11]));
       setActiveTab("score");
       setPanelOpen(true);
+      setWorkflowStage("study");
+      setStudySubStep("feasibility");
+      setWorkflowHistory(prev => prev.includes("study") ? prev : [...prev, "study"]);
+      setDashboardOpen(true);
+
+      // Auto-fetch satellite image → instant Claude Vision analysis
+      try {
+        const loc = val(results[1]); // explain has lat/lon
+        const lat = loc?.lat ?? loc?.location?.lat;
+        const lon = loc?.lon ?? loc?.location?.lon;
+        if (lat && lon) {
+          setVisionLoading(true);
+          const satResult = await api.vision.fetchSatellite(lat, lon, 2);
+          if (satResult?.upload_ids?.length) {
+            const instant = await api.vision.instantAnalyse(
+              satResult.upload_ids[0], lat, lon, id, "satellite"
+            );
+            if (instant) setVisionData(instant);
+          }
+          setVisionLoading(false);
+        }
+      } catch (visionErr) {
+        console.warn("Vision auto-fetch failed:", visionErr);
+        setVisionLoading(false);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -199,6 +259,75 @@ export function SiteProvider({ children }) {
     } catch (err) { console.error(err); }
   }, []);
 
+  // ── Run chained workflow ──
+  const runWorkflow = useCallback(async (id, preset, kw, day) => {
+    if (!id || workflowRunning) return;
+    setWorkflowRunning(true);
+    setWorkflowResults({});
+    setWorkflowSummary(null);
+    setWorkflowProgress(null);
+
+    // Abort any previous workflow SSE
+    if (workflowAbortRef.current) workflowAbortRef.current.abort();
+    const controller = new AbortController();
+    workflowAbortRef.current = controller;
+
+    try {
+      const res = await api.workflow.run(id, preset, kw, day);
+      if (!res.ok) {
+        console.error("Workflow request failed:", res.status);
+        setWorkflowRunning(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE lines
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        let eventType = null;
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ") && eventType) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (eventType === "step_start") {
+                setWorkflowProgress({ step: data.step, total: data.total, intent: data.intent, preset });
+                setActiveIntent(data.intent);
+                setStudySubStep(data.intent);
+              } else if (eventType === "step_complete") {
+                setWorkflowResults(prev => ({ ...prev, [data.intent]: data.result }));
+                setAgentResult(data.result);
+              } else if (eventType === "step_error") {
+                setWorkflowResults(prev => ({
+                  ...prev,
+                  [data.intent]: { verdict: "ERROR", confidence: 0, summary: data.error, intent: data.intent, risks: [], opportunities: [], next_steps: [] },
+                }));
+              } else if (eventType === "workflow_summary") {
+                setWorkflowSummary(data.summary);
+              }
+            } catch { /* skip malformed JSON */ }
+            eventType = null;
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") console.error("Workflow stream error:", err);
+    } finally {
+      setWorkflowRunning(false);
+      setWorkflowProgress(null);
+    }
+  }, [workflowRunning]);
+
   const value = {
     // Identity
     parcelId, setParcelId,
@@ -210,8 +339,8 @@ export function SiteProvider({ children }) {
     loadMw, setLoadMw,
     genMw, setGenMw,
     // Data
-    heightmap, explain, slopeStats, solarYield, solarHourly, mlSolar,
-    deferral, energyPrice, gridContext, planningApps, energySystem,
+    heightmap, setHeightmap, explain, setExplain, slopeStats, setSlopeStats, solarYield, setSolarYield, solarHourly, setSolarHourly, mlSolar,
+    deferral, setDeferral, energyPrice, setEnergyPrice, gridContext, setGridContext, planningApps, energySystem,
     siteBom, bomAvail, agentResult, setAgentResult,
     demandForecast, setDemandForecast,
     agilePricing, setAgilePricing,
@@ -220,6 +349,12 @@ export function SiteProvider({ children }) {
     geeflowData, setGeeflowData,
     geeflowLoading, setGeeflowLoading,
     geeflowJobId, setGeeflowJobId,
+    // Vision AI
+    visionData, setVisionData,
+    visionLoading, setVisionLoading,
+    visionUploads, setVisionUploads,
+    digitalTwinOpen, setDigitalTwinOpen,
+    twinData, setTwinData,
     // Loading
     loading, agentLoading,
     // Layout
@@ -239,10 +374,23 @@ export function SiteProvider({ children }) {
     activeTab, setActiveTab, selectTab,
     panelOpen, setPanelOpen,
     slopeOpacity, setSlopeOpacity,
+    // Intent-driven UI
+    activeIntent, setActiveIntent,
+    commandCollapsed, setCommandCollapsed,
+    analyticsCollapsed, setAnalyticsCollapsed,
+    // Workflow
+    workflowStage, setWorkflowStage, studySubStep, setStudySubStep,
+    workflowHistory, navigateWorkflow,
+    dashboardOpen, setDashboardOpen,
     // Layers
     layers, setLayers, toggleLayer,
     // Chat layers
     chatLayers, setChatLayers,
+    // Chained Workflows
+    workflowResults, setWorkflowResults,
+    workflowSummary, setWorkflowSummary,
+    workflowRunning, workflowProgress,
+    runWorkflow,
     // Actions
     loadSite, runAgent, runDeferral,
     // Settings

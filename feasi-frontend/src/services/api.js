@@ -69,6 +69,11 @@ const api = {
     ngedOpportunities: (bbox, minMw = 1) => get(`/nged/opportunities?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}&min_headroom_mw=${minMw}`),
     ngedSummary: () => get("/nged/summary"),
     ngedSubstation: (id) => get(`/nged/substation/${enc(id)}`),
+    circuit: (subId, depth = 3) => get(`/grid/cim/circuit/${enc(subId)}?depth=${depth}`),
+    circuitSearch: (q) => get(`/grid/cim/search?q=${enc(q)}`),
+    circuitPath: (fromId, toId) => get(`/grid/cim/path?from_id=${enc(fromId)}&to_id=${enc(toId)}`),
+    circuitDownstream: (subId) => get(`/grid/cim/downstream/${enc(subId)}`),
+    circuitHealth: () => get("/grid/cim/health"),
   },
 
   planning: {
@@ -116,6 +121,64 @@ const api = {
     submitAnalysis: (lat, lon, radiusKm = 5, modes = ["land_use", "terrain", "solar_resource", "vegetation"]) =>
       post("/job/geeflow_analysis", { lat, lon, radius_km: radiusKm, modes }),
     jobStatus: (jobId) => get(`/job/${enc(jobId)}`),
+  },
+
+  geoai: {
+    analyse: (lat, lon, mode = "asset_condition", params = {}) => {
+      const q = new URLSearchParams({ lat, lon, mode, ...params });
+      return get(`/geoai/analyse?${q}`);
+    },
+    modes: () => get("/geoai/modes"),
+  },
+
+  scoring: {
+    learned: (lat, lon) => get(`/scoring/learned?lat=${lat}&lon=${lon}`),
+    similar: (lat, lon, k = 5) => get(`/sites/similar?lat=${lat}&lon=${lon}&k=${k}`),
+  },
+
+  vision: {
+    upload: (file, lat, lon, parcelId) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const q = new URLSearchParams();
+      if (lat != null) q.set("lat", lat);
+      if (lon != null) q.set("lon", lon);
+      if (parcelId) q.set("parcel_id", parcelId);
+      return fetch(`/vision/upload?${q}`, { method: "POST", body: fd }).then(json);
+    },
+    instantAnalyse: (uploadId, lat, lon, parcelId, imageType) =>
+      post("/vision/analyse/instant", { upload_id: uploadId, lat, lon, parcel_id: parcelId, image_type: imageType }),
+    deepAnalyse: (uploadId, lat, lon, parcelId, modes) =>
+      post("/vision/analyse/deep", { upload_id: uploadId, lat, lon, parcel_id: parcelId, modes }),
+    fetchSatellite: (lat, lon, radiusKm = 2) =>
+      post("/vision/fetch/satellite", { lat, lon, radius_km: radiusKm }),
+    fetchStreetView: (lat, lon) =>
+      post("/vision/fetch/street_view", { lat, lon }),
+    getTwinData: (parcelId, radiusM = 500) =>
+      get(`/vision/twin/${enc(parcelId)}?radius_m=${radiusM}`),
+    getLayers: (parcelId) =>
+      get(`/vision/layers/${enc(parcelId)}`),
+    listAnalyses: (parcelId) =>
+      get(`/vision/site/${enc(parcelId)}/analyses`),
+    jobStatus: (jobId) => get(`/job/${enc(jobId)}`),
+  },
+
+  homeRetrofit: {
+    assess: (body) => post("/home-retrofit/assess", body),
+    options: (parcelId) => get(`/home-retrofit/options/${enc(parcelId)}`),
+    precedents: (parcelId, radiusKm = 10) => get(`/home-retrofit/precedents/${enc(parcelId)}?radius_km=${radiusKm}`),
+    archetypes: () => get("/home-retrofit/archetypes"),
+    interventions: () => get("/home-retrofit/interventions"),
+  },
+
+  workflow: {
+    presets: () => get("/workflows"),
+    run: (parcelId, preset = "full_feasibility", capacityKw = 100, dayOfYear = 172) =>
+      fetch(`/site/${enc(parcelId)}/workflow`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset, capacity_kw: capacityKw, day_of_year: dayOfYear }),
+      }),
   },
 
   analytics: {
