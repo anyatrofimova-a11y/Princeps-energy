@@ -2,6 +2,7 @@ import React from "react";
 import { useSite } from "../../SiteContext";
 import MetricCard from "../ui/MetricCard";
 import BarChart from "../ui/BarChart";
+import ImageryBadge from "../ui/ImageryBadge";
 import ErrorBoundary from "../ErrorBoundary";
 import ThreeView from "../ThreeView";
 import LayoutEditor from "../LayoutEditor";
@@ -12,6 +13,7 @@ export default function TerrainCard() {
     slopeStats, heightmap,
     layoutMode, componentLayout, selectedLayoutItem,
     setSelectedLayoutItem, solarCatalogue,
+    visionData,
   } = useSite();
 
   // These handlers need to use context setters
@@ -55,6 +57,15 @@ export default function TerrainCard() {
         <div>Min: {slopeStats.stats.min?.toFixed(1)}</div>
         <div>Max: {slopeStats.stats.max?.toFixed(1)}</div>
       </div>
+      {visionData?.findings && (
+        <div style={{ marginBottom: 8 }}>
+          {visionData.findings.terrain_flatness >= 60
+            ? <ImageryBadge text="Flat terrain confirmed" />
+            : visionData.findings.terrain_flatness < 30
+            ? <ImageryBadge text="Steep slope detected" />
+            : null}
+        </div>
+      )}
       {slopeStats.histogram && (
         <BarChart
           data={slopeStats.histogram.map(b => b.count)}
@@ -65,6 +76,20 @@ export default function TerrainCard() {
             return `${b.min.toFixed(1)}-${b.max.toFixed(1)}: ${b.count} px`;
           }}
         />
+      )}
+      {heightmap?.source && (
+        <div style={{
+          display: "inline-block",
+          fontSize: 10,
+          padding: "2px 6px",
+          borderRadius: 3,
+          background: heightmap.source === "Synthetic" ? "#fff3e0" : "#e3f2fd",
+          color: heightmap.source === "Synthetic" ? "#e65100" : "#1565c0",
+          marginTop: 4,
+          fontWeight: 500,
+        }}>
+          {heightmap.source}
+        </div>
       )}
       <ErrorBoundary name="3D View">
         {layoutMode ? (

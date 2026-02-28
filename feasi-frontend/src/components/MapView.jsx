@@ -102,6 +102,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const [mapReady, setMapReady] = React.useState(false);
 
   useEffect(() => {
     if (!protocolAdded) {
@@ -122,56 +123,23 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       style: {
         version: 8,
         glyphs: "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
+        sprite: "mapbox://sprites/mapbox/dark-v11",
         sources: {
-          // Light basemap
-          "carto-light": {
+          "carto-dark": {
             type: "raster",
-            tiles: ["https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png"],
-            tileSize: 256,
-            attribution: "&copy; CartoDB &copy; OpenStreetMap",
+            tiles: ["https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png"],
+            tileSize: 256, maxzoom: 20,
+            attribution: "© CartoDB",
           },
           "carto-labels": {
             type: "raster",
-            tiles: ["https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"],
-            tileSize: 256,
-          },
-          terrainSource: {
-            type: "raster-dem",
-            url: `${PROXY}/DTM.pmtiles`,
-            tileSize: 512,
-            minzoom: 0,
-            maxzoom: 14,
-            encoding: "mapbox",
-            attribution: '<a href="https://doi.org/10.1177/23998083251401613">GBDEM</a>',
-          },
-          hillshadeSource: {
-            type: "raster-dem",
-            url: `${PROXY}/DTM.pmtiles`,
-            tileSize: 512,
-            minzoom: 0,
-            maxzoom: 11,
-            encoding: "mapbox",
+            tiles: ["https://basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"],
+            tileSize: 256, maxzoom: 20,
           },
         },
         layers: [
-          { id: "light-base", type: "raster", source: "carto-light" },
-          {
-            id: "hillshade",
-            type: "hillshade",
-            source: "hillshadeSource",
-            paint: {
-              "hillshade-shadow-color": "#8a9a8a",
-              "hillshade-highlight-color": "#ffffff",
-              "hillshade-accent-color": "#2e7d32",
-              "hillshade-illumination-anchor": "map",
-              "hillshade-exaggeration": 0.4,
-            },
-          },
+          { id: "carto-base", type: "raster", source: "carto-dark" },
         ],
-        terrain: {
-          source: "terrainSource",
-          exaggeration: 2.0,
-        },
       },
       center: [-1.5, 52.5],
       zoom: 7,
@@ -182,36 +150,96 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
     mapRef.current = map;
 
-    map.on("load", () => {
-      // ── Sky atmosphere ──
-      map.addLayer({
-        id: "sky",
-        type: "sky",
-        paint: {
-          "sky-type": "atmosphere",
-          "sky-atmosphere-sun": [0, 15],
-          "sky-atmosphere-sun-intensity": 5,
-          "sky-atmosphere-color": "#88ccff",
-        },
+    map.on("error", (e) => {
+      console.warn("Mapbox error:", e.error?.message || e.message || e);
+    });
+
+    const setupMap = () => {
+      if (map._setupDone) return;
+      map._setupDone = true;
+      console.log("[MapView] running setup");
+      // safe() isolates each section so one failure doesn't kill everything
+      const safe = (label, fn) => { try { fn(); } catch(e) { console.error(`[MapView] ${label}:`, e.message, e); } };
+
+      safe("terrain", () => {
+        map.addSource("terrainSource", { type: "raster-dem", url: "mapbox://mapbox.mapbox-terrain-dem-v1", tileSize: 512, maxzoom: 14 });
+        map.addSource("hillshadeSource", { type: "raster-dem", url: "mapbox://mapbox.mapbox-terrain-dem-v1", tileSize: 512, maxzoom: 14 });
+        map.addLayer({
+          id: "hillshade", type: "hillshade", source: "hillshadeSource",
+          paint: { "hillshade-shadow-color": "#8a9a8a", "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#2e7d32", "hillshade-illumination-anchor": "map", "hillshade-exaggeration": 0.4 },
+        });
+        map.setTerrain({ source: "terrainSource", exaggeration: 2.0 });
       });
 
-      // ── Fog (aerial perspective) ──
-      map.setFog({
-        range: [1, 12],
-        color: "rgba(200, 210, 230, 0.9)",
-        "high-color": "#add8e6",
-        "space-color": "#0b1026",
-        "horizon-blend": 0.05,
-        "star-intensity": 0.1,
+      safe("sky+fog", () => {
+        map.addLayer({
+          id: "sky", type: "sky",
+          paint: { "sky-type": "atmosphere", "sky-atmosphere-sun": [0, 15], "sky-atmosphere-sun-intensity": 5, "sky-atmosphere-color": "#88ccff" },
+        });
+        map.setFog({
+          range: [1, 12], color: "rgba(200, 210, 230, 0.9)", "high-color": "#add8e6",
+          "space-color": "#0b1026", "horizon-blend": 0.05, "star-intensity": 0.1,
+        });
       });
 
       // Expose map instance to parent
       if (onMapReady) onMapReady(map);
 
-      // Labels layer (above hillshade, below data layers)
-      map.addLayer({ id: "base-labels", type: "raster", source: "carto-labels" });
+      safe("icons+patterns", () => {
+        const SITE_ICONS = [
+          "substation", "exchange", "hazard", "optimal-site",
+          "power-source", "flight-path", "fibre-pop", "flood-zone",
+        ];
+        for (const name of SITE_ICONS) {
+          map.loadImage(`/icons/${name}.svg`, (err, img) => {
+            if (!err && img && !map.hasImage(`icon-${name}`)) {
+              map.addImage(`icon-${name}`, img, { sdf: false });
+            }
+          });
+        }
 
-      // ── ESRI Aerial imagery (inserted early so data layers draw on top) ──
+        const makeHatch = (color, spacing = 10, width = 1.5) => {
+          const size = spacing * 2;
+          const canvas = document.createElement("canvas");
+          canvas.width = size; canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width;
+          ctx.beginPath();
+          ctx.moveTo(0, size); ctx.lineTo(size, 0);
+          ctx.moveTo(-size / 2, size / 2); ctx.lineTo(size / 2, -size / 2);
+          ctx.moveTo(size / 2, size * 1.5); ctx.lineTo(size * 1.5, size / 2);
+          ctx.stroke();
+          return ctx.getImageData(0, 0, size, size);
+        };
+        map.addImage("hatch-blue", makeHatch("#4a6fa5", 10, 1.5), { pixelRatio: 2 });
+        map.addImage("hatch-red", makeHatch("#e53935", 10, 1.5), { pixelRatio: 2 });
+        map.addImage("hatch-green", makeHatch("#2e7d32", 10, 1.5), { pixelRatio: 2 });
+        map.addImage("hatch-amber", makeHatch("#ff8f00", 10, 1.5), { pixelRatio: 2 });
+        map.addImage("hatch-grey", makeHatch("#78909c", 10, 1.5), { pixelRatio: 2 });
+
+        const makeCrossHatch = (color, spacing = 10, width = 1) => {
+          const size = spacing * 2;
+          const canvas = document.createElement("canvas");
+          canvas.width = size; canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          ctx.strokeStyle = color;
+          ctx.lineWidth = width;
+          ctx.beginPath();
+          ctx.moveTo(0, size); ctx.lineTo(size, 0);
+          ctx.moveTo(0, 0); ctx.lineTo(size, size);
+          ctx.stroke();
+          return ctx.getImageData(0, 0, size, size);
+        };
+        map.addImage("crosshatch-red", makeCrossHatch("#e53935", 8, 1.5), { pixelRatio: 2 });
+        map.addImage("crosshatch-blue", makeCrossHatch("#1565c0", 8, 1.5), { pixelRatio: 2 });
+      });
+
+      // Carto dark labels (above hillshade, below data layers)
+      safe("labels", () => map.addLayer({ id: "base-labels", type: "raster", source: "carto-labels" }));
+
+      // ── ESRI Aerial imagery + energy assets ──
+      safe("aerial+assets", () => {
       map.addSource("esri-imagery", {
         type: "raster",
         tiles: ["https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
@@ -389,8 +417,11 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         paint: { "raster-opacity": slopeOpacity },
         layout: { visibility: layers.slope ? "visible" : "none" },
       });
+      }); // end safe("aerial+assets")
 
-      // PBCC Carbon vector overlay
+      // PMTiles vector overlays — wrapped in try/catch because mapbox-gl v3
+      // removed addProtocol, so pmtiles:// URLs may fail
+      try {
       map.addSource("pbcc-carbon", {
         type: "vector",
         url: `${PROXY}/pbcc.pmtiles`,
@@ -570,8 +601,12 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         },
         layout: { visibility: layers.postcodes ? "visible" : "none" },
       });
+      } catch (pmtilesErr) {
+        console.warn("PMTiles vector layers unavailable (mapbox-gl v3):", pmtilesErr.message);
+      }
 
       // ── Grid flow network (FlowmapBlue-style) — on top of all data layers ──
+      safe("grid+osm+layers", () => {
       map.addSource("grid-flow-lines", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("grid-flow-nodes", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
 
@@ -588,6 +623,10 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
       // NGED CIM substations source
       map.addSource("nged-substations", { type: "geojson", data: EMPTY_FC });
+
+      // ESO TEC + REPD sources
+      map.addSource("eso-tec-projects", { type: "geojson", data: EMPTY_FC });
+      map.addSource("repd-projects", { type: "geojson", data: EMPTY_FC });
 
       // Flow glow (wide blurred line — FlowmapBlue cyan style)
       map.addLayer({
@@ -1240,6 +1279,144 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.on("mouseenter", "nged-sub-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "nged-sub-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
 
+      // ── ESO TEC Pipeline circles ──
+      map.addLayer({
+        id: "eso-tec-circles",
+        type: "circle",
+        source: "eso-tec-projects",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"],
+            5, ["interpolate", ["linear"], ["coalesce", ["get", "capacity_mw"], 0], 0, 3, 100, 6, 500, 10, 2000, 16],
+            10, ["interpolate", ["linear"], ["coalesce", ["get", "capacity_mw"], 0], 0, 5, 100, 10, 500, 18, 2000, 28],
+            14, ["interpolate", ["linear"], ["coalesce", ["get", "capacity_mw"], 0], 0, 7, 100, 14, 500, 24, 2000, 36],
+          ],
+          "circle-color": [
+            "match", ["coalesce", ["get", "plant_type"], "Other"],
+            "Solar", "#fdd835",
+            "Wind", "#00b0ff",
+            "Battery", "#7cb342",
+            "Gas", "#ff8f00",
+            "Nuclear", "#e53935",
+            "Hydro", "#1565c0",
+            "Biomass", "#8d6e63",
+            "Interconnector", "#ab47bc",
+            "#0277bd"
+          ],
+          "circle-opacity": 0.82,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "rgba(255,255,255,0.7)",
+        },
+        layout: { visibility: "none" },
+      });
+
+      // TEC labels
+      map.addLayer({
+        id: "eso-tec-labels",
+        type: "symbol",
+        source: "eso-tec-projects",
+        paint: {
+          "text-color": "#1a237e",
+          "text-halo-color": "rgba(255,255,255,0.9)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["get", "name"], "\n", ["to-string", ["coalesce", ["get", "capacity_mw"], 0]], " MW"],
+          "text-size": 10,
+          "text-offset": [0, 1.5],
+          "text-anchor": "top",
+          "text-optional": true,
+        },
+        minzoom: 9,
+      });
+
+      // TEC click popup
+      map.on("click", "eso-tec-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        const cap = p.capacity_mw ? `<br/>Capacity: ${p.capacity_mw} MW` : "";
+        const pt = p.plant_type ? `<br/>Type: ${p.plant_type}` : "";
+        const st = p.status ? `<br/>Status: ${p.status}` : "";
+        const host = p.host_to ? `<br/>TO: ${p.host_to}` : "";
+        const site = p.connection_site ? `<br/>Site: ${p.connection_site}` : "";
+        new mapboxgl.Popup({ maxWidth: "280px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px"><strong>${p.name || "TEC Project"}</strong>${pt}${cap}${st}${host}${site}</div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "eso-tec-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "eso-tec-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── REPD Project circles ──
+      map.addLayer({
+        id: "repd-circles",
+        type: "circle",
+        source: "repd-projects",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"],
+            5, ["interpolate", ["linear"], ["coalesce", ["get", "capacity_mw"], 0], 0, 2, 5, 4, 50, 7, 200, 12],
+            10, ["interpolate", ["linear"], ["coalesce", ["get", "capacity_mw"], 0], 0, 3, 5, 6, 50, 12, 200, 20],
+            14, ["interpolate", ["linear"], ["coalesce", ["get", "capacity_mw"], 0], 0, 5, 5, 10, 50, 18, 200, 28],
+          ],
+          "circle-color": [
+            "match", ["coalesce", ["get", "technology"], "Other"],
+            "Solar Photovoltaics", "#fdd835",
+            "Wind Onshore", "#00b0ff",
+            "Wind Offshore", "#0277bd",
+            "Battery", "#7cb342",
+            "Biomass (dedicated)", "#8d6e63",
+            "Landfill Gas", "#a1887f",
+            "Anaerobic Digestion", "#6d4c41",
+            "Small Hydro", "#1565c0",
+            "Large Hydro", "#0d47a1",
+            "EfW Incineration", "#e53935",
+            "#ff6f00"
+          ],
+          "circle-opacity": 0.75,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "rgba(255,255,255,0.6)",
+        },
+        layout: { visibility: "none" },
+      });
+
+      // REPD labels
+      map.addLayer({
+        id: "repd-labels",
+        type: "symbol",
+        source: "repd-projects",
+        paint: {
+          "text-color": "#e65100",
+          "text-halo-color": "rgba(255,255,255,0.9)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["get", "name"], "\n", ["to-string", ["coalesce", ["get", "capacity_mw"], 0]], " MW"],
+          "text-size": 10,
+          "text-offset": [0, 1.5],
+          "text-anchor": "top",
+          "text-optional": true,
+        },
+        minzoom: 10,
+      });
+
+      // REPD click popup
+      map.on("click", "repd-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        const cap = p.capacity_mw ? `<br/>Capacity: ${p.capacity_mw} MW` : "";
+        const tech = p.technology ? `<br/>Tech: ${p.technology}` : "";
+        const st = p.status ? `<br/>Status: ${p.status}` : "";
+        const rgn = p.region ? `<br/>Region: ${p.region}` : "";
+        const op = p.operator ? `<br/>Operator: ${p.operator}` : "";
+        new mapboxgl.Popup({ maxWidth: "280px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px"><strong>${p.name || "REPD Site"}</strong>${tech}${cap}${st}${rgn}${op}</div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "repd-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "repd-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
       // ── GeeFlow Land Use / Opportunity layers ──
       map.addSource("geeflow-landuse", { type: "geojson", data: EMPTY_FC });
       map.addSource("geeflow-opportunities", { type: "geojson", data: EMPTY_FC });
@@ -1509,14 +1686,19 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         if (!map._pickMode) map.getCanvas().style.cursor = "";
       });
 
-      // Location picker click handler
+      }); // end safe("grid+osm+layers")
+
+      // Location picker click handler (global — fires for any map click)
       map.on("click", (e) => {
+        console.log("[MapView] click event — pickMode:", map._pickMode, "onPick:", !!map._onPick);
         if (!map._pickMode || !map._onPick) return;
         const { lng, lat } = e.lngLat;
+        console.log("[MapView] pick fired:", { lat, lon: lng });
         map._onPick({ lat, lon: lng });
       });
 
-      // ── Fetch grid data immediately on load ──
+      // ── Fetch grid data + drawing layers ──
+      safe("data-fetch+draw", () => {
       fetch("/grid/topology")
         .then((r) => r.ok ? r.json() : null)
         .then((data) => {
@@ -1679,8 +1861,16 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         }
       });
 
+      }); // end safe("data-fetch+draw")
+
       map.addControl(new mapboxgl.NavigationControl(), "top-left");
-    });
+      console.log("[MapView] setup complete");
+      setMapReady(true);
+    };
+
+    map.on("load", setupMap);
+    // Fallback if load never fires (e.g. network issues)
+    setTimeout(() => { if (!map._setupDone) { console.warn("[MapView] load timeout — forcing setup"); setupMap(); } }, 5000);
 
     return () => map.remove();
   }, []);
@@ -1728,7 +1918,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   // Update layer visibility (with lazy raster loading)
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    if (!map || !mapReady) return;
 
     const layerMap = {
       slope: ["slope-tiles"],
@@ -1752,6 +1942,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
                  "osm-substation-circles", "osm-substation-labels",
                  "osm-tower-dots", "osm-generator-circles", "osm-generator-labels"],
       ngedSubs: ["nged-sub-circles", "nged-sub-labels"],
+      tecPipeline: ["eso-tec-circles", "eso-tec-labels"],
+      repdProjects: ["repd-circles", "repd-labels"],
       geeflowLandUse: ["geeflow-landuse-fill"],
       geeflowOpportunities: ["geeflow-opp-circles", "geeflow-opp-labels"],
       electricityZones: ["electricity-zones-fill", "electricity-zones-line", "electricity-zones-labels"],
@@ -1775,7 +1967,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         }
       }
     }
-  }, [layers]);
+  }, [mapReady, layers]);
 
   // ── Stability simulation overlay ──
   // When stabilityData changes, update node colors + add stability heatmap source
@@ -1884,6 +2076,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    console.log("[MapView] pickMode effect:", pickMode, "onPick:", !!onPick);
     map._pickMode = pickMode;
     map._onPick = onPick;
     map._onZoneClick = onZoneClick;
@@ -1911,7 +2104,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   // Fetch grid topology + live national grid data when layer toggled on
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !layers.gridFlow) return;
+    if (!map || !mapReady || !layers.gridFlow) return;
     let cancelled = false;
 
     // Fetch local feeder topology
@@ -1941,12 +2134,12 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       .catch(() => {});
 
     return () => { cancelled = true; };
-  }, [layers.gridFlow]);
+  }, [mapReady, layers.gridFlow]);
 
   // OSM power infrastructure — viewport-based loading with debounce
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !layers.osmPower) return;
+    if (!map || !mapReady || !layers.osmPower) return;
 
     let abortCtrl = new AbortController();
     let timer = null;
@@ -2028,7 +2221,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         if (src) src.setData(EMPTY_FC);
       }
     };
-  }, [layers.osmPower]);
+  }, [mapReady, layers.osmPower]);
 
   // NGED CIM substations — viewport-based loading with debounce
   useEffect(() => {
@@ -2066,6 +2259,87 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       if (src) src.setData(EMPTY_FC);
     };
   }, [layers.ngedSubs]);
+
+  // ESO TEC Pipeline — viewport-based loading with debounce
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.tecPipeline) return;
+
+    let abortCtrl = new AbortController();
+    let timer = null;
+
+    const loadTec = () => {
+      if (abortCtrl.signal.aborted) return;
+      const bounds = map.getBounds();
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+
+      api.eso.tecGeojson(bbox).then(data => {
+        if (abortCtrl.signal.aborted || !data) return;
+        const src = map.getSource("eso-tec-projects");
+        if (src) src.setData(data);
+      }).catch(() => {});
+    };
+
+    const debouncedLoad = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loadTec, 300);
+    };
+
+    loadTec();
+    map.on("moveend", debouncedLoad);
+
+    return () => {
+      abortCtrl.abort();
+      if (timer) clearTimeout(timer);
+      map.off("moveend", debouncedLoad);
+      const src = map.getSource("eso-tec-projects");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [layers.tecPipeline]);
+
+  // REPD Projects — viewport-based loading with zoom-dependent min capacity
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.repdProjects) return;
+
+    let abortCtrl = new AbortController();
+    let timer = null;
+
+    const loadRepd = () => {
+      if (abortCtrl.signal.aborted) return;
+      const bounds = map.getBounds();
+      const zoom = map.getZoom();
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+
+      // Zoom-dependent filtering to avoid clutter at low zoom
+      let minMw = 0;
+      if (zoom < 7) minMw = 50;
+      else if (zoom < 9) minMw = 10;
+      else if (zoom < 11) minMw = 1;
+
+      api.repd.geojson(bbox, null, null, minMw).then(data => {
+        if (abortCtrl.signal.aborted || !data) return;
+        const src = map.getSource("repd-projects");
+        if (src) src.setData(data);
+      }).catch(() => {});
+    };
+
+    const debouncedLoad = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loadRepd, 300);
+    };
+
+    loadRepd();
+    map.on("moveend", debouncedLoad);
+
+    return () => {
+      abortCtrl.abort();
+      if (timer) clearTimeout(timer);
+      map.off("moveend", debouncedLoad);
+      const src = map.getSource("repd-projects");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [layers.repdProjects]);
 
   // Electricity zones — load zone boundaries + fetch live carbon intensity data
   useEffect(() => {
@@ -2126,7 +2400,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   // Animate dash offset + node pulse when grid flow layer is visible
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !layers.gridFlow) return;
+    if (!map || !mapReady || !layers.gridFlow) return;
     let animId;
     let step = 0;
     const animate = (timestamp) => {
@@ -2161,7 +2435,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     };
     animId = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animId);
-  }, [layers.gridFlow]);
+  }, [mapReady, layers.gridFlow]);
 
   // Sync chat layers to map
   useEffect(() => {
@@ -2179,6 +2453,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     // Remove layers/sources no longer needed
     for (const id of existingIds) {
       if (!wantedIds.has(id)) {
+        if (map.getLayer(id + "-labels")) map.removeLayer(id + "-labels");
+        if (map.getLayer(id + "-outline")) map.removeLayer(id + "-outline");
         if (map.getLayer(id + "-layer")) map.removeLayer(id + "-layer");
         if (map.getSource(id)) map.removeSource(id);
       }
@@ -2189,6 +2465,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       const srcId = cl.id;
       const layerId = cl.id + "-layer";
       const geojson = cl.geojson || { type: "FeatureCollection", features: [] };
+      const style = cl.style || {};
 
       if (map.getSource(srcId)) {
         map.getSource(srcId).setData(geojson);
@@ -2197,22 +2474,115 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
         const layerType = cl.layer_type || "circle";
         const color = cl.color || "#00e5ff";
+        const opacity = style.opacity ?? 0.85;
 
         if (layerType === "circle") {
           map.addLayer({
             id: layerId, type: "circle", source: srcId,
-            paint: { "circle-radius": 6, "circle-color": color, "circle-stroke-width": 1, "circle-stroke-color": "#fff", "circle-opacity": 0.85 },
+            paint: {
+              "circle-radius": style.radius || 6,
+              "circle-color": (style.color_field && style.color_map)
+                ? ["match", ["get", style.color_field],
+                    ...Object.entries(style.color_map).flat(),
+                    color]
+                : color,
+              "circle-stroke-width": 1, "circle-stroke-color": "#fff",
+              "circle-opacity": opacity,
+            },
           });
         } else if (layerType === "fill") {
+          const fillColor = Array.isArray(color) ? color : color;
+          const outlineColor = Array.isArray(color) ? "#333" : color;
           map.addLayer({
             id: layerId, type: "fill", source: srcId,
-            paint: { "fill-color": color, "fill-opacity": 0.3, "fill-outline-color": color },
+            paint: { "fill-color": fillColor, "fill-opacity": style.opacity ?? 0.35, "fill-outline-color": outlineColor },
           });
+          const hasLabels = geojson.features?.some(f => f.properties?.label);
+          if (hasLabels) {
+            map.addLayer({
+              id: srcId + "-labels", type: "symbol", source: srcId,
+              layout: { "text-field": ["get", "label"], "text-size": 10, "text-allow-overlap": false, "text-padding": 4 },
+              paint: { "text-color": "#fff", "text-halo-color": "#000", "text-halo-width": 1 },
+            });
+          }
+
+        } else if (layerType === "fill-pattern") {
+          // Hatched / patterned fill for constraint zones (flood, AONB, green belt, etc.)
+          const patternName = style.pattern || "hatch-blue";
+          map.addLayer({
+            id: layerId, type: "fill", source: srcId,
+            paint: {
+              "fill-pattern": patternName,
+              "fill-opacity": style.opacity ?? 0.5,
+            },
+          });
+          // Add outline
+          map.addLayer({
+            id: srcId + "-outline", type: "line", source: srcId,
+            paint: { "line-color": color, "line-width": 1.5, "line-opacity": 0.7 },
+          });
+          const hasLabels = geojson.features?.some(f => f.properties?.label);
+          if (hasLabels) {
+            map.addLayer({
+              id: srcId + "-labels", type: "symbol", source: srcId,
+              layout: { "text-field": ["get", "label"], "text-size": 11, "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"], "text-allow-overlap": false, "text-padding": 6 },
+              paint: { "text-color": color, "text-halo-color": "#fff", "text-halo-width": 1.5 },
+            });
+          }
+
+        } else if (layerType === "symbol") {
+          // Icon-based point layer (substations, exchanges, hazards, etc.)
+          const iconName = style.icon || "icon-substation";
+          const iconPrefix = iconName.startsWith("icon-") ? iconName : `icon-${iconName}`;
+          // If data-driven icon: use color_field to pick icon per feature
+          const iconImage = (style.icon_field)
+            ? ["concat", "icon-", ["get", style.icon_field]]
+            : iconPrefix;
+          map.addLayer({
+            id: layerId, type: "symbol", source: srcId,
+            layout: {
+              "icon-image": iconImage,
+              "icon-size": style.icon_size || 0.55,
+              "icon-allow-overlap": true,
+              "icon-anchor": "center",
+              "text-field": style.label_field ? ["get", style.label_field] : "",
+              "text-size": 10,
+              "text-offset": [0, 1.8],
+              "text-anchor": "top",
+              "text-optional": true,
+            },
+            paint: {
+              "text-color": "#333",
+              "text-halo-color": "#fff",
+              "text-halo-width": 1,
+            },
+          });
+
         } else if (layerType === "line") {
+          // Enhanced line with optional dashing and data-driven color
+          const lineColor = (style.color_field && style.color_map)
+            ? ["match", ["get", style.color_field],
+                ...Object.entries(style.color_map).flat(),
+                color]
+            : color;
+          const paintProps = {
+            "line-color": lineColor,
+            "line-width": style.line_width || 2,
+            "line-opacity": style.opacity ?? 0.8,
+          };
+          const layoutProps = {};
+          if (style.dash_array) {
+            paintProps["line-dasharray"] = style.dash_array;
+          }
+          if (style.line_cap) {
+            layoutProps["line-cap"] = style.line_cap;
+          }
           map.addLayer({
             id: layerId, type: "line", source: srcId,
-            paint: { "line-color": color, "line-width": 2, "line-opacity": 0.8 },
+            paint: paintProps,
+            layout: layoutProps,
           });
+
         } else if (layerType === "heatmap") {
           map.addLayer({
             id: layerId, type: "heatmap", source: srcId,
@@ -2276,5 +2646,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     }
   }, [drawState, pickMode]);
 
-  return <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />;
+  return (
+    <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />
+  );
 }

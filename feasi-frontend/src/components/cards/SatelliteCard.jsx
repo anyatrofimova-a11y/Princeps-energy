@@ -96,6 +96,96 @@ function SolarResourceBars({ data }) {
   );
 }
 
+function FloodRisk({ data }) {
+  if (!data?.risk_level) return null;
+  const color = data.risk_level === "HIGH" ? "#f44336"
+    : data.risk_level === "MEDIUM" ? "#ff9800" : "#4caf50";
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div className="card-label">Flood Risk (JRC)</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12 }}>
+        <span style={{
+          padding: "2px 8px", borderRadius: 8,
+          background: color, color: "#fff", fontSize: 11, fontWeight: "bold",
+        }}>
+          {data.risk_level}
+        </span>
+        <span>Water occurrence: <b>{data.water_occurrence_pct}%</b></span>
+        <span>Seasonality: <b>{data.seasonality_months_mean}</b> months</span>
+      </div>
+      {data.environmental_constraint && (
+        <div style={{ fontSize: 11, color: "#f44336", marginTop: 4 }}>
+          Environmental constraint — may require EA consent
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SarBackscatter({ data }) {
+  if (!data?.backscatter) return null;
+  const bs = data.backscatter;
+  const ind = data.indicators || {};
+  const moistColor = ind.soil_moisture === "wet" ? "#2196f3"
+    : ind.soil_moisture === "moderate" ? "#ff9800" : "#795548";
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div className="card-label">SAR Ground Conditions (Sentinel-1)</div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12 }}>
+        <span>VV: <b>{bs.vv_mean_db} dB</b></span>
+        <span>VH: <b>{bs.vh_mean_db} dB</b></span>
+        <span>Scenes: <b>{data.scene_count}</b></span>
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 4, fontSize: 11 }}>
+        <span>
+          Moisture: <span style={{ color: moistColor, fontWeight: "bold" }}>{ind.soil_moisture}</span>
+        </span>
+        <span>
+          Roughness: <b>{ind.surface_roughness}</b>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function NdviTimeseries({ data }) {
+  if (!data?.annual_data) return null;
+  const ad = data.annual_data;
+  const trend = data.trend || {};
+  const maxNdvi = Math.max(...ad.map(a => a.ndvi_mean || 0), 0.01);
+  const trendColor = trend.direction === "greening" ? "#4caf50"
+    : trend.direction === "browning" ? "#f44336" : "#888";
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div className="card-label">NDVI Trend ({data.period})</div>
+      <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 40 }}>
+        {ad.map((a, i) => (
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              height: `${((a.ndvi_mean || 0) / maxNdvi) * 100}%`,
+              background: "#66bb6a",
+              borderRadius: "2px 2px 0 0",
+              minHeight: 2,
+            }}
+            title={`${a.year}: NDVI ${a.ndvi_mean}`}
+          />
+        ))}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#888", marginTop: 2 }}>
+        {ad.map(a => <span key={a.year}>{a.year}</span>)}
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 4, fontSize: 12 }}>
+        <span>
+          Trend: <span style={{ color: trendColor, fontWeight: "bold" }}>{trend.direction}</span>
+        </span>
+        <span>Stability: <b>{trend.stability_score}/100</b></span>
+      </div>
+    </div>
+  );
+}
+
 function ScoreGauge({ score }) {
   if (!score) return null;
   const pct = (score.total_score / score.max_score) * 100;
@@ -129,6 +219,9 @@ function ScoreGauge({ score }) {
   );
 }
 
+const BASIC_MODES = ["land_use", "terrain", "solar_resource", "vegetation"];
+const FULL_MODES = [...BASIC_MODES, "sar_backscatter", "flood_risk", "ndvi_timeseries"];
+
 export default function SatelliteCard() {
   const {
     pickedLocation, geeflowData, setGeeflowData,
@@ -136,6 +229,7 @@ export default function SatelliteCard() {
     geeflowJobId, setGeeflowJobId,
   } = useSite();
 
+  const [fullMode, setFullMode] = useState(true);
   const pollRef = useRef(null);
 
   // Poll for job completion
@@ -163,9 +257,9 @@ export default function SatelliteCard() {
     if (!pickedLocation) return;
     setGeeflowLoading(true);
     setGeeflowData(null);
+    const modes = fullMode ? FULL_MODES : BASIC_MODES;
     const res = await api.geeflow.submitAnalysis(
-      pickedLocation.lat, pickedLocation.lon, 5,
-      ["land_use", "terrain", "solar_resource", "vegetation"]
+      pickedLocation.lat, pickedLocation.lon, 5, modes
     );
     if (res?.job_id) {
       setGeeflowJobId(res.job_id);
@@ -187,13 +281,24 @@ export default function SatelliteCard() {
     >
       {!geeflowData && !geeflowLoading && (
         <div style={{ textAlign: "center", padding: "12px 0" }}>
+          <div style={{ marginBottom: 8 }}>
+            <label style={{ fontSize: 11, color: "#aaa", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={fullMode}
+                onChange={(e) => setFullMode(e.target.checked)}
+                style={{ accentColor: "#1565c0" }}
+              />
+              Include SAR, Flood Risk & NDVI Trend
+            </label>
+          </div>
           <button
             className="btn-primary"
             onClick={handleRun}
             disabled={!pickedLocation}
             style={{ fontSize: 12 }}
           >
-            Run Satellite Analysis
+            {fullMode ? "Run Full Satellite Analysis" : "Run Satellite Analysis"}
           </button>
           {!pickedLocation && (
             <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
@@ -217,12 +322,16 @@ export default function SatelliteCard() {
           <SolarResourceBars data={extractions.solar_resource} />
 
           {extractions.vegetation && (
-            <div style={{ fontSize: 12 }}>
+            <div style={{ fontSize: 12, marginBottom: 10 }}>
               <div className="card-label">Vegetation</div>
               Green cover: <b>{extractions.vegetation.green_cover_pct}%</b>,
               NDVI: <b>{extractions.vegetation.annual_ndvi_mean}</b>
             </div>
           )}
+
+          <FloodRisk data={extractions.flood_risk} />
+          <SarBackscatter data={extractions.sar_backscatter} />
+          <NdviTimeseries data={extractions.ndvi_timeseries} />
 
           <button
             className="btn-primary"

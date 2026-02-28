@@ -2,11 +2,12 @@ import React from "react";
 import { useSite } from "../../SiteContext";
 import MetricCard from "../ui/MetricCard";
 import BarChart from "../ui/BarChart";
+import ImageryBadge from "../ui/ImageryBadge";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 export default function GridContextCard() {
-  const { gridContext } = useSite();
+  const { gridContext, visionData } = useSite();
 
   if (!gridContext) {
     return (
@@ -22,6 +23,11 @@ export default function GridContextCard() {
       accentColor="#00bcd4"
       headerValue={`${gridContext.demand?.daily_avg?.toLocaleString()} MW avg`}
     >
+      {visionData?.findings?.existing_infrastructure >= 60 && (
+        <div style={{ marginBottom: 8 }}>
+          <ImageryBadge text="HV line detected nearby" />
+        </div>
+      )}
       <div className="stat-grid">
         <div>Records: <strong>{gridContext.summary?.records?.toLocaleString()}</strong></div>
         <div>Range: <strong>{gridContext.summary?.date_range?.[0]} to {gridContext.summary?.date_range?.[1]}</strong></div>

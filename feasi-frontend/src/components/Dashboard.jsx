@@ -27,6 +27,7 @@ import ProcurementCard from "./cards/ProcurementCard";
 import GridEfficiencyCard from "./cards/GridEfficiencyCard";
 import SiteProspectorCard from "./cards/SiteProspectorCard";
 import BESSOptimizerCard from "./cards/BESSOptimizerCard";
+import LandClassifierCard from "./cards/LandClassifierCard";
 
 /**
  * Dashboard — vertically scrollable card-based layout replacing 13-tab panel.
@@ -63,6 +64,7 @@ export default function Dashboard() {
     { id: "gridEff", label: "Grid Eff.", color: "#795548" },
     { id: "prospector", label: "Prospector", color: "#009688" },
     { id: "bess", label: "BESS", color: "#4caf50" },
+    { id: "classify", label: "Classify", color: "#ff6f00" },
     { id: "analytics", label: "AI Energy", color: "#00e5ff" },
     { id: "agent", label: "Analysis", color: "#7c4dff" },
   ];
@@ -139,6 +141,9 @@ export default function Dashboard() {
           )}
           {activeTab === "bess" && (
             <ErrorBoundary name="BESS"><BESSOptimizerCard /></ErrorBoundary>
+          )}
+          {activeTab === "classify" && (
+            <ErrorBoundary name="Classifier"><LandClassifierCard /></ErrorBoundary>
           )}
           {activeTab === "analytics" && (
             <ErrorBoundary name="Analytics"><EnergyAnalyticsCard /></ErrorBoundary>

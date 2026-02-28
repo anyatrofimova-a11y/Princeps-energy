@@ -27,28 +27,37 @@ import LandClassifierCard from "./cards/LandClassifierCard";
 import HomeRetrofitCard from "./cards/HomeRetrofitCard";
 import VisionCard from "./cards/VisionCard";
 import CIMCircuitCard from "./cards/CIMCircuitCard";
+import AssetTrackerCard from "./cards/AssetTrackerCard";
+import REPDTrackerCard from "./cards/REPDTrackerCard";
+import TECQueueCard from "./cards/TECQueueCard";
+import GridUpgradeCard from "./cards/GridUpgradeCard";
+import RegulatoryRAGCard from "./cards/RegulatoryRAGCard";
+import AlertsCard from "./cards/AlertsCard";
+import GridConnectionCard from "./cards/GridConnectionCard";
 import GridDataPanel from "./GridDataPanel";
 import AgentPanel from "./AgentPanel";
 
 // Study sub-step -> card names
 const STUDY_CARD_MAP = {
-  feasibility:        ["ScoreCard", "SolarCard", "TerrainCard", "GridContextCard", "PlanningCard", "VisionCard"],
-  grid_study:         ["GridContextCard", "GridEfficiencyCard", "CIMCircuitCard", "NGEDOpportunityCard", "StabilityCard", "GridDataPanel"],
+  feasibility:        ["ScoreCard", "SolarCard", "TerrainCard", "GridContextCard", "PlanningCard", "AssetTrackerCard", "REPDTrackerCard", "VisionCard"],
+  grid_study:         ["GridContextCard", "GridEfficiencyCard", "CIMCircuitCard", "NGEDOpportunityCard", "AssetTrackerCard", "TECQueueCard", "GridUpgradeCard", "StabilityCard", "GridDataPanel"],
   financial:          ["PricingCard", "DeferralCard", "StorageCard", "BESSOptimizerCard", "EnergyAnalyticsCard"],
   environmental:      ["SatelliteCard", "LandClassifierCard", "PlanningCard", "TerrainCard", "VisionCard"],
-  planning:           ["PlanningCard", "DeferralCard", "InventoryCard", "EnergySystemCard"],
+  planning:           ["PlanningCard", "DeferralCard", "InventoryCard", "EnergySystemCard", "AssetTrackerCard", "REPDTrackerCard"],
   satellite_analysis: ["SatelliteCard", "LandClassifierCard", "TerrainCard", "VisionCard"],
   legacy_compliance:  ["LegacyAssetCard", "ProcurementCard", "InventoryCard"],
   procurement:        ["ProcurementCard", "TendersCard", "InventoryCard"],
-  grid_efficiency:    ["GridEfficiencyCard", "CIMCircuitCard", "GridContextCard", "NGEDOpportunityCard", "StabilityCard"],
-  site_prospecting:   ["SiteProspectorCard", "ScoreCard", "SatelliteCard", "TerrainCard"],
+  grid_connection:    ["GridConnectionCard", "GridContextCard", "GridEfficiencyCard", "TECQueueCard", "GridUpgradeCard", "StabilityCard"],
+  grid_efficiency:    ["GridEfficiencyCard", "CIMCircuitCard", "GridContextCard", "NGEDOpportunityCard", "TECQueueCard", "GridUpgradeCard", "StabilityCard"],
+  site_prospecting:   ["SiteProspectorCard", "ScoreCard", "SatelliteCard", "TerrainCard", "AssetTrackerCard"],
   bess_optimisation:  ["BESSOptimizerCard", "StorageCard", "GridContextCard", "PricingCard"],
   bess:               ["BESSOptimizerCard", "StorageCard", "GridContextCard", "PricingCard"],
   home_retrofit:      ["HomeRetrofitCard", "LandClassifierCard", "VisionCard"],
+  regulatory_intelligence: ["REPDTrackerCard", "TECQueueCard", "GridUpgradeCard", "RegulatoryRAGCard", "AlertsCard"],
 };
 
 const PLAN_CARDS = ["PlanningCard", "InventoryCard", "EnergySystemCard", "DeferralCard"];
-const ACT_CARDS = ["LegacyAssetCard", "ProcurementCard", "TendersCard", "SiteProspectorCard"];
+const ACT_CARDS = ["LegacyAssetCard", "ProcurementCard", "TendersCard", "SiteProspectorCard", "REPDTrackerCard", "TECQueueCard", "AlertsCard"];
 
 const CARD_COMPONENTS = {
   ScoreCard, SolarCard, TerrainCard, GridContextCard, PricingCard,
@@ -56,14 +65,17 @@ const CARD_COMPONENTS = {
   TendersCard, StabilityCard, EnergyAnalyticsCard, NGEDOpportunityCard,
   SatelliteCard, LegacyAssetCard, ProcurementCard, GridEfficiencyCard,
   SiteProspectorCard, BESSOptimizerCard, LandClassifierCard,
-  HomeRetrofitCard, VisionCard, CIMCircuitCard, GridDataPanel, AgentPanel,
+  HomeRetrofitCard, VisionCard, CIMCircuitCard, AssetTrackerCard,
+  REPDTrackerCard, TECQueueCard, GridUpgradeCard, RegulatoryRAGCard, AlertsCard,
+  GridConnectionCard, GridDataPanel, AgentPanel,
 };
 
 const INTENT_LABELS = {
-  feasibility: "Feasibility", grid_study: "Grid Study", financial: "Financial",
-  environmental: "Environmental", planning: "Planning", satellite_analysis: "Satellite",
-  bess_optimisation: "BESS", grid_efficiency: "Grid Efficiency",
+  feasibility: "Feasibility", grid_study: "Grid Study", grid_connection: "Grid Connection",
+  financial: "Financial", environmental: "Environmental", planning: "Planning",
+  satellite_analysis: "Satellite", bess_optimisation: "BESS", grid_efficiency: "Grid Efficiency",
   legacy_compliance: "Legacy", procurement: "Procurement", site_prospecting: "Prospecting",
+  regulatory_intelligence: "Regulatory",
 };
 
 export default function FloatingCards() {

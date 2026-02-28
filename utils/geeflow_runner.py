@@ -11,6 +11,7 @@ Extraction modes:
   vegetation     — Sentinel-2 NDVI profile
   site_composite — All modes combined
   change_detection — Sentinel-2 land use change over N years
+  elevation_grid — NASADEM pixel grid for 3D terrain mesh
 """
 
 import argparse
@@ -609,6 +610,56 @@ def extract_ndvi_timeseries(lat: float, lon: float, radius_km: float,
 
 
 # ---------------------------------------------------------------------------
+# Mode: elevation_grid — NASADEM pixel grid for 3D terrain mesh
+# ---------------------------------------------------------------------------
+
+def extract_elevation_grid(lat: float, lon: float, radius_km: float, grid_size: int = 128) -> dict:
+    """Extract an NxN grid of elevation pixels from NASADEM using sampleRectangle.
+
+    Returns a 2D array of elevation values suitable for building a 3D mesh.
+    128x128 = 16,384 pixels, well under sampleRectangle's 262,144 limit.
+    """
+    point = ee.Geometry.Point([lon, lat])
+    aoi = point.buffer(radius_km * 1000).bounds()
+
+    dem = ee.Image("NASA/NASADEM_HGT/001").select("elevation")
+
+    # Resample to target grid size within the bounding box
+    # Use bilinear resampling for smoother terrain
+    dem_resampled = dem.resample("bilinear").reproject(
+        crs="EPSG:4326",
+        scale=radius_km * 2000 / grid_size,  # metres per pixel
+    )
+
+    # Sample the rectangle — returns a 2D array
+    sample = dem_resampled.sampleRectangle(region=aoi, defaultValue=0)
+    array = sample.get("elevation").getInfo()
+
+    if not array or not isinstance(array, list):
+        return {"mode": "elevation_grid", "error": "No elevation data returned"}
+
+    # Resize to target grid_size if GEE returned a different shape
+    h = len(array)
+    w = len(array[0]) if h > 0 else 0
+
+    # Clamp null values to 0
+    values = []
+    for row in array:
+        values.append([round(v, 1) if v is not None else 0.0 for v in row])
+
+    return {
+        "mode": "elevation_grid",
+        "source": "NASADEM 30m",
+        "width": w,
+        "height": h,
+        "values": values,
+        "lat": lat,
+        "lon": lon,
+        "radius_km": radius_km,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Mode: site_composite — all modes combined
 # ---------------------------------------------------------------------------
 
@@ -651,6 +702,7 @@ MODE_MAP = {
     "sar_backscatter": extract_sar_backscatter,
     "flood_risk": extract_flood_risk,
     "ndvi_timeseries": extract_ndvi_timeseries,
+    "elevation_grid": extract_elevation_grid,
 }
 
 
@@ -663,6 +715,7 @@ def main():
     parser.add_argument("--year", type=int, default=datetime.now().year - 1)
     parser.add_argument("--gee_project", required=True)
     parser.add_argument("--lookback_years", type=int, default=3)
+    parser.add_argument("--grid_size", type=int, default=128)
     args = parser.parse_args()
 
     init_ee(args.gee_project)
@@ -678,6 +731,8 @@ def main():
         result = extract_flood_risk(args.lat, args.lon, args.radius_km)
     elif mode == "ndvi_timeseries":
         result = extract_ndvi_timeseries(args.lat, args.lon, args.radius_km, args.year, args.lookback_years)
+    elif mode == "elevation_grid":
+        result = extract_elevation_grid(args.lat, args.lon, args.radius_km, args.grid_size)
     else:
         func = MODE_MAP[mode]
         result = func(args.lat, args.lon, args.radius_km, args.year)

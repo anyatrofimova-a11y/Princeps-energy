@@ -57,6 +57,16 @@ WORKFLOW_PRESETS: dict[str, dict[str, Any]] = {
             "procurement",
         ],
     },
+    "regulatory_scan": {
+        "label": "Regulatory Intelligence Scan",
+        "description": "Regulatory landscape, competing projects, and grid queue analysis",
+        "steps": [
+            "regulatory_intelligence",
+            "grid_study",
+            "planning",
+            "grid_efficiency",
+        ],
+    },
 }
 
 

@@ -13,6 +13,7 @@
     "pmtiles": "^4.4.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
+    "@xyflow/react": "^12.3.0",
     "three": "^0.165.0"
   },
   "devDependencies": {

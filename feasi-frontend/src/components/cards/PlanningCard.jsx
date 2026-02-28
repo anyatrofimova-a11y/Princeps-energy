@@ -1,9 +1,10 @@
 import React from "react";
 import { useSite } from "../../SiteContext";
 import MetricCard from "../ui/MetricCard";
+import ImageryBadge from "../ui/ImageryBadge";
 
 export default function PlanningCard() {
-  const { planningApps } = useSite();
+  const { planningApps, visionData } = useSite();
 
   if (!planningApps) {
     return (
@@ -19,6 +20,13 @@ export default function PlanningCard() {
       accentColor="#e91e63"
       headerValue={`${planningApps.total_applications} apps`}
     >
+      {visionData?.findings?.exclusion_zones?.some(ez =>
+        /heritage|listed|protected|historic/i.test(ez.type + " " + (ez.reason || ""))
+      ) && (
+        <div style={{ marginBottom: 8 }}>
+          <ImageryBadge text="Heritage features flagged" />
+        </div>
+      )}
       <div className="stat-grid">
         <div>Total: <strong>{planningApps.total_applications}</strong> apps</div>
         <div>Capacity: <strong>{planningApps.total_capacity_mw?.toLocaleString()} MW</strong></div>

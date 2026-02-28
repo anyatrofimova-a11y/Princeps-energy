@@ -864,6 +864,7 @@ html, body, #root { height: 100%; margin: 0; overflow: hidden; background: var(-
   font-size: 12px;
   font-weight: 600;
   animation: pulse-pick 1.5s infinite;
+  pointer-events: none;
 }
 @keyframes pulse-pick {
   0%, 100% { opacity: 1; }

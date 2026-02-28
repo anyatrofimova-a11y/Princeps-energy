@@ -278,6 +278,8 @@ def compute_site_score(
     # Add detail from top concerns
     concerns = []
     for category, data in breakdown.items():
+        if "score" not in data or "max" not in data:
+            continue
         if data["score"] < data["max"] * 0.4:
             concerns.extend(data.get("notes", [])[:1])
     if concerns:

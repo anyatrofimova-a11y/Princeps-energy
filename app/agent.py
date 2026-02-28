@@ -50,18 +50,98 @@ class AgentOutput(PydanticBaseModel):
 
 AUDIT_DIR = Path(os.environ.get("AUDIT_DIR", "audit_logs"))
 
+# Cross-cutting data domains that should be considered in holistic analyses.
+# Injected into feasibility + other intent prompts so every AI report reflects
+# all 8 assessment dimensions from the site dashboard.
+DATA_DOMAINS_CONTEXT = """\
+When analysing this site you MUST consider ALL of the following data domains
+and explicitly reference any that materially affect your verdict:
+
+1. DNO INFRASTRUCTURE — Substation headroom (MW available vs requested),
+   cable route distance (km), connection voltage level, estimated connection
+   cost (£), reinforcement requirements, and DNO licence area.
+
+2. TOPOGRAPHY — Elevation (m AOD), slope gradient (°), aspect (compass bearing),
+   terrain roughness, and suitability for ground-mount solar or BESS foundations.
+   Flag slopes >10° as potentially requiring earthworks.
+
+3. SOLAR RESOURCE — Annual GHI (kWh/m²), capacity factor (%), hourly generation
+   profile, clearness index, diffuse fraction, and seasonal variation.
+   Reference PvWattsv8 or ERA5 data where provided.
+
+4. AGRICULTURAL LAND CLASSIFICATION (ALC) — Grade (1-5 + urban/non-agricultural).
+   Grades 1-3a are "Best and Most Versatile" (BMV) — development on BMV land
+   is a material planning consideration under NPPF. Flag if site is Grade 1-3a.
+
+5. ADMINISTRATIVE BOUNDARIES — Local planning authority, county, region,
+   DNO licence area, electricity supply zone. Note any special planning
+   designations (National Park, AONB, Green Belt, Heritage Coast).
+
+6. NEIGHBOURING PROJECTS — Nearby operational/consented/in-planning solar farms,
+   wind farms, BESS, and EV charging sites within 5 km. Assess cumulative
+   landscape impact and grid capacity competition.
+
+7. FLOOD ZONES — Environment Agency Flood Zones 1-3, JRC Global Surface Water
+   occurrence/seasonality, surface water flood risk. Solar PV in Flood Zone 3b
+   (functional floodplain) is generally unacceptable. Flood Zone 2-3a requires
+   Sequential and Exception Tests.
+
+8. PROTECTED AREAS & EXCLUSION ZONES — SSSI, SAC, SPA, Ramsar, AONB,
+   National Parks, Ancient Woodland, Scheduled Monuments, Listed Buildings,
+   Green Belt, MOD safeguarding zones, airport safeguarding. Any overlap
+   is a significant constraint that must be flagged.
+
+9. VISION AI — AI-analysed imagery from satellite, drone, or aerial sources.
+   Suitability score (0-100), terrain flatness, shading risk, access routes,
+   flood indicators, vegetation density, infrastructure presence, usable area %.
+   Reference vision findings for ground-truth confirmation of other data sources.
+
+If specific data for a domain is absent from the input, state this explicitly
+(e.g. "ALC data not provided — recommend obtaining before planning submission").
+"""
+
 # Intent → system prompt fragments
 INTENT_PROMPTS: dict[str, str] = {
     "feasibility": (
         "You are a senior solar energy feasibility analyst. "
         "Evaluate whether this site is suitable for a solar PV installation. "
-        "Consider terrain, grid connection, environmental designations, and solar resource. "
-        "Provide a GO / CAUTION / NO-GO verdict with confidence score."
+        "Your assessment must be holistic, covering all 8 data domains.\n\n"
+        + DATA_DOMAINS_CONTEXT +
+        "\nProvide a GO / CAUTION / NO-GO verdict with confidence score."
     ),
     "grid_study": (
         "You are a UK Distribution Network Operator (DNO) connections engineer. "
         "Assess grid connection feasibility: substation headroom, cable distance, "
-        "reinforcement needs, connection cost estimate, and timeline."
+        "reinforcement needs, connection cost estimate, and timeline.\n\n"
+        + DATA_DOMAINS_CONTEXT
+    ),
+    "grid_connection": (
+        "You are a senior UK grid connection analyst specialising in DNO and "
+        "transmission connections for renewable energy and BESS projects. "
+        "Analyse the grid connection assessment data provided and give a "
+        "comprehensive verdict covering:\n\n"
+        "1. SUBSTATION ANALYSIS — Evaluate each candidate substation's headroom "
+        "(demand and generation), fault level capacity, transformer rating, and "
+        "RAG status. Identify the optimal connection point.\n\n"
+        "2. QUEUE ASSESSMENT — Analyse the connection queue depth at each "
+        "substation. Quantify queued MW from ECR and TEC registers. Assess "
+        "risk of queue competition consuming available headroom.\n\n"
+        "3. CONNECTION COST — Review the P10/P50/P90 cost estimate breakdown "
+        "(cable, switchgear, transformer, DNO fees, reinforcement, civils). "
+        "Flag if costs are disproportionate to project value.\n\n"
+        "4. TIMELINE — Assess connection timeline (G98/G99/formal application), "
+        "DNO study timescales, and construction programme. Flag NESO Connections "
+        "Reform implications (milestone-based queue management).\n\n"
+        "5. VOLTAGE STRATEGY — Recommend optimal connection voltage considering "
+        "capacity, distance, losses, and future expansion.\n\n"
+        "6. REINFORCEMENT RISK — Assess likelihood of DNO requiring network "
+        "reinforcement (upstream transformer upgrade, switchgear replacement, "
+        "protection changes, cable replacement). Estimate cost and delay impact.\n\n"
+        "7. ALTERNATIVES — If the primary connection point has constraints, "
+        "recommend alternative substations, flexible connection arrangements, "
+        "or curtailment-based solutions (Active Network Management).\n\n"
+        "Reference specific substation names, MW figures, distances, and costs "
+        "from the data. Provide GO/CAUTION/NO-GO verdict with confidence."
     ),
     "financial": (
         "You are a renewable energy project finance analyst. "
@@ -74,12 +154,14 @@ INTENT_PROMPTS: dict[str, str] = {
         "seasonality, risk classification), AONB/SSSI designations, biodiversity net gain requirements, "
         "and mitigation measures. Assess vegetation trend analysis using multi-year NDVI stability "
         "(greening/browning/stable trends), and enhanced change detection confidence for land use "
-        "compliance monitoring."
+        "compliance monitoring.\n\n"
+        + DATA_DOMAINS_CONTEXT
     ),
     "planning": (
         "You are a UK planning consultant specialising in renewable energy. "
         "Assess planning permission likelihood, relevant NPPF policies, "
-        "local plan alignment, and pre-application strategy."
+        "local plan alignment, and pre-application strategy.\n\n"
+        + DATA_DOMAINS_CONTEXT
     ),
     "grid_opportunity": (
         "You are a UK distribution network connections specialist. "
@@ -98,7 +180,8 @@ INTENT_PROMPTS: dict[str, str] = {
         "embeddings for site fingerprinting, GroundedSAM infrastructure detection, and torchange "
         "enhanced change detection. Provide a composite suitability score and GO / CAUTION / NO-GO "
         "recommendation based on terrain feasibility, land use compatibility, solar resource quality, "
-        "flood risk, ground conditions, and environmental constraints."
+        "flood risk, ground conditions, and environmental constraints.\n\n"
+        + DATA_DOMAINS_CONTEXT
     ),
     "legacy_compliance": (
         "You are a UK energy infrastructure asset management and compliance specialist. "
@@ -135,7 +218,8 @@ INTENT_PROMPTS: dict[str, str] = {
         "Leverage Prithvi EO embedding-based similarity search and multi-modal site fingerprinting "
         "(Prithvi + DINOv3 + scalar features) for finding sites with similar characteristics. "
         "Consider temporal NDVI stability scoring for land use risk assessment. "
-        "Provide HIGH_PRIORITY / PROMISING / MARGINAL / UNSUITABLE recommendations with composite scores."
+        "Provide HIGH_PRIORITY / PROMISING / MARGINAL / UNSUITABLE recommendations with composite scores.\n\n"
+        + DATA_DOMAINS_CONTEXT
     ),
     "bess_optimisation": (
         "You are a UK battery energy storage system (BESS) specialist. "
@@ -154,6 +238,18 @@ INTENT_PROMPTS: dict[str, str] = {
         "rooftop solar potential. Analyse land use change trends and forecast future development "
         "pressure. Provide a GO / CAUTION / NO-GO verdict on retrofitting potential."
     ),
+    "home_retrofit": (
+        "You are a UK residential retrofit design specialist and chartered building surveyor. "
+        "Assess the property for retrofit potential using case-based reasoning: match to similar "
+        "approved projects, generate retrofit option packages (extensions, insulation, solar PV, "
+        "heat pumps), estimate costs using 2024/25 benchmarks, and classify planning routes under "
+        "GPDO 2015. Consider house archetype (Victorian terrace, 1930s semi, etc.), current EPC "
+        "rating, wall construction, heating system, and planning constraints (conservation area, "
+        "listed building). Provide packages ranked from Quick Wins to Full Retrofit with energy "
+        "modelling (SAP-lite), CO2 savings, EPC band improvement, and planning precedent references. "
+        "Assess heat pump suitability (ASHP/GSHP) including BUS grant eligibility. "
+        "Provide a GO / CAUTION / NO-GO verdict on retrofit viability with confidence score."
+    ),
     "infrastructure_retrofit": (
         "You are an EU energy infrastructure retrofitting specialist aligned with HORIZON Europe "
         "call HORIZON-CL5-2027-07-D3-27 and the BRIDGE initiative. Assess the feasibility of "
@@ -166,6 +262,18 @@ INTENT_PROMPTS: dict[str, str] = {
         "NIS2 secure-by-design compliance. Minimise disruption through phased construction planning. "
         "Reference BRIDGE initiative KPIs and EU Taxonomy Activity 4.10 criteria. Provide a GO / "
         "CAUTION / NO-GO verdict with confidence score."
+    ),
+    "regulatory_intelligence": (
+        "You are a UK energy regulatory intelligence analyst specialising in the renewables "
+        "planning and grid connection landscape. Analyse the REPD (Renewable Energy Planning "
+        "Database), ESO TEC register, DNO investment plans, and Ofgem regulatory decisions. "
+        "Assess: (1) nearby competing projects within 10km — their status, capacity, and "
+        "developer, (2) grid connection queue depth and expected connection dates at the "
+        "nearest substation, (3) planned DNO upgrades that could ease constraints or release "
+        "capacity, (4) relevant Ofgem decisions and consultations that impact the project. "
+        "Cross-reference NGED CIM headroom with TEC queue to identify real available capacity. "
+        "Provide a GO / CAUTION / NO-GO verdict with confidence score.\n\n"
+        + DATA_DOMAINS_CONTEXT
     ),
 }
 
@@ -453,6 +561,35 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
             },
         ]
 
+    elif intent == "grid_connection":
+        actions = [
+            {
+                "label": "View Capacity Map",
+                "endpoint": "/api/grid/capacity-map",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Check Connection Queue",
+                "endpoint": f"/api/grid/queue?substation_name={ctx.get('best_substation', '')}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Run Financial Model",
+                "endpoint": f"/site/{pid}/agent",
+                "method": "POST",
+                "payload": {"intent": "financial", "capacity_kw": cap},
+            },
+            {
+                "label": "Run Satellite Analysis",
+                "endpoint": "/job/geeflow_analysis",
+                "method": "POST",
+                "payload": {"lat": lat, "lon": lon, "radius_km": 5,
+                            "modes": ["land_use", "terrain", "solar_resource"]},
+            },
+        ]
+
     elif intent == "grid_efficiency":
         actions = [
             {
@@ -571,6 +708,35 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
             },
         ]
 
+    elif intent == "home_retrofit":
+        actions = [
+            {
+                "label": "Assess Home Retrofit",
+                "endpoint": "/home-retrofit/assess",
+                "method": "POST",
+                "payload": {"house_type": "1930s_semi", "plot_width_m": 8.0, "plot_depth_m": 25.0,
+                            "epc_rating": "D", "lat": lat, "lon": lon},
+            },
+            {
+                "label": "View House Archetypes",
+                "endpoint": "/home-retrofit/archetypes",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View Interventions & Costs",
+                "endpoint": "/home-retrofit/interventions",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Find Local Precedents",
+                "endpoint": f"/home-retrofit/precedents/{pid}",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
     elif intent == "infrastructure_retrofit":
         actions = [
             {
@@ -608,6 +774,34 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
             },
         ]
 
+    elif intent == "regulatory_intelligence":
+        actions = [
+            {
+                "label": "View REPD Projects Near Site",
+                "endpoint": f"/tracker/repd?lat={lat}&lon={lon}&radius_km=10",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Check Connection Queue",
+                "endpoint": "/tracker/tec/summary",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View DNO Investment Plans",
+                "endpoint": "/tracker/dno-investment",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Search Regulatory Decisions",
+                "endpoint": "/rag/query",
+                "method": "POST",
+                "payload": {"query": "grid connection reform"},
+            },
+        ]
+
     # Add satellite analysis as secondary action for feasibility and grid_opportunity
     if intent in ("feasibility", "grid_opportunity"):
         actions.append({
@@ -619,3 +813,50 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
         })
 
     return actions
+
+
+async def enrich_context_with_trackers(conn, context: dict) -> dict:
+    """Inject nearby REPD projects and TEC queue data for relevant intents."""
+    from utils.repd_tracker import query_repd
+    from utils.eso_tec_register import query_tec
+
+    loc = context.get("location", {})
+    lat = loc.get("lat", context.get("lat"))
+    lon = loc.get("lon", context.get("lon"))
+    if lat is None or lon is None:
+        return context
+
+    enriched = {**context}
+
+    try:
+        nearby_repd = await query_repd(conn, lat=lat, lon=lon, radius_km=10, limit=10)
+        if nearby_repd:
+            enriched["nearby_repd_projects"] = [
+                {
+                    "site_name": r.get("site_name"),
+                    "tech_category": r.get("tech_category"),
+                    "capacity_mw": r.get("capacity_mw"),
+                    "status": r.get("status"),
+                    "developer": r.get("developer"),
+                }
+                for r in nearby_repd
+            ]
+    except Exception as e:
+        log.debug("REPD enrichment failed: %s", e)
+
+    try:
+        nearby_tec = await query_tec(conn, lat=lat, lon=lon, radius_km=25, limit=10)
+        if nearby_tec:
+            enriched["nearby_tec_entries"] = [
+                {
+                    "connection_site": r.get("connection_site"),
+                    "tech_category": r.get("tech_category"),
+                    "tec_mw": r.get("tec_mw"),
+                    "status": r.get("status"),
+                }
+                for r in nearby_tec
+            ]
+    except Exception as e:
+        log.debug("TEC enrichment failed: %s", e)
+
+    return enriched

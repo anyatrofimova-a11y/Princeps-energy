@@ -20,16 +20,26 @@ const TOOL_LABELS = {
   search_substations: "Substation Search",
   get_grid_live: "Grid Live Data",
   create_map_layer: "Map Layer",
+  zoom_to_location: "Map Zoom",
   process_uploaded_file: "File Analysis",
   query_energy_scenario: "Energy Scenario",
   get_electricity_map: "Electricity Map",
   run_satellite_analysis: "Satellite Analysis",
   score_tender_sites: "Tender Site Scoring",
+  run_geoai_analysis: "GeoAI Deep Learning",
+  query_legacy_assets: "Legacy Assets",
+  assess_asset_lifecycle: "Lifecycle Assessment",
+  score_candidate_site_prospector: "Site Scoring",
+  scan_region_for_sites: "Regional Scan",
+  find_similar_sites: "Similar Sites",
 };
 
-export default function ChatPanel({ onMapLayer }) {
+/**
+ * ChatSection — The inner chat content (messages + input) without any
+ * positioning wrapper. Used by CommandPanel.
+ */
+export function ChatSection({ onMapLayer, onZoomTo }) {
   const { parcelId } = useSite();
-  const [open, setOpen] = useState(false);
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -201,6 +211,8 @@ export default function ChatPanel({ onMapLayer }) {
             });
             // Inject into map
             if (onMapLayer) onMapLayer(event.layer);
+          } else if (event.type === "zoom_to") {
+            if (onZoomTo) onZoomTo({ lat: event.lat, lon: event.lon, zoom: event.zoom, label: event.label });
           } else if (event.type === "error") {
             setMessages(prev => {
               const copy = [...prev];
@@ -270,29 +282,13 @@ export default function ChatPanel({ onMapLayer }) {
     }
   };
 
-  if (!open) {
-    return (
-      <button className="chat-toggle-btn" onClick={() => setOpen(true)} title="Open Princeps AI Chat">
-        AI
-      </button>
-    );
-  }
-
   return (
-    <div className="chat-panel">
-      {/* Header */}
-      <div className="chat-header">
-        <span className="chat-header-title">Princeps AI</span>
-        <button className="chat-close-btn" onClick={() => setOpen(false)} title="Close">
-          &times;
-        </button>
-      </div>
-
+    <div className="chat-section">
       {/* Messages */}
       <div className="chat-messages">
         {messages.length === 0 && (
           <div className="chat-welcome">
-            <div className="chat-welcome-title">Princeps AI</div>
+            <div className="chat-welcome-title">Feasibly AI</div>
             <div className="chat-welcome-sub">
               Ask about solar yield, grid connections, energy pricing, or upload data for analysis.
             </div>
@@ -374,6 +370,30 @@ export default function ChatPanel({ onMapLayer }) {
           {streaming ? "..." : "\u25B6"}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * ChatPanel — Legacy floating wrapper (kept for backwards compat).
+ * New layout uses ChatSection directly inside CommandPanel.
+ */
+export default function ChatPanel({ onMapLayer }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button className="chat-toggle-btn" onClick={() => setOpen(true)} title="Open AI Chat">
+        AI
+      </button>
+    );
+  }
+  return (
+    <div className="chat-panel">
+      <div className="chat-header">
+        <span className="chat-header-title">Feasibly AI</span>
+        <button className="chat-close-btn" onClick={() => setOpen(false)}>&times;</button>
+      </div>
+      <ChatSection onMapLayer={onMapLayer} />
     </div>
   );
 }

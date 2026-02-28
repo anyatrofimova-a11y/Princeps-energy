@@ -181,6 +181,30 @@ const api = {
       }),
   },
 
+  eso: {
+    tecGeojson: (bbox, plantType, status) => {
+      const q = new URLSearchParams({ west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3] });
+      if (plantType) q.set("plant_type", plantType);
+      if (status) q.set("status", status);
+      return get(`/eso/tec?${q}`);
+    },
+    tecSummary: () => get("/eso/tec/summary"),
+    tecProject: (id) => get(`/eso/tec/project/${enc(id)}`),
+  },
+
+  repd: {
+    geojson: (bbox, technology, status, minMw = 0) => {
+      const q = new URLSearchParams({ west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3] });
+      if (technology) q.set("technology", technology);
+      if (status) q.set("status", status);
+      if (minMw > 0) q.set("min_mw", minMw);
+      return get(`/repd/projects?${q}`);
+    },
+    summary: () => get("/repd/summary"),
+    project: (refId) => get(`/repd/project/${enc(refId)}`),
+    pipeline: () => get("/grid/pipeline"),
+  },
+
   analytics: {
     solarForecast: (kw = 100, day = 172) => get(`/analytics/solar-forecast?capacity_kw=${kw}&day_of_year=${day}`),
     consumptionHeatmap: (scale = 1) => get(`/analytics/consumption-heatmap?scale=${scale}`),
@@ -194,6 +218,59 @@ const api = {
     turbineHealth: () => get("/analytics/turbine-health"),
     transmissionFaults: () => get("/analytics/transmission-faults"),
     energyAssets: () => get("/analytics/energy-assets"),
+  },
+
+  tracker: {
+    repd: (params = {}) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, v);
+      return get(`/tracker/repd?${q}`);
+    },
+    repdSummary: () => get("/tracker/repd/summary"),
+    repdGeojson: (tech, status) => {
+      const q = new URLSearchParams();
+      if (tech) q.set("tech_category", tech);
+      if (status) q.set("status", status);
+      return get(`/tracker/repd/geojson?${q}`);
+    },
+    repdIngest: () => post("/tracker/repd/ingest"),
+    tec: (params = {}) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, v);
+      return get(`/tracker/tec?${q}`);
+    },
+    tecSummary: () => get("/tracker/tec/summary"),
+    tecQueue: (site) => get(`/tracker/tec/queue/${enc(site)}`),
+    gridUpgrades: (params = {}) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, v);
+      return get(`/tracker/grid-upgrades?${q}`);
+    },
+    gridUpgradesSummary: () => get("/tracker/grid-upgrades/summary"),
+    dnoInvestment: (dno) => get(`/tracker/dno-investment${dno ? `?dno=${enc(dno)}` : ""}`),
+  },
+
+  rag: {
+    query: (query, source, topK = 5) => post("/rag/query", { query, source, top_k: topK }),
+    search: (q, topK = 5, source, docType) => {
+      const params = new URLSearchParams({ q, top_k: topK });
+      if (source) params.set("source", source);
+      if (docType) params.set("doc_type", docType);
+      return get(`/rag/search?${params}`);
+    },
+    ingest: () => post("/rag/ingest"),
+  },
+
+  notifications: {
+    list: (unreadOnly = false, limit = 50) =>
+      get(`/notifications?unread_only=${unreadOnly}&limit=${limit}`),
+    markRead: (id) => post(`/notifications/${enc(id)}/read`),
+    markAllRead: () => post("/notifications/mark-all-read"),
+    rules: () => get("/alerts/rules"),
+    createRule: (rule) => post("/alerts/rules", rule),
+    deleteRule: (id) =>
+      fetch(`/alerts/rules/${enc(id)}`, { method: "DELETE" }).then(json),
+    checkNow: () => post("/alerts/check-now"),
   },
 };
 

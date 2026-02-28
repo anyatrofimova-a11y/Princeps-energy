@@ -149,6 +149,8 @@ export function SiteProvider({ children }) {
     demandOverlay: false, flowFocus: false, osmPower: false,
     ndvi: false, satellite: false, aerial: true, lidarDtm: false, lidarDsm: false, landsat: false, viirs: false,
     ngedSubs: false,
+    tecPipeline: false,
+    repdProjects: false,
     geeflowLandUse: false,
     geeflowOpportunities: false,
     electricityZones: false,
@@ -175,7 +177,7 @@ export function SiteProvider({ children }) {
     setActiveIntent("feasibility");
     try {
       const results = await Promise.allSettled([
-        api.site.heightmap(id),
+        api.site.heightmap(id, 128),
         api.site.explain(id),
         api.site.slopeStats(id),
         api.site.solarYield(id, kw),

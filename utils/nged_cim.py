@@ -25,18 +25,23 @@ log = logging.getLogger("princeps.nged_cim")
 # ---------------------------------------------------------------------------
 # CIM namespace and data source configuration
 # ---------------------------------------------------------------------------
-CIM_NS = "http://iec.ch/TC57/2013/CIM-schema-cim16#"
+CIM_NS_100 = "http://iec.ch/TC57/CIM100#"
+CIM_NS_16 = "http://iec.ch/TC57/2013/CIM-schema-cim16#"
 RDF_NS = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
-NS = {"cim": CIM_NS, "rdf": RDF_NS}
+GB_NS = "http://ofgem.gov.uk/ns/CIM/LTDS/Extensions#"
+# Default to CIM100 (current LTDS format); detect() swaps if needed
+CIM_NS = CIM_NS_100
+NS = {"cim": CIM_NS, "rdf": RDF_NS, "gb": GB_NS}
 
 DATA_DIR = Path(os.path.dirname(__file__), "..", "data", "nged_cim").resolve()
 
 # NGED LTDS CIM dataset URLs (Equipment profiles)
+# Source: https://connecteddata.nationalgrid.co.uk/dataset/ltds-common-information-model
 NGED_REGIONS = {
-    "east_midlands": "https://connecteddata.nationalgrid.co.uk/dataset/3c8d8b0e-1e6e-4a7e-b9f4-5d6d5e7c0c1a/resource/eq-east-midlands.zip",
-    "south_wales": "https://connecteddata.nationalgrid.co.uk/dataset/3c8d8b0e-1e6e-4a7e-b9f4-5d6d5e7c0c1a/resource/eq-south-wales.zip",
-    "south_west": "https://connecteddata.nationalgrid.co.uk/dataset/3c8d8b0e-1e6e-4a7e-b9f4-5d6d5e7c0c1a/resource/eq-south-west.zip",
-    "west_midlands": "https://connecteddata.nationalgrid.co.uk/dataset/3c8d8b0e-1e6e-4a7e-b9f4-5d6d5e7c0c1a/resource/eq-west-midlands.zip",
+    "east_midlands": "https://connecteddata.nationalgrid.co.uk/dataset/7367f8a5-7714-4647-84db-dc35119bea78/resource/2ef4b5ac-3e57-4f84-a376-9014c146c1de/download/ltds-cim-east-midlands.zip",
+    "south_wales": "https://connecteddata.nationalgrid.co.uk/dataset/7367f8a5-7714-4647-84db-dc35119bea78/resource/46575bac-99cf-4edd-933e-9df58c2b95e0/download/ltds-cim-south-wales.zip",
+    "south_west": "https://connecteddata.nationalgrid.co.uk/dataset/7367f8a5-7714-4647-84db-dc35119bea78/resource/38dbec57-e1ff-48c3-b4dc-c9759ebed3c0/download/ltds-cim-south-west.zip",
+    "west_midlands": "https://connecteddata.nationalgrid.co.uk/dataset/7367f8a5-7714-4647-84db-dc35119bea78/resource/ab83d544-7a2a-4801-9d2a-4dbec5c8efbf/download/ltds-cim-west-midlands.zip",
 }
 
 # Fuzzy match threshold
@@ -108,30 +113,34 @@ async def setup_tables(conn):
 # CIM XML parsing
 # ---------------------------------------------------------------------------
 def _rdf_id(elem):
-    """Extract rdf:ID or rdf:about from an element."""
-    return (elem.get(f"{{{RDF_NS}}}ID")
-            or elem.get(f"{{{RDF_NS}}}about", "").lstrip("#")
-            or "")
+    """Extract rdf:ID or rdf:about from an element.
+
+    CIM100 uses rdf:ID='_uuid' format; strip the leading underscore.
+    """
+    raw = (elem.get(f"{{{RDF_NS}}}ID")
+           or elem.get(f"{{{RDF_NS}}}about", "").lstrip("#")
+           or "")
+    return raw.lstrip("_") if raw else ""
 
 
-def _rdf_ref(elem, tag):
+def _rdf_ref(elem, tag, ns=None):
     """Get the rdf:resource reference from a child element."""
-    child = elem.find(tag, NS)
+    child = elem.find(tag, ns or NS)
     if child is not None:
         ref = child.get(f"{{{RDF_NS}}}resource", "")
-        return ref.lstrip("#")
+        return ref.lstrip("#").lstrip("_")
     return None
 
 
-def _text(elem, tag):
+def _text(elem, tag, ns=None):
     """Get text content of a child element."""
-    child = elem.find(tag, NS)
+    child = elem.find(tag, ns or NS)
     return child.text.strip() if child is not None and child.text else None
 
 
-def _float(elem, tag):
+def _float(elem, tag, ns=None):
     """Get float value of a child element."""
-    val = _text(elem, tag)
+    val = _text(elem, tag, ns)
     if val:
         try:
             return float(val)
@@ -141,8 +150,17 @@ def _float(elem, tag):
 
 
 def parse_cim_xml(xml_content: bytes, region: str) -> dict[str, list[dict]]:
-    """Parse CIM RDF/XML equipment profile into structured dicts."""
+    """Parse CIM RDF/XML equipment profile into structured dicts.
+
+    Auto-detects CIM16 vs CIM100 namespace.
+    """
     root = ET.fromstring(xml_content)
+
+    # Auto-detect namespace: CIM100 (current LTDS) or CIM16 (legacy)
+    cim_ns = CIM_NS_100
+    if root.findall(f"{{{CIM_NS_16}}}Substation"):
+        cim_ns = CIM_NS_16
+    ns = {"cim": cim_ns, "rdf": RDF_NS, "gb": GB_NS}
 
     substations = []
     voltage_levels = {}  # id -> {substation_id, base_kv}
@@ -151,43 +169,38 @@ def parse_cim_xml(xml_content: bytes, region: str) -> dict[str, list[dict]]:
     consumers = []
     connectivity_nodes = {}  # id -> {substation_id}
 
-    # First pass: collect VoltageLevel -> Substation mappings
-    for elem in root.findall(f"{{{CIM_NS}}}VoltageLevel"):
+    # First pass: BaseVoltage lookup (needed to resolve VoltageLevel kV)
+    base_voltages = {}
+    for elem in root.findall(f"{{{cim_ns}}}BaseVoltage"):
+        bv_id = _rdf_id(elem)
+        nom_kv = _float(elem, "cim:BaseVoltage.nominalVoltage", ns)
+        base_voltages[bv_id] = nom_kv
+
+    # Second pass: collect VoltageLevel -> Substation mappings
+    for elem in root.findall(f"{{{cim_ns}}}VoltageLevel"):
         vl_id = _rdf_id(elem)
-        sub_ref = _rdf_ref(elem, "cim:VoltageLevel.Substation")
-        base_kv = _float(elem, "cim:VoltageLevel.BaseVoltage")
+        sub_ref = _rdf_ref(elem, "cim:VoltageLevel.Substation", ns)
+        base_kv = _float(elem, "cim:VoltageLevel.BaseVoltage", ns)
         if not base_kv:
-            # Try nested BaseVoltage reference
-            bv_ref = _rdf_ref(elem, "cim:VoltageLevel.BaseVoltage")
-            # Will resolve later if needed
+            # Resolve via BaseVoltage reference
+            bv_ref = _rdf_ref(elem, "cim:VoltageLevel.BaseVoltage", ns)
+            if bv_ref and bv_ref in base_voltages:
+                base_kv = base_voltages[bv_ref]
         voltage_levels[vl_id] = {"substation_id": sub_ref, "base_kv": base_kv}
 
     # Collect ConnectivityNode -> VoltageLevel mappings
-    for elem in root.findall(f"{{{CIM_NS}}}ConnectivityNode"):
+    for elem in root.findall(f"{{{cim_ns}}}ConnectivityNode"):
         cn_id = _rdf_id(elem)
-        vl_ref = _rdf_ref(elem, "cim:ConnectivityNode.ConnectivityNodeContainer")
+        vl_ref = _rdf_ref(elem, "cim:ConnectivityNode.ConnectivityNodeContainer", ns)
         sub_id = None
         if vl_ref and vl_ref in voltage_levels:
             sub_id = voltage_levels[vl_ref].get("substation_id")
         connectivity_nodes[cn_id] = {"substation_id": sub_id, "vl_id": vl_ref}
 
-    # BaseVoltage lookup
-    base_voltages = {}
-    for elem in root.findall(f"{{{CIM_NS}}}BaseVoltage"):
-        bv_id = _rdf_id(elem)
-        nom_kv = _float(elem, "cim:BaseVoltage.nominalVoltage")
-        base_voltages[bv_id] = nom_kv
-
-    # Resolve voltage levels that reference BaseVoltage by ID
-    for vl_id, vl in voltage_levels.items():
-        if vl["base_kv"] is None:
-            # Check for BaseVoltage reference
-            pass  # base_kv stays None
-
     # Substations
-    for elem in root.findall(f"{{{CIM_NS}}}Substation"):
+    for elem in root.findall(f"{{{cim_ns}}}Substation"):
         sub_id = _rdf_id(elem)
-        name = _text(elem, "cim:IdentifiedObject.name") or sub_id
+        name = _text(elem, "cim:IdentifiedObject.name", ns) or sub_id
         # Find max voltage level for this substation
         max_kv = None
         for vl_id, vl in voltage_levels.items():
@@ -202,14 +215,14 @@ def parse_cim_xml(xml_content: bytes, region: str) -> dict[str, list[dict]]:
         })
 
     # PowerTransformers
-    for elem in root.findall(f"{{{CIM_NS}}}PowerTransformer"):
+    for elem in root.findall(f"{{{cim_ns}}}PowerTransformer"):
         xfmr_id = _rdf_id(elem)
-        name = _text(elem, "cim:IdentifiedObject.name") or xfmr_id
+        name = _text(elem, "cim:IdentifiedObject.name", ns) or xfmr_id
         # ratedS is in VA in CIM — convert to MVA
-        rated_s = _float(elem, "cim:PowerTransformer.ratedS")
+        rated_s = _float(elem, "cim:PowerTransformer.ratedS", ns)
         rated_mva = rated_s / 1e6 if rated_s and rated_s > 1000 else rated_s
         # Find parent substation via EquipmentContainer
-        container_ref = _rdf_ref(elem, "cim:Equipment.EquipmentContainer")
+        container_ref = _rdf_ref(elem, "cim:Equipment.EquipmentContainer", ns)
         sub_id = None
         if container_ref:
             # Could be substation directly or voltage level
@@ -227,11 +240,11 @@ def parse_cim_xml(xml_content: bytes, region: str) -> dict[str, list[dict]]:
 
     # Also check PowerTransformerEnd for ratedS
     xfmr_ends = {}
-    for elem in root.findall(f"{{{CIM_NS}}}PowerTransformerEnd"):
+    for elem in root.findall(f"{{{cim_ns}}}PowerTransformerEnd"):
         end_id = _rdf_id(elem)
-        xfmr_ref = _rdf_ref(elem, "cim:PowerTransformerEnd.PowerTransformer")
-        rated_s = _float(elem, "cim:PowerTransformerEnd.ratedS")
-        rated_kv = _float(elem, "cim:PowerTransformerEnd.ratedU")
+        xfmr_ref = _rdf_ref(elem, "cim:PowerTransformerEnd.PowerTransformer", ns)
+        rated_s = _float(elem, "cim:PowerTransformerEnd.ratedS", ns)
+        rated_kv = _float(elem, "cim:PowerTransformerEnd.ratedU", ns)
         if xfmr_ref:
             if xfmr_ref not in xfmr_ends:
                 xfmr_ends[xfmr_ref] = []
@@ -255,12 +268,12 @@ def parse_cim_xml(xml_content: bytes, region: str) -> dict[str, list[dict]]:
                 xfmr["voltage_kv"] = max(kv_vals)
 
     # ACLineSegments
-    for elem in root.findall(f"{{{CIM_NS}}}ACLineSegment"):
+    for elem in root.findall(f"{{{cim_ns}}}ACLineSegment"):
         seg_id = _rdf_id(elem)
-        name = _text(elem, "cim:IdentifiedObject.name") or seg_id
-        length = _float(elem, "cim:Conductor.length")
-        r = _float(elem, "cim:ACLineSegment.r")
-        x = _float(elem, "cim:ACLineSegment.x")
+        name = _text(elem, "cim:IdentifiedObject.name", ns) or seg_id
+        length = _float(elem, "cim:Conductor.length", ns)
+        r = _float(elem, "cim:ACLineSegment.r", ns)
+        x = _float(elem, "cim:ACLineSegment.x", ns)
         # Length in CIM is typically meters
         length_km = length / 1000.0 if length and length > 100 else length
         line_segments.append({
@@ -274,12 +287,12 @@ def parse_cim_xml(xml_content: bytes, region: str) -> dict[str, list[dict]]:
         })
 
     # EnergyConsumers
-    for elem in root.findall(f"{{{CIM_NS}}}EnergyConsumer"):
+    for elem in root.findall(f"{{{cim_ns}}}EnergyConsumer"):
         ec_id = _rdf_id(elem)
-        name = _text(elem, "cim:IdentifiedObject.name") or ec_id
-        p = _float(elem, "cim:EnergyConsumer.pfixed")
+        name = _text(elem, "cim:IdentifiedObject.name", ns) or ec_id
+        p = _float(elem, "cim:EnergyConsumer.pfixed", ns)
         p_mw = p / 1e6 if p and p > 10000 else p  # W -> MW if large
-        container_ref = _rdf_ref(elem, "cim:Equipment.EquipmentContainer")
+        container_ref = _rdf_ref(elem, "cim:Equipment.EquipmentContainer", ns)
         sub_id = None
         if container_ref and container_ref in voltage_levels:
             sub_id = voltage_levels[container_ref].get("substation_id")
@@ -369,10 +382,10 @@ async def geo_match_substations(conn, substations: list[dict]) -> list[dict]:
     """Fuzzy-match CIM substations against OSM substation names to get geometry."""
     # Fetch all OSM substations with names
     osm_rows = await conn.fetch("""
-        SELECT osm_id, tags->>'name' AS name,
-               ST_Y(geometry) AS lat, ST_X(geometry) AS lon
+        SELECT osm_id, name,
+               ST_Y(ST_Centroid(geometry)) AS lat, ST_X(ST_Centroid(geometry)) AS lon
         FROM osm_power_substation
-        WHERE tags->>'name' IS NOT NULL
+        WHERE name IS NOT NULL AND name != ''
     """)
 
     osm_lookup = {}
@@ -391,19 +404,15 @@ async def geo_match_substations(conn, substations: list[dict]) -> list[dict]:
 
     for sub in substations:
         norm_cim = _normalise_name(sub["name"])
-        if not norm_cim:
+        if not norm_cim or norm_cim == "cimgrid":
+            sub["lat"] = sub["lon"] = sub["osm_match_score"] = sub["osm_match_name"] = None
             continue
 
-        # Use SequenceMatcher for fuzzy matching
-        best_score = 0.0
-        best_match = None
-        for osm_name in osm_names:
-            score = difflib.SequenceMatcher(None, norm_cim, osm_name).ratio()
-            if score > best_score:
-                best_score = score
-                best_match = osm_name
-
-        if best_match and best_score >= MATCH_THRESHOLD:
+        # Use get_close_matches for fast fuzzy matching (cutoff pre-filters)
+        close = difflib.get_close_matches(norm_cim, osm_names, n=1, cutoff=MATCH_THRESHOLD)
+        if close:
+            best_match = close[0]
+            best_score = difflib.SequenceMatcher(None, norm_cim, best_match).ratio()
             osm = osm_lookup[best_match]
             sub["lat"] = osm["lat"]
             sub["lon"] = osm["lon"]
@@ -413,7 +422,7 @@ async def geo_match_substations(conn, substations: list[dict]) -> list[dict]:
         else:
             sub["lat"] = None
             sub["lon"] = None
-            sub["osm_match_score"] = round(best_score, 3) if best_score > 0 else None
+            sub["osm_match_score"] = None
             sub["osm_match_name"] = None
 
     log.info("Geo-matched %d / %d NGED substations against OSM", matched, len(substations))

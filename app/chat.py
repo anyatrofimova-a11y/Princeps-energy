@@ -216,7 +216,18 @@ TOOLS: list[dict] = [
     },
     {
         "name": "create_map_layer",
-        "description": "Create a GeoJSON layer to display on the map. Use this to visualise analysis results geographically.",
+        "description": (
+            "Create a GeoJSON layer on the map. Supports multiple visualisation styles:\n"
+            "- circle: Point markers (default)\n"
+            "- fill: Solid polygon fills with optional data-driven colour\n"
+            "- fill-pattern: Hatched/patterned polygons for constraint zones (flood risk, AONB, green belt). "
+            "Available patterns: hatch-blue, hatch-red, hatch-green, hatch-amber, hatch-grey, crosshatch-red, crosshatch-blue\n"
+            "- symbol: Icon-based points. Available icons: substation, exchange, hazard, optimal-site, power-source, flight-path, fibre-pop, flood-zone. "
+            "Set style.icon to the icon name. Use style.icon_field to pick icon per feature from a GeoJSON property.\n"
+            "- line: Polylines with optional dashing and per-feature colour. Set style.dash_array for dashed lines (e.g. [4,3]).\n"
+            "- heatmap: Heat density visualisation\n\n"
+            "For data-driven colours on circle/line layers, set style.color_field and style.color_map (e.g. {\"Supplier1\": \"#2196F3\", \"Supplier2\": \"#9C27B0\"})."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
@@ -227,13 +238,45 @@ TOOLS: list[dict] = [
                 },
                 "layer_type": {
                     "type": "string",
-                    "enum": ["circle", "fill", "line", "heatmap"],
-                    "description": "Map layer type",
+                    "enum": ["circle", "fill", "fill-pattern", "symbol", "line", "heatmap"],
+                    "description": "Map layer rendering type",
                     "default": "circle",
                 },
                 "color": {"type": "string", "description": "Primary colour for the layer", "default": "#00e5ff"},
+                "style": {
+                    "type": "object",
+                    "description": "Advanced styling options",
+                    "properties": {
+                        "icon": {"type": "string", "description": "Icon name for symbol layers (e.g. 'substation', 'hazard')"},
+                        "icon_field": {"type": "string", "description": "GeoJSON property to pick icon per feature"},
+                        "icon_size": {"type": "number", "description": "Icon scale (default 0.55)"},
+                        "label_field": {"type": "string", "description": "GeoJSON property to use as text label"},
+                        "pattern": {"type": "string", "description": "Fill pattern name for fill-pattern layers"},
+                        "dash_array": {"type": "array", "items": {"type": "number"}, "description": "Line dash pattern [dash, gap]"},
+                        "line_width": {"type": "number", "description": "Line width in pixels"},
+                        "line_cap": {"type": "string", "enum": ["butt", "round", "square"]},
+                        "color_field": {"type": "string", "description": "GeoJSON property for data-driven colour"},
+                        "color_map": {"type": "object", "description": "Mapping of property values to colours"},
+                        "opacity": {"type": "number", "description": "Layer opacity 0-1"},
+                        "radius": {"type": "number", "description": "Circle radius in pixels"},
+                    },
+                },
             },
             "required": ["name", "geojson"],
+        },
+    },
+    {
+        "name": "zoom_to_location",
+        "description": "Zoom the map to a specific location. Use this ALWAYS when you mention, identify, or discuss a geographic location, site, substation, or area — even if you also create a map layer. This ensures the user can see what you're talking about.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "zoom": {"type": "number", "description": "Map zoom level (1-20, default 14)", "default": 14},
+                "label": {"type": "string", "description": "Optional label to show on the map at this location"},
+            },
+            "required": ["lat", "lon"],
         },
     },
     {
@@ -466,6 +509,40 @@ TOOLS: list[dict] = [
             "required": ["title"],
         },
     },
+    {
+        "name": "run_vision_analysis",
+        "description": "Analyse site imagery using Vision AI. Fetches a satellite screenshot and runs Claude Vision instant analysis to assess terrain, shading, access, vegetation, and suitability.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude"},
+                "lon": {"type": "number", "description": "Longitude"},
+                "image_type": {"type": "string", "description": "Image type: satellite, drone, aerial", "default": "satellite"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "assess_home_retrofit",
+        "description": "Run a UK residential home retrofit assessment using case-based reasoning. Matches the property to similar approved projects, generates retrofit option packages (Quick Wins, Fabric First, Extension+Energy, Full Retrofit), estimates costs, energy savings, EPC improvement, and planning routes.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "house_type": {"type": "string", "description": "House archetype: victorian_terrace_mid, victorian_terrace_end, edwardian_semi, 1930s_semi, 1930s_detached, 1950s_semi, 1960s_detached, 1970s_bungalow, 1980s_semi, 1990s_detached, 2000s_townhouse, modern_newbuild", "default": "1930s_semi"},
+                "plot_width_m": {"type": "number", "description": "Plot width in metres", "default": 8.0},
+                "plot_depth_m": {"type": "number", "description": "Plot depth in metres", "default": 25.0},
+                "storeys": {"type": "integer", "description": "Number of storeys", "default": 2},
+                "epc_rating": {"type": "string", "description": "Current EPC rating (A-G)", "default": "D"},
+                "heating": {"type": "string", "description": "Heating system: gas_boiler, gas_combi, oil_boiler, electric_storage, ashp, gshp, lpg", "default": "gas_boiler"},
+                "conservation": {"type": "boolean", "description": "In a conservation area?", "default": False},
+                "listed": {"type": "string", "description": "Listed building grade: I, II*, II, or null"},
+                "budget_gbp": {"type": "number", "description": "Optional budget constraint in GBP"},
+                "lat": {"type": "number", "description": "Latitude"},
+                "lon": {"type": "number", "description": "Longitude"},
+            },
+            "required": ["house_type"],
+        },
+    },
 ]
 
 
@@ -670,9 +747,19 @@ async def execute_tool(
                 "geojson": args["geojson"],
                 "layer_type": args.get("layer_type", "circle"),
                 "color": args.get("color", "#00e5ff"),
+                "style": args.get("style", {}),
             }
             session.map_layers.append(layer)
             return {"layer_id": layer_id, "name": args["name"], "feature_count": len(args["geojson"].get("features", []))}
+
+        elif name == "zoom_to_location":
+            return {
+                "status": "ok",
+                "lat": args["lat"],
+                "lon": args["lon"],
+                "zoom": args.get("zoom", 14),
+                "label": args.get("label"),
+            }
 
         elif name == "process_uploaded_file":
             filename = args["filename"]
@@ -903,6 +990,77 @@ async def execute_tool(
                 grid_headroom_mw=args.get("grid_headroom_mw"),
             )
 
+        elif name == "run_vision_analysis":
+            lat = args.get("lat", 52.5)
+            lon = args.get("lon", -1.5)
+            img_type = args.get("image_type", "satellite")
+            # Use httpx to call our own vision endpoints internally
+            import httpx
+            base = "http://localhost:8000"
+            async with httpx.AsyncClient(timeout=30) as hx:
+                # Fetch satellite screenshot
+                sat_resp = await hx.post(f"{base}/vision/fetch/satellite",
+                    json={"lat": lat, "lon": lon, "radius_km": 2})
+                sat_data = sat_resp.json()
+                upload_ids = sat_data.get("upload_ids", [])
+                if not upload_ids:
+                    return {"error": "Failed to fetch satellite imagery"}
+                # Run instant analysis
+                analysis_resp = await hx.post(f"{base}/vision/analyse/instant",
+                    json={"upload_id": upload_ids[0], "lat": lat, "lon": lon, "image_type": img_type})
+                result = analysis_resp.json()
+            return {
+                "suitability_score": result.get("suitability_score"),
+                "verdict": result.get("verdict"),
+                "summary": result.get("summary"),
+                "findings": result.get("findings"),
+            }
+
+        elif name == "assess_home_retrofit":
+            from utils.home_retrofit_engine import (
+                run_assessment as _home_assess,
+                build_case_library_from_rows as _build_cases,
+            )
+            house_type = args.get("house_type", "1930s_semi")
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    "SELECT * FROM home_retrofit_cases ORDER BY house_type LIMIT 200"
+                )
+                case_library = _build_cases(rows)
+            result = _home_assess(
+                house_type=house_type,
+                plot_width_m=args.get("plot_width_m", 8.0),
+                plot_depth_m=args.get("plot_depth_m", 25.0),
+                storeys=args.get("storeys", 2),
+                epc_rating=args.get("epc_rating", "D"),
+                heating=args.get("heating", "gas_boiler"),
+                conservation=args.get("conservation", False),
+                listed=args.get("listed"),
+                budget_gbp=args.get("budget_gbp"),
+                lat=args.get("lat", 52.5),
+                lon=args.get("lon", -1.5),
+                case_library=case_library,
+            )
+            # Compact for chat context
+            return {
+                "archetype": result["archetype"],
+                "matched_cases_count": len(result.get("matched_cases", [])),
+                "options": [
+                    {
+                        "name": o["name"],
+                        "interventions": o["interventions"],
+                        "total_cost_gbp": o["total_cost_gbp"],
+                        "energy_saving_kwh": o["energy"]["energy_saving_kwh"],
+                        "epc_before": o["energy"]["epc_before"],
+                        "epc_after": o["energy"]["epc_after"],
+                        "planning_route": o["planning"]["route"],
+                    }
+                    for o in result.get("options", [])
+                ],
+                "solar_potential": result.get("solar_potential"),
+                "heat_pump_recommendation": result.get("heat_pump_assessment", {}).get("recommendation"),
+            }
+
         else:
             return {"error": f"Unknown tool: {name}"}
 
@@ -925,6 +1083,8 @@ def parse_uploaded_file(filename: str, content: bytes) -> dict:
             df = pd.read_csv(BytesIO(content))
         elif ext in ("xlsx", "xls"):
             df = pd.read_excel(BytesIO(content), engine="openpyxl")
+        elif ext in ("jpg", "jpeg", "png", "tif", "tiff", "webp"):
+            return {**summary, "type": "image", "format": ext, "note": "Image uploaded. Use Vision AI to analyse it."}
         else:
             # For PDF or unknown, just return basic info
             return {**summary, "type": ext or "unknown", "note": "File stored. Ask me to analyse it."}
@@ -1032,7 +1192,13 @@ def build_system_prompt(session: ChatSession) -> str:
         "- Use tools proactively when they can provide concrete data to support your analysis.",
         "- When discussing solar yield, always run a simulation rather than estimating.",
         "- Present numerical results clearly with units.",
-        "- When results have geographic components, offer to create a map layer to visualise them.",
+        "- IMPORTANT: Whenever you mention, identify, or discuss ANY geographic location (site, substation, town, region, coordinates),",
+        "  ALWAYS call zoom_to_location to zoom the map there. Do this even if you also create a map layer.",
+        "- When results have geographic components (lists of sites, substations, grid points, search results),",
+        "  ALWAYS create a map layer with create_map_layer to visualise them as markers/overlays.",
+        "  Then call zoom_to_location to fly the map to the area of interest.",
+        "- For search results with multiple locations, create a single map layer with all points as features,",
+        "  then zoom to fit the area. Use 'circle' type for point markers with labels in properties.",
         "- Be concise but thorough. Prioritise actionable insights.",
         "- For UK-specific context: typical capacity factors are 9-12%, Agile tariffs vary by region.",
     ]
@@ -1170,6 +1336,10 @@ async def stream_chat_response(
                     if block.name == "create_map_layer" and session.map_layers:
                         layer = session.map_layers[-1]
                         yield f"data: {json.dumps({'type': 'map_layer', 'layer': layer}, default=str)}\n\n"
+
+                    # If this was a zoom_to_location, emit zoom_to event
+                    if block.name == "zoom_to_location":
+                        yield f"data: {json.dumps({'type': 'zoom_to', 'lat': result['lat'], 'lon': result['lon'], 'zoom': result.get('zoom', 14), 'label': result.get('label')}, default=str)}\n\n"
 
                     tool_results.append({
                         "type": "tool_result",

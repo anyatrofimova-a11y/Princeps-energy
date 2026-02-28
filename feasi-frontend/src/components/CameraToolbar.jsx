@@ -1,4 +1,6 @@
 import React, { useState, useCallback } from "react";
+import { useSite } from "../SiteContext";
+import api from "../services/api";
 
 const VIEW_PRESETS = [
   { label: "Overview", icon: "🌐", zoom: 7, pitch: 30, bearing: 0, duration: 2000 },
@@ -7,8 +9,10 @@ const VIEW_PRESETS = [
 ];
 
 export default function CameraToolbar({ map, pickedLocation }) {
+  const { parcelId, setTwinData, setDigitalTwinOpen } = useSite();
   const [is3D, setIs3D] = useState(true);
   const [exaggeration, setExaggeration] = useState(2);
+  const [twinLoading, setTwinLoading] = useState(false);
 
   const flyToPreset = useCallback((preset) => {
     if (!map) return;
@@ -26,8 +30,25 @@ export default function CameraToolbar({ map, pickedLocation }) {
     if (preset.pitch > 0) setIs3D(true);
   }, [map, pickedLocation]);
 
-  const toggle3D = useCallback(() => {
+  const toggle3D = useCallback(async () => {
     if (!map) return;
+    // If parcel is selected, launch 3D Digital Twin with satellite imagery
+    if (parcelId) {
+      setTwinLoading(true);
+      try {
+        const data = await api.vision.getTwinData(parcelId, 500);
+        if (data) {
+          setTwinData(data);
+          setDigitalTwinOpen(true);
+        }
+      } catch (e) {
+        console.error("3D Twin error:", e);
+      } finally {
+        setTwinLoading(false);
+      }
+      return;
+    }
+    // Fallback: just tilt the map camera
     const next = !is3D;
     setIs3D(next);
     map.easeTo({
@@ -35,7 +56,7 @@ export default function CameraToolbar({ map, pickedLocation }) {
       bearing: next ? -15 : 0,
       duration: 1500,
     });
-  }, [map, is3D]);
+  }, [map, is3D, parcelId, setTwinData, setDigitalTwinOpen]);
 
   const handleExaggeration = useCallback((e) => {
     const val = parseFloat(e.target.value);
@@ -65,11 +86,12 @@ export default function CameraToolbar({ map, pickedLocation }) {
       </div>
       <div className="camera-toolbar-divider" />
       <button
-        className={`camera-btn camera-btn-toggle ${is3D ? "active" : ""}`}
+        className={`camera-btn camera-btn-toggle ${is3D || parcelId ? "active" : ""}`}
         onClick={toggle3D}
-        title={is3D ? "Switch to 2D" : "Switch to 3D"}
+        disabled={twinLoading}
+        title={parcelId ? "Open 3D Digital Twin" : is3D ? "Switch to 2D" : "Switch to 3D"}
       >
-        {is3D ? "3D" : "2D"}
+        {twinLoading ? "..." : parcelId ? "3D" : is3D ? "3D" : "2D"}
       </button>
       <div className="camera-toolbar-divider" />
       <div className="camera-exaggeration">

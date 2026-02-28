@@ -47,6 +47,14 @@ from utils.grid_data_platform import (
     health_check as gdp_health_check,
     record_metric, query_metrics,
 )
+from utils.grid_data_ingester import ingest_all_dnos
+from utils.grid_connection_analyser import (
+    assess_connection as gc_assess,
+    capacity_map_geojson as gc_capacity_map,
+    substation_detail as gc_substation_detail,
+    grid_lines_geojson as gc_lines_geojson,
+    estimate_connection_cost as gc_cost_estimate,
+)
 from utils.national_grid_live import fetch_all_live, live_data_to_geojson
 from utils.uk_grid_topology import topology_to_geojson
 from utils.energy_demand_predictor import get_demand_forecast, simulate_storage, optimize_storage
@@ -128,6 +136,17 @@ from utils.nged_cim import (
     get_transformers as nged_get_transformers,
     get_line_segments as nged_get_line_segments,
 )
+from utils.eso_tec import (
+    setup_tables as eso_tec_setup,
+    seed_tec_data as eso_tec_seed,
+    tec_geojson, tec_summary, tec_project_detail,
+)
+from utils.repd import (
+    setup_tables as repd_setup,
+    seed_repd_data as repd_seed,
+    repd_geojson, repd_summary, repd_project_detail,
+    pipeline_combined,
+)
 from utils.graph_topology import (
     init_driver as neo4j_init,
     close_driver as neo4j_close,
@@ -137,6 +156,27 @@ from utils.graph_topology import (
     get_downstream_assets as neo4j_downstream,
     graph_health_check as neo4j_health,
     driver_available as neo4j_available,
+)
+from utils.repd_tracker import (
+    setup_repd_table, ingest_repd, query_repd,
+    repd_summary as repd_tracker_summary, repd_geojson as repd_tracker_geojson,
+)
+from utils.eso_tec_register import (
+    setup_tec_table, ingest_tec_register, query_tec,
+    tec_summary as tec_register_summary, connection_queue_analysis,
+)
+from utils.grid_upgrade_tracker import (
+    setup_grid_upgrade_tables, ingest_nged_upgrades, ingest_ukpn_upgrades,
+    ingest_ssen_upgrades, query_grid_upgrades, grid_upgrade_summary,
+    dno_investment_summary,
+)
+from utils.ofgem_rag import (
+    setup_rag_tables, ingest_ofgem_documents, rag_query, rag_answer,
+)
+from utils.alert_engine import (
+    setup_notifications_table, run_daily_alert_check,
+    get_notifications, mark_notification_read, mark_all_read,
+    get_alert_rules, create_alert_rule, delete_alert_rule,
 )
 from agent_claude import get_structured_agent_output
 
@@ -246,6 +286,8 @@ async def lifespan(_app: FastAPI):
         await seed_demand(conn)
         await osm_power_setup(conn)
         await nged_setup(conn)
+        await eso_tec_setup(conn)
+        await repd_setup(conn)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS site_layouts (
                 parcel_id UUID PRIMARY KEY,
@@ -349,6 +391,15 @@ async def lifespan(_app: FastAPI):
         # Home retrofit CBR tables
         await setup_home_retrofit_tables(conn)
         await seed_home_retrofit_cases(conn)
+        # Regulatory intelligence tables
+        await setup_repd_table(conn)
+        await setup_tec_table(conn)
+        await setup_grid_upgrade_tables(conn)
+        try:
+            await setup_rag_tables(conn)
+        except Exception as e:
+            log.warning("RAG tables setup skipped — pgvector may not be installed: %s", e)
+        await setup_notifications_table(conn)
         # Seed dno_substations from UK_SUBSTATIONS if empty
         sub_count = await conn.fetchval("SELECT count(*) FROM dno_substations")
         if sub_count == 0:
@@ -391,6 +442,9 @@ async def lifespan(_app: FastAPI):
     asyncio.create_task(osm_power_seed(pool))
     # Launch NGED CIM data seeding in background
     asyncio.create_task(nged_seed(pool))
+    # Launch ESO TEC + REPD seeding in background
+    asyncio.create_task(eso_tec_seed(pool))
+    asyncio.create_task(repd_seed(pool))
     # Neo4j graph topology (graceful degradation — app works without it)
     try:
         await neo4j_init()
@@ -398,6 +452,27 @@ async def lifespan(_app: FastAPI):
             asyncio.create_task(neo4j_seed(pool))
     except Exception as e:
         log.warning("Neo4j init skipped — graph features disabled: %s", e)
+    # Regulatory intelligence background ingestion
+    async def _safe_bg(name, coro_func, *args):
+        try:
+            await coro_func(*args)
+        except Exception as e:
+            log.warning("Background task %s failed: %s", name, e)
+    asyncio.create_task(_safe_bg("repd_ingest", ingest_repd, pool))
+    asyncio.create_task(_safe_bg("tec_ingest", ingest_tec_register, pool))
+    asyncio.create_task(_safe_bg("grid_upgrade_ingest", ingest_nged_upgrades, pool))
+    # Grid Connection module — run migration then ingest all DNO data
+    asyncio.create_task(_safe_bg("grid_connection_ingest", ingest_all_dnos, pool))
+    # Daily alert loop
+    async def _daily_alert_loop():
+        while True:
+            await asyncio.sleep(24 * 3600)
+            try:
+                async with pool.acquire() as conn:
+                    await run_daily_alert_check(conn)
+            except Exception as e:
+                log.error("Daily alert check failed: %s", e)
+    asyncio.create_task(_daily_alert_loop())
     yield
     await neo4j_close()
     await pool.close()
@@ -956,10 +1031,29 @@ async def slope_tile(z: int, x: int, y: int):
     return Response(content=bytes(png), media_type="image/png")
 
 
+def _compute_satellite_tile(lat: float, lon: float, zoom: int = 17) -> dict:
+    """Compute ArcGIS World Imagery tile coords for a lat/lon centre point."""
+    n = 2 ** zoom
+    tx = int((lon + 180) / 360 * n)
+    ty = int((1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * n)
+    return {
+        "url": f"https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{zoom}/{ty}/{tx}",
+        "zoom": zoom,
+        "tile_x": tx,
+        "tile_y": ty,
+        "bbox": {
+            "west": tx / n * 360 - 180,
+            "east": (tx + 1) / n * 360 - 180,
+            "north": math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * ty / n)))),
+            "south": math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (ty + 1) / n)))),
+        },
+    }
+
+
 @app.get("/site/{parcel_id}/heightmap")
 async def site_heightmap(
     parcel_id: str,
-    size: int = Query(64, ge=8, le=256),
+    size: int = Query(128, ge=8, le=256),
 ):
     """Return a size x size grid of elevation values (from dem_elev) clipped to the parcel."""
     try:
@@ -969,7 +1063,10 @@ async def site_heightmap(
 
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            "SELECT ST_AsGeoJSON(geometry) AS geojson FROM parcels WHERE parcel_id = $1",
+            """SELECT ST_AsGeoJSON(geometry) AS geojson,
+                      ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                      ST_X(ST_Transform(centroid, 4326)) AS lon
+               FROM parcels WHERE parcel_id = $1""",
             pid,
         )
         if not row:
@@ -977,6 +1074,7 @@ async def site_heightmap(
         geojson = row["geojson"]
         if geojson is None:
             raise HTTPException(status_code=500, detail="Parcel geometry missing")
+        lat, lon = float(row["lat"]), float(row["lon"])
 
         try:
             result = await conn.fetchrow(
@@ -1005,35 +1103,72 @@ async def site_heightmap(
         except asyncpg.PostgresError:
             result = None
 
-    if not result or result.get("vals") is None:
-        # Simulated heightmap when no DEM raster is available
+    source = None
+    vals = None
+
+    if result and result.get("vals") is not None:
+        source = "DEM 2m"
+        vals = result["vals"]
+        width, height = result["width"], result["height"]
+        bbox = result["bbox"]
+    else:
+        # Fallback 1: GeeFlow NASADEM elevation grid
+        try:
+            if GEE_PROJECT:
+                cmd = [
+                    GEEFLOW_PYTHON, GEEFLOW_RUNNER,
+                    "--mode", "elevation_grid",
+                    "--lat", str(lat), "--lon", str(lon),
+                    "--radius_km", "0.5",
+                    "--grid_size", str(size),
+                    "--gee_project", GEE_PROJECT,
+                ]
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=60)
+                if proc.returncode == 0:
+                    gee_data = json.loads(stdout.decode())
+                    if gee_data.get("values") and not gee_data.get("error"):
+                        source = "NASADEM 30m"
+                        vals = gee_data["values"]
+                        width = gee_data.get("width", size)
+                        height = gee_data.get("height", size)
+        except Exception as e:
+            log.warning("GeeFlow elevation_grid fallback failed: %s", e)
+
+    if vals is None:
+        # Fallback 2: synthetic heightmap
         import random
+        source = "Synthetic"
         rng = random.Random(hash(parcel_id))
         base_elev = rng.uniform(20, 150)
         slope_x = rng.uniform(-0.3, 0.3)
         slope_y = rng.uniform(-0.3, 0.3)
         vals = []
         for r in range(size):
-            row = []
+            row_vals = []
             for c in range(size):
                 elev = base_elev + slope_x * (c - size/2) + slope_y * (r - size/2)
-                elev += rng.gauss(0, 1.5)  # noise
-                row.append(round(elev, 1))
-            vals.append(row)
-        return {
-            "parcel_id": parcel_id,
-            "width": size,
-            "height": size,
-            "bbox_27700": f"BOX(0 0,{size} {size})",
-            "values": vals,
-        }
+                elev += rng.gauss(0, 1.5)
+                row_vals.append(round(elev, 1))
+            vals.append(row_vals)
+        width, height = size, size
+
+    # Satellite tile for terrain texture
+    satellite_tile = _compute_satellite_tile(lat, lon)
 
     return {
         "parcel_id": parcel_id,
-        "width": result["width"],
-        "height": result["height"],
-        "bbox_27700": result["bbox"],
-        "values": result["vals"],
+        "width": width,
+        "height": height,
+        "values": vals,
+        "source": source,
+        "lat": lat,
+        "lon": lon,
+        "satellite_tile": satellite_tile,
     }
 
 
@@ -2610,6 +2745,186 @@ async def site_grid_connection(
         "nearby_substations": nearby[:5],
         "connection_estimate": cost,
     }
+
+
+# ─── Grid Connection & Capacity Module ─────────────────────────────────────
+
+@app.post("/api/grid/assess")
+async def api_grid_assess(
+    lat: float = Query(52.5),
+    lon: float = Query(-1.5),
+    capacity_mw: float = Query(5.0, ge=0.001),
+    technology: str = Query("solar"),
+    radius_km: float = Query(20.0, ge=1, le=100),
+):
+    """
+    Assess grid connection feasibility at a location.
+
+    Returns nearest substations with headroom, queue depth, cost estimate,
+    and GO/CAUTION/NO-GO verdict.
+    """
+    async with pool.acquire() as conn:
+        result = await gc_assess(
+            conn, lat=lat, lon=lon, capacity_mw=capacity_mw,
+            technology=technology, search_radius_km=radius_km,
+        )
+    record_metric("grid_assessment", capacity_mw,
+                  labels={"technology": technology, "lat": lat, "lon": lon})
+    return result
+
+
+@app.get("/api/grid/substation/{substation_id}")
+async def api_grid_substation(substation_id: int):
+    """
+    Full detail for a grid substation including connected DER, TEC queue,
+    and capacity history.
+    """
+    async with pool.acquire() as conn:
+        result = await gc_substation_detail(conn, substation_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Substation not found")
+    return result
+
+
+@app.get("/api/grid/capacity-map")
+async def api_grid_capacity_map(
+    dno: str = Query(None),
+    min_voltage_kv: float = Query(None),
+    west: float = Query(None),
+    south: float = Query(None),
+    east: float = Query(None),
+    north: float = Query(None),
+):
+    """
+    GeoJSON FeatureCollection of substations colour-coded by capacity headroom.
+    """
+    bbox = None
+    if all(v is not None for v in [west, south, east, north]):
+        bbox = (west, south, east, north)
+    async with pool.acquire() as conn:
+        return await gc_capacity_map(conn, dno=dno, min_voltage_kv=min_voltage_kv, bbox=bbox)
+
+
+@app.get("/api/grid/lines")
+async def api_grid_lines(
+    min_voltage_kv: float = Query(132),
+    west: float = Query(None),
+    south: float = Query(None),
+    east: float = Query(None),
+    north: float = Query(None),
+):
+    """GeoJSON FeatureCollection of grid transmission/distribution lines."""
+    bbox = None
+    if all(v is not None for v in [west, south, east, north]):
+        bbox = (west, south, east, north)
+    async with pool.acquire() as conn:
+        return await gc_lines_geojson(conn, min_voltage_kv=min_voltage_kv, bbox=bbox)
+
+
+@app.get("/api/grid/ecr")
+async def api_grid_ecr(
+    dno: str = Query(None),
+    technology: str = Query(None),
+    substation_id: int = Query(None),
+    limit: int = Query(100, ge=1, le=1000),
+):
+    """Query Embedded Capacity Register entries across all DNOs."""
+    conditions = []
+    params = []
+    idx = 1
+    if dno:
+        conditions.append(f"dno = ${idx}")
+        params.append(dno)
+        idx += 1
+    if technology:
+        conditions.append(f"technology = ${idx}")
+        params.append(technology)
+        idx += 1
+    if substation_id:
+        conditions.append(f"substation_id = ${idx}")
+        params.append(substation_id)
+        idx += 1
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(f"""
+            SELECT id, site_name, dno, technology, capacity_mw, voltage_kv,
+                   substation_name, status,
+                   ST_X(ST_Transform(geom, 4326)) AS lon,
+                   ST_Y(ST_Transform(geom, 4326)) AS lat
+            FROM grid_ecr
+            {where}
+            ORDER BY capacity_mw DESC NULLS LAST
+            LIMIT {limit}
+        """, *params)
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/grid/queue")
+async def api_grid_queue(
+    substation_id: int = Query(None),
+    substation_name: str = Query(None),
+    dno: str = Query(None),
+):
+    """Connection queue analysis at a specific substation or DNO area."""
+    async with pool.acquire() as conn:
+        if substation_id:
+            sub = await gc_substation_detail(conn, substation_id)
+            if not sub:
+                raise HTTPException(404, "Substation not found")
+            return {
+                "substation": sub["name"],
+                "queue_summary": sub["queue_summary"],
+                "connected_der": sub["connected_der"],
+                "tec_entries": sub["tec_entries"],
+            }
+        elif substation_name:
+            from utils.eso_tec_register import connection_queue_analysis
+            return await connection_queue_analysis(conn, substation_name)
+        elif dno:
+            row = await conn.fetchrow("""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status ILIKE '%%queue%%' OR status ILIKE '%%accepted%%') AS queued,
+                    COALESCE(SUM(capacity_mw), 0) AS total_mw
+                FROM grid_ecr WHERE dno = $1
+            """, dno)
+            return {"dno": dno, **dict(row)}
+        else:
+            raise HTTPException(400, "Provide substation_id, substation_name, or dno")
+
+
+@app.post("/api/grid/ingest")
+async def api_grid_ingest(
+    dno: str = Query(None, description="Specific DNO to ingest, or all if omitted"),
+):
+    """Trigger grid data ingestion (manual refresh)."""
+    if dno:
+        from utils.grid_data_ingester import get_adapter, upsert_substations, upsert_ecr
+        adapter = get_adapter(dno)
+        async with pool.acquire() as conn:
+            subs = await adapter.fetch_substations()
+            sub_count = await upsert_substations(conn, subs) if subs else 0
+            ecr = await adapter.fetch_ecr()
+            ecr_count = await upsert_ecr(conn, ecr) if ecr else 0
+        return {"dno": dno, "substations": sub_count, "ecr": ecr_count}
+    else:
+        result = await ingest_all_dnos(pool)
+        return result
+
+
+@app.get("/api/grid/ingestion-log")
+async def api_grid_ingestion_log(limit: int = Query(20, ge=1, le=100)):
+    """Recent grid data ingestion log entries."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT source, dataset, status, records_fetched, records_upserted,
+                   error, started_at, finished_at
+            FROM grid_ingestion_log
+            ORDER BY started_at DESC
+            LIMIT $1
+        """, limit)
+    return [dict(r) for r in rows]
 
 
 @app.get("/grid/dashboard")
@@ -4325,23 +4640,7 @@ async def vision_twin_data(parcel_id: str, radius_m: float = Query(500, ge=100, 
     sun_path = _compute_sun_paths(lat, lon)
 
     # Satellite imagery tile URL for terrain texture
-    # Compute zoom level and tile coords for the parcel centre
-    _sat_zoom = 17  # ~1.2m/px — good for site-level detail
-    _n = 2 ** _sat_zoom
-    _tx = int((lon + 180) / 360 * _n)
-    _ty = int((1 - math.log(math.tan(math.radians(lat)) + 1 / math.cos(math.radians(lat))) / math.pi) / 2 * _n)
-    satellite_tile = {
-        "url": f"https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{_sat_zoom}/{_ty}/{_tx}",
-        "zoom": _sat_zoom,
-        "tile_x": _tx,
-        "tile_y": _ty,
-        "bbox": {
-            "west": _tx / _n * 360 - 180,
-            "east": (_tx + 1) / _n * 360 - 180,
-            "north": math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * _ty / _n)))),
-            "south": math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * (_ty + 1) / _n)))),
-        },
-    }
+    satellite_tile = _compute_satellite_tile(lat, lon)
 
     return {
         "parcel_id": parcel_id,
@@ -5597,6 +5896,352 @@ async def home_retrofit_interventions():
             "cost_unit": cost.get("unit"),
         }
     return {"count": len(items), "interventions": items}
+
+
+# ---------------------------------------------------------------------------
+# ESO TEC Register (Transmission Entry Capacity)
+# ---------------------------------------------------------------------------
+
+@app.get("/eso/tec")
+async def eso_tec_geojson_endpoint(
+    west: float = Query(...), south: float = Query(...),
+    east: float = Query(...), north: float = Query(...),
+    plant_type: str = Query(None), status: str = Query(None),
+):
+    """GeoJSON of TEC projects within bbox."""
+    async with pool.acquire() as conn:
+        return await tec_geojson(conn, west, south, east, north, plant_type, status)
+
+
+@app.get("/eso/tec/summary")
+async def eso_tec_summary_endpoint():
+    """TEC register breakdown by plant type, status, and host TO."""
+    async with pool.acquire() as conn:
+        return await tec_summary(conn)
+
+
+@app.get("/eso/tec/project/{project_id}")
+async def eso_tec_project_endpoint(project_id: str):
+    """Single TEC project detail."""
+    async with pool.acquire() as conn:
+        detail = await tec_project_detail(conn, project_id)
+        if not detail:
+            raise HTTPException(404, f"TEC project {project_id} not found")
+        return detail
+
+
+# ---------------------------------------------------------------------------
+# REPD (Renewable Energy Planning Database)
+# ---------------------------------------------------------------------------
+
+@app.get("/repd/projects")
+async def repd_projects_endpoint(
+    west: float = Query(...), south: float = Query(...),
+    east: float = Query(...), north: float = Query(...),
+    technology: str = Query(None), status: str = Query(None),
+    min_mw: float = Query(0, ge=0),
+):
+    """GeoJSON of REPD projects within bbox."""
+    async with pool.acquire() as conn:
+        return await repd_geojson(conn, west, south, east, north, technology, status, min_mw)
+
+
+@app.get("/repd/summary")
+async def repd_summary_endpoint():
+    """REPD breakdown by technology, status, and region."""
+    async with pool.acquire() as conn:
+        return await repd_summary(conn)
+
+
+@app.get("/repd/project/{ref_id}")
+async def repd_project_endpoint(ref_id: str):
+    """Single REPD project detail."""
+    async with pool.acquire() as conn:
+        detail = await repd_project_detail(conn, ref_id)
+        if not detail:
+            raise HTTPException(404, f"REPD project {ref_id} not found")
+        return detail
+
+
+# ---------------------------------------------------------------------------
+# Combined Pipeline (TEC + REPD)
+# ---------------------------------------------------------------------------
+
+@app.get("/grid/pipeline")
+async def grid_pipeline_endpoint():
+    """Combined TEC + REPD pipeline summary."""
+    async with pool.acquire() as conn:
+        return await pipeline_combined(conn)
+
+
+# ---------------------------------------------------------------------------
+# Tracker: REPD (Renewable Energy Planning Database)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/tracker/repd")
+async def tracker_repd(
+    tech_category: str | None = None,
+    status: str | None = None,
+    developer: str | None = None,
+    region: str | None = None,
+    min_capacity_mw: float | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    radius_km: float = 25,
+    page: int = 1,
+    limit: int = 50,
+):
+    """Filtered REPD project list."""
+    async with pool.acquire() as conn:
+        rows = await query_repd(
+            conn, tech_category=tech_category, status=status,
+            developer=developer, region=region, min_capacity_mw=min_capacity_mw,
+            lat=lat, lon=lon, radius_km=radius_km, page=page, limit=limit,
+        )
+    return {"count": len(rows), "page": page, "projects": rows}
+
+
+@app.get("/tracker/repd/summary")
+async def tracker_repd_summary():
+    """REPD aggregates by tech/status/region."""
+    async with pool.acquire() as conn:
+        return await repd_tracker_summary(conn)
+
+
+@app.get("/tracker/repd/geojson")
+async def tracker_repd_geojson(
+    tech_category: str | None = None,
+    status: str | None = None,
+):
+    """GeoJSON FeatureCollection for REPD map layer."""
+    async with pool.acquire() as conn:
+        return await repd_tracker_geojson(conn, tech_category, status)
+
+
+@app.post("/tracker/repd/ingest")
+async def tracker_repd_ingest():
+    """Trigger REPD data refresh."""
+    job = await jobs.submit("repd_ingest", ingest_repd, pool)
+    return job.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Tracker: ESO TEC Register
+# ---------------------------------------------------------------------------
+
+
+@app.get("/tracker/tec")
+async def tracker_tec(
+    tech_category: str | None = None,
+    status: str | None = None,
+    connection_site: str | None = None,
+    customer_name: str | None = None,
+    min_tec_mw: float | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    radius_km: float = 25,
+    limit: int = 50,
+):
+    """Filtered ESO TEC connection queue."""
+    async with pool.acquire() as conn:
+        rows = await query_tec(
+            conn, tech_category=tech_category, status=status,
+            connection_site=connection_site, customer_name=customer_name,
+            min_tec_mw=min_tec_mw, lat=lat, lon=lon, radius_km=radius_km, limit=limit,
+        )
+    return {"count": len(rows), "entries": rows}
+
+
+@app.get("/tracker/tec/summary")
+async def tracker_tec_summary():
+    """TEC aggregates by fuel_type/status/site."""
+    async with pool.acquire() as conn:
+        return await tec_register_summary(conn)
+
+
+@app.get("/tracker/tec/queue/{connection_site}")
+async def tracker_tec_queue(connection_site: str):
+    """Detailed queue analysis for one connection site."""
+    async with pool.acquire() as conn:
+        return await connection_queue_analysis(conn, connection_site)
+
+
+# ---------------------------------------------------------------------------
+# Tracker: Grid Upgrades & DNO Investment
+# ---------------------------------------------------------------------------
+
+
+@app.get("/tracker/grid-upgrades")
+async def tracker_grid_upgrades(
+    dno: str | None = None,
+    status: str | None = None,
+    min_voltage_kv: float | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    radius_km: float = 25,
+    limit: int = 50,
+):
+    """Filtered DNO grid upgrade list."""
+    async with pool.acquire() as conn:
+        rows = await query_grid_upgrades(
+            conn, dno=dno, status=status, min_voltage_kv=min_voltage_kv,
+            lat=lat, lon=lon, radius_km=radius_km, limit=limit,
+        )
+    return {"count": len(rows), "upgrades": rows}
+
+
+@app.get("/tracker/grid-upgrades/summary")
+async def tracker_grid_upgrades_summary():
+    """Grid upgrades by DNO/status/voltage/RIIO."""
+    async with pool.acquire() as conn:
+        return await grid_upgrade_summary(conn)
+
+
+@app.get("/tracker/dno-investment")
+async def tracker_dno_investment(dno: str | None = None):
+    """RIIO-ED2 programme delivery dashboard."""
+    async with pool.acquire() as conn:
+        return await dno_investment_summary(conn, dno)
+
+
+# ---------------------------------------------------------------------------
+# RAG: Regulatory Search
+# ---------------------------------------------------------------------------
+
+
+@app.post("/rag/query")
+async def rag_query_endpoint(body: dict):
+    """Full RAG: query → retrieve → Claude answer with citations."""
+    query = body.get("query", "")
+    if not query:
+        return {"error": "query is required"}
+    top_k = body.get("top_k", 5)
+    source_filter = body.get("source")
+    async with pool.acquire() as conn:
+        client = anthropic.Anthropic()
+        model = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
+        return await rag_answer(conn, client, model, query, top_k=top_k, source_filter=source_filter)
+
+
+@app.get("/rag/search")
+async def rag_search(
+    q: str = "",
+    top_k: int = 5,
+    source: str | None = None,
+    doc_type: str | None = None,
+):
+    """Chunk retrieval only (no Claude)."""
+    if not q:
+        return {"error": "q is required"}
+    async with pool.acquire() as conn:
+        chunks = await rag_query(conn, q, top_k=top_k, source_filter=source, doc_type_filter=doc_type)
+    return {"count": len(chunks), "chunks": chunks}
+
+
+@app.post("/rag/ingest")
+async def rag_ingest():
+    """Trigger regulatory document ingestion."""
+    job = await jobs.submit("rag_ingest", ingest_ofgem_documents, pool)
+    return job.to_dict()
+
+
+# ---------------------------------------------------------------------------
+# Notifications & Alerts
+# ---------------------------------------------------------------------------
+
+
+@app.get("/notifications")
+async def notifications_list(
+    unread_only: bool = False,
+    limit: int = 50,
+    user_id: str = "default",
+):
+    """List notifications for a user."""
+    async with pool.acquire() as conn:
+        items = await get_notifications(conn, user_id, unread_only=unread_only, limit=limit)
+    unread = sum(1 for i in items if not i.get("read"))
+    return {"count": len(items), "unread": unread, "notifications": items}
+
+
+@app.post("/notifications/{notification_id}/read")
+async def notification_mark_read(notification_id: str):
+    """Mark a single notification as read."""
+    async with pool.acquire() as conn:
+        await mark_notification_read(conn, notification_id)
+    return {"ok": True}
+
+
+@app.post("/notifications/mark-all-read")
+async def notifications_mark_all_read(user_id: str = "default"):
+    """Mark all notifications as read."""
+    async with pool.acquire() as conn:
+        await mark_all_read(conn, user_id)
+    return {"ok": True}
+
+
+@app.get("/notifications/stream")
+async def notifications_stream(user_id: str = "default"):
+    """SSE endpoint for real-time notification push."""
+    from starlette.responses import StreamingResponse
+
+    async def _gen():
+        last_count = -1
+        while True:
+            try:
+                async with pool.acquire() as conn:
+                    items = await get_notifications(conn, user_id, unread_only=True, limit=10)
+                unread = len(items)
+                if unread != last_count:
+                    last_count = unread
+                    data = json.dumps({"unread": unread, "latest": items[:3]})
+                    yield f"data: {data}\n\n"
+            except Exception:
+                pass
+            await asyncio.sleep(30)
+
+    return StreamingResponse(_gen(), media_type="text/event-stream")
+
+
+@app.get("/alerts/rules")
+async def alert_rules_list(user_id: str = "default"):
+    """List alert rules for a user."""
+    async with pool.acquire() as conn:
+        rules = await get_alert_rules(conn, user_id)
+    return {"count": len(rules), "rules": rules}
+
+
+@app.post("/alerts/rules")
+async def alert_rules_create(body: dict):
+    """Create a new alert rule."""
+    async with pool.acquire() as conn:
+        rule = await create_alert_rule(
+            conn,
+            user_id=body.get("user_id", "default"),
+            rule_type=body.get("rule_type", "nearby_planning"),
+            config=body.get("config"),
+            site_id=body.get("site_id"),
+            lat=body.get("lat"),
+            lon=body.get("lon"),
+            radius_km=body.get("radius_km", 10),
+        )
+    return rule
+
+
+@app.delete("/alerts/rules/{rule_id}")
+async def alert_rules_delete(rule_id: str):
+    """Delete an alert rule."""
+    async with pool.acquire() as conn:
+        await delete_alert_rule(conn, rule_id)
+    return {"ok": True}
+
+
+@app.post("/alerts/check-now")
+async def alert_check_now():
+    """Manual trigger for alert checks."""
+    async with pool.acquire() as conn:
+        result = await run_daily_alert_check(conn)
+    return result
 
 
 # ---------------------------------------------------------------------------

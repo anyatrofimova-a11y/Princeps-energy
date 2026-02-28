@@ -15,7 +15,7 @@ export default function MetricCard({ title, accentColor = "var(--accent)", heade
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <div className="metric-card" style={{ borderLeft: `3px solid ${accentColor}` }}>
+    <div className="metric-card floating-card-inner" style={{ borderLeft: `3px solid ${accentColor}` }}>
       <div className="metric-card-header" onClick={() => setOpen(o => !o)}>
         <div>
           <span className="metric-card-title">{title}</span>
