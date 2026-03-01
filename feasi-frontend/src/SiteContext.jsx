@@ -81,6 +81,34 @@ export function SiteProvider({ children }) {
   const [geeflowLoading, setGeeflowLoading] = useState(false);
   const [geeflowJobId, setGeeflowJobId] = useState(null);
 
+  // ── Grid Connection Panel ──
+  const [gridConnectionOpen, setGridConnectionOpen] = useState(false);
+  const [gridHighlightSub, setGridHighlightSub] = useState(null); // candidate substation to highlight on map
+
+  // ── Demand Forecast Panel ──
+  const [demandForecastOpen, setDemandForecastOpen] = useState(false);
+
+  // ── Grid Digital Twin ──
+  const [gridTwinOpen, setGridTwinOpen] = useState(false);
+
+  // ── Advanced Grid Panel ──
+  const [advancedGridOpen, setAdvancedGridOpen] = useState(false);
+
+  // ── Connection Strategy Panel ──
+  const [connectionStrategyOpen, setConnectionStrategyOpen] = useState(false);
+
+  // ── Dispatch Panel ──
+  const [dispatchOpen, setDispatchOpen] = useState(false);
+
+  // ── Route-to-Market Panel ──
+  const [rtmOpen, setRtmOpen] = useState(false);
+
+  // ── Sustainability Panel ──
+  const [sustainabilityOpen, setSustainabilityOpen] = useState(false);
+
+  // ── Investment Panel ──
+  const [investmentOpen, setInvestmentOpen] = useState(false);
+
   // ── Vision AI ──
   const [visionData, setVisionData] = useState(null);
   const [visionLoading, setVisionLoading] = useState(false);
@@ -149,6 +177,8 @@ export function SiteProvider({ children }) {
     demandOverlay: false, flowFocus: false, osmPower: false,
     ndvi: false, satellite: false, aerial: true, lidarDtm: false, lidarDsm: false, landsat: false, viirs: false,
     ngedSubs: false,
+    gridCapacity: false,
+    demandGsps: false,
     tecPipeline: false,
     repdProjects: false,
     geeflowLandUse: false,
@@ -347,6 +377,25 @@ export function SiteProvider({ children }) {
     demandForecast, setDemandForecast,
     agilePricing, setAgilePricing,
     stabilityData, setStabilityData,
+    // Grid Connection Panel
+    gridConnectionOpen, setGridConnectionOpen,
+    gridHighlightSub, setGridHighlightSub,
+    // Demand Forecast Panel
+    demandForecastOpen, setDemandForecastOpen,
+    // Grid Digital Twin
+    gridTwinOpen, setGridTwinOpen,
+    // Advanced Grid Panel
+    advancedGridOpen, setAdvancedGridOpen,
+    // Connection Strategy Panel
+    connectionStrategyOpen, setConnectionStrategyOpen,
+    // Dispatch Panel
+    dispatchOpen, setDispatchOpen,
+    // Route-to-Market Panel
+    rtmOpen, setRtmOpen,
+    // Sustainability Panel
+    sustainabilityOpen, setSustainabilityOpen,
+    // Investment Panel
+    investmentOpen, setInvestmentOpen,
     // GeeFlow
     geeflowData, setGeeflowData,
     geeflowLoading, setGeeflowLoading,

@@ -2,6 +2,7 @@ import asyncio
 import base64
 import csv
 import math
+from datetime import datetime
 import os
 import json
 import struct
@@ -54,8 +55,26 @@ from utils.grid_connection_analyser import (
     substation_detail as gc_substation_detail,
     grid_lines_geojson as gc_lines_geojson,
     estimate_connection_cost as gc_cost_estimate,
+    tier2_power_flow as gc_power_flow,
 )
 from utils.national_grid_live import fetch_all_live, live_data_to_geojson
+
+# ── Demand forecasting subprocess helpers ────────────────────────────────────
+FORECAST_PYTHON = str(Path(__file__).resolve().parent.parent / ".venv-forecast" / "bin" / "python")
+DEMAND_INGESTER_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "demand_data_ingester.py")
+DEMAND_FORECAST_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "demand_forecaster.py")
+
+async def _run_forecast_subprocess(payload: dict, script: str = None) -> dict:
+    """Run a demand forecasting subprocess and return parsed JSON."""
+    import asyncio as _aio
+    proc = await _aio.create_subprocess_exec(
+        FORECAST_PYTHON, script or DEMAND_FORECAST_SCRIPT,
+        stdin=_aio.subprocess.PIPE, stdout=_aio.subprocess.PIPE,
+        stderr=_aio.subprocess.PIPE,
+    )
+    raw_in = json.dumps(payload).encode()
+    stdout, stderr = await _aio.wait_for(proc.communicate(raw_in), timeout=120)
+    return json.loads(stdout)
 from utils.uk_grid_topology import topology_to_geojson
 from utils.energy_demand_predictor import get_demand_forecast, simulate_storage, optimize_storage
 from utils.agile_pricing import get_pricing_overview, fetch_all_regions_current, regional_prices_to_geojson
@@ -189,7 +208,7 @@ from workflows import WORKFLOW_PRESETS, stream_workflow
 import chat as chat_module
 import jobs
 from pipeline import fetch_vibe_raster, clip_and_reproject, compute_slope, generate_tiles
-from fastapi import Body, FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi import Body, FastAPI, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 from pydantic import BaseModel
@@ -2771,6 +2790,1215 @@ async def api_grid_assess(
     record_metric("grid_assessment", capacity_mw,
                   labels={"technology": technology, "lat": lat, "lon": lon})
     return result
+
+
+@app.post("/api/grid/power-flow")
+async def api_grid_power_flow(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    capacity_mw: float = Query(5),
+    technology: str = Query("solar"),
+    substation_id: int = Query(None),
+    contingency: bool = Query(False),
+):
+    """
+    Tier 2 power flow validation using pandapower.
+
+    Builds a network model from nearby substations and grid lines,
+    adds the proposed connection, runs Newton-Raphson power flow,
+    and checks thermal limits, voltage deviations, and constraints.
+    Optionally runs N-1 contingency analysis.
+    """
+    async with pool.acquire() as conn:
+        result = await gc_power_flow(
+            conn, lat, lon,
+            capacity_mw=capacity_mw,
+            technology=technology,
+            connection_substation_id=substation_id,
+            contingency=contingency,
+        )
+    record_metric("grid_power_flow", capacity_mw,
+                  labels={"technology": technology, "lat": lat, "lon": lon})
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  DEMAND FORECASTING (Phase 5)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/demand/gsps")
+async def api_demand_gsps():
+    """List available GSPs with metadata."""
+    result = await _run_forecast_subprocess(
+        {"command": "list_gsps"}, script=DEMAND_INGESTER_SCRIPT,
+    )
+    return result
+
+
+@app.get("/api/demand/historical")
+async def api_demand_historical(
+    gsp_id: str = Query("ABHA"),
+    days: int = Query(30),
+    start_date: str = Query(None),
+):
+    """Fetch historical demand for a GSP (compact daily summaries)."""
+    result = await _run_forecast_subprocess(
+        {
+            "command": "generate_compact",
+            "n_gsps": 20,
+            "days": days,
+            "start_date": start_date or "2024-06-01",
+        },
+        script=DEMAND_INGESTER_SCRIPT,
+    )
+    # Filter to requested GSP
+    if result.get("ok") and result.get("daily_summaries"):
+        result["daily_summaries"] = [
+            s for s in result["daily_summaries"] if s["gsp_id"] == gsp_id
+        ]
+        result["profiles"] = [
+            p for p in result.get("profiles", []) if p["gsp_id"] == gsp_id
+        ]
+    return result
+
+
+@app.get("/api/demand/forecast")
+async def api_demand_forecast(
+    gsp_id: str = Query("ABHA"),
+    horizon_hours: int = Query(168),
+    model: str = Query("analytical"),
+    peak_mw: float = Query(None),
+    min_mw: float = Query(None),
+    capacity_mw: float = Query(None),
+):
+    """
+    Demand forecast for a GSP.
+    model: 'analytical' (instant), 'prophet' (seconds), 'tft' (minutes).
+    """
+    if model == "analytical":
+        result = await _run_forecast_subprocess({
+            "command": "quick_forecast",
+            "gsp_id": gsp_id,
+            "peak_mw": peak_mw or 285,
+            "min_mw": min_mw or 95,
+            "capacity_mw": capacity_mw or 360,
+            "horizon_hours": horizon_hours,
+        })
+    elif model == "prophet":
+        # Generate synthetic history then forecast
+        hist_result = await _run_forecast_subprocess(
+            {"command": "generate_compact", "n_gsps": 20, "days": 30},
+            script=DEMAND_INGESTER_SCRIPT,
+        )
+        # For Prophet, we need HH data — use quick_forecast as proxy
+        result = await _run_forecast_subprocess({
+            "command": "quick_forecast",
+            "gsp_id": gsp_id,
+            "peak_mw": peak_mw or 285,
+            "min_mw": min_mw or 95,
+            "capacity_mw": capacity_mw or 360,
+            "horizon_hours": horizon_hours,
+        })
+        result["model"] = "prophet_proxy"
+    else:
+        result = await _run_forecast_subprocess({
+            "command": "quick_forecast",
+            "gsp_id": gsp_id,
+            "peak_mw": peak_mw or 285,
+            "min_mw": min_mw or 95,
+            "capacity_mw": capacity_mw or 360,
+            "horizon_hours": horizon_hours,
+        })
+    record_metric("demand_forecast", horizon_hours, labels={"gsp_id": gsp_id, "model": model})
+    return result
+
+
+@app.get("/api/demand/scenarios")
+async def api_demand_scenarios(
+    gsp_id: str = Query("ABHA"),
+    peak_mw: float = Query(285),
+    min_mw: float = Query(95),
+    capacity_mw: float = Query(360),
+    years_ahead: int = Query(10),
+):
+    """Long-term scenario-weighted demand projection (NESO FES pathways)."""
+    result = await _run_forecast_subprocess({
+        "command": "scenario_forecast",
+        "gsp_id": gsp_id,
+        "peak_mw": peak_mw,
+        "min_mw": min_mw,
+        "capacity_mw": capacity_mw,
+        "years_ahead": years_ahead,
+    })
+    record_metric("demand_scenarios", years_ahead, labels={"gsp_id": gsp_id})
+    return result
+
+
+@app.get("/api/demand/summary")
+async def api_demand_summary():
+    """Summary of all GSPs with current demand/capacity stats."""
+    result = await _run_forecast_subprocess(
+        {"command": "generate_compact", "n_gsps": 20, "days": 7},
+        script=DEMAND_INGESTER_SCRIPT,
+    )
+    if result.get("ok"):
+        # Add utilisation stats per GSP
+        for p in result.get("profiles", []):
+            summaries = [s for s in result.get("daily_summaries", []) if s["gsp_id"] == p["gsp_id"]]
+            if summaries:
+                max_peak = max(s["peak_mw"] for s in summaries)
+                p["recent_peak_mw"] = max_peak
+                p["utilisation"] = round(max_peak / p["capacity_mw"], 3) if p["capacity_mw"] else None
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  CONNECTION STRATEGY — Curtailment, Flexible, Timeline, Strategy (Phase 8)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_CURTAILMENT_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "curtailment_estimator.py")
+_FLEXIBLE_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "flexible_connection.py")
+_TIMELINE_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "connection_timeline.py")
+_STRATEGY_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "connection_strategy.py")
+
+
+async def _run_phase8_subprocess(script: str, payload: dict) -> dict:
+    """Run a Phase 8 utility subprocess."""
+    import asyncio as _aio
+    proc = await _aio.create_subprocess_exec(
+        sys.executable, script,
+        stdin=_aio.subprocess.PIPE, stdout=_aio.subprocess.PIPE,
+        stderr=_aio.subprocess.PIPE,
+    )
+    raw_in = json.dumps(payload).encode()
+    stdout, stderr = await _aio.wait_for(proc.communicate(raw_in), timeout=60)
+    return json.loads(stdout)
+
+
+# ── Curtailment ──
+
+@app.get("/api/connection-strategy/curtailment/estimate")
+async def api_curtailment_estimate(
+    capacity_mw: float = Query(50),
+    voltage_kv: int = Query(132),
+    region: str = Query("Midlands"),
+    technology: str = Query("solar"),
+    connection_type: str = Query("firm"),
+    queue_depth: int = Query(0),
+):
+    """Estimate annual curtailment with P10/P50/P90."""
+    return await _run_phase8_subprocess(_CURTAILMENT_SCRIPT, {
+        "command": "estimate_annual",
+        "capacity_mw": capacity_mw, "voltage_kv": voltage_kv,
+        "region": region, "technology": technology,
+        "connection_type": connection_type, "queue_depth": queue_depth,
+    })
+
+
+@app.get("/api/connection-strategy/curtailment/revenue-impact")
+async def api_curtailment_revenue(
+    capacity_mw: float = Query(50),
+    region: str = Query("Midlands"),
+    technology: str = Query("solar"),
+    connection_type: str = Query("firm"),
+    wholesale_price_mwh: float = Query(55),
+):
+    """Calculate revenue impact of curtailment."""
+    return await _run_phase8_subprocess(_CURTAILMENT_SCRIPT, {
+        "command": "revenue_impact",
+        "capacity_mw": capacity_mw, "region": region,
+        "technology": technology, "connection_type": connection_type,
+        "wholesale_price_mwh": wholesale_price_mwh,
+    })
+
+
+@app.get("/api/connection-strategy/curtailment/regions")
+async def api_curtailment_regions():
+    """List available regions and connection types."""
+    return await _run_phase8_subprocess(_CURTAILMENT_SCRIPT, {"command": "regions"})
+
+
+# ── Flexible Connection ──
+
+@app.post("/api/connection-strategy/flexible/compare")
+async def api_flexible_compare(body: dict):
+    """Compare firm vs ANM vs non-firm connection options."""
+    return await _run_phase8_subprocess(_FLEXIBLE_SCRIPT, {
+        "command": "compare",
+        "capacity_mw": body.get("capacity_mw", 50),
+        "headroom_mw": body.get("headroom_mw", 30),
+        "region": body.get("region", "Midlands"),
+        "technology": body.get("technology", "solar"),
+        "voltage_kv": body.get("voltage_kv", 132),
+    })
+
+
+@app.get("/api/connection-strategy/flexible/anm-profile")
+async def api_flexible_anm_profile(
+    capacity_mw: float = Query(50),
+    headroom_mw: float = Query(30),
+    technology: str = Query("solar"),
+):
+    """Generate 24-hour ANM export profile."""
+    return await _run_phase8_subprocess(_FLEXIBLE_SCRIPT, {
+        "command": "anm_profile",
+        "capacity_mw": capacity_mw, "headroom_mw": headroom_mw,
+        "technology": technology,
+    })
+
+
+@app.get("/api/connection-strategy/flexible/optimal-sizing")
+async def api_flexible_sizing(
+    headroom_mw: float = Query(30),
+    region: str = Query("Midlands"),
+    technology: str = Query("solar"),
+    target_curtailment_pct: float = Query(5),
+):
+    """Find optimal plant capacity for given headroom."""
+    return await _run_phase8_subprocess(_FLEXIBLE_SCRIPT, {
+        "command": "optimal_sizing",
+        "headroom_mw": headroom_mw, "region": region,
+        "technology": technology, "target_curtailment_pct": target_curtailment_pct,
+    })
+
+
+# ── Connection Timeline ──
+
+@app.post("/api/connection-strategy/timeline/generate")
+async def api_timeline_generate(body: dict):
+    """Generate connection timeline with milestones and critical path."""
+    return await _run_phase8_subprocess(_TIMELINE_SCRIPT, {
+        "command": "generate",
+        "capacity_mw": body.get("capacity_mw", 50),
+        "voltage_kv": body.get("voltage_kv", 132),
+        "connection_type": body.get("connection_type", "firm"),
+        "start_date": body.get("start_date", "2025-06-01"),
+    })
+
+
+@app.get("/api/connection-strategy/timeline/milestones")
+async def api_timeline_milestones(capacity_mw: float = Query(50)):
+    """Return milestone templates."""
+    return await _run_phase8_subprocess(_TIMELINE_SCRIPT, {
+        "command": "milestones", "capacity_mw": capacity_mw,
+    })
+
+
+# ── Connection Strategy ──
+
+@app.post("/api/connection-strategy/strategy")
+async def api_connection_strategy(body: dict):
+    """Generate comprehensive connection strategy report."""
+    return await _run_phase8_subprocess(_STRATEGY_SCRIPT, {
+        "command": "strategy",
+        "lat": body.get("lat", 51.5), "lon": body.get("lon", -1.0),
+        "capacity_mw": body.get("capacity_mw", 50),
+        "technology": body.get("technology", "solar"),
+        "voltage_kv": body.get("voltage_kv", 132),
+        "headroom_mw": body.get("headroom_mw", 30),
+        "distance_km": body.get("distance_km", 5),
+    })
+
+
+@app.post("/api/connection-strategy/compare")
+async def api_strategy_compare(body: dict):
+    """Compare strategies with sensitivity analysis."""
+    return await _run_phase8_subprocess(_STRATEGY_SCRIPT, {
+        "command": "compare_strategies",
+        "capacity_mw": body.get("capacity_mw", 50),
+        "region": body.get("region", "Midlands"),
+        "headroom_mw": body.get("headroom_mw", 30),
+        "technology": body.get("technology", "solar"),
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ROUTE-TO-MARKET — PPA, Offtake, Routes, Risk (Phase 10)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_PPA_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "ppa_modeller.py")
+_OFFTAKE_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "offtake_matcher.py")
+_RTM_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "route_to_market.py")
+_RISK_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "project_risk_model.py")
+
+
+async def _run_phase10_subprocess(script: str, payload: dict) -> dict:
+    """Run a Phase 10 utility subprocess."""
+    import asyncio as _aio
+    proc = await _aio.create_subprocess_exec(
+        sys.executable, script,
+        stdin=_aio.subprocess.PIPE, stdout=_aio.subprocess.PIPE,
+        stderr=_aio.subprocess.PIPE,
+    )
+    raw_in = json.dumps(payload).encode()
+    stdout, stderr = await _aio.wait_for(proc.communicate(raw_in), timeout=60)
+    return json.loads(stdout)
+
+
+# ── PPA Modeller ──
+
+@app.get("/api/rtm/ppa/price")
+async def api_ppa_price(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    structure: str = Query("fixed"),
+    term_years: int = Query(15),
+    credit_tier: str = Query("investment_grade"),
+):
+    return await _run_phase10_subprocess(_PPA_SCRIPT, {
+        "command": "ppa_price", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+        "structure": structure, "term_years": term_years,
+        "credit_tier": credit_tier,
+    })
+
+
+@app.get("/api/rtm/ppa/term-analysis")
+async def api_ppa_term_analysis(
+    capacity_mw: float = Query(50),
+    technology: str = Query("solar"),
+    region: str = Query("Midlands"),
+    structure: str = Query("fixed"),
+):
+    return await _run_phase10_subprocess(_PPA_SCRIPT, {
+        "command": "term_analysis", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region, "structure": structure,
+    })
+
+
+@app.get("/api/rtm/ppa/structures")
+async def api_ppa_structures(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    term_years: int = Query(15),
+):
+    return await _run_phase10_subprocess(_PPA_SCRIPT, {
+        "command": "structure_comparison", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region, "term_years": term_years,
+    })
+
+
+# ── Offtake Matcher ──
+
+@app.get("/api/rtm/offtake/match")
+async def api_offtake_match(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+):
+    return await _run_phase10_subprocess(_OFFTAKE_SCRIPT, {
+        "command": "match_buyers", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+    })
+
+
+@app.get("/api/rtm/offtake/buyer")
+async def api_offtake_buyer(buyer_type: str = Query("data_centre")):
+    return await _run_phase10_subprocess(_OFFTAKE_SCRIPT, {
+        "command": "buyer_profile", "buyer_type": buyer_type,
+    })
+
+
+@app.get("/api/rtm/offtake/correlation")
+async def api_offtake_correlation(
+    technology: str = Query("wind"),
+    buyer_type: str = Query("industrial"),
+):
+    return await _run_phase10_subprocess(_OFFTAKE_SCRIPT, {
+        "command": "demand_correlation", "technology": technology,
+        "buyer_type": buyer_type,
+    })
+
+
+# ── Route-to-Market ──
+
+@app.get("/api/rtm/routes/compare")
+async def api_rtm_compare(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+):
+    return await _run_phase10_subprocess(_RTM_SCRIPT, {
+        "command": "compare_routes", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+    })
+
+
+@app.get("/api/rtm/routes/detail")
+async def api_rtm_detail(
+    route: str = Query("cfd"),
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+):
+    return await _run_phase10_subprocess(_RTM_SCRIPT, {
+        "command": "route_detail", "route": route,
+        "capacity_mw": capacity_mw, "technology": technology,
+    })
+
+
+@app.get("/api/rtm/routes/bankability")
+async def api_rtm_bankability(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    route: str = Query("corporate_ppa"),
+):
+    return await _run_phase10_subprocess(_RTM_SCRIPT, {
+        "command": "bankability_score", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region, "route": route,
+    })
+
+
+# ── Project Risk ──
+
+@app.get("/api/rtm/risk/assessment")
+async def api_risk_assessment(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    route: str = Query("cfd"),
+):
+    return await _run_phase10_subprocess(_RISK_SCRIPT, {
+        "command": "risk_assessment", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region, "route": route,
+    })
+
+
+@app.get("/api/rtm/risk/sensitivity")
+async def api_risk_sensitivity(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    route: str = Query("cfd"),
+):
+    return await _run_phase10_subprocess(_RISK_SCRIPT, {
+        "command": "sensitivity_analysis", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region, "route": route,
+    })
+
+
+@app.get("/api/rtm/risk/bankability")
+async def api_risk_bankability(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    route: str = Query("corporate_ppa"),
+):
+    return await _run_phase10_subprocess(_RISK_SCRIPT, {
+        "command": "bankability_report", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region, "route": route,
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SUSTAINABILITY — Carbon, ESG, Portfolio, Community, Decommissioning (Phase 11)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_CARBON_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "carbon_esg_tracker.py")
+_PORTFOLIO_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "portfolio_analytics.py")
+_COMMUNITY_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "community_benefit.py")
+_DECOM_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "decommissioning_planner.py")
+
+
+async def _run_phase11_subprocess(script: str, payload: dict) -> dict:
+    """Run a Phase 11 utility subprocess."""
+    import asyncio as _aio
+    proc = await _aio.create_subprocess_exec(
+        sys.executable, script,
+        stdin=_aio.subprocess.PIPE, stdout=_aio.subprocess.PIPE,
+        stderr=_aio.subprocess.PIPE,
+    )
+    raw_in = json.dumps(payload).encode()
+    stdout, stderr = await _aio.wait_for(proc.communicate(raw_in), timeout=60)
+    return json.loads(stdout)
+
+
+# ── Carbon & ESG ──
+
+@app.get("/api/sustainability/carbon/footprint")
+async def api_carbon_footprint(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    project_life_years: int = Query(25),
+):
+    return await _run_phase11_subprocess(_CARBON_SCRIPT, {
+        "command": "carbon_footprint", "capacity_mw": capacity_mw,
+        "technology": technology, "project_life_years": project_life_years,
+    })
+
+
+@app.get("/api/sustainability/carbon/displacement")
+async def api_grid_displacement(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    project_life_years: int = Query(25),
+):
+    return await _run_phase11_subprocess(_CARBON_SCRIPT, {
+        "command": "grid_displacement", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+        "project_life_years": project_life_years,
+    })
+
+
+@app.get("/api/sustainability/esg/score")
+async def api_esg_score(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    community_fund: bool = Query(True),
+    shared_ownership: bool = Query(False),
+    biodiversity_net_gain: bool = Query(True),
+):
+    return await _run_phase11_subprocess(_CARBON_SCRIPT, {
+        "command": "esg_score", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+        "community_fund": community_fund,
+        "shared_ownership": shared_ownership,
+        "biodiversity_net_gain": biodiversity_net_gain,
+    })
+
+
+# ── Portfolio ──
+
+@app.post("/api/sustainability/portfolio/summary")
+async def api_portfolio_summary(req: dict):
+    return await _run_phase11_subprocess(_PORTFOLIO_SCRIPT, {
+        "command": "portfolio_summary", "sites": req.get("sites", []),
+    })
+
+
+@app.post("/api/sustainability/portfolio/diversification")
+async def api_portfolio_diversification(req: dict):
+    return await _run_phase11_subprocess(_PORTFOLIO_SCRIPT, {
+        "command": "diversification_analysis", "sites": req.get("sites", []),
+    })
+
+
+@app.get("/api/sustainability/portfolio/optimisation")
+async def api_portfolio_optimisation(
+    budget_mw: float = Query(200),
+    target: str = Query("max_revenue"),
+):
+    return await _run_phase11_subprocess(_PORTFOLIO_SCRIPT, {
+        "command": "portfolio_optimisation", "budget_mw": budget_mw,
+        "target": target,
+    })
+
+
+# ── Community ──
+
+@app.get("/api/sustainability/community/package")
+async def api_community_package(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    community_fund: bool = Query(True),
+    shared_ownership_pct: float = Query(0),
+):
+    return await _run_phase11_subprocess(_COMMUNITY_SCRIPT, {
+        "command": "benefit_package", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+        "community_fund": community_fund,
+        "shared_ownership_pct": shared_ownership_pct,
+    })
+
+
+@app.get("/api/sustainability/community/shared-ownership")
+async def api_shared_ownership(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    community_stake_pct: float = Query(25),
+):
+    return await _run_phase11_subprocess(_COMMUNITY_SCRIPT, {
+        "command": "shared_ownership", "capacity_mw": capacity_mw,
+        "technology": technology,
+        "community_stake_pct": community_stake_pct,
+    })
+
+
+@app.get("/api/sustainability/community/social-value")
+async def api_social_value(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    community_fund: bool = Query(True),
+    apprenticeships: int = Query(3),
+):
+    return await _run_phase11_subprocess(_COMMUNITY_SCRIPT, {
+        "command": "social_value", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+        "community_fund": community_fund,
+        "apprenticeships": apprenticeships,
+    })
+
+
+# ── Decommissioning ──
+
+@app.get("/api/sustainability/decom/estimate")
+async def api_decom_estimate(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    age_years: int = Query(25),
+):
+    return await _run_phase11_subprocess(_DECOM_SCRIPT, {
+        "command": "decommission_estimate", "capacity_mw": capacity_mw,
+        "technology": technology, "age_years": age_years,
+    })
+
+
+@app.get("/api/sustainability/decom/repowering")
+async def api_repowering(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+):
+    return await _run_phase11_subprocess(_DECOM_SCRIPT, {
+        "command": "repowering_comparison", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+    })
+
+
+@app.get("/api/sustainability/decom/material-recovery")
+async def api_material_recovery(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+):
+    return await _run_phase11_subprocess(_DECOM_SCRIPT, {
+        "command": "material_recovery", "capacity_mw": capacity_mw,
+        "technology": technology,
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  DISPATCH OPTIMISATION — Constraints, Dispatch, BM, Revenue (Phase 9)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_CONSTRAINT_FORECASTER = str(Path(__file__).resolve().parent.parent / "utils" / "constraint_forecaster.py")
+_DISPATCH_SCHEDULER = str(Path(__file__).resolve().parent.parent / "utils" / "dispatch_scheduler.py")
+_BALANCING_MECHANISM = str(Path(__file__).resolve().parent.parent / "utils" / "balancing_mechanism.py")
+_REVENUE_TRACKER = str(Path(__file__).resolve().parent.parent / "utils" / "revenue_tracker.py")
+
+
+async def _run_phase9_subprocess(script: str, payload: dict) -> dict:
+    """Run a Phase 9 utility subprocess."""
+    import asyncio as _aio
+    proc = await _aio.create_subprocess_exec(
+        sys.executable, script,
+        stdin=_aio.subprocess.PIPE, stdout=_aio.subprocess.PIPE,
+        stderr=_aio.subprocess.PIPE,
+    )
+    raw_in = json.dumps(payload).encode()
+    stdout, stderr = await _aio.wait_for(proc.communicate(raw_in), timeout=60)
+    return json.loads(stdout)
+
+
+# ── Constraint Forecaster ──
+
+@app.get("/api/dispatch/constraints/forecast")
+async def api_constraint_forecast(
+    hours_ahead: int = Query(48),
+    date: str = Query(None),
+):
+    return await _run_phase9_subprocess(_CONSTRAINT_FORECASTER, {
+        "command": "forecast", "hours_ahead": hours_ahead, "date": date,
+    })
+
+
+@app.get("/api/dispatch/constraints/boundary")
+async def api_constraint_boundary(
+    boundary_id: str = Query("B1"),
+    hours_ahead: int = Query(48),
+    date: str = Query(None),
+):
+    return await _run_phase9_subprocess(_CONSTRAINT_FORECASTER, {
+        "command": "boundary_forecast", "boundary_id": boundary_id,
+        "hours_ahead": hours_ahead, "date": date,
+    })
+
+
+@app.get("/api/dispatch/constraints/windows")
+async def api_constraint_windows(
+    hours_ahead: int = Query(48),
+    threshold: float = Query(0.5),
+    date: str = Query(None),
+):
+    return await _run_phase9_subprocess(_CONSTRAINT_FORECASTER, {
+        "command": "constraint_windows", "hours_ahead": hours_ahead,
+        "threshold": threshold, "date": date,
+    })
+
+
+# ── Dispatch Scheduler ──
+
+@app.get("/api/dispatch/schedule")
+async def api_dispatch_schedule(
+    capacity_mw: float = Query(50),
+    technology: str = Query("solar"),
+    region: str = Query("Midlands"),
+    connection_type: str = Query("anm"),
+    headroom_mw: float = Query(30),
+    hours_ahead: int = Query(24),
+    month: int = Query(1),
+):
+    return await _run_phase9_subprocess(_DISPATCH_SCHEDULER, {
+        "command": "schedule", "capacity_mw": capacity_mw, "technology": technology,
+        "region": region, "connection_type": connection_type,
+        "headroom_mw": headroom_mw, "hours_ahead": hours_ahead, "month": month,
+    })
+
+
+@app.post("/api/dispatch/bess-schedule")
+async def api_bess_schedule(body: dict):
+    return await _run_phase9_subprocess(_DISPATCH_SCHEDULER, {
+        "command": "bess_schedule",
+        "power_mw": body.get("power_mw", 25),
+        "energy_mwh": body.get("energy_mwh", 50),
+        "soc_pct": body.get("soc_pct", 50),
+        "region": body.get("region", "Midlands"),
+        "hours_ahead": body.get("hours_ahead", 24),
+        "month": body.get("month", 1),
+    })
+
+
+@app.get("/api/dispatch/revenue-comparison")
+async def api_dispatch_revenue_comparison(
+    capacity_mw: float = Query(50),
+    technology: str = Query("solar"),
+    region: str = Query("Midlands"),
+):
+    return await _run_phase9_subprocess(_DISPATCH_SCHEDULER, {
+        "command": "revenue_comparison", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+    })
+
+
+# ── Balancing Mechanism ──
+
+@app.get("/api/dispatch/bm/revenue")
+async def api_bm_revenue(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+):
+    return await _run_phase9_subprocess(_BALANCING_MECHANISM, {
+        "command": "bm_revenue", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+    })
+
+
+@app.get("/api/dispatch/bm/boa-profile")
+async def api_bm_boa_profile(
+    capacity_mw: float = Query(50),
+    region: str = Query("Scotland"),
+    technology: str = Query("wind"),
+    hours_ahead: int = Query(24),
+    month: int = Query(1),
+):
+    return await _run_phase9_subprocess(_BALANCING_MECHANISM, {
+        "command": "boa_profile", "capacity_mw": capacity_mw, "region": region,
+        "technology": technology, "hours_ahead": hours_ahead, "month": month,
+    })
+
+
+@app.get("/api/dispatch/bm/system-prices")
+async def api_bm_system_prices(date: str = Query("2025-01-15")):
+    return await _run_phase9_subprocess(_BALANCING_MECHANISM, {
+        "command": "system_prices", "date": date,
+    })
+
+
+# ── Revenue Tracker ──
+
+@app.get("/api/dispatch/revenue/stack")
+async def api_revenue_stack(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    connection_type: str = Query("anm"),
+    headroom_mw: float = Query(30),
+    cfd_enabled: bool = Query(True),
+):
+    return await _run_phase9_subprocess(_REVENUE_TRACKER, {
+        "command": "revenue_stack", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+        "connection_type": connection_type, "headroom_mw": headroom_mw,
+        "cfd_enabled": cfd_enabled,
+    })
+
+
+@app.get("/api/dispatch/revenue/monthly")
+async def api_revenue_monthly(
+    capacity_mw: float = Query(50),
+    technology: str = Query("solar"),
+    region: str = Query("Midlands"),
+    connection_type: str = Query("anm"),
+    headroom_mw: float = Query(30),
+):
+    return await _run_phase9_subprocess(_REVENUE_TRACKER, {
+        "command": "monthly_breakdown", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+        "connection_type": connection_type, "headroom_mw": headroom_mw,
+    })
+
+
+@app.get("/api/dispatch/revenue/scenarios")
+async def api_revenue_scenarios(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+):
+    return await _run_phase9_subprocess(_REVENUE_TRACKER, {
+        "command": "scenario_comparison", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+    })
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ADVANCED GRID ANALYSIS — DLR, Congestion, Optimiser, Reinforcement (Phase 7)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Phase 7 utility scripts — pure Python, no special venv needed
+_PHASE7_DIR = str(Path(__file__).resolve().parent.parent / "utils")
+_DLR_SCRIPT = os.path.join(_PHASE7_DIR, "dynamic_line_rating.py")
+_CONGESTION_SCRIPT = os.path.join(_PHASE7_DIR, "congestion_predictor.py")
+_OPTIMISER_SCRIPT = os.path.join(_PHASE7_DIR, "connection_optimiser.py")
+_REINFORCEMENT_SCRIPT = os.path.join(_PHASE7_DIR, "reinforcement_cost.py")
+
+
+async def _run_phase7_subprocess(script: str, payload: dict) -> dict:
+    """Run a Phase 7 utility subprocess (pure Python 3)."""
+    import asyncio as _aio
+    proc = await _aio.create_subprocess_exec(
+        sys.executable, script,
+        stdin=_aio.subprocess.PIPE, stdout=_aio.subprocess.PIPE,
+        stderr=_aio.subprocess.PIPE,
+    )
+    raw_in = json.dumps(payload).encode()
+    stdout, stderr = await _aio.wait_for(proc.communicate(raw_in), timeout=60)
+    return json.loads(stdout)
+
+
+# ── Dynamic Line Rating ──
+
+@app.get("/api/advanced-grid/dlr/rate")
+async def api_dlr_rate(
+    conductor: str = Query("Zebra"),
+    ambient_temp_c: float = Query(20),
+    wind_speed_ms: float = Query(0.5),
+    wind_angle_deg: float = Query(45),
+    solar_irradiance_wm2: float = Query(0),
+):
+    """Calculate dynamic line rating for a conductor under given weather."""
+    return await _run_phase7_subprocess(_DLR_SCRIPT, {
+        "command": "rate",
+        "conductor": conductor,
+        "ambient_temp_c": ambient_temp_c,
+        "wind_speed_ms": wind_speed_ms,
+        "wind_angle_deg": wind_angle_deg,
+        "solar_irradiance_wm2": solar_irradiance_wm2,
+    })
+
+
+@app.get("/api/advanced-grid/dlr/rate-line")
+async def api_dlr_rate_line(
+    voltage_kv: int = Query(132),
+    ambient_temp_c: float = Query(20),
+    wind_speed_ms: float = Query(0.5),
+    wind_angle_deg: float = Query(45),
+    solar_irradiance_wm2: float = Query(0),
+):
+    """Calculate DLR for a line by voltage level."""
+    return await _run_phase7_subprocess(_DLR_SCRIPT, {
+        "command": "rate_line",
+        "voltage_kv": voltage_kv,
+        "ambient_temp_c": ambient_temp_c,
+        "wind_speed_ms": wind_speed_ms,
+        "wind_angle_deg": wind_angle_deg,
+        "solar_irradiance_wm2": solar_irradiance_wm2,
+    })
+
+
+@app.get("/api/advanced-grid/dlr/seasonal")
+async def api_dlr_seasonal(conductor: str = Query("Zebra"), lat: float = Query(52.0)):
+    """Seasonal DLR profile showing uplift across typical UK conditions."""
+    return await _run_phase7_subprocess(_DLR_SCRIPT, {
+        "command": "seasonal_profile",
+        "conductor": conductor,
+        "lat": lat,
+    })
+
+
+@app.get("/api/advanced-grid/dlr/conductors")
+async def api_dlr_conductors():
+    """List available conductor types."""
+    return await _run_phase7_subprocess(_DLR_SCRIPT, {"command": "list_conductors"})
+
+
+# ── Congestion Prediction ──
+
+@app.get("/api/advanced-grid/congestion/predict")
+async def api_congestion_predict(
+    hour: int = Query(17),
+    month: int = Query(1),
+    day_of_week: int = Query(2),
+    demand_gw: float = Query(42),
+    wind_gen_gw: float = Query(8),
+    solar_gen_gw: float = Query(1),
+    temperature_c: float = Query(5),
+):
+    """Predict congestion probability for all UK transmission boundaries."""
+    return await _run_phase7_subprocess(_CONGESTION_SCRIPT, {
+        "command": "predict",
+        "hour": hour, "month": month, "day_of_week": day_of_week,
+        "demand_gw": demand_gw, "wind_gen_gw": wind_gen_gw,
+        "solar_gen_gw": solar_gen_gw, "temperature_c": temperature_c,
+    })
+
+
+@app.get("/api/advanced-grid/congestion/predict-day")
+async def api_congestion_predict_day(
+    date: str = Query("2024-12-15"),
+    demand_base_gw: float = Query(40),
+):
+    """Predict congestion for every hour of a given day."""
+    return await _run_phase7_subprocess(_CONGESTION_SCRIPT, {
+        "command": "predict_day",
+        "date": date, "demand_base_gw": demand_base_gw,
+    })
+
+
+@app.get("/api/advanced-grid/congestion/boundaries")
+async def api_congestion_boundaries():
+    """List UK transmission boundaries."""
+    return await _run_phase7_subprocess(_CONGESTION_SCRIPT, {"command": "boundaries"})
+
+
+# ── Connection Optimiser ──
+
+@app.post("/api/advanced-grid/optimise")
+async def api_connection_optimise(body: dict):
+    """Multi-objective connection optimisation with Pareto frontier."""
+    return await _run_phase7_subprocess(_OPTIMISER_SCRIPT, {
+        "command": "optimise",
+        "lat": body.get("lat", 51.5),
+        "lon": body.get("lon", -1.0),
+        "capacity_mw": body.get("capacity_mw", 50),
+        "technology": body.get("technology", "solar"),
+        "candidates": body.get("candidates"),
+    })
+
+
+# ── Reinforcement Cost ──
+
+@app.get("/api/advanced-grid/reinforcement/estimate")
+async def api_reinforcement_estimate(
+    distance_km: float = Query(5),
+    voltage_kv: int = Query(132),
+    capacity_mw: float = Query(50),
+    headroom_mw: float = Query(0),
+    terrain: str = Query("rural"),
+    connection_type: str = Query("cable"),
+):
+    """Monte Carlo reinforcement cost estimate with P10/P50/P90."""
+    return await _run_phase7_subprocess(_REINFORCEMENT_SCRIPT, {
+        "command": "estimate",
+        "distance_km": distance_km, "voltage_kv": voltage_kv,
+        "capacity_mw": capacity_mw, "headroom_mw": headroom_mw,
+        "terrain": terrain, "connection_type": connection_type,
+    })
+
+
+@app.get("/api/advanced-grid/reinforcement/benchmarks")
+async def api_reinforcement_benchmarks():
+    """Return UK DNO reinforcement cost benchmark tables."""
+    return await _run_phase7_subprocess(_REINFORCEMENT_SCRIPT, {"command": "benchmarks"})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  3D GRID DIGITAL TWIN — WebSocket + REST (Phase 6)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Connected WebSocket clients for grid twin live updates
+_grid_twin_clients: set[WebSocket] = set()
+
+
+@app.get("/api/grid-twin/state")
+async def api_grid_twin_state():
+    """
+    Full grid state snapshot for 3D digital twin.
+    Returns substations (with demand/gen), lines (with flow), GSP demand,
+    and system-level metrics.
+    """
+    import math, random
+    now = datetime.now()
+    hour = now.hour + now.minute / 60.0
+    day_of_year = now.timetuple().tm_yday
+
+    # Diurnal demand factor
+    morning = math.exp(-0.5 * ((hour - 8.5) / 1.8) ** 2) * 0.85
+    evening = math.exp(-0.5 * ((hour - 17.5) / 2.0) ** 2) * 1.0
+    night = 0.35 + 0.15 * math.cos(2 * math.pi * (hour - 3) / 24)
+    diurnal = max(night, morning, evening)
+    seasonal = 0.7 + 0.3 * math.cos(2 * math.pi * (day_of_year - 15) / 365)
+
+    # Representative UK substations with 3D positions
+    substations = [
+        {"id": "ABHA", "name": "Abham", "lat": 51.35, "lon": 0.55, "voltage_kv": 275,
+         "capacity_mw": 360, "type": "GSP"},
+        {"id": "BEDD", "name": "Beddington", "lat": 51.37, "lon": -0.13, "voltage_kv": 275,
+         "capacity_mw": 500, "type": "GSP"},
+        {"id": "BRWA", "name": "Bramley", "lat": 51.33, "lon": -1.06, "voltage_kv": 400,
+         "capacity_mw": 640, "type": "GSP"},
+        {"id": "CELL", "name": "Cellarhead", "lat": 53.00, "lon": -2.02, "voltage_kv": 275,
+         "capacity_mw": 300, "type": "GSP"},
+        {"id": "DEES", "name": "Deeside", "lat": 53.22, "lon": -3.04, "voltage_kv": 400,
+         "capacity_mw": 450, "type": "GSP"},
+        {"id": "EDIN", "name": "Edinburgh South", "lat": 55.92, "lon": -3.19, "voltage_kv": 275,
+         "capacity_mw": 360, "type": "GSP"},
+        {"id": "MANN", "name": "Manchester South", "lat": 53.45, "lon": -2.25, "voltage_kv": 400,
+         "capacity_mw": 600, "type": "GSP"},
+        {"id": "INDQ", "name": "Indian Queens", "lat": 50.39, "lon": -4.95, "voltage_kv": 132,
+         "capacity_mw": 160, "type": "GSP"},
+        {"id": "KEAD", "name": "Keadby", "lat": 53.60, "lon": -0.75, "voltage_kv": 275,
+         "capacity_mw": 360, "type": "GSP"},
+        {"id": "EXET", "name": "Exeter Main", "lat": 50.72, "lon": -3.53, "voltage_kv": 132,
+         "capacity_mw": 200, "type": "GSP"},
+        {"id": "NORW", "name": "Norwich Main", "lat": 52.62, "lon": 1.30, "voltage_kv": 275,
+         "capacity_mw": 280, "type": "GSP"},
+        {"id": "CAMA", "name": "Cambridge", "lat": 52.19, "lon": 0.14, "voltage_kv": 132,
+         "capacity_mw": 250, "type": "GSP"},
+        {"id": "LOVE", "name": "Lovedon", "lat": 51.08, "lon": -1.20, "voltage_kv": 132,
+         "capacity_mw": 260, "type": "GSP"},
+        {"id": "FLEE", "name": "Fleet", "lat": 51.28, "lon": -0.83, "voltage_kv": 132,
+         "capacity_mw": 280, "type": "GSP"},
+        {"id": "BOLN", "name": "Bolney", "lat": 50.98, "lon": -0.23, "voltage_kv": 275,
+         "capacity_mw": 400, "type": "GSP"},
+    ]
+
+    # Add live demand/generation
+    for s in substations:
+        base_demand = s["capacity_mw"] * 0.55 * diurnal * seasonal
+        s["demand_mw"] = round(base_demand * (1 + random.gauss(0, 0.04)), 1)
+        solar_factor = max(0, math.sin(math.pi * max(0, min(1, (hour - 6) / 12))))
+        solar_season = max(0.1, math.sin(math.pi * (day_of_year - 80) / 365))
+        s["generation_mw"] = round(s["capacity_mw"] * 0.12 * solar_factor * solar_season * (1 + random.gauss(0, 0.05)), 1)
+        s["net_demand_mw"] = round(s["demand_mw"] - s["generation_mw"], 1)
+        s["utilisation"] = round(s["demand_mw"] / s["capacity_mw"], 3)
+        s["headroom_mw"] = round(s["capacity_mw"] - s["demand_mw"], 1)
+
+    # Lines connecting substations (major transmission corridors)
+    lines = [
+        {"from": "BRWA", "to": "BEDD", "voltage_kv": 400, "rating_mw": 1200},
+        {"from": "BRWA", "to": "ABHA", "voltage_kv": 275, "rating_mw": 800},
+        {"from": "BEDD", "to": "BOLN", "voltage_kv": 275, "rating_mw": 600},
+        {"from": "BEDD", "to": "FLEE", "voltage_kv": 132, "rating_mw": 200},
+        {"from": "BRWA", "to": "FLEE", "voltage_kv": 132, "rating_mw": 200},
+        {"from": "BRWA", "to": "LOVE", "voltage_kv": 132, "rating_mw": 200},
+        {"from": "ABHA", "to": "CAMA", "voltage_kv": 275, "rating_mw": 600},
+        {"from": "CAMA", "to": "NORW", "voltage_kv": 275, "rating_mw": 500},
+        {"from": "CELL", "to": "MANN", "voltage_kv": 275, "rating_mw": 800},
+        {"from": "MANN", "to": "DEES", "voltage_kv": 400, "rating_mw": 1000},
+        {"from": "MANN", "to": "KEAD", "voltage_kv": 275, "rating_mw": 600},
+        {"from": "DEES", "to": "EDIN", "voltage_kv": 400, "rating_mw": 1000},
+        {"from": "EXET", "to": "INDQ", "voltage_kv": 132, "rating_mw": 200},
+        {"from": "BOLN", "to": "EXET", "voltage_kv": 275, "rating_mw": 500},
+    ]
+
+    sub_map = {s["id"]: s for s in substations}
+    for line in lines:
+        src = sub_map.get(line["from"], {})
+        dst = sub_map.get(line["to"], {})
+        line["from_coords"] = [src.get("lon", 0), src.get("lat", 0)]
+        line["to_coords"] = [dst.get("lon", 0), dst.get("lat", 0)]
+        # Flow: positive = from→to, magnitude based on net demand difference
+        demand_diff = dst.get("net_demand_mw", 0) - src.get("net_demand_mw", 0)
+        line["flow_mw"] = round(demand_diff * 0.6 * (1 + random.gauss(0, 0.08)), 1)
+        line["loading_pct"] = round(abs(line["flow_mw"]) / line["rating_mw"] * 100, 1)
+        line["congested"] = line["loading_pct"] > 80
+
+    # System metrics
+    total_demand = sum(s["demand_mw"] for s in substations)
+    total_gen = sum(s["generation_mw"] for s in substations)
+    total_capacity = sum(s["capacity_mw"] for s in substations)
+
+    return {
+        "timestamp": now.isoformat() + "Z",
+        "substations": substations,
+        "lines": lines,
+        "system": {
+            "total_demand_mw": round(total_demand, 1),
+            "total_generation_mw": round(total_gen, 1),
+            "total_capacity_mw": round(total_capacity, 1),
+            "system_utilisation": round(total_demand / total_capacity, 3),
+            "frequency_hz": round(50.0 + random.gauss(0, 0.02), 3),
+            "hour": round(hour, 1),
+            "day_of_year": day_of_year,
+        },
+    }
+
+
+@app.websocket("/ws/grid-twin")
+async def ws_grid_twin(ws: WebSocket):
+    """
+    WebSocket for real-time grid twin state updates.
+    Sends grid state snapshot every 5 seconds.
+    """
+    await ws.accept()
+    _grid_twin_clients.add(ws)
+    try:
+        while True:
+            state = await api_grid_twin_state()
+            await ws.send_json(state)
+            await asyncio.sleep(5)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        _grid_twin_clients.discard(ws)
+
+
+@app.get("/api/grid-twin/scenario/{scenario_name}")
+async def api_grid_twin_scenario(
+    scenario_name: str,
+    year: int = Query(2030),
+):
+    """
+    Apply a NESO FES scenario to the grid state.
+    Returns modified substations/lines with projected demand.
+    """
+    growth_rates = {
+        "leading_the_way": 0.035,
+        "consumer_transformation": 0.028,
+        "system_transformation": 0.022,
+        "falling_short": 0.012,
+        "baseline": 0.02,
+    }
+    rate = growth_rates.get(scenario_name, 0.02)
+    years = year - 2024
+
+    base = await api_grid_twin_state()
+    for s in base["substations"]:
+        factor = (1 + rate) ** years
+        s["demand_mw"] = round(s["demand_mw"] * factor, 1)
+        s["net_demand_mw"] = round(s["net_demand_mw"] * factor, 1)
+        s["utilisation"] = round(s["demand_mw"] / s["capacity_mw"], 3)
+        s["headroom_mw"] = round(s["capacity_mw"] - s["demand_mw"], 1)
+
+    for line in base["lines"]:
+        sub_map = {s["id"]: s for s in base["substations"]}
+        src = sub_map.get(line["from"], {})
+        dst = sub_map.get(line["to"], {})
+        demand_diff = dst.get("net_demand_mw", 0) - src.get("net_demand_mw", 0)
+        line["flow_mw"] = round(demand_diff * 0.6, 1)
+        line["loading_pct"] = round(abs(line["flow_mw"]) / line["rating_mw"] * 100, 1)
+        line["congested"] = line["loading_pct"] > 80
+
+    base["scenario"] = {"name": scenario_name, "year": year, "growth_rate": rate}
+    return base
 
 
 @app.get("/api/grid/substation/{substation_id}")
@@ -6144,6 +7372,191 @@ async def rag_ingest():
     """Trigger regulatory document ingestion."""
     job = await jobs.submit("rag_ingest", ingest_ofgem_documents, pool)
     return job.to_dict()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  INVESTMENT READINESS & DUE DILIGENCE (Phase 12)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_APPRAISAL_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "investment_appraisal.py")
+_SCENARIO_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "scenario_engine.py")
+_DD_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "due_diligence.py")
+_REPORT_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "report_generator.py")
+
+
+async def _run_phase12_subprocess(script: str, payload: dict) -> dict:
+    """Run a Phase 12 utility subprocess."""
+    import asyncio as _aio
+    proc = await _aio.create_subprocess_exec(
+        sys.executable, script,
+        stdin=_aio.subprocess.PIPE, stdout=_aio.subprocess.PIPE,
+        stderr=_aio.subprocess.PIPE,
+    )
+    raw_in = json.dumps(payload).encode()
+    stdout, stderr = await _aio.wait_for(proc.communicate(raw_in), timeout=120)
+    return json.loads(stdout)
+
+
+# ── Finance ──
+
+@app.get("/api/investment/finance/project")
+async def api_investment_project_finance(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    ppa_price: float = Query(55),
+):
+    return await _run_phase12_subprocess(_APPRAISAL_SCRIPT, {
+        "command": "project_finance", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region, "ppa_price": ppa_price,
+    })
+
+
+@app.get("/api/investment/finance/debt")
+async def api_investment_debt_structure(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    target_dscr: float = Query(1.3),
+    gearing: float = Query(0.7),
+    ppa_price: float = Query(55),
+):
+    return await _run_phase12_subprocess(_APPRAISAL_SCRIPT, {
+        "command": "debt_structure", "capacity_mw": capacity_mw,
+        "technology": technology, "target_dscr": target_dscr,
+        "gearing": gearing, "ppa_price": ppa_price,
+    })
+
+
+@app.get("/api/investment/finance/equity")
+async def api_investment_equity_returns(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    gearing: float = Query(0.7),
+    ppa_price: float = Query(55),
+    tax_rate: float = Query(0.25),
+):
+    return await _run_phase12_subprocess(_APPRAISAL_SCRIPT, {
+        "command": "equity_returns", "capacity_mw": capacity_mw,
+        "technology": technology, "gearing": gearing,
+        "ppa_price": ppa_price, "tax_rate": tax_rate,
+    })
+
+
+# ── Scenarios ──
+
+@app.get("/api/investment/scenario/stress-test")
+async def api_investment_stress_test(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    gearing: float = Query(0.7),
+):
+    return await _run_phase12_subprocess(_SCENARIO_SCRIPT, {
+        "command": "stress_test", "capacity_mw": capacity_mw,
+        "technology": technology, "gearing": gearing,
+    })
+
+
+@app.get("/api/investment/scenario/montecarlo")
+async def api_investment_montecarlo(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    n_sims: int = Query(2000),
+    gearing: float = Query(0.7),
+):
+    return await _run_phase12_subprocess(_SCENARIO_SCRIPT, {
+        "command": "correlated_montecarlo", "capacity_mw": capacity_mw,
+        "technology": technology, "n_sims": n_sims, "gearing": gearing,
+    })
+
+
+@app.get("/api/investment/scenario/break-even")
+async def api_investment_break_even(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    gearing: float = Query(0.7),
+):
+    return await _run_phase12_subprocess(_SCENARIO_SCRIPT, {
+        "command": "break_even", "capacity_mw": capacity_mw,
+        "technology": technology, "gearing": gearing,
+    })
+
+
+# ── Due Diligence ──
+
+@app.get("/api/investment/dd/checklist")
+async def api_investment_dd_checklist(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+):
+    return await _run_phase12_subprocess(_DD_SCRIPT, {
+        "command": "dd_checklist", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+    })
+
+
+@app.get("/api/investment/dd/technical")
+async def api_investment_dd_technical(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+):
+    return await _run_phase12_subprocess(_DD_SCRIPT, {
+        "command": "technical_dd", "capacity_mw": capacity_mw,
+        "technology": technology,
+    })
+
+
+@app.get("/api/investment/dd/commercial")
+async def api_investment_dd_commercial(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    ppa_price: float = Query(55),
+):
+    return await _run_phase12_subprocess(_DD_SCRIPT, {
+        "command": "commercial_dd", "capacity_mw": capacity_mw,
+        "technology": technology, "ppa_price": ppa_price,
+    })
+
+
+# ── Report ──
+
+@app.get("/api/investment/report/memo")
+async def api_investment_memo(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+    ppa_price: float = Query(55),
+    gearing: float = Query(0.7),
+):
+    return await _run_phase12_subprocess(_REPORT_SCRIPT, {
+        "command": "investment_memo", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+        "ppa_price": ppa_price, "gearing": gearing,
+    })
+
+
+@app.get("/api/investment/report/risk-matrix")
+async def api_investment_risk_matrix(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+):
+    return await _run_phase12_subprocess(_REPORT_SCRIPT, {
+        "command": "risk_matrix", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+    })
+
+
+@app.get("/api/investment/report/action-plan")
+async def api_investment_action_plan(
+    capacity_mw: float = Query(50),
+    technology: str = Query("wind"),
+    region: str = Query("Scotland"),
+):
+    return await _run_phase12_subprocess(_REPORT_SCRIPT, {
+        "command": "action_plan", "capacity_mw": capacity_mw,
+        "technology": technology, "region": region,
+    })
 
 
 # ---------------------------------------------------------------------------

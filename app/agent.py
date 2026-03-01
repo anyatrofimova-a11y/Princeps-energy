@@ -221,6 +221,69 @@ INTENT_PROMPTS: dict[str, str] = {
         "Provide HIGH_PRIORITY / PROMISING / MARGINAL / UNSUITABLE recommendations with composite scores.\n\n"
         + DATA_DOMAINS_CONTEXT
     ),
+    "connection_strategy": (
+        "You are a UK grid connection strategy specialist advising energy developers. "
+        "Evaluate connection options (firm, ANM, non-firm, timed export, intertrip) and "
+        "recommend the optimal strategy based on multi-criteria analysis: NPV, curtailment "
+        "risk, timeline, DLR uplift potential, and flexibility value. Assess annual curtailment "
+        "estimates (P10/P50/P90), revenue impact over project lifetime, flexible connection "
+        "trade-offs, and milestone-based connection timelines with critical path risks. "
+        "Reference NESO Connections Reform, G99/CUSC processes, DNO queue positions, and "
+        "UK wholesale price assumptions. Provide GO / CAUTION / NO-GO verdict with confidence."
+    ),
+    "advanced_grid": (
+        "You are a UK transmission and distribution grid analysis specialist. "
+        "Analyse dynamic line ratings (IEEE 738 thermal model), transmission boundary "
+        "congestion probabilities, multi-objective connection point optimisation, and "
+        "reinforcement cost estimates. Evaluate DLR uplift potential under current weather "
+        "conditions, identify congested boundaries (Scotland-England, North-Midlands, etc.), "
+        "recommend optimal connection points from the Pareto frontier balancing distance, cost, "
+        "and queue wait, and provide Monte Carlo P10/P50/P90 reinforcement cost breakdowns. "
+        "Reference specific conductors (Lynx/Zebra/Rubus), boundary loading percentages, "
+        "and cost components. Provide a GO / CAUTION / NO-GO verdict with confidence score."
+    ),
+    "route_to_market": (
+        "You are a UK energy route-to-market specialist advising renewable energy developers. "
+        "Evaluate PPA structures (fixed, CPI-indexed, floor/cap, baseload, as-generated, synthetic/virtual), "
+        "calculate optimal PPA pricing considering capture price discounts, cannibalisation effects, and "
+        "seasonal shaping. Match generation assets to corporate offtake buyers (data centres, industrial, "
+        "commercial, public sector, EV charging) based on demand-generation correlation and credit quality. "
+        "Compare market routes (merchant, CfD, corporate PPA, sleeved PPA, synthetic PPA, private wire) "
+        "across multi-criteria scoring (NPV, revenue certainty, bankability). Assess project bankability "
+        "using Monte Carlo revenue-at-risk (P10/P50/P90), DSCR analysis, sensitivity tornado charts, and "
+        "risk registers covering construction/market/operational/regulatory/financial risks. "
+        "Provide GO / CAUTION / NO-GO verdict with investment grade scoring."
+    ),
+    "sustainability": (
+        "You are a UK renewable energy sustainability and lifecycle specialist. "
+        "Calculate lifecycle carbon footprints (construction, operation, decommissioning) and compare "
+        "against grid average, gas CCGT, and coal benchmarks. Assess grid carbon displacement using "
+        "marginal intensity by UK region. Score projects across ESG pillars (Environmental, Social, "
+        "Governance) with AAA-B ratings. Analyse multi-site portfolio diversification using Markowitz "
+        "variance, Herfindahl concentration, and technology-region correlation matrices. Model community "
+        "benefit packages (BEIS/DESNZ fund rates, shared ownership structures, TOMS social value). "
+        "Estimate decommissioning costs, material recovery credits, repowering vs new-build NPV, and "
+        "bond/escrow sizing. Provide GO / CAUTION / NO-GO verdict with ESG rating."
+    ),
+    "dispatch_optimisation": (
+        "You are a UK energy dispatch optimisation specialist. "
+        "Forecast grid constraints across transmission boundaries (Scotland-England, North-Midlands, etc.) "
+        "24-48 hours ahead using weather, demand, and generation profiles. Generate optimal dispatch schedules "
+        "for generation and BESS assets — balancing wholesale arbitrage, frequency response (FFR/DC/DM), "
+        "constraint-aware export, and Balancing Mechanism participation. Model BOA acceptance profiles, "
+        "SBP/SSP system prices, constraint payments, and multi-market revenue stacking (wholesale, CfD, "
+        "capacity market, frequency response, BM, embedded benefits, Triad avoidance). "
+        "Provide GO / CAUTION / NO-GO verdict on dispatch strategy with confidence score."
+    ),
+    "demand_forecast": (
+        "You are a UK electricity demand forecasting specialist. "
+        "Analyse historical demand patterns at Grid Supply Points (GSPs), generate probabilistic "
+        "short-term forecasts (P10/P50/P90 bands) and long-term scenario projections using NESO "
+        "Future Energy Scenarios (Leading the Way, Consumer Transformation, System Transformation, "
+        "Falling Short). Assess capacity exceedance probability, time-to-constraint, and the impact "
+        "of new loads (EVs, heat pumps, data centres) on local demand growth. Recommend demand-side "
+        "interventions and reinforcement timing."
+    ),
     "bess_optimisation": (
         "You are a UK battery energy storage system (BESS) specialist. "
         "Assess site suitability for BESS deployment considering grid connection capacity, "
@@ -262,6 +325,19 @@ INTENT_PROMPTS: dict[str, str] = {
         "NIS2 secure-by-design compliance. Minimise disruption through phased construction planning. "
         "Reference BRIDGE initiative KPIs and EU Taxonomy Activity 4.10 criteria. Provide a GO / "
         "CAUTION / NO-GO verdict with confidence score."
+    ),
+    "investment_readiness": (
+        "You are a UK renewable energy investment analyst and project finance specialist. "
+        "Build a 25-year project finance model with levered/unlevered cashflows, WACC, IRR "
+        "(project and equity, pre/post-tax), NPV at multiple discount rates, LCOE, and simple "
+        "payback. Structure senior debt with sculpted repayment at target DSCR (1.3x), calculate "
+        "gearing, lock-up/default covenants, and assess covenant headroom. Model equity returns "
+        "including dividend waterfall (EBITDA → debt service → tax → dividend → retention). "
+        "Run Monte Carlo sensitivity (2000 sims, correlated inputs via Cholesky decomposition) "
+        "and tornado stress tests across 6 variables. Score due diligence across 4 pillars "
+        "(Technical, Commercial, Legal, Financial) with RAG ratings. Generate investment memo "
+        "with INVEST / CONDITIONAL / DECLINE verdict, 5x5 risk matrix, and phased action plan "
+        "to financial close. Provide GO / CAUTION / NO-GO verdict with confidence score."
     ),
     "regulatory_intelligence": (
         "You are a UK energy regulatory intelligence analyst specialising in the renewables "
@@ -564,6 +640,12 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
     elif intent == "grid_connection":
         actions = [
             {
+                "label": "Run Power Flow",
+                "endpoint": f"/api/grid/power-flow?lat={lat}&lon={lon}&capacity_mw={cap / 1000}&technology=solar",
+                "method": "POST",
+                "payload": {},
+            },
+            {
                 "label": "View Capacity Map",
                 "endpoint": "/api/grid/capacity-map",
                 "method": "GET",
@@ -587,6 +669,204 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "method": "POST",
                 "payload": {"lat": lat, "lon": lon, "radius_km": 5,
                             "modes": ["land_use", "terrain", "solar_resource"]},
+            },
+        ]
+
+    elif intent == "connection_strategy":
+        actions = [
+            {
+                "label": "Generate Strategy Report",
+                "endpoint": "/api/connection-strategy/strategy",
+                "method": "POST",
+                "payload": {"lat": lat, "lon": lon, "capacity_mw": cap / 1000, "technology": "solar", "headroom_mw": 30},
+            },
+            {
+                "label": "Curtailment Estimate",
+                "endpoint": f"/api/connection-strategy/curtailment/estimate?capacity_mw={cap / 1000}&region=Midlands",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Compare Flexible Options",
+                "endpoint": "/api/connection-strategy/flexible/compare",
+                "method": "POST",
+                "payload": {"capacity_mw": cap / 1000, "headroom_mw": 30, "region": "Midlands"},
+            },
+            {
+                "label": "Connection Timeline",
+                "endpoint": "/api/connection-strategy/timeline/generate",
+                "method": "POST",
+                "payload": {"capacity_mw": cap / 1000, "voltage_kv": 132, "connection_type": "firm"},
+            },
+        ]
+
+    elif intent == "advanced_grid":
+        actions = [
+            {
+                "label": "Dynamic Line Rating",
+                "endpoint": "/api/advanced-grid/dlr/rate?conductor=Zebra&ambient_temp_c=15&wind_speed_ms=3",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Congestion Forecast",
+                "endpoint": "/api/advanced-grid/congestion/predict?hour=17&month=1&demand_gw=42&wind_gen_gw=8",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Optimise Connection",
+                "endpoint": "/api/advanced-grid/optimise",
+                "method": "POST",
+                "payload": {"lat": lat, "lon": lon, "capacity_mw": cap / 1000, "technology": "solar"},
+            },
+            {
+                "label": "Reinforcement Cost",
+                "endpoint": f"/api/advanced-grid/reinforcement/estimate?distance_km=5&voltage_kv=132&capacity_mw={cap / 1000}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View Boundaries",
+                "endpoint": "/api/advanced-grid/congestion/boundaries",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "route_to_market":
+        actions = [
+            {
+                "label": "Compare Market Routes",
+                "endpoint": f"/api/rtm/routes/compare?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "PPA Structure Comparison",
+                "endpoint": f"/api/rtm/ppa/structures?capacity_mw={cap / 1000}&technology=wind",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Match Offtake Buyers",
+                "endpoint": f"/api/rtm/offtake/match?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Risk Assessment",
+                "endpoint": f"/api/rtm/risk/assessment?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Bankability Report",
+                "endpoint": f"/api/rtm/risk/bankability?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "sustainability":
+        actions = [
+            {
+                "label": "Carbon Footprint",
+                "endpoint": f"/api/sustainability/carbon/footprint?capacity_mw={cap / 1000}&technology=wind",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "ESG Score",
+                "endpoint": f"/api/sustainability/esg/score?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Community Benefit Package",
+                "endpoint": f"/api/sustainability/community/package?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Portfolio Optimisation",
+                "endpoint": f"/api/sustainability/portfolio/optimisation?budget_mw=200",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Decommissioning Estimate",
+                "endpoint": f"/api/sustainability/decom/estimate?capacity_mw={cap / 1000}&technology=wind",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "dispatch_optimisation":
+        actions = [
+            {
+                "label": "Constraint Forecast",
+                "endpoint": "/api/dispatch/constraints/forecast?hours_ahead=48",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Dispatch Schedule",
+                "endpoint": f"/api/dispatch/schedule?capacity_mw={cap / 1000}&technology=solar&region=Midlands",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "BM Revenue Estimate",
+                "endpoint": f"/api/dispatch/bm/revenue?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Revenue Stack",
+                "endpoint": f"/api/dispatch/revenue/stack?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Scenario Comparison",
+                "endpoint": f"/api/dispatch/revenue/scenarios?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "demand_forecast":
+        actions = [
+            {
+                "label": "View Demand Forecast",
+                "endpoint": f"/api/demand/forecast?gsp_id=ABHA&horizon_hours=168&model=analytical",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Scenario Projections",
+                "endpoint": f"/api/demand/scenarios?gsp_id=ABHA&years_ahead=10",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View Historical Demand",
+                "endpoint": f"/api/demand/historical?gsp_id=ABHA&days=30",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "List Grid Supply Points",
+                "endpoint": "/api/demand/gsps",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Demand Summary",
+                "endpoint": "/api/demand/summary",
+                "method": "GET",
+                "payload": {},
             },
         ]
 
@@ -771,6 +1051,40 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "method": "POST",
                 "payload": {"infrastructure_type": "coal_power_plant", "storage_technology": "li_ion_bess",
                             "capacity_mw": cap / 1000 if cap > 100 else 50},
+            },
+        ]
+
+    elif intent == "investment_readiness":
+        actions = [
+            {
+                "label": "Project Finance Model",
+                "endpoint": f"/api/investment/finance/project?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Due Diligence Checklist",
+                "endpoint": f"/api/investment/dd/checklist?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Monte Carlo Scenarios",
+                "endpoint": f"/api/investment/scenario/montecarlo?capacity_mw={cap / 1000}&technology=wind",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Investment Memo",
+                "endpoint": f"/api/investment/report/memo?capacity_mw={cap / 1000}&technology=wind&region=Scotland",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Risk Matrix",
+                "endpoint": f"/api/investment/report/risk-matrix?capacity_mw={cap / 1000}&technology=wind",
+                "method": "GET",
+                "payload": {},
             },
         ]
 

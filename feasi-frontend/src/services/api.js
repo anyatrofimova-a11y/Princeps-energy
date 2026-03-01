@@ -74,6 +74,161 @@ const api = {
     circuitPath: (fromId, toId) => get(`/grid/cim/path?from_id=${enc(fromId)}&to_id=${enc(toId)}`),
     circuitDownstream: (subId) => get(`/grid/cim/downstream/${enc(subId)}`),
     circuitHealth: () => get("/grid/cim/health"),
+    // Grid connection capacity endpoints
+    capacityMap: (bbox) => get(`/grid/capacity-map?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
+    gridLines: (bbox) => get(`/grid/lines?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
+    powerFlow: (lat, lon, capacityMw, technology, substationId, contingency) => {
+      const q = new URLSearchParams({ lat, lon, capacity_mw: capacityMw, technology });
+      if (substationId != null) q.set("substation_id", substationId);
+      if (contingency) q.set("contingency", "true");
+      return post(`/grid/power-flow?${q}`);
+    },
+  },
+
+  demand: {
+    gsps:       () => get("/api/demand/gsps"),
+    historical: (gspId, days = 30, startDate) =>
+      get(`/api/demand/historical?gsp_id=${enc(gspId)}&days=${days}${startDate ? `&start_date=${startDate}` : ""}`),
+    forecast:   (gspId, horizonHours = 168, model = "analytical", peakMw, minMw, capacityMw) => {
+      const q = new URLSearchParams({ gsp_id: gspId, horizon_hours: horizonHours, model });
+      if (peakMw != null) q.set("peak_mw", peakMw);
+      if (minMw != null) q.set("min_mw", minMw);
+      if (capacityMw != null) q.set("capacity_mw", capacityMw);
+      return get(`/api/demand/forecast?${q}`);
+    },
+    scenarios:  (gspId, peakMw, minMw, capacityMw, yearsAhead = 10) =>
+      get(`/api/demand/scenarios?gsp_id=${enc(gspId)}&peak_mw=${peakMw}&min_mw=${minMw}&capacity_mw=${capacityMw}&years_ahead=${yearsAhead}`),
+    summary:    () => get("/api/demand/summary"),
+  },
+
+  gridTwin: {
+    state:    () => get("/api/grid-twin/state"),
+    scenario: (name, year = 2030) => get(`/api/grid-twin/scenario/${enc(name)}?year=${year}`),
+  },
+
+  connectionStrategy: {
+    curtailmentEstimate: (capacityMw = 50, region = "Midlands", technology = "solar", connType = "firm", queueDepth = 0) =>
+      get(`/api/connection-strategy/curtailment/estimate?capacity_mw=${capacityMw}&region=${enc(region)}&technology=${enc(technology)}&connection_type=${enc(connType)}&queue_depth=${queueDepth}`),
+    curtailmentRevenue: (capacityMw = 50, region = "Midlands", technology = "solar", connType = "firm", price = 55) =>
+      get(`/api/connection-strategy/curtailment/revenue-impact?capacity_mw=${capacityMw}&region=${enc(region)}&technology=${enc(technology)}&connection_type=${enc(connType)}&wholesale_price_mwh=${price}`),
+    curtailmentRegions: () => get("/api/connection-strategy/curtailment/regions"),
+    flexibleCompare: (capacityMw, headroomMw, region, technology, voltageKv) =>
+      post("/api/connection-strategy/flexible/compare", { capacity_mw: capacityMw, headroom_mw: headroomMw, region, technology, voltage_kv: voltageKv }),
+    anmProfile: (capacityMw = 50, headroomMw = 30, technology = "solar") =>
+      get(`/api/connection-strategy/flexible/anm-profile?capacity_mw=${capacityMw}&headroom_mw=${headroomMw}&technology=${enc(technology)}`),
+    optimalSizing: (headroomMw = 30, region = "Midlands", technology = "solar", target = 5) =>
+      get(`/api/connection-strategy/flexible/optimal-sizing?headroom_mw=${headroomMw}&region=${enc(region)}&technology=${enc(technology)}&target_curtailment_pct=${target}`),
+    timelineGenerate: (capacityMw, voltageKv, connType, startDate) =>
+      post("/api/connection-strategy/timeline/generate", { capacity_mw: capacityMw, voltage_kv: voltageKv, connection_type: connType, start_date: startDate }),
+    timelineMilestones: (capacityMw = 50) => get(`/api/connection-strategy/timeline/milestones?capacity_mw=${capacityMw}`),
+    strategy: (lat, lon, capacityMw, technology, voltageKv, headroomMw, distanceKm) =>
+      post("/api/connection-strategy/strategy", { lat, lon, capacity_mw: capacityMw, technology, voltage_kv: voltageKv, headroom_mw: headroomMw, distance_km: distanceKm }),
+    compare: (capacityMw, region, headroomMw, technology) =>
+      post("/api/connection-strategy/compare", { capacity_mw: capacityMw, region, headroom_mw: headroomMw, technology }),
+  },
+
+  sustainability: {
+    carbonFootprint: (capacityMw = 50, technology = "wind", projectLifeYears = 25) =>
+      get(`/api/sustainability/carbon/footprint?capacity_mw=${capacityMw}&technology=${enc(technology)}&project_life_years=${projectLifeYears}`),
+    gridDisplacement: (capacityMw = 50, technology = "wind", region = "Scotland", projectLifeYears = 25) =>
+      get(`/api/sustainability/carbon/displacement?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&project_life_years=${projectLifeYears}`),
+    esgScore: (capacityMw = 50, technology = "wind", region = "Scotland", communityFund = true, sharedOwnership = false, bng = true) =>
+      get(`/api/sustainability/esg/score?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&community_fund=${communityFund}&shared_ownership=${sharedOwnership}&biodiversity_net_gain=${bng}`),
+    portfolioSummary: (sites) =>
+      post("/api/sustainability/portfolio/summary", { sites }),
+    portfolioDiversification: (sites) =>
+      post("/api/sustainability/portfolio/diversification", { sites }),
+    portfolioOptimisation: (budgetMw = 200, target = "max_revenue") =>
+      get(`/api/sustainability/portfolio/optimisation?budget_mw=${budgetMw}&target=${enc(target)}`),
+    communityPackage: (capacityMw = 50, technology = "wind", region = "Scotland", communityFund = true, sharedOwnershipPct = 0) =>
+      get(`/api/sustainability/community/package?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&community_fund=${communityFund}&shared_ownership_pct=${sharedOwnershipPct}`),
+    sharedOwnership: (capacityMw = 50, technology = "wind", communityStakePct = 25) =>
+      get(`/api/sustainability/community/shared-ownership?capacity_mw=${capacityMw}&technology=${enc(technology)}&community_stake_pct=${communityStakePct}`),
+    socialValue: (capacityMw = 50, technology = "wind", region = "Scotland", communityFund = true, apprenticeships = 3) =>
+      get(`/api/sustainability/community/social-value?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&community_fund=${communityFund}&apprenticeships=${apprenticeships}`),
+    decomEstimate: (capacityMw = 50, technology = "wind", ageYears = 25) =>
+      get(`/api/sustainability/decom/estimate?capacity_mw=${capacityMw}&technology=${enc(technology)}&age_years=${ageYears}`),
+    repoweringComparison: (capacityMw = 50, technology = "wind", region = "Scotland") =>
+      get(`/api/sustainability/decom/repowering?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}`),
+    materialRecovery: (capacityMw = 50, technology = "wind") =>
+      get(`/api/sustainability/decom/material-recovery?capacity_mw=${capacityMw}&technology=${enc(technology)}`),
+  },
+
+  rtm: {
+    ppaPrice: (capacityMw = 50, technology = "wind", region = "Scotland", structure = "fixed", termYears = 15, creditTier = "investment_grade") =>
+      get(`/api/rtm/ppa/price?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&structure=${enc(structure)}&term_years=${termYears}&credit_tier=${enc(creditTier)}`),
+    ppaTerms: (capacityMw = 50, technology = "solar", region = "Midlands", structure = "fixed") =>
+      get(`/api/rtm/ppa/term-analysis?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&structure=${enc(structure)}`),
+    ppaStructures: (capacityMw = 50, technology = "wind", region = "Scotland", termYears = 15) =>
+      get(`/api/rtm/ppa/structures?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&term_years=${termYears}`),
+    offtakeMatch: (capacityMw = 50, technology = "wind", region = "Scotland") =>
+      get(`/api/rtm/offtake/match?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}`),
+    offtakeBuyer: (buyerType = "data_centre") =>
+      get(`/api/rtm/offtake/buyer?buyer_type=${enc(buyerType)}`),
+    offtakeCorrelation: (technology = "wind", buyerType = "industrial") =>
+      get(`/api/rtm/offtake/correlation?technology=${enc(technology)}&buyer_type=${enc(buyerType)}`),
+    routesCompare: (capacityMw = 50, technology = "wind", region = "Scotland") =>
+      get(`/api/rtm/routes/compare?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}`),
+    routeDetail: (route = "cfd", capacityMw = 50, technology = "wind") =>
+      get(`/api/rtm/routes/detail?route=${enc(route)}&capacity_mw=${capacityMw}&technology=${enc(technology)}`),
+    routeBankability: (capacityMw = 50, technology = "wind", region = "Scotland", route = "corporate_ppa") =>
+      get(`/api/rtm/routes/bankability?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&route=${enc(route)}`),
+    riskAssessment: (capacityMw = 50, technology = "wind", region = "Scotland", route = "cfd") =>
+      get(`/api/rtm/risk/assessment?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&route=${enc(route)}`),
+    riskSensitivity: (capacityMw = 50, technology = "wind", region = "Scotland", route = "cfd") =>
+      get(`/api/rtm/risk/sensitivity?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&route=${enc(route)}`),
+    riskBankability: (capacityMw = 50, technology = "wind", region = "Scotland", route = "corporate_ppa") =>
+      get(`/api/rtm/risk/bankability?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&route=${enc(route)}`),
+  },
+
+  dispatch: {
+    constraintForecast: (hoursAhead = 48, date) =>
+      get(`/api/dispatch/constraints/forecast?hours_ahead=${hoursAhead}${date ? `&date=${enc(date)}` : ""}`),
+    constraintBoundary: (boundaryId = "B1", hoursAhead = 48, date) =>
+      get(`/api/dispatch/constraints/boundary?boundary_id=${enc(boundaryId)}&hours_ahead=${hoursAhead}${date ? `&date=${enc(date)}` : ""}`),
+    constraintWindows: (hoursAhead = 48, threshold = 0.5, date) =>
+      get(`/api/dispatch/constraints/windows?hours_ahead=${hoursAhead}&threshold=${threshold}${date ? `&date=${enc(date)}` : ""}`),
+    schedule: (capacityMw = 50, technology = "solar", region = "Midlands", connType = "anm", headroomMw = 30, hoursAhead = 24, month = 1) =>
+      get(`/api/dispatch/schedule?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&connection_type=${enc(connType)}&headroom_mw=${headroomMw}&hours_ahead=${hoursAhead}&month=${month}`),
+    bessSchedule: (powerMw, energyMwh, socPct, region, hoursAhead, month) =>
+      post("/api/dispatch/bess-schedule", { power_mw: powerMw, energy_mwh: energyMwh, soc_pct: socPct, region, hours_ahead: hoursAhead, month }),
+    revenueComparison: (capacityMw = 50, technology = "solar", region = "Midlands") =>
+      get(`/api/dispatch/revenue-comparison?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}`),
+    bmRevenue: (capacityMw = 50, technology = "wind", region = "Scotland") =>
+      get(`/api/dispatch/bm/revenue?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}`),
+    bmBoaProfile: (capacityMw = 50, region = "Scotland", technology = "wind", hoursAhead = 24, month = 1) =>
+      get(`/api/dispatch/bm/boa-profile?capacity_mw=${capacityMw}&region=${enc(region)}&technology=${enc(technology)}&hours_ahead=${hoursAhead}&month=${month}`),
+    bmSystemPrices: (date = "2025-01-15") =>
+      get(`/api/dispatch/bm/system-prices?date=${enc(date)}`),
+    revenueStack: (capacityMw = 50, technology = "wind", region = "Scotland", connType = "anm", headroomMw = 30, cfdEnabled = true) =>
+      get(`/api/dispatch/revenue/stack?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&connection_type=${enc(connType)}&headroom_mw=${headroomMw}&cfd_enabled=${cfdEnabled}`),
+    revenueMonthly: (capacityMw = 50, technology = "solar", region = "Midlands", connType = "anm", headroomMw = 30) =>
+      get(`/api/dispatch/revenue/monthly?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&connection_type=${enc(connType)}&headroom_mw=${headroomMw}`),
+    revenueScenarios: (capacityMw = 50, technology = "wind", region = "Scotland") =>
+      get(`/api/dispatch/revenue/scenarios?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}`),
+  },
+
+  advancedGrid: {
+    dlrRate: (conductor = "Zebra", temp = 20, wind = 0.5, angle = 45, solar = 0) =>
+      get(`/api/advanced-grid/dlr/rate?conductor=${enc(conductor)}&ambient_temp_c=${temp}&wind_speed_ms=${wind}&wind_angle_deg=${angle}&solar_irradiance_wm2=${solar}`),
+    dlrRateLine: (voltageKv = 132, temp = 20, wind = 0.5, angle = 45, solar = 0) =>
+      get(`/api/advanced-grid/dlr/rate-line?voltage_kv=${voltageKv}&ambient_temp_c=${temp}&wind_speed_ms=${wind}&wind_angle_deg=${angle}&solar_irradiance_wm2=${solar}`),
+    dlrSeasonal: (conductor = "Zebra", lat = 52) =>
+      get(`/api/advanced-grid/dlr/seasonal?conductor=${enc(conductor)}&lat=${lat}`),
+    dlrConductors: () => get("/api/advanced-grid/dlr/conductors"),
+    congestionPredict: (params = {}) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) q.set(k, v);
+      return get(`/api/advanced-grid/congestion/predict?${q}`);
+    },
+    congestionDay: (date, demandGw = 40) =>
+      get(`/api/advanced-grid/congestion/predict-day?date=${enc(date)}&demand_base_gw=${demandGw}`),
+    congestionBoundaries: () => get("/api/advanced-grid/congestion/boundaries"),
+    optimise: (lat, lon, capacityMw, technology = "solar", candidates) =>
+      post("/api/advanced-grid/optimise", { lat, lon, capacity_mw: capacityMw, technology, candidates }),
+    reinforcementEstimate: (distKm = 5, voltageKv = 132, capacityMw = 50, headroomMw = 0, terrain = "rural", type = "cable") =>
+      get(`/api/advanced-grid/reinforcement/estimate?distance_km=${distKm}&voltage_kv=${voltageKv}&capacity_mw=${capacityMw}&headroom_mw=${headroomMw}&terrain=${enc(terrain)}&connection_type=${enc(type)}`),
+    reinforcementBenchmarks: () => get("/api/advanced-grid/reinforcement/benchmarks"),
   },
 
   planning: {
@@ -259,6 +414,33 @@ const api = {
       return get(`/rag/search?${params}`);
     },
     ingest: () => post("/rag/ingest"),
+  },
+
+  investment: {
+    projectFinance: (mw = 50, tech = "wind", region = "Scotland", ppa = 55) =>
+      get(`/api/investment/finance/project?capacity_mw=${mw}&technology=${enc(tech)}&region=${enc(region)}&ppa_price=${ppa}`),
+    debtStructure: (mw = 50, tech = "wind", dscr = 1.3, gearing = 0.7, ppa = 55) =>
+      get(`/api/investment/finance/debt?capacity_mw=${mw}&technology=${enc(tech)}&target_dscr=${dscr}&gearing=${gearing}&ppa_price=${ppa}`),
+    equityReturns: (mw = 50, tech = "wind", gearing = 0.7, ppa = 55, tax = 0.25) =>
+      get(`/api/investment/finance/equity?capacity_mw=${mw}&technology=${enc(tech)}&gearing=${gearing}&ppa_price=${ppa}&tax_rate=${tax}`),
+    stressTest: (mw = 50, tech = "wind", gearing = 0.7) =>
+      get(`/api/investment/scenario/stress-test?capacity_mw=${mw}&technology=${enc(tech)}&gearing=${gearing}`),
+    montecarlo: (mw = 50, tech = "wind", nSims = 2000, gearing = 0.7) =>
+      get(`/api/investment/scenario/montecarlo?capacity_mw=${mw}&technology=${enc(tech)}&n_sims=${nSims}&gearing=${gearing}`),
+    breakEven: (mw = 50, tech = "wind", gearing = 0.7) =>
+      get(`/api/investment/scenario/break-even?capacity_mw=${mw}&technology=${enc(tech)}&gearing=${gearing}`),
+    ddChecklist: (mw = 50, tech = "wind", region = "Scotland") =>
+      get(`/api/investment/dd/checklist?capacity_mw=${mw}&technology=${enc(tech)}&region=${enc(region)}`),
+    ddTechnical: (mw = 50, tech = "wind") =>
+      get(`/api/investment/dd/technical?capacity_mw=${mw}&technology=${enc(tech)}`),
+    ddCommercial: (mw = 50, tech = "wind", ppa = 55) =>
+      get(`/api/investment/dd/commercial?capacity_mw=${mw}&technology=${enc(tech)}&ppa_price=${ppa}`),
+    memo: (mw = 50, tech = "wind", region = "Scotland", ppa = 55, gearing = 0.7) =>
+      get(`/api/investment/report/memo?capacity_mw=${mw}&technology=${enc(tech)}&region=${enc(region)}&ppa_price=${ppa}&gearing=${gearing}`),
+    riskMatrix: (mw = 50, tech = "wind", region = "Scotland") =>
+      get(`/api/investment/report/risk-matrix?capacity_mw=${mw}&technology=${enc(tech)}&region=${enc(region)}`),
+    actionPlan: (mw = 50, tech = "wind", region = "Scotland") =>
+      get(`/api/investment/report/action-plan?capacity_mw=${mw}&technology=${enc(tech)}&region=${enc(region)}`),
   },
 
   notifications: {

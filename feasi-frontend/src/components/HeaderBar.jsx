@@ -17,6 +17,14 @@ const STUDY_STEPS = [
   { id: "satellite_analysis", intent: "satellite_analysis", label: "Satellite" },
   { id: "legacy_compliance", intent: "legacy_compliance", label: "Legacy" },
   { id: "bess_optimisation", intent: "bess_optimisation", label: "BESS" },
+  { id: "grid_connection", intent: "grid_connection", label: "Connection" },
+  { id: "demand_forecast", intent: "demand_forecast", label: "Demand" },
+  { id: "advanced_grid", intent: "advanced_grid", label: "Advanced" },
+  { id: "connection_strategy", intent: "connection_strategy", label: "Strategy" },
+  { id: "dispatch_optimisation", intent: "dispatch_optimisation", label: "Dispatch" },
+  { id: "route_to_market", intent: "route_to_market", label: "RTM" },
+  { id: "sustainability", intent: "sustainability", label: "Sustain." },
+  { id: "investment_readiness", intent: "investment_readiness", label: "Invest" },
 ];
 
 const WORKFLOW_BUTTONS = [
@@ -33,7 +41,7 @@ function verdictDot(v) {
   return null;
 }
 
-export default function HeaderBar({ onAnalyse, onNomExplorer, onLayoutToggle, onSettings, onPitch }) {
+export default function HeaderBar({ onAnalyse, onNomExplorer, onLayoutToggle, onSettings, onPitch, onGridTwin }) {
   const {
     parcelId,
     samCapacity, setSamCapacity,
@@ -186,6 +194,7 @@ export default function HeaderBar({ onAnalyse, onNomExplorer, onLayoutToggle, on
           <span>kW</span>
         </span>
 
+        <button className="btn-topbar-action" onClick={onGridTwin}>TWIN</button>
         <button className="btn-topbar-action" onClick={onPitch}>PITCH</button>
         <button className="btn-topbar-action" onClick={onNomExplorer}>NOM</button>
         <button className="btn-topbar-icon" onClick={onSettings} title="Settings">

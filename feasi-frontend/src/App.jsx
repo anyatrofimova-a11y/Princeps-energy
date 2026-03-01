@@ -17,6 +17,15 @@ import PitchPage from "./components/PitchPage";
 import SiteDashboard from "./components/SiteDashboard";
 import SitePicker from "./components/SitePicker";
 import DigitalTwin from "./components/DigitalTwin";
+import GridConnectionPanel from "./components/GridConnectionPanel";
+import DemandForecastPanel from "./components/DemandForecastPanel";
+import GridTwin from "./components/GridTwin";
+import AdvancedGridPanel from "./components/AdvancedGridPanel";
+import ConnectionStrategyPanel from "./components/ConnectionStrategyPanel";
+import DispatchPanel from "./components/DispatchPanel";
+import RouteToMarketPanel from "./components/RouteToMarketPanel";
+import SustainabilityPanel from "./components/SustainabilityPanel";
+import InvestmentPanel from "./components/InvestmentPanel";
 import MapLegend from "./components/MapLegend";
 import {
   MODES, createDrawState, handleClick as drawHandleClick, handleDoubleClick as drawHandleDoubleClick,
@@ -30,7 +39,7 @@ export default function App() {
     pickMode, setPickMode,
     samCapacity, samDay,
     loading,
-    layers,
+    layers, setLayers,
     slopeOpacity,
     epcZonesField, epcDomField, epcNondomField, postcodesField,
     layoutMode, setLayoutMode,
@@ -44,6 +53,16 @@ export default function App() {
     dashboardOpen, setDashboardOpen,
     digitalTwinOpen, setDigitalTwinOpen, twinData,
     workflowStage,
+    gridConnectionOpen, setGridConnectionOpen, setGridHighlightSub,
+    demandForecastOpen, setDemandForecastOpen,
+    gridTwinOpen, setGridTwinOpen,
+    advancedGridOpen, setAdvancedGridOpen,
+    connectionStrategyOpen, setConnectionStrategyOpen,
+    dispatchOpen, setDispatchOpen,
+    rtmOpen, setRtmOpen,
+    sustainabilityOpen, setSustainabilityOpen,
+    investmentOpen, setInvestmentOpen,
+    activeIntent,
   } = useSite();
 
   const [mapInstance, setMapInstance] = useState(null);
@@ -225,6 +244,36 @@ export default function App() {
     navigator.clipboard.writeText(json).catch(() => {});
   }, [drawState.features]);
 
+  // Auto-open grid connection panel + enable capacity layer when intent selected
+  useEffect(() => {
+    if (activeIntent === "grid_connection") {
+      setGridConnectionOpen(true);
+      setLayers(prev => ({ ...prev, gridCapacity: true }));
+    }
+    if (activeIntent === "demand_forecast") {
+      setDemandForecastOpen(true);
+      setLayers(prev => ({ ...prev, demandGsps: true }));
+    }
+    if (activeIntent === "advanced_grid") {
+      setAdvancedGridOpen(true);
+    }
+    if (activeIntent === "connection_strategy") {
+      setConnectionStrategyOpen(true);
+    }
+    if (activeIntent === "dispatch_optimisation") {
+      setDispatchOpen(true);
+    }
+    if (activeIntent === "route_to_market") {
+      setRtmOpen(true);
+    }
+    if (activeIntent === "sustainability") {
+      setSustainabilityOpen(true);
+    }
+    if (activeIntent === "investment_readiness") {
+      setInvestmentOpen(true);
+    }
+  }, [activeIntent, setGridConnectionOpen, setDemandForecastOpen, setAdvancedGridOpen, setConnectionStrategyOpen, setDispatchOpen, setRtmOpen, setSustainabilityOpen, setInvestmentOpen, setLayers]);
+
   // Escape key to cancel drawing
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape") handleDrawModeChange(MODES.VIEW); };
@@ -253,6 +302,7 @@ export default function App() {
         onLayoutToggle={handleLayoutToggle}
         onSettings={() => setSettingsMode(true)}
         onPitch={() => setPitchMode(true)}
+        onGridTwin={() => setGridTwinOpen(true)}
       />
 
       <div className="map-area-v2">
@@ -310,13 +360,91 @@ export default function App() {
         {dashboardOpen && (
           <SiteDashboard onClose={() => setDashboardOpen(false)} />
         )}
+
+        {/* Grid Connection Panel — right slide-in */}
+        {gridConnectionOpen && (
+          <ErrorBoundary name="GridConnectionPanel">
+            <GridConnectionPanel
+              onClose={() => setGridConnectionOpen(false)}
+              onHighlightSubstation={setGridHighlightSub}
+            />
+          </ErrorBoundary>
+        )}
+
+        {/* Demand Forecast Panel — right slide-in */}
+        {demandForecastOpen && (
+          <ErrorBoundary name="DemandForecastPanel">
+            <DemandForecastPanel
+              onClose={() => setDemandForecastOpen(false)}
+            />
+          </ErrorBoundary>
+        )}
+
+        {/* Advanced Grid Panel — right slide-in */}
+        {advancedGridOpen && (
+          <ErrorBoundary name="AdvancedGridPanel">
+            <AdvancedGridPanel
+              onClose={() => setAdvancedGridOpen(false)}
+            />
+          </ErrorBoundary>
+        )}
+
+        {/* Connection Strategy Panel — right slide-in */}
+        {connectionStrategyOpen && (
+          <ErrorBoundary name="ConnectionStrategyPanel">
+            <ConnectionStrategyPanel
+              onClose={() => setConnectionStrategyOpen(false)}
+            />
+          </ErrorBoundary>
+        )}
+
+        {/* Dispatch Panel — right slide-in */}
+        {dispatchOpen && (
+          <ErrorBoundary name="DispatchPanel">
+            <DispatchPanel
+              onClose={() => setDispatchOpen(false)}
+            />
+          </ErrorBoundary>
+        )}
+
+        {/* Route-to-Market Panel — right slide-in */}
+        {rtmOpen && (
+          <ErrorBoundary name="RouteToMarketPanel">
+            <RouteToMarketPanel
+              onClose={() => setRtmOpen(false)}
+            />
+          </ErrorBoundary>
+        )}
+
+        {/* Sustainability Panel — right slide-in */}
+        {sustainabilityOpen && (
+          <ErrorBoundary name="SustainabilityPanel">
+            <SustainabilityPanel
+              onClose={() => setSustainabilityOpen(false)}
+            />
+          </ErrorBoundary>
+        )}
+
+        {/* Investment Panel — right slide-in */}
+        {investmentOpen && (
+          <ErrorBoundary name="InvestmentPanel">
+            <InvestmentPanel
+              onClose={() => setInvestmentOpen(false)}
+            />
+          </ErrorBoundary>
+        )}
       </div>
 
       <CommandBar onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} />
 
-      {/* 3D Digital Twin overlay */}
+      {/* 3D Site Digital Twin overlay */}
       {digitalTwinOpen && twinData && (
         <DigitalTwin data={twinData} onClose={() => setDigitalTwinOpen(false)} />
+      )}
+
+      {/* 3D Grid Digital Twin overlay */}
+      {gridTwinOpen && (
+        <GridTwin onClose={() => setGridTwinOpen(false)} />
       )}
     </div>
   );
