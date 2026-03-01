@@ -2,7 +2,7 @@
 Grid Connection Analyser — three-tier feasibility assessment.
 
 Tier 1 (Data-driven): Instant lookup of published DNO headroom + queue depth.
-Tier 2 (Power flow): pandapower simulation (if installed).
+Tier 2 (Power flow): pandapower simulation via subprocess bridge.
 Tier 3 (Transmission): PyPSA-GB model (future).
 
 Called from FastAPI endpoints and agent module.
@@ -10,8 +10,11 @@ Called from FastAPI endpoints and agent module.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import os
+import subprocess
 import time
 from math import atan2, cos, radians, sin, sqrt
 from typing import Any
@@ -683,3 +686,209 @@ async def grid_lines_geojson(
         "features": features,
         "metadata": {"total": len(features), "min_voltage_kv": min_voltage_kv},
     }
+
+
+# ─── Tier 2: Power Flow Validation ──────────────────────────────────────
+
+# Path to pandapower subprocess
+GRID_PYTHON = os.environ.get(
+    "GRID_PYTHON",
+    os.path.join(os.path.dirname(__file__), "..", ".venv-grid", "bin", "python"),
+)
+GRID_POWER_FLOW_SCRIPT = os.path.join(os.path.dirname(__file__), "grid_power_flow.py")
+
+
+async def tier2_power_flow(
+    conn,
+    lat: float,
+    lon: float,
+    capacity_mw: float,
+    technology: str = "solar",
+    connection_substation_id: int | None = None,
+    search_radius_km: float = 20.0,
+    contingency: bool = False,
+) -> dict[str, Any]:
+    """
+    Run Tier 2 pandapower-based power flow validation.
+
+    Fetches network topology from PostGIS, builds a pandapower model via
+    subprocess, and returns detailed electrical analysis.
+    """
+    t0 = time.time()
+
+    # 1. Get substations near the site
+    substations = await _find_nearest_substations(conn, lat, lon, search_radius_km, 10)
+    if not substations:
+        return {
+            "success": False,
+            "error": "No substations found within search radius",
+            "tier": "power_flow",
+        }
+
+    # 2. Determine connection point
+    conn_sub_id = connection_substation_id
+    if conn_sub_id is None:
+        # Default to nearest suitable substation
+        for sub in substations:
+            rec_v = _recommended_voltage(capacity_mw)
+            if sub.get("voltage_kv") and sub["voltage_kv"] >= rec_v:
+                conn_sub_id = sub["id"]
+                break
+        if conn_sub_id is None:
+            conn_sub_id = substations[0]["id"]
+
+    # 3. Get grid lines connecting these substations
+    sub_ids = [s["id"] for s in substations]
+    lines = await _fetch_grid_lines(conn, sub_ids)
+
+    # If no lines in DB, create synthetic connections between nearest substations
+    if not lines:
+        lines = _synthesise_lines(substations)
+
+    # 4. Build input for subprocess
+    pf_input = {
+        "substations": substations,
+        "lines": lines,
+        "proposed": {
+            "capacity_mw": capacity_mw,
+            "technology": technology,
+            "connection_substation_id": conn_sub_id,
+            "power_factor": 0.95,
+        },
+        "options": {
+            "contingency": contingency,
+            "max_loading_pct": 100,
+            "voltage_limits": [0.94, 1.06],
+        },
+    }
+
+    # 5. Run pandapower subprocess
+    result = await _run_power_flow_subprocess(pf_input)
+
+    elapsed = round(time.time() - t0, 3)
+    result["tier"] = "power_flow"
+    result["elapsed_s"] = elapsed
+    result["connection_substation_id"] = conn_sub_id
+    result["network_size"] = {
+        "substations": len(substations),
+        "lines": len(lines),
+    }
+
+    return result
+
+
+async def _fetch_grid_lines(conn, substation_ids: list[int]) -> list[dict]:
+    """Fetch grid lines connecting the given substations."""
+    if not substation_ids:
+        return []
+
+    rows = await conn.fetch("""
+        SELECT
+            id, from_substation_id, to_substation_id,
+            voltage_kv, circuits, length_km
+        FROM grid_lines
+        WHERE from_substation_id = ANY($1::int[])
+           OR to_substation_id = ANY($1::int[])
+    """, substation_ids)
+
+    return [
+        {
+            "id": r["id"],
+            "from_id": r["from_substation_id"],
+            "to_id": r["to_substation_id"],
+            "voltage_kv": float(r["voltage_kv"]) if r["voltage_kv"] else 33,
+            "circuits": r["circuits"] or 1,
+            "length_km": float(r["length_km"]) if r["length_km"] else 1.0,
+        }
+        for r in rows
+    ]
+
+
+def _synthesise_lines(substations: list[dict]) -> list[dict]:
+    """
+    Create synthetic line connections between substations when PostGIS
+    line data is unavailable. Connects each substation to the nearest
+    higher-voltage one.
+    """
+    if len(substations) < 2:
+        return []
+
+    lines = []
+    sorted_subs = sorted(substations, key=lambda s: s.get("voltage_kv") or 0, reverse=True)
+
+    for i, sub in enumerate(sorted_subs[1:], 1):
+        # Connect to nearest higher-voltage substation
+        best_parent = sorted_subs[0]
+        best_dist = _haversine(sub["lat"], sub["lon"], best_parent["lat"], best_parent["lon"])
+
+        for parent in sorted_subs[:i]:
+            if (parent.get("voltage_kv") or 0) >= (sub.get("voltage_kv") or 0):
+                d = _haversine(sub["lat"], sub["lon"], parent["lat"], parent["lon"])
+                if d < best_dist:
+                    best_dist = d
+                    best_parent = parent
+
+        lines.append({
+            "from_id": best_parent["id"],
+            "to_id": sub["id"],
+            "voltage_kv": min(
+                best_parent.get("voltage_kv") or 33,
+                sub.get("voltage_kv") or 33,
+            ),
+            "circuits": 1,
+            "length_km": round(best_dist, 2),
+        })
+
+    return lines
+
+
+def _haversine(lat1, lon1, lat2, lon2):
+    """Haversine distance in km."""
+    R = 6371.0
+    dlat = radians(lat2 - lat1)
+    dlon = radians(lon2 - lon1)
+    a = sin(dlat / 2) ** 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ** 2
+    return R * 2 * atan2(sqrt(a), sqrt(1 - a))
+
+
+async def _run_power_flow_subprocess(pf_input: dict) -> dict:
+    """Run the pandapower subprocess and parse results."""
+    grid_python = GRID_PYTHON
+    script = GRID_POWER_FLOW_SCRIPT
+
+    if not os.path.isfile(grid_python):
+        return {"success": False, "error": f"Grid Python not found at {grid_python}"}
+    if not os.path.isfile(script):
+        return {"success": False, "error": f"Power flow script not found at {script}"}
+
+    input_json = json.dumps(pf_input)
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            grid_python, script,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=input_json.encode()),
+            timeout=30.0,
+        )
+
+        if proc.returncode != 0:
+            err = stderr.decode().strip()
+            log.warning("Power flow subprocess failed (rc=%d): %s", proc.returncode, err[:500])
+            return {"success": False, "error": f"Subprocess error: {err[:200]}"}
+
+        result = json.loads(stdout.decode())
+        return result
+
+    except asyncio.TimeoutError:
+        return {"success": False, "error": "Power flow subprocess timed out (30s)"}
+    except json.JSONDecodeError:
+        return {"success": False, "error": "Invalid JSON from power flow subprocess"}
+    except FileNotFoundError:
+        return {"success": False, "error": f"Grid Python executable not found: {grid_python}"}
+    except Exception as e:
+        log.exception("Power flow subprocess error")
+        return {"success": False, "error": str(e)}

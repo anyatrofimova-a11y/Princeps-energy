@@ -98,7 +98,7 @@ const EMPTY_FC = { type: "FeatureCollection", features: [] };
 
 export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = false, onPick, pickedLocation, onZoneClick, epcFields = {},
   drawState, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex, chatLayers = [], onMapReady }) {
-  const { stabilityData } = useSite();
+  const { stabilityData, gridHighlightSub } = useSite();
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -627,6 +627,14 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       // ESO TEC + REPD sources
       map.addSource("eso-tec-projects", { type: "geojson", data: EMPTY_FC });
       map.addSource("repd-projects", { type: "geojson", data: EMPTY_FC });
+
+      // Grid connection capacity sources
+      map.addSource("gc-capacity-subs", { type: "geojson", data: EMPTY_FC });
+      map.addSource("gc-grid-lines", { type: "geojson", data: EMPTY_FC });
+      map.addSource("gc-highlight-sub", { type: "geojson", data: EMPTY_FC });
+
+      // Demand GSP source
+      map.addSource("demand-gsps", { type: "geojson", data: EMPTY_FC });
 
       // Flow glow (wide blurred line — FlowmapBlue cyan style)
       map.addLayer({
@@ -1278,6 +1286,151 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       });
       map.on("mouseenter", "nged-sub-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "nged-sub-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── Grid Connection Capacity Map layers ──
+      // Grid lines (transmission/distribution)
+      map.addLayer({
+        id: "gc-lines-glow",
+        type: "line",
+        source: "gc-grid-lines",
+        paint: {
+          "line-color": ["match", ["coalesce", ["get", "voltage_kv"], 0],
+            400, "#e53935", 275, "#ff7043", 132, "#ffa726", 66, "#ffca28", 33, "#66bb6a", "#90a4ae"],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1, 10, 2, 14, 4],
+          "line-blur": 3,
+          "line-opacity": 0.5,
+        },
+        layout: { visibility: "none", "line-cap": "round" },
+      });
+      map.addLayer({
+        id: "gc-lines-core",
+        type: "line",
+        source: "gc-grid-lines",
+        paint: {
+          "line-color": ["match", ["coalesce", ["get", "voltage_kv"], 0],
+            400, "#e53935", 275, "#ff7043", 132, "#ffa726", 66, "#ffca28", 33, "#66bb6a", "#90a4ae"],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.5, 10, 1, 14, 2],
+          "line-opacity": 0.85,
+        },
+        layout: { visibility: "none", "line-cap": "round" },
+      });
+
+      // Capacity substation circles — graduated by headroom
+      map.addLayer({
+        id: "gc-capacity-circles",
+        type: "circle",
+        source: "gc-capacity-subs",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"],
+            5, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 3, 10, 6, 50, 10, 200, 16],
+            10, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 5, 10, 10, 50, 16, 200, 24],
+            14, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 7, 10, 14, 50, 22, 200, 32],
+          ],
+          "circle-color": [
+            "match", ["coalesce", ["get", "rag"], "gray"],
+            "green", "#24a148", "amber", "#f1c21b", "red", "#da1e28", "#8d8d8d"
+          ],
+          "circle-opacity": 0.75,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "rgba(255,255,255,0.6)",
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "gc-capacity-labels",
+        type: "symbol",
+        source: "gc-capacity-subs",
+        paint: {
+          "text-color": "#f4f4f4",
+          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["get", "name"], "\n", ["to-string", ["round", ["coalesce", ["get", "gen_headroom_mw"], 0]]], " MW"],
+          "text-size": 10,
+          "text-offset": [0, 1.8],
+          "text-anchor": "top",
+          "text-optional": true,
+        },
+        minzoom: 9,
+      });
+
+      // Highlighted candidate substation (pulsing ring)
+      map.addLayer({
+        id: "gc-highlight-ring",
+        type: "circle",
+        source: "gc-highlight-sub",
+        paint: {
+          "circle-radius": 18,
+          "circle-color": "transparent",
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#0f62fe",
+          "circle-opacity": 1,
+        },
+        layout: { visibility: "visible" },
+      });
+
+      map.on("click", "gc-capacity-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        const name = p.name || "Substation";
+        const headroom = p.gen_headroom_mw != null ? `<br/><strong>Headroom: ${p.gen_headroom_mw} MW</strong>` : "";
+        const voltage = p.voltage_kv ? `<br/>Voltage: ${p.voltage_kv} kV` : "";
+        const queued = p.ecr_queued ? `<br/>Queue: ${p.ecr_queued} projects` : "";
+        new mapboxgl.Popup({ maxWidth: "240px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px"><strong>${name}</strong>${voltage}${headroom}${queued}</div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "gc-capacity-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "gc-capacity-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── Demand GSP circles ──
+      map.addLayer({
+        id: "demand-gsp-circles",
+        type: "circle",
+        source: "demand-gsps",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["get", "peak_demand_mw"],
+            40, 5, 200, 10, 500, 16],
+          "circle-color": ["interpolate", ["linear"], ["get", "utilisation"],
+            0, "#52c41a", 0.6, "#52c41a", 0.75, "#fa8c16", 0.9, "#f5222d"],
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "rgba(255,255,255,0.3)",
+          "circle-opacity": 0.85,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "demand-gsp-labels",
+        type: "symbol",
+        source: "demand-gsps",
+        layout: {
+          "text-field": ["get", "gsp_name"],
+          "text-size": 9,
+          "text-offset": [0, 1.5],
+          "text-anchor": "top",
+          visibility: "none",
+        },
+        paint: {
+          "text-color": "rgba(255,255,255,0.6)",
+          "text-halo-color": "rgba(0,0,0,0.7)",
+          "text-halo-width": 1,
+        },
+      });
+
+      map.on("click", "demand-gsp-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        const util = p.utilisation != null ? `<br/>Utilisation: <strong>${(p.utilisation * 100).toFixed(1)}%</strong>` : "";
+        new mapboxgl.Popup({ maxWidth: "240px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px"><strong>${p.gsp_name}</strong> (${p.dno})<br/>Peak: ${p.peak_demand_mw} MW / Cap: ${p.capacity_mw} MW${util}</div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "demand-gsp-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "demand-gsp-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
 
       // ── ESO TEC Pipeline circles ──
       map.addLayer({
@@ -1942,6 +2095,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
                  "osm-substation-circles", "osm-substation-labels",
                  "osm-tower-dots", "osm-generator-circles", "osm-generator-labels"],
       ngedSubs: ["nged-sub-circles", "nged-sub-labels"],
+      gridCapacity: ["gc-capacity-circles", "gc-capacity-labels", "gc-lines-glow", "gc-lines-core"],
+      demandGsps: ["demand-gsp-circles", "demand-gsp-labels"],
       tecPipeline: ["eso-tec-circles", "eso-tec-labels"],
       repdProjects: ["repd-circles", "repd-labels"],
       geeflowLandUse: ["geeflow-landuse-fill"],
@@ -2340,6 +2495,112 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       if (src) src.setData(EMPTY_FC);
     };
   }, [layers.repdProjects]);
+
+  // Grid connection capacity map — viewport-based loading
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.gridCapacity) return;
+
+    let abortCtrl = new AbortController();
+    let timer = null;
+
+    const loadCapacity = async () => {
+      const bounds = map.getBounds();
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+
+      try {
+        const [subsData, linesData] = await Promise.all([
+          api.grid.capacityMap(bbox),
+          api.grid.gridLines(bbox),
+        ]);
+        if (abortCtrl.signal.aborted) return;
+        const subsSrc = map.getSource("gc-capacity-subs");
+        if (subsSrc && subsData) subsSrc.setData(subsData);
+        const linesSrc = map.getSource("gc-grid-lines");
+        if (linesSrc && linesData) linesSrc.setData(linesData);
+      } catch (err) {
+        if (err.name !== "AbortError") console.warn("Grid capacity load error:", err);
+      }
+    };
+
+    const debouncedLoad = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loadCapacity, 300);
+    };
+
+    loadCapacity();
+    map.on("moveend", debouncedLoad);
+
+    return () => {
+      abortCtrl.abort();
+      if (timer) clearTimeout(timer);
+      map.off("moveend", debouncedLoad);
+      const s1 = map.getSource("gc-capacity-subs");
+      if (s1) s1.setData(EMPTY_FC);
+      const s2 = map.getSource("gc-grid-lines");
+      if (s2) s2.setData(EMPTY_FC);
+    };
+  }, [layers.gridCapacity]);
+
+  // Grid connection — highlight selected candidate substation
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource("gc-highlight-sub");
+    if (!src) return;
+
+    if (gridHighlightSub && gridHighlightSub.lon != null && gridHighlightSub.lat != null) {
+      src.setData({
+        type: "FeatureCollection",
+        features: [{
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [gridHighlightSub.lon, gridHighlightSub.lat] },
+          properties: { name: gridHighlightSub.name || "" },
+        }],
+      });
+    } else {
+      src.setData(EMPTY_FC);
+    }
+  }, [gridHighlightSub]);
+
+  // Demand GSPs — load GSP locations with utilisation
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.demandGsps) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.demand.summary();
+        if (cancelled || !data?.profiles) return;
+        const fc = {
+          type: "FeatureCollection",
+          features: data.profiles.map(p => ({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+            properties: {
+              gsp_id: p.gsp_id,
+              gsp_name: p.gsp_name,
+              dno: p.dno,
+              peak_demand_mw: p.peak_demand_mw || p.recent_peak_mw,
+              capacity_mw: p.capacity_mw,
+              utilisation: p.utilisation || (p.peak_demand_mw / p.capacity_mw),
+            },
+          })),
+        };
+        const src = map.getSource("demand-gsps");
+        if (src) src.setData(fc);
+      } catch (err) {
+        console.warn("Demand GSP load error:", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      const src = map.getSource("demand-gsps");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [layers.demandGsps]);
 
   // Electricity zones — load zone boundaries + fetch live carbon intensity data
   useEffect(() => {

@@ -8,12 +8,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@deck.gl/core": "^9.2.10",
+    "@deck.gl/extensions": "^9.2.10",
+    "@deck.gl/geo-layers": "^9.2.10",
+    "@deck.gl/layers": "^9.2.10",
+    "@deck.gl/mapbox": "^9.2.10",
+    "@luma.gl/core": "^9.2.6",
+    "@luma.gl/webgl": "^9.2.6",
+    "@xyflow/react": "^12.3.0",
     "chart.js": "^4.5.1",
     "mapbox-gl": "^3.9.0",
     "pmtiles": "^4.4.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@xyflow/react": "^12.3.0",
     "three": "^0.165.0"
   },
   "devDependencies": {

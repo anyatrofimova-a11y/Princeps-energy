@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import { useSite } from "./SiteContext";
+// WorkspaceContext is used by child components (AssetBrowser, DetailPanel, etc.)
 import api from "./services/api";
 import MapView from "./components/MapView";
 import ComponentPalette from "./components/ComponentPalette";
-import HeaderBar from "./components/HeaderBar";
+import AppShell from "./components/shell/AppShell";
+import WorkspaceRouter from "./components/workspace/WorkspaceRouter";
 import LayerRail from "./components/LayerRail";
-import FloatingCards from "./components/FloatingCards";
 import CommandBar from "./components/CommandBar";
 import DrawingToolbar from "./components/DrawingToolbar";
 import CameraToolbar from "./components/CameraToolbar";
@@ -17,15 +18,7 @@ import PitchPage from "./components/PitchPage";
 import SiteDashboard from "./components/SiteDashboard";
 import SitePicker from "./components/SitePicker";
 import DigitalTwin from "./components/DigitalTwin";
-import GridConnectionPanel from "./components/GridConnectionPanel";
-import DemandForecastPanel from "./components/DemandForecastPanel";
 import GridTwin from "./components/GridTwin";
-import AdvancedGridPanel from "./components/AdvancedGridPanel";
-import ConnectionStrategyPanel from "./components/ConnectionStrategyPanel";
-import DispatchPanel from "./components/DispatchPanel";
-import RouteToMarketPanel from "./components/RouteToMarketPanel";
-import SustainabilityPanel from "./components/SustainabilityPanel";
-import InvestmentPanel from "./components/InvestmentPanel";
 import MapLegend from "./components/MapLegend";
 import {
   MODES, createDrawState, handleClick as drawHandleClick, handleDoubleClick as drawHandleDoubleClick,
@@ -53,15 +46,7 @@ export default function App() {
     dashboardOpen, setDashboardOpen,
     digitalTwinOpen, setDigitalTwinOpen, twinData,
     workflowStage,
-    gridConnectionOpen, setGridConnectionOpen, setGridHighlightSub,
-    demandForecastOpen, setDemandForecastOpen,
     gridTwinOpen, setGridTwinOpen,
-    advancedGridOpen, setAdvancedGridOpen,
-    connectionStrategyOpen, setConnectionStrategyOpen,
-    dispatchOpen, setDispatchOpen,
-    rtmOpen, setRtmOpen,
-    sustainabilityOpen, setSustainabilityOpen,
-    investmentOpen, setInvestmentOpen,
     activeIntent,
   } = useSite();
 
@@ -70,7 +55,6 @@ export default function App() {
   // Handle map layers from chat — add layer + auto-zoom to fit
   const handleChatMapLayer = useCallback((layer) => {
     setChatLayers(prev => [...prev, layer]);
-    // Auto-zoom to fit the layer's GeoJSON bounds
     if (mapInstance && layer.geojson?.features?.length) {
       const bounds = new mapboxgl.LngLatBounds();
       for (const f of layer.geojson.features) {
@@ -244,36 +228,6 @@ export default function App() {
     navigator.clipboard.writeText(json).catch(() => {});
   }, [drawState.features]);
 
-  // Auto-open grid connection panel + enable capacity layer when intent selected
-  useEffect(() => {
-    if (activeIntent === "grid_connection") {
-      setGridConnectionOpen(true);
-      setLayers(prev => ({ ...prev, gridCapacity: true }));
-    }
-    if (activeIntent === "demand_forecast") {
-      setDemandForecastOpen(true);
-      setLayers(prev => ({ ...prev, demandGsps: true }));
-    }
-    if (activeIntent === "advanced_grid") {
-      setAdvancedGridOpen(true);
-    }
-    if (activeIntent === "connection_strategy") {
-      setConnectionStrategyOpen(true);
-    }
-    if (activeIntent === "dispatch_optimisation") {
-      setDispatchOpen(true);
-    }
-    if (activeIntent === "route_to_market") {
-      setRtmOpen(true);
-    }
-    if (activeIntent === "sustainability") {
-      setSustainabilityOpen(true);
-    }
-    if (activeIntent === "investment_readiness") {
-      setInvestmentOpen(true);
-    }
-  }, [activeIntent, setGridConnectionOpen, setDemandForecastOpen, setAdvancedGridOpen, setConnectionStrategyOpen, setDispatchOpen, setRtmOpen, setSustainabilityOpen, setInvestmentOpen, setLayers]);
-
   // Escape key to cancel drawing
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape") handleDrawModeChange(MODES.VIEW); };
@@ -294,145 +248,74 @@ export default function App() {
     return <PitchPage onExit={() => setPitchMode(false)} />;
   }
 
-  return (
-    <div className="app-grid-v2">
-      <HeaderBar
-        onAnalyse={handleAnalyse}
-        onNomExplorer={() => setNomMode(true)}
-        onLayoutToggle={handleLayoutToggle}
-        onSettings={() => setSettingsMode(true)}
-        onPitch={() => setPitchMode(true)}
-        onGridTwin={() => setGridTwinOpen(true)}
+  // Map content (rendered inside CenterCanvas via WorkspaceRouter)
+  const mapContent = (
+    <div className="map-area-inner">
+      <ErrorBoundary name="Map">
+        <MapView
+          slopeOpacity={slopeOpacity}
+          layers={layers}
+          pickMode={pickMode}
+          onPick={handleMapPick}
+          pickedLocation={pickedLocation}
+          onZoneClick={handleZoneClick}
+          epcFields={{ epcZones: epcZonesField, epcDom: epcDomField, epcNondom: epcNondomField, postcodes: postcodesField }}
+          drawState={drawState}
+          onDrawClick={handleDrawClick}
+          onDrawDoubleClick={handleDrawDoubleClick}
+          onDrawMouseMove={handleDrawMouseMove}
+          onDrawSelectFeature={handleDrawSelectFeature}
+          onDrawDragVertex={handleDrawDragVertex}
+          chatLayers={chatLayers}
+          onMapReady={setMapInstance}
+        />
+      </ErrorBoundary>
+
+      <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
+      <MapLegend chatLayers={chatLayers} />
+
+      <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
+
+      <DrawingToolbar
+        drawMode={drawState.mode}
+        onModeChange={handleDrawModeChange}
+        featureCount={drawState.features.features.length}
+        selectedIndex={drawState.selectedIndex}
+        onDeleteFeature={handleDeleteDrawFeature}
+        onClearAll={handleClearDrawFeatures}
+        onExportGeoJSON={handleExportGeoJSON}
+        measurement={measurement}
       />
 
-      <div className="map-area-v2">
-        <ErrorBoundary name="Map">
-          <MapView
-            slopeOpacity={slopeOpacity}
-            layers={layers}
-            pickMode={pickMode}
-            onPick={handleMapPick}
-            pickedLocation={pickedLocation}
-            onZoneClick={handleZoneClick}
-            epcFields={{ epcZones: epcZonesField, epcDom: epcDomField, epcNondom: epcNondomField, postcodes: postcodesField }}
-            drawState={drawState}
-            onDrawClick={handleDrawClick}
-            onDrawDoubleClick={handleDrawDoubleClick}
-            onDrawMouseMove={handleDrawMouseMove}
-            onDrawSelectFeature={handleDrawSelectFeature}
-            onDrawDragVertex={handleDrawDragVertex}
-            chatLayers={chatLayers}
-            onMapReady={setMapInstance}
-          />
-        </ErrorBoundary>
+      {/* Site picker — SITE stage floating search */}
+      {workflowStage === "site" && (
+        <SitePicker map={mapInstance} onPick={handleMapPick} />
+      )}
 
-        <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
-        <MapLegend chatLayers={chatLayers} />
-        {!dashboardOpen && <FloatingCards />}
+      {pickMode && workflowStage !== "site" && (
+        <div className="pick-banner">Click anywhere on the map to select a site</div>
+      )}
 
-        <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
+      {layoutMode && solarCatalogue && (
+        <ComponentPalette catalogue={solarCatalogue} />
+      )}
 
-        <DrawingToolbar
-          drawMode={drawState.mode}
-          onModeChange={handleDrawModeChange}
-          featureCount={drawState.features.features.length}
-          selectedIndex={drawState.selectedIndex}
-          onDeleteFeature={handleDeleteDrawFeature}
-          onClearAll={handleClearDrawFeatures}
-          onExportGeoJSON={handleExportGeoJSON}
-          measurement={measurement}
-        />
+      {/* Site dashboard overlay */}
+      {dashboardOpen && (
+        <SiteDashboard onClose={() => setDashboardOpen(false)} />
+      )}
+    </div>
+  );
 
-        {/* Site picker — SITE stage floating search */}
-        {workflowStage === "site" && (
-          <SitePicker map={mapInstance} onPick={handleMapPick} />
-        )}
-
-        {pickMode && workflowStage !== "site" && (
-          <div className="pick-banner">Click anywhere on the map to select a site</div>
-        )}
-
-        {layoutMode && solarCatalogue && (
-          <ComponentPalette catalogue={solarCatalogue} />
-        )}
-
-        {/* Site dashboard overlay */}
-        {dashboardOpen && (
-          <SiteDashboard onClose={() => setDashboardOpen(false)} />
-        )}
-
-        {/* Grid Connection Panel — right slide-in */}
-        {gridConnectionOpen && (
-          <ErrorBoundary name="GridConnectionPanel">
-            <GridConnectionPanel
-              onClose={() => setGridConnectionOpen(false)}
-              onHighlightSubstation={setGridHighlightSub}
-            />
-          </ErrorBoundary>
-        )}
-
-        {/* Demand Forecast Panel — right slide-in */}
-        {demandForecastOpen && (
-          <ErrorBoundary name="DemandForecastPanel">
-            <DemandForecastPanel
-              onClose={() => setDemandForecastOpen(false)}
-            />
-          </ErrorBoundary>
-        )}
-
-        {/* Advanced Grid Panel — right slide-in */}
-        {advancedGridOpen && (
-          <ErrorBoundary name="AdvancedGridPanel">
-            <AdvancedGridPanel
-              onClose={() => setAdvancedGridOpen(false)}
-            />
-          </ErrorBoundary>
-        )}
-
-        {/* Connection Strategy Panel — right slide-in */}
-        {connectionStrategyOpen && (
-          <ErrorBoundary name="ConnectionStrategyPanel">
-            <ConnectionStrategyPanel
-              onClose={() => setConnectionStrategyOpen(false)}
-            />
-          </ErrorBoundary>
-        )}
-
-        {/* Dispatch Panel — right slide-in */}
-        {dispatchOpen && (
-          <ErrorBoundary name="DispatchPanel">
-            <DispatchPanel
-              onClose={() => setDispatchOpen(false)}
-            />
-          </ErrorBoundary>
-        )}
-
-        {/* Route-to-Market Panel — right slide-in */}
-        {rtmOpen && (
-          <ErrorBoundary name="RouteToMarketPanel">
-            <RouteToMarketPanel
-              onClose={() => setRtmOpen(false)}
-            />
-          </ErrorBoundary>
-        )}
-
-        {/* Sustainability Panel — right slide-in */}
-        {sustainabilityOpen && (
-          <ErrorBoundary name="SustainabilityPanel">
-            <SustainabilityPanel
-              onClose={() => setSustainabilityOpen(false)}
-            />
-          </ErrorBoundary>
-        )}
-
-        {/* Investment Panel — right slide-in */}
-        {investmentOpen && (
-          <ErrorBoundary name="InvestmentPanel">
-            <InvestmentPanel
-              onClose={() => setInvestmentOpen(false)}
-            />
-          </ErrorBoundary>
-        )}
+  return (
+    <AppShell
+      onGridTwin={() => setGridTwinOpen(true)}
+      onPitch={() => setPitchMode(true)}
+      onNomExplorer={() => setNomMode(true)}
+      onSettings={() => setSettingsMode(true)}
+    >
+      <div className="app-shell-content">
+        <WorkspaceRouter mapContent={mapContent} />
       </div>
 
       <CommandBar onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} />
@@ -446,6 +329,6 @@ export default function App() {
       {gridTwinOpen && (
         <GridTwin onClose={() => setGridTwinOpen(false)} />
       )}
-    </div>
+    </AppShell>
   );
 }

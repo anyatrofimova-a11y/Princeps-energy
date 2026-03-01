@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { SiteProvider } from "./SiteContext";
+import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 import App from "./App";
 import "./styles.css";
 
@@ -22,5 +23,5 @@ class ErrorBoundary extends React.Component {
 }
 
 createRoot(document.getElementById("root")).render(
-  <ErrorBoundary><SiteProvider><App /></SiteProvider></ErrorBoundary>
+  <ErrorBoundary><SiteProvider><WorkspaceProvider><App /></WorkspaceProvider></SiteProvider></ErrorBoundary>
 );

@@ -37,6 +37,10 @@ export default defineConfig({
       "/repd": "http://localhost:8000",
       "/workflows": "http://localhost:8000",
       "/energy_system": "http://localhost:8000",
+      "/tracker": "http://localhost:8000",
+      "/rag": "http://localhost:8000",
+      "/notifications": "http://localhost:8000",
+      "/alerts": "http://localhost:8000",
       "/pmtiles-proxy": {
         target: "https://pbcc.blob.core.windows.net",
         changeOrigin: true,

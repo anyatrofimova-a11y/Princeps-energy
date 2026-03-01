@@ -33,6 +33,8 @@ const SECTIONS = [
       { id: "flowFocus", label: "Flow Focus", color: "#08bdba" },
       { id: "osmPower", label: "OSM Power", color: "#B54EB2" },
       { id: "ngedSubs", label: "NGED Subs", color: "#1b5e20" },
+      { id: "gridCapacity", label: "Grid Capacity", color: "#0f62fe" },
+      { id: "demandGsps", label: "Demand GSPs", color: "#fa8c16" },
       { id: "tecPipeline", label: "TEC Pipeline", color: "#0277bd" },
       { id: "repdProjects", label: "REPD Projects", color: "#ff6f00" },
       { id: "electricityZones", label: "Elec. Zones", color: "#24a148" },
