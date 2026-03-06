@@ -312,6 +312,53 @@ def parse_cim_xml(xml_content: bytes, region: str) -> dict[str, list[dict]]:
     }
 
 
+def parse_cim_xml_models(xml_content: bytes, region: str) -> dict[str, list]:
+    """Parse CIM XML into typed Pydantic models (wraps parse_cim_xml).
+
+    Returns dict keyed by collection name → list of CIM Pydantic model instances.
+    """
+    from models.cim.core import Substation
+    from models.cim.wires import ACLineSegment, EnergyConsumer, PowerTransformer
+
+    raw = parse_cim_xml(xml_content, region)
+
+    return {
+        "substations": [
+            Substation(mrid=s["id"], name=s["name"], region=s.get("region"))
+            for s in raw["substations"]
+        ],
+        "power_transformers": [
+            PowerTransformer(
+                mrid=t["id"],
+                name=t["name"],
+                rated_mva=t.get("rated_mva"),
+                substation_id=t.get("substation_id"),
+            )
+            for t in raw["transformers"]
+        ],
+        "ac_line_segments": [
+            ACLineSegment(
+                mrid=l["id"],
+                name=l["name"],
+                length_km=l.get("length_km"),
+                r_ohm=l.get("r_ohm"),
+                x_ohm=l.get("x_ohm"),
+                region=l.get("region"),
+            )
+            for l in raw["line_segments"]
+        ],
+        "energy_consumers": [
+            EnergyConsumer(
+                mrid=c["id"],
+                name=c["name"],
+                p_mw=c.get("p_mw"),
+                substation_id=c.get("substation_id"),
+            )
+            for c in raw["consumers"]
+        ],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Download & extract
 # ---------------------------------------------------------------------------
