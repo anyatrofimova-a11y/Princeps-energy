@@ -6,8 +6,8 @@ import { useSite } from "../../SiteContext";
  */
 export default function SiteProspectorCard() {
   const { pickedLocation } = useSite();
-  const lat = pickedLocation?.[0];
-  const lon = pickedLocation?.[1];
+  const lat = pickedLocation?.lat;
+  const lon = pickedLocation?.lon;
   const [view, setView] = useState("score"); // score | scan | similar
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);

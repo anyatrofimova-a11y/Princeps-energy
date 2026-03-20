@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { useSite } from "../SiteContext";
 
 const TIMELINE_PHASES = [
-  { key: "design", label: "Design", color: "#0f62fe", pct: 15 },
+  { key: "design", label: "Design", color: "#7c5cfc", pct: 15 },
   { key: "application", label: "Apply", color: "#3b82f6", pct: 20 },
   { key: "assessment", label: "Assess", color: "#6366f1", pct: 25 },
   { key: "construction", label: "Build", color: "#8b5cf6", pct: 30 },

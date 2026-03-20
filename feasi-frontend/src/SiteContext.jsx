@@ -109,6 +109,30 @@ export function SiteProvider({ children }) {
   // ── Investment Panel ──
   const [investmentOpen, setInvestmentOpen] = useState(false);
 
+  // ── Data Centre Twin (unified) ──
+  const [dcTwinOpen, setDcTwinOpen] = useState(false);
+  const [dcLandingOpen, setDcLandingOpen] = useState(false);
+  const [dcComparisonOpen, setDcComparisonOpen] = useState(false);
+  const [dcComparisonSites, setDcComparisonSites] = useState([]);
+
+  // ── BEMS Digital Twin ──
+  const [bemsOpen, setBemsOpen] = useState(false);
+
+  // ── Asset Inspector (LiDAR) ──
+  const [assetInspectorOpen, setAssetInspectorOpen] = useState(false);
+
+  // ── Grid Graph Topology ──
+  const [gridGraphOpen, setGridGraphOpen] = useState(false);
+
+  // ── BESS Facility Twin ──
+  const [bessFacilityOpen, setBessFacilityOpen] = useState(false);
+
+  // ── Hardware Configurator ──
+  const [hwConfigOpen, setHwConfigOpen] = useState(false);
+
+  // ── Thermal Model (TEASER) ──
+  const [thermalModelOpen, setThermalModelOpen] = useState(false);
+
   // ── Vision AI ──
   const [visionData, setVisionData] = useState(null);
   const [visionLoading, setVisionLoading] = useState(false);
@@ -127,6 +151,23 @@ export function SiteProvider({ children }) {
   const [customBom, setCustomBom] = useState(null);
   const [solarCatalogue, setSolarCatalogue] = useState(null);
   const bomAbortRef = useRef(null);
+
+  // ── Placed assets (map drag-drop) ──
+  const [placedAssets, setPlacedAssets] = useState([]);
+  const [energyFlowOpen, setEnergyFlowOpen] = useState(false);
+
+  const addPlacedAsset = useCallback((asset) => {
+    setPlacedAssets(prev => [...prev, { ...asset, id: `${asset.assetType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }]);
+    setEnergyFlowOpen(true);
+  }, []);
+
+  const removePlacedAsset = useCallback((id) => {
+    setPlacedAssets(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  const clearPlacedAssets = useCallback(() => {
+    setPlacedAssets([]);
+  }, []);
 
   // ── EPC ──
   const [selectedLsoa, setSelectedLsoa] = useState(null);
@@ -185,6 +226,7 @@ export function SiteProvider({ children }) {
     geeflowOpportunities: false,
     electricityZones: false,
     epcZones: false, epcDom: false, epcNondom: false, postcodes: false,
+    dcCapacity: false, dcFibre: false, dcIxp: false,
   });
   const toggleLayer = useCallback((id) => {
     setLayers(l => ({ ...l, [id]: !l[id] }));
@@ -396,6 +438,23 @@ export function SiteProvider({ children }) {
     sustainabilityOpen, setSustainabilityOpen,
     // Investment Panel
     investmentOpen, setInvestmentOpen,
+    // Data Centre Panel
+    dcTwinOpen, setDcTwinOpen,
+    dcLandingOpen, setDcLandingOpen,
+    dcComparisonOpen, setDcComparisonOpen,
+    dcComparisonSites, setDcComparisonSites,
+    // BEMS Digital Twin
+    bemsOpen, setBemsOpen,
+    // Asset Inspector (LiDAR)
+    assetInspectorOpen, setAssetInspectorOpen,
+    // Grid Graph Topology
+    gridGraphOpen, setGridGraphOpen,
+    // BESS Facility Twin
+    bessFacilityOpen, setBessFacilityOpen,
+    // Hardware Configurator
+    hwConfigOpen, setHwConfigOpen,
+    // Thermal Model (TEASER)
+    thermalModelOpen, setThermalModelOpen,
     // GeeFlow
     geeflowData, setGeeflowData,
     geeflowLoading, setGeeflowLoading,
@@ -415,6 +474,9 @@ export function SiteProvider({ children }) {
     customBom, setCustomBom,
     solarCatalogue, setSolarCatalogue,
     bomAbortRef,
+    // Placed assets (map drag-drop)
+    placedAssets, setPlacedAssets, addPlacedAsset, removePlacedAsset, clearPlacedAssets,
+    energyFlowOpen, setEnergyFlowOpen,
     // EPC
     selectedLsoa, setSelectedLsoa,
     epcZonesField, setEpcZonesField,

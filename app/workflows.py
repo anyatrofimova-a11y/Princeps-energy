@@ -123,6 +123,7 @@ async def stream_workflow(
     model: str,
     base_context: dict[str, Any],
     preset_key: str,
+    pool=None,
 ) -> AsyncIterator[str]:
     """
     Async generator that yields SSE events for a chained workflow.
@@ -163,6 +164,7 @@ async def stream_workflow(
                 model=model,
                 context=step_context,
                 intent=intent,
+                pool=pool,
             )
             elapsed = round(time.time() - t0, 2)
             result["elapsed_s"] = elapsed

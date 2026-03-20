@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import api from "../services/api";
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -14,8 +15,7 @@ export default function BIPVPanel({ parcelId, samCapacity }) {
 
   // Fetch catalogue on mount
   useEffect(() => {
-    fetch("/bipv/catalogue")
-      .then((r) => (r.ok ? r.json() : null))
+    api.bipv.catalogue()
       .then((d) => { if (d) setCatalogue(d); })
       .catch(() => {});
   }, []);
@@ -25,17 +25,13 @@ export default function BIPVPanel({ parcelId, samCapacity }) {
     setLoading(true);
     try {
       const [annRes, profRes] = await Promise.allSettled([
-        fetch(
-          `/site/${encodeURIComponent(parcelId)}/bipv/annual?area_m2=${area}&module_type=${moduleType}&surface_type=${surfaceType}`
-        ),
-        fetch(
-          `/site/${encodeURIComponent(parcelId)}/bipv/profile?date=${date}&area_m2=${area}&module_type=${moduleType}&surface_type=${surfaceType}`
-        ),
+        api.bipv.annual(parcelId, area, moduleType, surfaceType),
+        api.bipv.profile(parcelId, date, area, moduleType, surfaceType),
       ]);
-      if (annRes.status === "fulfilled" && annRes.value.ok)
-        setAnnual(await annRes.value.json());
-      if (profRes.status === "fulfilled" && profRes.value.ok)
-        setProfile(await profRes.value.json());
+      if (annRes.status === "fulfilled" && annRes.value)
+        setAnnual(annRes.value);
+      if (profRes.status === "fulfilled" && profRes.value)
+        setProfile(profRes.value);
     } catch (err) {
       console.error(err);
     } finally {

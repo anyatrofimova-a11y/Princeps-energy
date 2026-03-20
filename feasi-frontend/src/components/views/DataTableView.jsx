@@ -12,7 +12,7 @@ export default function DataTableView() {
   // Collect available data rows based on workspace
   const rows = [];
 
-  if (activeWorkspace === "feasibility" || activeWorkspace === "home") {
+  if (activeWorkspace === "analyse" || activeWorkspace === "home") {
     if (explain) {
       rows.push({ label: "Site Score", value: explain.score_total?.toFixed(1) || "--", unit: "/100" });
       rows.push({ label: "Latitude", value: explain.lat?.toFixed(5) || "--" });
@@ -28,7 +28,7 @@ export default function DataTableView() {
     }
   }
 
-  if (activeWorkspace === "grid" || activeWorkspace === "home") {
+  if (activeWorkspace === "analyse" || activeWorkspace === "home") {
     if (gridContext?.nearest_substation) {
       const sub = gridContext.nearest_substation;
       rows.push({ label: "Nearest Substation", value: sub.name || "--" });
@@ -37,12 +37,12 @@ export default function DataTableView() {
     }
   }
 
-  if ((activeWorkspace === "feasibility" || activeWorkspace === "home") && energyPrice) {
+  if ((activeWorkspace === "analyse" || activeWorkspace === "home") && energyPrice) {
     rows.push({ label: "Revenue (yr 1)", value: energyPrice.annual_revenue ? `${(energyPrice.annual_revenue).toFixed(0)}` : "--", unit: "GBP" });
     rows.push({ label: "LCOE", value: energyPrice.lcoe?.toFixed(1) || "--", unit: "p/kWh" });
   }
 
-  if (activeWorkspace === "environment" && planningApps?.applications) {
+  if (activeWorkspace === "analyse" && planningApps?.applications) {
     rows.push({ label: "Planning Apps", value: planningApps.applications.length || "0" });
   }
 

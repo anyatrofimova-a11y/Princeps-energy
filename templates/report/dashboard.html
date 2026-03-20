@@ -1,0 +1,129 @@
+<!-- Dashboard Page — Executive Overview -->
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ site.name }} &mdash; Executive Dashboard &mdash; {{ site.generated_at }}</div>
+  </div>
+
+  <h2 class="section-title">Executive Dashboard</h2>
+
+  <!-- KPI Strip -->
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.kpis.capacity_mw }} MW</div>
+      <div class="kpi-label">Capacity</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ site.kpis.capacity_factor_pct }}%</div>
+      <div class="kpi-label">Capacity Factor</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ site.kpis.annual_yield_gwh }} GWh</div>
+      <div class="kpi-label">Annual Yield</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">&pound;{{ site.kpis.lcoe_gbp_mwh }}/MWh</div>
+      <div class="kpi-label">LCOE</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ site.kpis.irr_pct }}%</div>
+      <div class="kpi-label">Est. IRR</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ site.kpis.payback_years }} yr</div>
+      <div class="kpi-label">Payback</div>
+    </div>
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.score_pct }}%</div>
+      <div class="kpi-label">Overall Score</div>
+    </div>
+  </div>
+
+  <!-- Verdict + Radar + Map row -->
+  <div class="two-col">
+    <div>
+      <!-- Verdict Card -->
+      <div class="card center" style="margin-bottom: 12px; padding: 16px;">
+        <div class="text-xs text-muted mb-4">SITE VERDICT</div>
+        <div class="verdict-badge verdict-{{ site.verdict }}" style="font-size: 22px; margin-bottom: 8px;">
+          {{ site.verdict }}
+        </div>
+        <div class="text-sm text-muted">
+          {{ site.score_total }} / {{ (site.scores|length) * 100 }} points ({{ site.score_pct }}%)
+        </div>
+        <div class="text-xs text-muted mt-4">
+          {% if site.verdict == 'GO' %}Site meets feasibility thresholds across all key dimensions
+          {% elif site.verdict == 'CAUTION' %}Some dimensions require further investigation before proceeding
+          {% else %}Significant constraints identified — site may not be viable{% endif %}
+        </div>
+      </div>
+
+      <!-- Radar Chart -->
+      {% if charts.radar %}
+      <div class="card center">
+        <div class="text-xs text-muted mb-4">FEASIBILITY PROFILE</div>
+        <img src="data:image/png;base64,{{ charts.radar }}" alt="Radar chart" class="chart-img" style="max-width: 300px;">
+      </div>
+      {% endif %}
+    </div>
+
+    <div>
+      <!-- Map -->
+      {% if map_image %}
+      <div class="card">
+        <div class="text-xs text-muted mb-4">SITE LOCATION</div>
+        <img src="data:image/png;base64,{{ map_image }}" alt="Site map" class="map-img">
+        <div style="display: flex; justify-content: space-between; margin-top: 6px;">
+          <div class="text-xs text-muted">
+            {{ "%.4f"|format(site.lat) }}N, {{ "%.4f"|format(site.lon|abs) }}{% if site.lon < 0 %}W{% else %}E{% endif %}
+          </div>
+          <div class="text-xs text-muted">
+            Nearest grid: {{ site.nearest_substation }} ({{ "%.1f"|format(site.distance_km) if site.distance_km else 'N/A' }} km)
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Quick Stats -->
+      <div class="card">
+        <div class="card-header">Key Metrics</div>
+        <div class="stat-row">
+          <span class="stat-label">Grid Connection</span>
+          <span class="stat-value">{% if site.distance_km %}{{ "%.1f"|format(site.distance_km) }} km @ {% if site.voltage_kv %}{{ site.voltage_kv|int }} kV{% else %}Unknown kV{% endif %}{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Connection Cost (est.)</span>
+          <span class="stat-value">&pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp) }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Annual Revenue</span>
+          <span class="stat-value">&pound;{{ "{:,.0f}".format(site.kpis.annual_revenue_k) }}k</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">25-Year NPV</span>
+          <span class="stat-value">&pound;{{ site.kpis.npv_25y_m }}m</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">CO2 Offset</span>
+          <span class="stat-value">{{ "{:,.0f}".format(site.kpis.co2_offset_tonnes_yr) }} t/yr</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Land Required</span>
+          <span class="stat-value">{{ site.kpis.land_required_ha }} ha{% if site.kpis.available_area_ha %} ({{ site.kpis.available_area_ha }} ha available){% endif %}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Score Bars -->
+  {% if charts.score_bars %}
+  <div class="card">
+    <div class="text-xs text-muted mb-4">DIMENSION SCORE BREAKDOWN</div>
+    <img src="data:image/png;base64,{{ charts.score_bars }}" alt="Score bars" class="chart-img" style="max-width: 520px;">
+  </div>
+  {% endif %}
+
+  <div class="page-footer">
+    Princeps Site Assessment &mdash; Page 2 &mdash; {{ now }}
+  </div>
+</div>

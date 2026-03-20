@@ -24,8 +24,18 @@ import pandas as pd
 log = logging.getLogger("princeps.chat")
 
 # ---------------------------------------------------------------------------
-# Session storage (in-memory, same pattern as jobs.py)
+# Session storage — in-memory cache + PostgreSQL write-through
 # ---------------------------------------------------------------------------
+
+# Optional pool — set via ``init_pool()`` at startup so we can persist.
+_pool = None
+
+
+def init_pool(pool) -> None:
+    """Set the asyncpg pool for write-through persistence."""
+    global _pool
+    _pool = pool
+
 
 @dataclass
 class ChatSession:
@@ -40,10 +50,39 @@ class ChatSession:
 _sessions: dict[str, ChatSession] = {}
 
 
+async def _db_persist_session(session: ChatSession) -> None:
+    """Write-through session to chat_sessions table (best-effort)."""
+    if _pool is None:
+        return
+    try:
+        # Strip non-serialisable uploaded_files.content_bytes before persisting
+        safe_messages = json.dumps(session.messages, default=str)
+        parcel_uuid = None
+        if session.parcel_id:
+            try:
+                from uuid import UUID as _UUID
+                parcel_uuid = _UUID(session.parcel_id)
+            except (ValueError, TypeError):
+                pass
+        await _pool.execute(
+            """INSERT INTO chat_sessions (session_id, parcel_id, messages, updated_at)
+               VALUES ($1, $2, $3::jsonb, NOW())
+               ON CONFLICT (session_id) DO UPDATE SET
+                 messages = EXCLUDED.messages,
+                 updated_at = NOW()""",
+            session.id, parcel_uuid, safe_messages,
+        )
+    except Exception as e:
+        log.warning("Failed to persist chat session %s: %s", session.id, e)
+
+
 def create_session(parcel_id: str | None = None) -> ChatSession:
     sid = uuid.uuid4().hex[:12]
     session = ChatSession(id=sid, parcel_id=parcel_id)
     _sessions[sid] = session
+    # Fire-and-forget persistence
+    if _pool is not None:
+        asyncio.ensure_future(_db_persist_session(session))
     return session
 
 
@@ -541,6 +580,61 @@ TOOLS: list[dict] = [
                 "lon": {"type": "number", "description": "Longitude"},
             },
             "required": ["house_type"],
+        },
+    },
+    {
+        "name": "assess_dc_colocation",
+        "description": "Assess a site for data centre co-location suitability. Scores 9 dimensions (power capacity, REAL grid headroom from all 6 UK DNOs, fibre proximity, IXP proximity, water cooling, latency, land/planning, resilience, connection speed). Returns DC-SCORE (0-100) with GO/CAUTION/NO-GO verdict, proximity matrix, gate compliance, and connection cost estimate. Unlike competitors, headroom values are REAL — not N/A.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "capacity_mw": {"type": "number", "description": "Required IT load in MW", "default": 10},
+                "profile": {"type": "string", "enum": ["google_hyperscale", "hyperscale", "colocation", "edge", "custom"], "description": "Facility profile", "default": "colocation"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "score_dc_site_extended",
+        "description": "Extended 15-dimension DC site scoring including 24/7 CFE%, cooling (PUE/WUE), constraint overlay (SSSI/AONB/Green Belt), water stress, incentives (Enterprise Zones/Freeports), and regulatory pathway (NSIP/TM04+). Use for Google hyperscale assessments requiring full analysis. Returns DC-SCORE with all 15 dimension breakdowns.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "capacity_mw": {"type": "number", "description": "Required IT load in MW", "default": 100},
+                "profile": {"type": "string", "enum": ["google_hyperscale", "hyperscale", "colocation", "edge"], "description": "Facility profile", "default": "google_hyperscale"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "compare_dc_sites",
+        "description": "Compare multiple candidate sites for data centre suitability across all 15 dimensions. Returns ranked sites with radar chart data, dimension-by-dimension comparison, and recommendation. Ideal for shortlisting between 2-6 candidate locations.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sites": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "lat": {"type": "number"}, "lon": {"type": "number"}}, "required": ["lat", "lon"]}, "description": "Candidate sites to compare"},
+                "capacity_mw": {"type": "number", "description": "Required IT load in MW", "default": 100},
+                "profile": {"type": "string", "default": "google_hyperscale"},
+            },
+            "required": ["sites"],
+        },
+    },
+    {
+        "name": "find_dc_sites",
+        "description": "AI-driven site discovery for data centres. Scans substations with adequate headroom and scores them with the full 15-dimension engine. Use natural language queries like 'Find 200+ acre sites near London with >100MW'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Natural language site criteria"},
+                "capacity_mw": {"type": "number", "default": 100},
+                "min_headroom_mw": {"type": "number", "default": 50},
+                "limit": {"type": "integer", "default": 20},
+            },
+            "required": ["query"],
         },
     },
 ]
@@ -1061,6 +1155,87 @@ async def execute_tool(
                 "heat_pump_recommendation": result.get("heat_pump_assessment", {}).get("recommendation"),
             }
 
+        elif name == "assess_dc_colocation":
+            from utils.dc_colocation_scorer import score_dc_site as _dc_score
+            lat, lon = args["lat"], args["lon"]
+            capacity_mw = args.get("capacity_mw", 10)
+            profile = args.get("profile", "colocation")
+            async with pool.acquire() as conn:
+                result = await _dc_score(conn, lat, lon, capacity_mw, profile)
+            # Compact for chat context
+            return {
+                "dc_score": result["dc_score"],
+                "verdict": result["verdict"],
+                "confidence": result["confidence"],
+                "profile": result["profile"],
+                "capacity_mw": result["capacity_mw"],
+                "proximity": result["proximity"],
+                "grid_connection": result["grid_connection"],
+                "gates_all_passed": result["gates_all_passed"],
+                "risks": result["risks"],
+                "opportunities": result["opportunities"],
+            }
+
+        elif name == "score_dc_site_extended":
+            from utils.dc_site_comparator import score_dc_site_extended as _ext_score
+            lat, lon = args["lat"], args["lon"]
+            capacity_mw = args.get("capacity_mw", 100)
+            profile = args.get("profile", "google_hyperscale")
+            async with pool.acquire() as conn:
+                result = await _ext_score(conn, lat, lon, capacity_mw, profile)
+            return {
+                "dc_score": result.get("dc_score"),
+                "verdict": result.get("verdict"),
+                "confidence": result.get("confidence"),
+                "profile": result.get("profile"),
+                "capacity_mw": result.get("capacity_mw"),
+                "dimensions_15": {k: v.get("score") for k, v in result.get("scores", {}).items()},
+                "cfe_pct": result.get("cfe", {}).get("achievable_cfe_pct"),
+                "pue_estimate": result.get("cooling", {}).get("pue_estimate"),
+                "constraint_clear": result.get("constraints", {}).get("is_clear"),
+                "water_status": result.get("water", {}).get("status"),
+                "incentive_zones": [z.get("name") for z in result.get("incentives", {}).get("zones", [])],
+                "nsip_eligible": result.get("regulatory", {}).get("nsip_eligible"),
+                "grid_connection": result.get("grid_connection"),
+                "risks": result.get("risks", []),
+                "opportunities": result.get("opportunities", []),
+            }
+
+        elif name == "compare_dc_sites":
+            from utils.dc_site_comparator import compare_dc_sites as _compare
+            sites = args["sites"]
+            capacity_mw = args.get("capacity_mw", 100)
+            profile = args.get("profile", "google_hyperscale")
+            async with pool.acquire() as conn:
+                result = await _compare(conn, sites, capacity_mw, profile)
+            return {
+                "site_count": result.get("site_count"),
+                "ranking": result.get("ranking"),
+                "dimension_winners": result.get("dimension_winners"),
+                "recommendation": result.get("recommendation"),
+            }
+
+        elif name == "find_dc_sites":
+            from utils.dc_colocation_scorer import scan_dc_sites as _scan
+            query = args.get("query", "")
+            capacity_mw = args.get("capacity_mw", 100)
+            min_hr = args.get("min_headroom_mw", 50)
+            limit = args.get("limit", 20)
+            async with pool.acquire() as conn:
+                result = await _scan(conn, "google_hyperscale", capacity_mw,
+                                     min_headroom_mw=min_hr, limit=limit)
+            sites = result.get("sites", [])
+            return {
+                "query": query,
+                "count": len(sites),
+                "top_sites": [
+                    {"name": s.get("substation_name"), "dc_score": s.get("dc_score"),
+                     "verdict": s.get("verdict"), "headroom_mw": s.get("grid_connection", {}).get("headroom_mw"),
+                     "lat": s.get("lat"), "lon": s.get("lon")}
+                    for s in sites[:10]
+                ],
+            }
+
         else:
             return {"error": f"Unknown tool: {name}"}
 
@@ -1357,9 +1532,11 @@ async def stream_chat_response(
         else:
             # Final text response — no more tool calls
             session.messages.append({"role": "assistant", "content": assistant_content or [{"type": "text", "text": text_content}]})
+            await _db_persist_session(session)
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             return
 
     # Max turns reached
+    await _db_persist_session(session)
     yield f"data: {json.dumps({'type': 'error', 'message': 'Maximum tool call depth reached'})}\n\n"
     yield f"data: {json.dumps({'type': 'done'})}\n\n"

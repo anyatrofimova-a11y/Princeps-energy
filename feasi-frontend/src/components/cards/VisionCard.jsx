@@ -20,7 +20,7 @@ function ScoreGauge({ score, verdict, confidence }) {
     <div style={{ marginBottom: 12 }}>
       <div className="card-label">Suitability Score</div>
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
-        <div style={{ flex: 1, height: 10, borderRadius: 5, background: "#1a1a2e", overflow: "hidden" }}>
+        <div style={{ flex: 1, height: 10, borderRadius: 5, background: "#F7F8FA", overflow: "hidden" }}>
           <div style={{ width: `${score}%`, height: "100%", background: color, borderRadius: 5, transition: "width 0.5s ease" }} />
         </div>
         <span style={{ color, fontWeight: "bold", fontSize: 16, minWidth: 36, textAlign: "right" }}>{score}</span>
@@ -53,7 +53,7 @@ function FindingsGrid({ findings }) {
             <div key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ color: "#aaa", marginBottom: 2 }}>{label}</div>
-                <div style={{ height: 5, borderRadius: 3, background: "#1a1a2e", overflow: "hidden" }}>
+                <div style={{ height: 5, borderRadius: 3, background: "#F7F8FA", overflow: "hidden" }}>
                   <div style={{ width: `${val}%`, height: "100%", background: color, borderRadius: 3 }} />
                 </div>
               </div>

@@ -12,19 +12,18 @@ const MAP_IMG = MB_TOKEN ? `https://api.mapbox.com/styles/v1/mapbox/dark-v11/sta
 
 const SLIDES = [
   { id: "hero", label: "PRINCEPS" },
-  { id: "problem", label: "PROBLEM" },
-  { id: "solution", label: "SOLUTION" },
-  { id: "product", label: "PRODUCT" },
-  { id: "engine", label: "AI ENGINE" },
-  { id: "stack", label: "DATA & AI" },
-  { id: "chat", label: "CHAT AI" },
-  { id: "compliance", label: "COMPLIANCE" },
-  { id: "gridprocess", label: "GRID" },
-  { id: "financial", label: "FINANCIALS" },
-  { id: "competitive", label: "LANDSCAPE" },
+  { id: "dc-opportunity", label: "OPPORTUNITY" },
+  { id: "dc-problem", label: "PROBLEM" },
+  { id: "dc-solution", label: "SOLUTION" },
+  { id: "dc-engine", label: "15D ENGINE" },
+  { id: "dc-cfe", label: "24/7 CFE%" },
+  { id: "dc-demo", label: "LIVE DEMO" },
+  { id: "dc-comparison", label: "COMPARE" },
+  { id: "dc-google-sites", label: "GOOGLE UK" },
+  { id: "dc-competitive", label: "VS OTHERS" },
+  { id: "dc-data", label: "DATA STACK" },
   { id: "architecture", label: "TECH ARCH" },
   { id: "traction", label: "TRACTION" },
-  { id: "market", label: "MARKET" },
   { id: "business", label: "BUSINESS" },
   { id: "team", label: "TEAM / ASK" },
 ];
@@ -92,21 +91,20 @@ export default function PitchPage({ onExit }) {
         <div className="pitch-frame-16x9">
           <div key={slide} className={`pitch-slide-transition ${direction > 0 ? "pitch-enter-right" : "pitch-enter-left"}`}>
             {slide === 0 && <SlideHero />}
-            {slide === 1 && <SlideProblem />}
-            {slide === 2 && <SlideSolution />}
-            {slide === 3 && <SlideProduct />}
-            {slide === 4 && <SlideEngine />}
-            {slide === 5 && <SlideStack />}
-            {slide === 6 && <SlideChat />}
-            {slide === 7 && <SlideCompliance />}
-            {slide === 8 && <SlideGridProcess />}
-            {slide === 9 && <SlideFinancial />}
-            {slide === 10 && <SlideCompetitive />}
+            {slide === 1 && <SlideDCOpportunity />}
+            {slide === 2 && <SlideDCProblem />}
+            {slide === 3 && <SlideDCSolution />}
+            {slide === 4 && <SlideDCEngine />}
+            {slide === 5 && <SlideDCCFE />}
+            {slide === 6 && <SlideDCDemo />}
+            {slide === 7 && <SlideDCComparison />}
+            {slide === 8 && <SlideDCGoogleSites />}
+            {slide === 9 && <SlideDCCompetitive />}
+            {slide === 10 && <SlideDCData />}
             {slide === 11 && <SlideArchitecture />}
             {slide === 12 && <SlideTraction />}
-            {slide === 13 && <SlideMarket />}
-            {slide === 14 && <SlideBusiness />}
-            {slide === 15 && <SlideTeam />}
+            {slide === 13 && <SlideBusiness />}
+            {slide === 14 && <SlideTeam />}
           </div>
         </div>
       </div>
@@ -202,8 +200,8 @@ function StaticAnalytics() {
 
   const metrics = [
     { label: "YIELD", value: annualKwh ? `${(annualKwh / 1000).toFixed(1)} MWh/yr` : "--", color: "#ff9800" },
-    { label: "CF", value: cf ? `${cf.toFixed(1)}%` : "--", color: "#00e5ff" },
-    { label: "SCORE", value: score != null ? `${score}/120` : "--", color: "#00ff88" },
+    { label: "CF", value: cf ? `${cf.toFixed(1)}%` : "--", color: "#7c5cfc" },
+    { label: "SCORE", value: score != null ? `${score}/120` : "--", color: "#22c55e" },
     { label: "GRID", value: gridDist ? `${gridDist.toFixed(1)} km` : "--", color: "#2196f3" },
     { label: "CONF", value: confidence ? `${Math.round(confidence * 100)}%` : "--", color: "#7c4dff" },
   ];
@@ -284,9 +282,9 @@ function MockMapView() {
         )}
         {/* Site boundary + substation overlay */}
         <svg className="pf-map-overlay" viewBox="0 0 500 320" preserveAspectRatio="xMidYMid slice">
-          <polygon points="160,100 340,90 350,230 170,240" fill="rgba(15,98,254,0.12)" stroke="#0f62fe" strokeWidth="1.5" strokeDasharray="4,2" />
+          <polygon points="160,100 340,90 350,230 170,240" fill="rgba(124,92,252,0.12)" stroke="#7c5cfc" strokeWidth="1.5" strokeDasharray="4,2" />
           <line x1="345" y1="160" x2="400" y2="145" stroke="#f1c21b" strokeWidth="1" strokeDasharray="3,3" opacity="0.6" />
-          <text x="250" y="175" textAnchor="middle" fill="#0f62fe" fontSize="9" fontWeight="700">5 MW SOLAR SITE</text>
+          <text x="250" y="175" textAnchor="middle" fill="#7c5cfc" fontSize="9" fontWeight="700">5 MW SOLAR SITE</text>
           <text x="400" y="135" textAnchor="middle" fill="#f1c21b" fontSize="7">33kV PRIMARY</text>
           <text x="375" y="165" textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="6">1.8km</text>
         </svg>
@@ -298,7 +296,7 @@ function MockMapView() {
       </div>
       <div className="pf-map-kpi pf-map-kpi-tr">
         <span className="pf-kpi-label">CF</span>
-        <span className="pf-kpi-value" style={{ color: "#0f62fe" }}>10.95%</span>
+        <span className="pf-kpi-value" style={{ color: "#7c5cfc" }}>10.95%</span>
       </div>
       <div className="pf-map-kpi pf-map-kpi-bl">
         <span className="pf-kpi-label">YIELD</span>
@@ -312,16 +310,17 @@ function MockMapView() {
   );
 }
 
-/** 9-domain radar using inline SVG */
-function DomainRadar() {
-  const domains = DEMO_AGENT_RESULT.domains;
-  const keys = Object.keys(domains);
+/** Domain radar using inline SVG — supports custom domains/keys or defaults to DEMO data */
+function DomainRadar({ domains: customDomains, keys: customKeys }) {
+  const defaultDomains = DEMO_AGENT_RESULT.domains;
+  const domains = customDomains || defaultDomains;
+  const keys = customKeys || Object.keys(domains);
   const n = keys.length;
   const cx = 100, cy = 100, r = 80;
 
   const points = keys.map((k, i) => {
     const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-    const val = domains[k].score / 100;
+    const val = (domains[k].score || 0) / 100;
     return {
       x: cx + r * val * Math.cos(angle),
       y: cy + r * val * Math.sin(angle),
@@ -350,7 +349,7 @@ function DomainRadar() {
         return <line key={i} x1={cx} y1={cy} x2={cx + r * Math.cos(angle)} y2={cy + r * Math.sin(angle)} stroke="rgba(82,82,82,0.15)" strokeWidth="0.5" />;
       })}
       {/* Data polygon */}
-      <polygon points={polyPoints} fill="rgba(15,98,254,0.15)" stroke="#0f62fe" strokeWidth="1.5" />
+      <polygon points={polyPoints} fill="rgba(124,92,252,0.15)" stroke="#7c5cfc" strokeWidth="1.5" />
       {/* Data points */}
       {points.map((p, i) => (
         <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={p.status === "GO" ? "#24a148" : p.status === "CAUTION" ? "#f1c21b" : "#da1e28"} />
@@ -386,7 +385,7 @@ function MonthlyYieldChart() {
 function LandUseDonut() {
   const classes = DEMO_GEEFLOW_DATA.extractions.land_use.class_percentages;
   const colors = {
-    grass: "#24a148", crops: "#f1c21b", built: "#da1e28", trees: "#0f62fe",
+    grass: "#24a148", crops: "#f1c21b", built: "#da1e28", trees: "#7c5cfc",
     shrub_and_scrub: "#a56eff", bare: "#8d8d8d", water: "#1e90ff",
     flooded_vegetation: "#00bcd4", snow_and_ice: "#e0e0e0",
   };
@@ -479,7 +478,7 @@ function ScoreGaugeBar() {
 }
 
 /* ══════════════════════════════════════════════════
-   SLIDE COMPONENTS (with live embeds)
+   SLIDE COMPONENTS
    ══════════════════════════════════════════════════ */
 
 function SlideHero() {
@@ -487,379 +486,137 @@ function SlideHero() {
     <div className="pitch-slide pitch-slide-hero">
       <div className="pitch-hero-glow" />
       <div className="pitch-hero-grid-bg" />
-      <span className="pitch-hero-eyebrow">THE INTELLIGENCE LAYER FOR RENEWABLE ENERGY</span>
+      <span className="pitch-hero-eyebrow">THE UK'S MOST INTELLIGENT DATA CENTRE SITE SELECTION ENGINE</span>
       <h1 className="pitch-hero-title">PRINCEPS</h1>
       <p className="pitch-hero-sub">
-        The first AI platform that fuses satellite imagery, grid topology, planning data and financial models into a single site feasibility verdict — replacing months of consultancy with a 5-minute automated assessment.
+        15-dimension AI scoring with real grid capacity data from all 6 UK DNOs, 24/7 CFE% modelling, and integrated environmental intelligence. No competitor platform does this.
       </p>
-      <div className="pitch-hero-tagline">Site intelligence. Automated. Institutional-grade.</div>
+      <div className="pitch-hero-tagline">Data centre site intelligence. Automated. Institutional-grade.</div>
       <div className="pitch-hero-stats">
-        <StatBox label="FASTER" value="1000x" color="var(--pg-green)" />
-        <StatBox label="CHEAPER" value="10-30x" color="var(--pg-blue)" />
-        <StatBox label="DATA SOURCES" value="20+" color="var(--pg-accent)" />
-        <StatBox label="AI MODELS" value="12" color="var(--pg-purple)" />
+        <StatBox label="UK DNOs" value="6" color="var(--pg-green)" />
+        <StatBox label="DIMENSIONS" value="15" color="var(--pg-blue)" />
+        <StatBox label="CFE MODEL" value="24/7" color="var(--pg-accent)" />
+        <StatBox label="SUBSTATIONS" value="500+" color="var(--pg-purple)" />
       </div>
     </div>
   );
 }
 
-function SlideProblem() {
+/* ── DC-FOCUSED SLIDES ── */
+
+function SlideDCOpportunity() {
+  const sites = [
+    { name: "Waltham Cross", status: "Operational", statusColor: "#24a148", mw: "30 MW", detail: "UKPN network, Enfield substation cluster" },
+    { name: "North Weald", status: "Approved", statusColor: "#3b82f6", mw: "50 MW", detail: "Planning consent granted 2024, UKPN 132kV feed" },
+    { name: "Purfleet", status: "Acquired", statusColor: "#f1c21b", mw: "80 MW", detail: "Thames Enterprise Park, National Grid 275kV proximity" },
+    { name: "Teesside", status: "Negotiation", statusColor: "#a56eff", mw: "100 MW", detail: "Freeport zone, NPG network, offshore wind CFE advantage" },
+  ];
   return (
     <div className="pitch-slide">
-      <SlideTitle num="02" title="THE PROBLEM" accent="var(--pg-red)" />
+      <SlideTitle num="02" title="THE OPPORTUNITY" accent="var(--pg-green)" />
       <div className="pitch-cols">
         <div className="pitch-col">
           <div className="pitch-big-stat">
-            <span className="pitch-big-num" style={{ color: "var(--pg-accent)" }}>50 GW</span>
-            <span className="pitch-big-label">UK Government target — solar + storage capacity by 2035. Requires assessing tens of thousands of candidate sites.</span>
+            <span className="pitch-big-num" style={{ color: "var(--pg-green)" }}>&pound;5B+</span>
+            <span className="pitch-big-label">Google's planned investment in UK data centre infrastructure. Hyperscalers are racing to secure power-ready sites with grid capacity, clean energy access, and planning certainty.</span>
           </div>
           <div className="pitch-big-stat">
-            <span className="pitch-big-num" style={{ color: "var(--pg-red)" }}>4-8 weeks</span>
-            <span className="pitch-big-label">Current timeline to assess a single site. Involves grid consultants, environmental surveys, planning reviews and financial modelling — all sequential.</span>
+            <span className="pitch-big-num" style={{ color: "var(--pg-blue)" }}>6+ GW</span>
+            <span className="pitch-big-label">UK data centre power pipeline. The grid queue is 739 GW deep. Finding sites with actual available capacity is the bottleneck.</span>
           </div>
           <div className="pitch-big-stat">
-            <span className="pitch-big-num" style={{ color: "var(--pg-red)" }}>&pound;5-15K</span>
-            <span className="pitch-big-label">Per-site consultancy cost before any planning application. Most developers assess 10-50 sites for every one that proceeds.</span>
+            <span className="pitch-big-num" style={{ color: "var(--pg-accent)" }}>95%</span>
+            <span className="pitch-big-label">Google's 24/7 Carbon-Free Energy target by 2030. Every new site must demonstrate achievable CFE% from day one.</span>
           </div>
         </div>
         <div className="pitch-col">
+          <h3 className="pitch-section-head">GOOGLE UK DC PORTFOLIO</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {sites.map(s => (
+              <div key={s.name} className="pitch-competitor-card" style={{ borderLeftColor: s.statusColor }}>
+                <div className="pitch-competitor-head">
+                  <span className="pitch-competitor-dot" style={{ background: s.statusColor }} />
+                  <span className="pitch-competitor-name">{s.name}</span>
+                  <span className="pitch-intent-chip" style={{ borderColor: s.statusColor, color: s.statusColor }}>{s.status}</span>
+                </div>
+                <div className="pitch-competitor-focus">{s.mw} &mdash; {s.detail}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="pitch-callout pitch-callout-accent">
+        <strong>The challenge:</strong> No platform integrates grid capacity + CFE% + PUE + constraints + financial TCO into a single automated DC site verdict. Site selection remains manual, fragmented, and slow.
+      </div>
+    </div>
+  );
+}
+
+function SlideDCProblem() {
+  return (
+    <div className="pitch-slide">
+      <SlideTitle num="03" title="WHAT'S BROKEN" accent="var(--pg-red)" />
+      <div className="pitch-cols">
+        <div className="pitch-col">
+          <div className="pitch-big-stat">
+            <span className="pitch-big-num" style={{ color: "var(--pg-red)" }}>12-18 mo</span>
+            <span className="pitch-big-label">Typical DC site selection cycle. By the time you have grid confirmation, competitors have secured the site.</span>
+          </div>
+          <div className="pitch-big-stat">
+            <span className="pitch-big-num" style={{ color: "var(--pg-red)" }}>&pound;M+</span>
+            <span className="pitch-big-label">Annual spend on consultant fees for grid studies, environmental assessments, planning due diligence, and CFE analysis per hyperscaler.</span>
+          </div>
+        </div>
+        <div className="pitch-col">
+          <h3 className="pitch-section-head">CURRENT DC SITE SELECTION IS FRAGMENTED</h3>
           <div className="pitch-pain-list">
-            <PainPoint icon="01" text="Manual site surveys" detail="Physical helicopter flyovers, weeks-long ground visits, Agricultural Land Classification soil surveys — all before any planning decision" />
-            <PainPoint icon="02" text="Fragmented data" detail="Grid headroom data from DNOs, planning applications from local authorities, EA flood maps, Defra environmental designations — none integrated" />
-            <PainPoint icon="03" text="Regulatory maze" detail="G99, CDM, BNG, EIA, NPPF, ALC \u2014 all manual" />
-            <PainPoint icon="04" text="Blind bidding" detail="Developers bid on tenders without understanding how their portfolio sites match — no similarity search, no embedding-based ranking" />
-            <PainPoint icon="05" text="No portfolio view" detail="Each site in isolation; no similarity search" />
+            <PainPoint icon="01" text="Grid data is locked in DNO portals" detail="Each of 6 UK DNOs publishes capacity data in different formats, update cycles, and portals. No single view of real headroom. Most show 'N/A'." />
+            <PainPoint icon="02" text="CFE% is manual spreadsheet work" detail="Modelling 24/7 carbon-free energy requires hourly generation profiles, PPA matching, grid carbon intensity data, and storage optimisation. Currently done by hand." />
+            <PainPoint icon="03" text="Constraint checks take weeks" detail="Flood zones, SSSI/AONB buffers, aviation height limits, telecoms interference zones, water stress — each checked separately via different agencies." />
+            <PainPoint icon="04" text="No PUE-aware site scoring" detail="Power Usage Effectiveness varies by climate zone, water availability, and altitude. No platform models this alongside grid and CFE constraints." />
+            <PainPoint icon="05" text="Financial TCO is a black box" detail="Grid connection costs, reinforcement charges, PPA rates, and incentives vary wildly by location. No way to compare TCO across candidate sites." />
           </div>
         </div>
       </div>
       <div className="pitch-callout pitch-callout-danger">
-        Over 70% of assessed sites never proceed to planning. The UK energy sector wastes an estimated &pound;500M+ annually on failed due diligence — a problem that scales linearly with the 50 GW pipeline.
+        Result: 12-18 month site selection cycles, missed opportunities, and millions in consultant fees. Google needs a faster, data-driven approach.
       </div>
     </div>
   );
 }
 
-function SlideSolution() {
-  const replaces = [
-    "Site survey consultants", "Grid connection consultants", "Planning consultants",
-    "Environmental consultants", "Financial modelers", "Procurement advisors",
+function SlideDCSolution() {
+  const differentiators = [
+    { title: "Real Grid Data", desc: "Live headroom from all 6 UK DNOs. Not estimates \u2014 actual available capacity at every substation.", color: "var(--pg-green)" },
+    { title: "24/7 CFE% Model", desc: "Hourly generation profiles matched against Carbon Intensity API. PPA overlay from nearby REPD wind/solar assets.", color: "var(--pg-blue)" },
+    { title: "15D AI Scoring", desc: "Grid, CFE, PUE, cooling, water, constraints, planning, environment, connectivity, land, finance, incentives, regulatory, security, resilience.", color: "var(--pg-accent)" },
   ];
   return (
     <div className="pitch-slide">
-      <SlideTitle num="03" title="THE SOLUTION" accent="var(--pg-green)" />
-      <div className="pitch-cols">
-        <div className="pitch-col">
-          <p className="pitch-lead">
-            Princeps ingests <strong>20+ live data sources</strong> — satellite imagery, grid network topology, regulatory databases, terrain models, and financial benchmarks — then applies 12 deep learning models and NREL's PvWattsv8 engine to deliver a structured GO / CAUTION / NO-GO verdict with calibrated confidence scoring. One platform replaces an entire consultancy team.
-          </p>
-          <div className="pitch-verdict-row">
-            <VerdictBadge verdict="GO" color="var(--pg-green)" />
-            <VerdictBadge verdict="CAUTION" color="var(--pg-accent)" />
-            <VerdictBadge verdict="NO-GO" color="var(--pg-red)" />
-          </div>
-          <div className="pitch-replaces">
-            <span className="pitch-replaces-label">ONE PLATFORM REPLACES:</span>
-            <div className="pitch-replaces-grid">
-              {replaces.map(r => (
-                <div key={r} className="pitch-replaces-item">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--pg-green)" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
-                  {r}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="pitch-flow-row">
-            <FlowStep label="SITE" active /><FlowArrow />
-            <FlowStep label="STUDY" /><FlowArrow />
-            <FlowStep label="PLAN" /><FlowArrow />
-            <FlowStep label="ACT" />
-          </div>
-        </div>
-        <div className="pitch-col">
-          <ProductFrame title="princeps.app \u2014 Verdict">
-            <div className="pitch-live-component">
-              <StaticVerdict />
-            </div>
-          </ProductFrame>
-        </div>
+      <SlideTitle num="04" title="THE PRINCEPS ANSWER" accent="var(--pg-green)" />
+      <p className="pitch-lead" style={{ textAlign: "center", maxWidth: 700, margin: "0 auto 16px" }}>
+        <strong>One platform. 15 dimensions. Real data. Instant verdict.</strong>
+      </p>
+      <div className="pitch-flow-row" style={{ justifyContent: "center", marginBottom: 20 }}>
+        <FlowStep label="PICK SITE" active /><FlowArrow />
+        <FlowStep label="AI SCORE (15D)" /><FlowArrow />
+        <FlowStep label="COMPARE" /><FlowArrow />
+        <FlowStep label="REPORT" /><FlowArrow />
+        <FlowStep label="GO / NO-GO" />
       </div>
-    </div>
-  );
-}
-
-function SlideProduct() {
-  const stages = [
-    { stage: "1", title: "SITE", subtitle: "Discovery & Selection", color: "var(--pg-blue)",
-      items: ["NOM Explorer \u2014 search 1,000+ UK substations by headroom, voltage, distance", "Interactive map \u2014 click, postcode, or coordinate search with real-time grid overlay", "Site Prospector \u2014 AI scores 25 candidates across 5 dimensions (resource, terrain, land use, grid, planning)", "Similarity search \u2014 NASA Prithvi EO 2.0 embeddings find sites with matching characteristics"] },
-    { stage: "2", title: "STUDY", subtitle: "Deep Feasibility Analysis", color: "var(--pg-green)",
-      items: ["9-domain AI engine with 11 analysis intents \u2014 each returns a structured verdict", "Claude AI synthesises GO / CAUTION / NO-GO with calibrated confidence (0-100%)", "Full-stack: DNO grid study, PvWatts yield, financial IRR, planning risk, environmental screening", "Satellite computer vision \u2014 12 DL models analyse land cover, terrain, shading, infrastructure"] },
-    { stage: "3", title: "PLAN", subtitle: "Design & Layout", color: "var(--pg-accent)",
-      items: ["70+ component catalogue \u2014 drag-and-drop panels, inverters, BESS, transformers onto site", "3D Digital Twin with real sun path simulation, inter-row shading analysis, terrain following", "Auto-generated BOM with live supplier stock levels and cost estimates", "BiPV rooftop designer for commercial and residential solar installations"] },
-    { stage: "4", title: "ACT", subtitle: "Procure & Execute", color: "var(--pg-purple)",
-      items: ["Procurement intelligence \u2014 live tender pipeline with AI bid viability scoring (0-100)", "Cost benchmarks by technology \u2014 solar, BESS, wind, EV charging with regional adjustments", "Tender-to-site matching \u2014 automatically ranks portfolio sites against each tender requirement", "Legacy asset lifecycle \u2014 repowering economics, decommissioning cost, compliance calendar"] },
-  ];
-  return (
-    <div className="pitch-slide">
-      <SlideTitle num="04" title="4-STAGE WORKFLOW" accent="var(--pg-blue)" />
-      <div className="pitch-stages-grid">
-        {stages.map(s => (
-          <div key={s.stage} className="pitch-stage-card" style={{ borderTopColor: s.color }}>
-            <div className="pitch-stage-num" style={{ color: s.color }}>{s.stage}</div>
-            <div className="pitch-stage-title">{s.title}</div>
-            <div className="pitch-stage-sub">{s.subtitle}</div>
-            <ul className="pitch-stage-items">
-              {s.items.map((item, i) => <li key={i}>{item}</li>)}
-            </ul>
+      <div className="pitch-cols" style={{ gap: 16 }}>
+        {differentiators.map(d => (
+          <div key={d.title} className="pitch-col">
+            <div className="pitch-stage-card" style={{ borderTopColor: d.color, flex: 1 }}>
+              <div className="pitch-stage-title" style={{ color: d.color }}>{d.title}</div>
+              <div className="pitch-stage-sub">{d.desc}</div>
+            </div>
           </div>
         ))}
       </div>
-      {/* Live product embed: static analytics strip */}
-      <ProductFrame title="princeps.app \u2014 Live Metrics" className="pf-chrome-wide">
-        <div className="pitch-live-component">
-          <StaticAnalytics />
-        </div>
-      </ProductFrame>
-    </div>
-  );
-}
-
-function SlideEngine() {
-  const domains = DEMO_AGENT_RESULT.domains;
-  const domainList = [
-    { key: "dno_infrastructure", name: "DNO Infrastructure", color: "var(--pg-blue)" },
-    { key: "topography", name: "Topography", color: "var(--pg-green)" },
-    { key: "solar_resource", name: "Solar Resource", color: "var(--pg-accent)" },
-    { key: "agricultural_land", name: "Agricultural Land", color: "#e36209" },
-    { key: "administrative", name: "Administrative", color: "var(--cds-text-secondary)" },
-    { key: "neighbouring_projects", name: "Neighbouring Projects", color: "var(--pg-purple)" },
-    { key: "flood_zones", name: "Flood Zones", color: "#1e90ff" },
-    { key: "protected_areas", name: "Protected Areas", color: "#ff6b6b" },
-    { key: "vision_ai", name: "Vision AI", color: "#00e5ff" },
-  ];
-  return (
-    <div className="pitch-slide">
-      <SlideTitle num="05" title="9-DOMAIN AI ENGINE" accent="var(--pg-blue)" />
-      <div className="pitch-cols">
-        <div className="pitch-col" style={{ flex: "0 0 55%" }}>
-          <div className="pitch-domains-grid pitch-domains-compact">
-            {domainList.map((d, i) => {
-              const data = domains[d.key];
-              return (
-                <div key={i} className="pitch-domain-card">
-                  <div className="pitch-domain-header">
-                    <span className="pitch-domain-num" style={{ color: d.color }}>{String(i + 1).padStart(2, "0")}</span>
-                    <span className={`pitch-domain-status pitch-domain-${data.status.toLowerCase()}`}>{data.status}</span>
-                  </div>
-                  <div className="pitch-domain-name">{d.name}</div>
-                  <div className="pitch-domain-score-bar">
-                    <div className="pitch-domain-score-fill" style={{ width: `${data.score}%`, background: d.color }} />
-                  </div>
-                  <div className="pitch-domain-detail">{data.detail}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="pitch-col" style={{ flex: "0 0 40%", alignItems: "center", justifyContent: "center" }}>
-          <ProductFrame title="princeps.app \u2014 Score">
-            <div className="pitch-live-component">
-              <ScoreCard />
-            </div>
-          </ProductFrame>
-          <DomainRadar />
-          <div style={{ textAlign: "center", marginTop: 4 }}>
-            <span style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--mono)" }}>LIVE 9-DOMAIN SCORE</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SlideStack() {
-  const satSources = [
-    { source: "DynamicWorld", res: "10m", what: "Land cover classification", color: "#00e5ff" },
-    { source: "NASADEM", res: "30m", what: "Elevation & terrain", color: "#24a148" },
-    { source: "ERA5-Land", res: "9km", what: "Solar GHI/DHI", color: "#f1c21b" },
-    { source: "Sentinel-2", res: "10m", what: "NDVI & change detection", color: "#a56eff" },
-    { source: "Sentinel-1 SAR", res: "10m", what: "Soil moisture", color: "#ff6b6b" },
-    { source: "JRC Water", res: "30m", what: "Flood risk mapping", color: "#1e90ff" },
-  ];
-  const models = [
-    { name: "Prithvi EO 2.0", org: "NASA/IBM", cap: "Site similarity embeddings", orgColor: "#00e5ff" },
-    { name: "GroundedSAM", org: "Meta", cap: "Infrastructure detection", orgColor: "#ff6b6b" },
-    { name: "DINOv3", org: "Meta", cap: "Terrain fingerprinting", orgColor: "#ff6b6b" },
-    { name: "Moondream VLM", org: "vikhyatk", cap: "Natural language captions", orgColor: "#a56eff" },
-    { name: "SAM", org: "Meta", cap: "Building extraction", orgColor: "#ff6b6b" },
-    { name: "torchange", org: "open", cap: "Change detection", orgColor: "#24a148" },
-    { name: "OmniCloudMask", org: "open", cap: "Cloud assessment", orgColor: "#24a148" },
-    { name: "OpenSR", org: "ESA", cap: "4x super-resolution", orgColor: "#1e90ff" },
-  ];
-  const layers = [
-    { label: "Satellite Imagery", color: "#00e5ff" },
-    { label: "Terrain Analysis", color: "#f1c21b" },
-    { label: "Grid Network", color: "#e36209" },
-    { label: "Environmental", color: "#24a148" },
-    { label: "Land Cover", color: "#a56eff" },
-  ];
-  return (
-    <div className="pitch-slide">
-      <SlideTitle num="06" title="Multi-modal Data" subtitle="Satellite + Deep Learning + Energy Simulation" accent="var(--pg-purple)" badge="DATA & AI STACK" />
-      <div className="ps-stack-layout">
-        {/* Left — Satellite Sources */}
-        <div className="ps-stack-col">
-          <div className="ps-stack-col-header">
-            <div className="ps-stack-icon" style={{ borderColor: "#00e5ff" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10A15.3 15.3 0 0112 2z"/></svg>
-            </div>
-            <div>
-              <div className="ps-stack-col-title">Satellite Intelligence</div>
-              <div className="ps-stack-col-sub">Google Earth Engine</div>
-            </div>
-          </div>
-          <div className="ps-source-cards">
-            {satSources.map(s => (
-              <div key={s.source} className="ps-source-card">
-                <div className="ps-source-top">
-                  <span className="ps-source-dot" style={{ background: s.color }} />
-                  <span className="ps-source-name">{s.source}</span>
-                  <span className="ps-res-badge" style={{ borderColor: s.color, color: s.color }}>{s.res}</span>
-                </div>
-                <div className="ps-source-desc">{s.what}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Center — Satellite Imagery Preview */}
-        <div className="ps-stack-center">
-          <div className="ps-sat-preview">
-            <div className="ps-sat-image">
-              {SAT_IMG ? (
-                <img src={SAT_IMG} alt="Satellite view — Bicester demo site" className="ps-sat-img" />
-              ) : (
-                <div className="ps-sat-fallback" />
-              )}
-              {/* Site boundary overlay */}
-              <svg className="ps-sat-overlay" viewBox="0 0 600 450" preserveAspectRatio="xMidYMid slice">
-                <polygon points="220,150 380,140 390,310 230,320" fill="rgba(15,98,254,0.12)" stroke="#0f62fe" strokeWidth="2" strokeDasharray="6,3" />
-                <text x="305" y="240" textAnchor="middle" fill="#0f62fe" fontSize="11" fontWeight="700">5 MW SITE</text>
-              </svg>
-            </div>
-            <div className="ps-sat-layers">
-              {layers.map((l, i) => (
-                <div key={l.label} className="ps-layer-row" style={{ borderColor: l.color, opacity: 1 - i * 0.12 }}>
-                  <span className="ps-layer-dot" style={{ background: l.color }} />
-                  <span className="ps-layer-label">{l.label}</span>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={l.color} strokeWidth="1.5" style={{ marginLeft: "auto" }}><path d="M12 2C6.48 2 2 6 2 10s10 12 10 12 10-8 10-12-4.48-8-10-8z"/></svg>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Right — Deep Learning Models */}
-        <div className="ps-stack-col">
-          <div className="ps-stack-col-header">
-            <div className="ps-stack-icon" style={{ borderColor: "#a56eff" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a56eff" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
-            </div>
-            <div>
-              <div className="ps-stack-col-title">Deep Learning</div>
-              <div className="ps-stack-col-sub">12 specialized models</div>
-            </div>
-          </div>
-          <div className="ps-source-cards">
-            {models.slice(0, 6).map(m => (
-              <div key={m.name} className="ps-source-card">
-                <div className="ps-source-top">
-                  <span className="ps-source-name">{m.name}</span>
-                  <span className="ps-org-badge" style={{ borderColor: m.orgColor, color: m.orgColor }}>{m.org}</span>
-                </div>
-                <div className="ps-source-desc">{m.cap}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SlideChat() {
-  return (
-    <div className="pitch-slide">
-      <SlideTitle num="07" title="CONVERSATIONAL AI" accent="var(--pg-blue)" />
-      <div className="pitch-cols">
-        <div className="pitch-col" style={{ flex: "0 0 55%" }}>
-          <ProductFrame title="princeps.app \u2014 Chat">
-            <MockChat />
-          </ProductFrame>
-        </div>
-        <div className="pitch-col" style={{ flex: "0 0 40%" }}>
-          <h3 className="pitch-section-head">30+ CALLABLE TOOLS</h3>
-          <div className="pitch-feature-list">
-            <Feature icon=">" text="Natural language site analysis" detail="Ask complex questions: 'What's the grid connection cost for a 5MW site here?' — AI orchestrates the right tools automatically" />
-            <Feature icon=">" text="Transparent tool execution" detail="Watch in real-time as the AI calls grid study, SAM simulation, planning search, and financial models — full auditability" />
-            <Feature icon=">" text="Dynamic map layers" detail="AI generates GeoJSON layers on-the-fly — flood zones, grid networks, site boundaries rendered directly onto the map" />
-            <Feature icon=">" text="Portfolio file upload" detail="Upload CSV/Excel with hundreds of site coordinates — bulk feasibility screening with parallel AI assessment" />
-            <Feature icon=">" text="Server-sent event streaming" detail="Sub-second response streaming with intermediate tool results — no waiting for the full analysis to complete" />
-          </div>
-          <h3 className="pitch-section-head" style={{ marginTop: 12 }}>11 AGENT INTENTS</h3>
-          <div className="pitch-intent-grid">
-            {["feasibility", "grid_study", "financial", "planning", "environmental", "satellite", "legacy", "procurement", "grid_eff", "prospecting", "BESS"].map(i => (
-              <span key={i} className="pitch-intent-chip">{i}</span>
-            ))}
-          </div>
-          <ProductFrame title="princeps.app \u2014 Grid" className="pitch-grid-card-frame">
-            <div className="pitch-live-component">
-              <GridContextCard />
-            </div>
-          </ProductFrame>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SlideCompliance() {
-  const frameworks = [
-    { code: "G99/G100", what: "Determines grid connection application route — G99 for >16A, G100 for type-tested inverters. Auto-selects based on site capacity." },
-    { code: "CDM 2015", what: "Construction Design and Management — identifies Principal Designer obligations, pre-construction information requirements." },
-    { code: "BNG", what: "Biodiversity Net Gain — calculates 10% mandatory uplift requirement, identifies offset opportunities and habitat creation costs." },
-    { code: "EIA", what: "Environmental Impact Assessment screening — automatic threshold check (>5 MW), scoping opinion requirements." },
-    { code: "NPPF", what: "National Planning Policy Framework alignment — checks paragraphs relevant to renewable energy and agricultural land protection." },
-    { code: "ALC", what: "Agricultural Land Classification — flags BMV (Best and Most Versatile) Grade 1-3a land, triggers detailed soil survey requirement." },
-    { code: "Flood Test", what: "EA Sequential and Exception Test — checks Flood Zone designation, surface water risk, JRC water occurrence data." },
-    { code: "NSIP", what: "Nationally Significant Infrastructure Projects — >50 MW solar triggers DCO route via Planning Inspectorate." },
-  ];
-  return (
-    <div className="pitch-slide">
-      <SlideTitle num="08" title="UK REGULATORY COMPLIANCE" accent="var(--pg-accent)" />
-      <div className="pitch-cols">
-        <div className="pitch-col" style={{ flex: "0 0 55%" }}>
-          <p className="pitch-lead">Princeps automatically screens every site against 8 UK regulatory frameworks, flagging compliance risks and generating the checklist of required applications — work that typically takes a planning consultant 2-3 weeks per site.</p>
-          <div className="pitch-compliance-grid">
-            {frameworks.map(f => (
-              <div key={f.code} className="pitch-compliance-card">
-                <span className="pitch-compliance-code">{f.code}</span>
-                <span className="pitch-compliance-what">{f.what}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="pitch-col" style={{ flex: "0 0 40%" }}>
-          <h3 className="pitch-section-head">ASSET LIFECYCLE TRACKING</h3>
-          <div className="pitch-lifecycle-bar">
-            <div className="pitch-lifecycle-items pitch-lifecycle-vertical">
-              <LifecycleItem label="Solar Design Life" years="25 years" />
-              <LifecycleItem label="BESS Design Life" years="15 years" />
-              <LifecycleItem label="Degradation Model" years="0.5%/yr curve" />
-              <LifecycleItem label="Compliance Calendar" years="Automated" />
-              <LifecycleItem label="Decommissioning" years="Cost provisioned" />
-            </div>
-          </div>
-          <ProductFrame title="princeps.app \u2014 Agent Verdict">
+      <div className="pitch-cols" style={{ marginTop: 16 }}>
+        <div className="pitch-col" style={{ flex: 1 }}>
+          <ProductFrame title="princeps.app \u2014 DC Verdict">
             <div className="pitch-live-component">
               <StaticVerdict />
             </div>
@@ -870,160 +627,90 @@ function SlideCompliance() {
   );
 }
 
-function SlideGridProcess() {
-  /* Traditional steps positioned along a tangled cable path */
-  const tradNodes = [
-    { x: 30,  y: 60,  label: "Site ID",        time: "2-4wk" },
-    { x: 80,  y: 120, label: "Desktop Study",   time: "2-3wk" },
-    { x: 40,  y: 185, label: "DNO Pre-App",     time: "4-6wk" },
-    { x: 110, y: 235, label: "G99 Filing",       time: "11-13wk" },
-    { x: 55,  y: 295, label: "Feasibility",      time: "6-12wk" },
-    { x: 105, y: 350, label: "Offer",            time: "4-8wk" },
-    { x: 60,  y: 405, label: "Build",            time: "3-12mo" },
-  ];
-  /* Princeps steps positioned along a clean glowing cable */
-  const fastNodes = [
-    { x: 605, y: 75,  label: "AI Discovery",    time: "30s",  color: "#3b82f6" },
-    { x: 605, y: 155, label: "Grid Analysis",   time: "2min", color: "#34c759" },
-    { x: 605, y: 235, label: "9-Domain AI",     time: "5min", color: "#f4b700" },
-    { x: 605, y: 315, label: "G99 Pack",        time: "10min",color: "#a78bfa" },
-    { x: 605, y: 395, label: "Submit",           time: "1day", color: "#00e5ff" },
+function SlideDCEngine() {
+  const dimensions = [
+    { num: "01", name: "Grid Capacity", desc: "Real DNO headroom (MW)", icon: "\u26A1", isNew: false },
+    { num: "02", name: "Grid Distance", desc: "km to nearest HV substation", icon: "\uD83D\uDCCD", isNew: false },
+    { num: "03", name: "Grid Voltage", desc: "132kV/275kV/400kV access", icon: "\uD83D\uDD0C", isNew: false },
+    { num: "04", name: "CFE%", desc: "24/7 carbon-free energy score", icon: "\u2600", isNew: true },
+    { num: "05", name: "PUE Potential", desc: "Climate-adjusted efficiency", icon: "\u2744", isNew: true },
+    { num: "06", name: "Cooling", desc: "Free cooling hours, wet bulb temp", icon: "\uD83D\uDCA8", isNew: true },
+    { num: "07", name: "Flood Risk", desc: "EA zones + JRC surface water", icon: "\uD83C\uDF0A", isNew: false },
+    { num: "08", name: "Constraints", desc: "SSSI, AONB, aviation, telecoms", icon: "\uD83D\uDEE1", isNew: true },
+    { num: "09", name: "Planning", desc: "Local plan zoning, precedent", icon: "\uD83D\uDCCB", isNew: false },
+    { num: "10", name: "Connectivity", desc: "IXP distance, fibre routes", icon: "\uD83C\uDF10", isNew: false },
+    { num: "11", name: "Water Stress", desc: "EA water availability zones", icon: "\uD83D\uDCA7", isNew: true },
+    { num: "12", name: "Land Use", desc: "DynamicWorld classification", icon: "\uD83C\uDF3F", isNew: false },
+    { num: "13", name: "Financial TCO", desc: "Connection + PPA + rates", icon: "\uD83D\uDCB7", isNew: false },
+    { num: "14", name: "Incentives", desc: "Freeport, EZ, UKIB zones", icon: "\uD83C\uDFC6", isNew: true },
+    { num: "15", name: "Regulatory", desc: "NSIP thresholds, DCO route", icon: "\uD83D\uDCDC", isNew: false },
   ];
   return (
     <div className="pitch-slide">
-      <SlideTitle num="09" title="GRID CONNECTION PROCESS" accent="var(--pg-cyan)" badge="BEFORE & AFTER" />
-      <div className="pitch-wire-graphic">
-        <svg viewBox="0 0 750 470" className="pitch-wire-svg">
-          <defs>
-            {/* Glow filters */}
-            <filter id="gCyan"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <filter id="gGold"><feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <filter id="gRed"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            <filter id="gGreen"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-            {/* Animated dash for energy flow */}
-            <linearGradient id="cableGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#00e5ff" stopOpacity="0.9"/>
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.7"/>
-            </linearGradient>
-          </defs>
-
-          {/* ═══ LEFT: TANGLED CABLE MESS ═══ */}
-          {/* Main tangled cable path — chaotic beziers */}
-          <path d="M70,30 C120,35 30,80 70,60 S130,90 80,120 C30,150 110,160 40,185 S-10,210 110,235 C160,250 20,270 55,295 S140,320 105,350 C70,380 110,390 60,405 S40,430 80,445"
-            fill="none" stroke="rgba(255,69,58,0.35)" strokeWidth="6" strokeLinecap="round"/>
-          {/* Secondary tangled wires for visual noise */}
-          <path d="M90,25 C140,50 10,70 95,95 S20,130 65,155 C110,170 15,200 85,220 S130,260 40,280 C-10,300 120,330 80,360"
-            fill="none" stroke="rgba(255,69,58,0.15)" strokeWidth="3" strokeLinecap="round" strokeDasharray="8 6"/>
-          <path d="M50,45 C-10,70 130,100 60,130 S-20,170 90,195 C140,210 30,245 100,270 S20,310 75,340 C120,365 40,390 70,420"
-            fill="none" stroke="rgba(255,69,58,0.12)" strokeWidth="2.5" strokeLinecap="round"/>
-          {/* Stray broken wires */}
-          <path d="M25,100 C10,95 0,110 15,115" fill="none" stroke="rgba(255,69,58,0.2)" strokeWidth="2"/>
-          <path d="M130,175 C145,170 150,185 140,192" fill="none" stroke="rgba(255,69,58,0.2)" strokeWidth="2"/>
-          <path d="M20,260 C5,255 -5,270 10,278" fill="none" stroke="rgba(255,69,58,0.2)" strokeWidth="2"/>
-          <path d="M135,310 C150,305 155,320 142,325" fill="none" stroke="rgba(255,69,58,0.2)" strokeWidth="1.5"/>
-          {/* Small X marks for failures/delays */}
-          {[[15,140],[125,205],[25,330],[115,380]].map(([cx,cy],i) => (
-            <g key={`x${i}`} opacity="0.4">
-              <line x1={cx-4} y1={cy-4} x2={cx+4} y2={cy+4} stroke="#ff453a" strokeWidth="1.5"/>
-              <line x1={cx+4} y1={cy-4} x2={cx-4} y2={cy+4} stroke="#ff453a" strokeWidth="1.5"/>
-            </g>
-          ))}
-          {/* Traditional step nodes */}
-          {tradNodes.map((n, i) => (
-            <g key={`t${i}`}>
-              <circle cx={n.x} cy={n.y} r="12" fill="rgba(255,69,58,0.1)" stroke="#ff453a" strokeWidth="1.2" filter="url(#gRed)"/>
-              <text x={n.x} y={n.y + 3.5} textAnchor="middle" fill="#ff453a" fontSize="8" fontWeight="800" fontFamily="monospace">{i + 1}</text>
-              <text x={n.x + 18} y={n.y - 3} fill="rgba(255,255,255,0.75)" fontSize="8.5" fontWeight="600" fontFamily="Inter, sans-serif">{n.label}</text>
-              <text x={n.x + 18} y={n.y + 8} fill="#ff453a" fontSize="7" fontWeight="700" fontFamily="monospace">{n.time}</text>
-            </g>
-          ))}
-          {/* "6-18 MONTHS" header label */}
-          <text x="75" y="18" textAnchor="middle" fill="#ff453a" fontSize="10" fontWeight="800" fontFamily="monospace" letterSpacing="1.5">6-18 MONTHS</text>
-          {/* Unplugged socket icon at bottom-left */}
-          <g transform="translate(60,440)">
-            <rect x="-12" y="-6" width="24" height="12" rx="2" fill="none" stroke="rgba(255,69,58,0.4)" strokeWidth="1.5"/>
-            <line x1="-4" y1="-3" x2="-4" y2="3" stroke="rgba(255,69,58,0.5)" strokeWidth="2" strokeLinecap="round"/>
-            <line x1="4" y1="-3" x2="4" y2="3" stroke="rgba(255,69,58,0.5)" strokeWidth="2" strokeLinecap="round"/>
-            <text x="0" y="22" textAnchor="middle" fill="rgba(255,69,58,0.5)" fontSize="7" fontFamily="monospace" fontWeight="700">DISCONNECTED</text>
-          </g>
-
-          {/* ═══ CENTER: PRINCEPS HUB ═══ */}
-          {/* Hub glow aura */}
-          <circle cx="340" cy="235" r="52" fill="rgba(244,183,0,0.04)" stroke="none">
-            <animate attributeName="r" values="48;56;48" dur="3s" repeatCount="indefinite"/>
-            <animate attributeName="opacity" values="0.5;1;0.5" dur="3s" repeatCount="indefinite"/>
-          </circle>
-          <circle cx="340" cy="235" r="40" fill="rgba(244,183,0,0.06)" stroke="rgba(244,183,0,0.15)" strokeWidth="1" filter="url(#gGold)"/>
-          {/* Hub hexagon */}
-          <polygon points="340,198 370,215 370,255 340,272 310,255 310,215" fill="rgba(10,14,26,0.9)" stroke="#f4b700" strokeWidth="1.5" filter="url(#gGold)"/>
-          {/* Lightning bolt icon */}
-          <path d="M336,218 L344,218 L340,232 L348,232 L334,252 L338,238 L332,238 Z" fill="#f4b700" opacity="0.9"/>
-          {/* Hub label */}
-          <text x="340" y="282" textAnchor="middle" fill="#f4b700" fontSize="9" fontWeight="800" fontFamily="monospace" letterSpacing="2">PRINCEPS AI</text>
-
-          {/* Tangled cables entering hub (left side) */}
-          <path d="M80,445 C120,440 200,400 280,320 S310,270 310,235" fill="none" stroke="rgba(255,69,58,0.2)" strokeWidth="4" strokeLinecap="round"/>
-          <path d="M80,445 C130,430 220,380 290,310 S320,265 315,240" fill="none" stroke="rgba(255,69,58,0.1)" strokeWidth="2" strokeDasharray="6 4"/>
-
-          {/* Clean cable exiting hub (right side) */}
-          <path d="M370,235 C400,235 460,120 605,75" fill="none" stroke="url(#cableGrad)" strokeWidth="3" strokeLinecap="round" filter="url(#gCyan)" opacity="0.8"/>
-          <path d="M370,235 C410,240 480,235 605,235" fill="none" stroke="url(#cableGrad)" strokeWidth="3" strokeLinecap="round" filter="url(#gCyan)" opacity="0.6"/>
-          <path d="M370,245 C410,280 480,350 605,395" fill="none" stroke="url(#cableGrad)" strokeWidth="3" strokeLinecap="round" filter="url(#gCyan)" opacity="0.7"/>
-          {/* Animated energy particles on clean cable */}
-          <circle r="2.5" fill="#00e5ff" filter="url(#gCyan)">
-            <animateMotion dur="2.5s" repeatCount="indefinite" path="M370,235 C400,235 460,120 605,75"/>
-          </circle>
-          <circle r="2" fill="#34c759" filter="url(#gGreen)">
-            <animateMotion dur="3s" repeatCount="indefinite" path="M370,235 C410,240 480,235 605,235"/>
-          </circle>
-          <circle r="2.5" fill="#a78bfa">
-            <animateMotion dur="2.8s" repeatCount="indefinite" path="M370,245 C410,280 480,350 605,395"/>
-          </circle>
-
-          {/* ═══ RIGHT: CLEAN PROCESS ═══ */}
-          {/* "UNDER 1 DAY" header */}
-          <text x="660" y="18" textAnchor="middle" fill="#34c759" fontSize="10" fontWeight="800" fontFamily="monospace" letterSpacing="1.5">UNDER 1 DAY</text>
-          {/* Clean vertical cable backbone */}
-          <line x1="605" y1="75" x2="605" y2="395" stroke="rgba(0,229,255,0.12)" strokeWidth="1.5"/>
-          {/* Fast step nodes */}
-          {fastNodes.map((n, i) => (
-            <g key={`f${i}`}>
-              <circle cx={n.x} cy={n.y} r="12" fill="rgba(0,229,255,0.06)" stroke={n.color} strokeWidth="1.5" filter="url(#gCyan)"/>
-              <text x={n.x} y={n.y + 3.5} textAnchor="middle" fill={n.color} fontSize="8" fontWeight="800" fontFamily="monospace">{i + 1}</text>
-              <text x={n.x + 18} y={n.y - 3} fill="rgba(255,255,255,0.85)" fontSize="8.5" fontWeight="600" fontFamily="Inter, sans-serif">{n.label}</text>
-              <text x={n.x + 18} y={n.y + 8} fill={n.color} fontSize="7" fontWeight="700" fontFamily="monospace">{n.time}</text>
-            </g>
-          ))}
-          {/* Connected plug icon at bottom-right */}
-          <g transform="translate(605,440)">
-            <rect x="-14" y="-7" width="28" height="14" rx="3" fill="rgba(52,199,89,0.12)" stroke="#34c759" strokeWidth="1.5" filter="url(#gGreen)"/>
-            <line x1="-5" y1="-3" x2="-5" y2="3" stroke="#34c759" strokeWidth="2.5" strokeLinecap="round"/>
-            <line x1="5" y1="-3" x2="5" y2="3" stroke="#34c759" strokeWidth="2.5" strokeLinecap="round"/>
-            <text x="0" y="22" textAnchor="middle" fill="#34c759" fontSize="7" fontFamily="monospace" fontWeight="700">CONNECTED</text>
-          </g>
-
-          {/* ═══ BOTTOM STATS BAR ═══ */}
-          {/* Divider line */}
-          <line x1="160" y1="458" x2="590" y2="458" stroke="rgba(255,255,255,0.06)" strokeWidth="0.5"/>
-        </svg>
-
-        {/* Stats overlay at bottom */}
-        <div className="pitch-wire-stats">
-          <div className="pitch-wire-stat">
-            <span className="pitch-wire-stat-val" style={{ color: "#34c759" }}>97%</span>
-            <span className="pitch-wire-stat-label">faster pre-application</span>
+      <SlideTitle num="05" title="15-DIMENSION DC SCORING" accent="var(--pg-blue)" badge="ENGINE" />
+      <div className="pitch-domains-grid pitch-domains-compact" style={{ gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+        {dimensions.map(d => (
+          <div key={d.num} className="pitch-domain-card" style={{ position: "relative" }}>
+            <div className="pitch-domain-header">
+              <span className="pitch-domain-num" style={{ color: d.isNew ? "#f1c21b" : "var(--pg-blue)" }}>{d.num}</span>
+              {d.isNew && <span className="pitch-intent-chip" style={{ borderColor: "#f1c21b", color: "#f1c21b", fontSize: 7, padding: "1px 4px" }}>NEW</span>}
+            </div>
+            <div className="pitch-domain-name" style={{ fontSize: 10 }}>{d.icon} {d.name}</div>
+            <div className="pitch-domain-detail" style={{ fontSize: 8 }}>{d.desc}</div>
           </div>
-          <div className="pitch-wire-stat">
-            <span className="pitch-wire-stat-val" style={{ color: "#f4b700" }}>90%</span>
-            <span className="pitch-wire-stat-label">cost reduction</span>
+        ))}
+      </div>
+      <div className="pitch-callout pitch-callout-accent" style={{ marginTop: 10 }}>
+        <strong>6 new DC-specific dimensions</strong> (highlighted) added to the 9 existing energy infrastructure dimensions. Weighted scoring with Google-specific gates: CFE% &gt; 70% required, grid headroom &gt; 50 MW minimum.
+      </div>
+    </div>
+  );
+}
+
+function SlideDCCFE() {
+  const regions = [
+    { name: "Scotland (North)", cfe: 92, color: "#24a148", note: "Abundant onshore wind + hydro" },
+    { name: "Scotland (South)", cfe: 85, color: "#34c759", note: "Wind-dominant, good grid export" },
+    { name: "North East", cfe: 78, color: "#3b82f6", note: "Offshore wind PPAs available" },
+    { name: "North West", cfe: 72, color: "#3b82f6", note: "Onshore wind + nuclear baseload" },
+    { name: "Yorkshire", cfe: 68, color: "#f1c21b", note: "Mixed wind/solar, Drax biomass" },
+    { name: "Midlands", cfe: 58, color: "#ff9800", note: "Solar-dominant, limited wind" },
+    { name: "East England", cfe: 62, color: "#f1c21b", note: "Offshore wind proximity" },
+    { name: "London / SE", cfe: 42, color: "#ff453a", note: "Grid-dependent, minimal local RE" },
+  ];
+  return (
+    <div className="pitch-slide">
+      <SlideTitle num="06" title="24/7 CARBON-FREE ENERGY" accent="var(--pg-green)" badge="CFE%" />
+      <div className="pitch-cols">
+        <div className="pitch-col" style={{ flex: "0 0 45%" }}>
+          <div className="pitch-big-stat">
+            <span className="pitch-big-num" style={{ color: "var(--pg-green)" }}>95%</span>
+            <span className="pitch-big-label">Google's 24/7 CFE target by 2030. CFE% measures how much of your hourly electricity consumption is matched by carbon-free sources.</span>
           </div>
-          <div className="pitch-wire-stat">
-            <span className="pitch-wire-stat-val" style={{ color: "#3b82f6" }}>10x</span>
-            <span className="pitch-wire-stat-label">more sites screened</span>
+          <h3 className="pitch-section-head" style={{ marginTop: 12 }}>HOW PRINCEPS MODELS CFE%</h3>
+          <div className="pitch-feature-list">
+            <Feature icon="1" text="Hourly grid carbon intensity" detail="Carbon Intensity API data for each UK region, half-hourly resolution, 48-hour forecast" />
+            <Feature icon="2" text="Local RE generation profiles" detail="REPD database: every consented wind/solar project within PPA range of the site" />
+            <Feature icon="3" text="PPA overlay modelling" detail="Match site demand profile against nearby wind/solar output curves to calculate achievable CFE%" />
+            <Feature icon="4" text="Storage optimisation" detail="BESS co-location shifts surplus RE hours to deficit hours, boosting effective CFE%" />
           </div>
-          <div className="pitch-wire-stat">
-            <span className="pitch-wire-stat-val" style={{ color: "#ff453a" }}>739GW</span>
-            <span className="pitch-wire-stat-label">UK grid queue backlog</span>
+        </div>
+        <div className="pitch-col" style={{ flex: "0 0 50%" }}>
+          <h3 className="pitch-section-head">UK REGIONAL CFE% (ACHIEVABLE)</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            {regions.map(r => (
+              <div key={r.name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 9, fontFamily: "var(--mono)", color: "var(--text-dim)", width: 100, flexShrink: 0 }}>{r.name}</span>
+                <div style={{ flex: 1, height: 14, background: "rgba(255,255,255,0.04)", borderRadius: 3, overflow: "hidden", position: "relative" }}>
+                  <div style={{ width: `${r.cfe}%`, height: "100%", background: r.color, borderRadius: 3, opacity: 0.8 }} />
+                </div>
+                <span style={{ fontSize: 11, fontFamily: "var(--mono)", fontWeight: 700, color: r.color, width: 32, textAlign: "right" }}>{r.cfe}%</span>
+                <span style={{ fontSize: 7, color: "var(--text-dim)", width: 140, flexShrink: 0 }}>{r.note}</span>
+              </div>
+            ))}
+          </div>
+          <div className="pitch-callout pitch-callout-accent" style={{ marginTop: 10, fontSize: 9 }}>
+            <strong>Key insight:</strong> London sites achieve only ~42% CFE%. Moving 200 miles north to Teesside nearly doubles CFE% to 78%. Princeps quantifies this trade-off against latency, connectivity, and grid costs.
           </div>
         </div>
       </div>
@@ -1031,54 +718,65 @@ function SlideGridProcess() {
   );
 }
 
-function SlideFinancial() {
-  const bessRevenue = [
-    { stream: "FFR Dynamic", revenue: 65, display: "55-75K" },
-    { stream: "Dynamic Containment", revenue: 42, display: "35-48K" },
-    { stream: "Capacity Market", revenue: 12.5, display: "12.5K" },
-    { stream: "Wholesale Arbitrage", revenue: 22, display: "18-25K" },
-    { stream: "DNO Peak Shaving", revenue: 22, display: "22K" },
-  ];
-  const costs = [
-    { tech: "Solar PV", range: "450-950", unit: "/kW" },
-    { tech: "Battery", range: "300-700", unit: "/kW" },
-    { tech: "Wind", range: "900-1,800", unit: "/kW" },
-    { tech: "EV Charging", range: "800-2,000", unit: "/kW" },
-  ];
+function SlideDCDemo() {
+  const dcDimensions = {
+    grid_capacity: { score: 82, status: "GO" },
+    grid_distance: { score: 90, status: "GO" },
+    cfe_percent: { score: 65, status: "CAUTION" },
+    pue_potential: { score: 78, status: "GO" },
+    cooling: { score: 72, status: "GO" },
+    flood_risk: { score: 95, status: "GO" },
+    constraints: { score: 88, status: "GO" },
+    planning: { score: 70, status: "CAUTION" },
+    connectivity: { score: 92, status: "GO" },
+    water_stress: { score: 55, status: "CAUTION" },
+    land_use: { score: 85, status: "GO" },
+    financial_tco: { score: 68, status: "CAUTION" },
+    incentives: { score: 40, status: "NO-GO" },
+    regulatory: { score: 75, status: "GO" },
+    resilience: { score: 80, status: "GO" },
+  };
+  const dcKeys = Object.keys(dcDimensions);
   return (
     <div className="pitch-slide">
-      <SlideTitle num="10" title="FINANCIAL MODEL" accent="var(--pg-green)" />
+      <SlideTitle num="07" title="LIVE DEMO" accent="var(--pg-accent)" badge="WALTHAM CROSS" />
       <div className="pitch-cols">
-        <div className="pitch-col">
-          <h3 className="pitch-section-head">BESS REVENUE STACKING (&pound;/MW/yr)</h3>
-          <div className="pitch-revenue-stack">
-            {bessRevenue.map((r, i) => (
-              <div key={i} className="pitch-revenue-bar">
-                <span className="pitch-revenue-label">{r.stream}</span>
-                <div className="pitch-revenue-fill" style={{ width: `${(r.revenue / 75) * 100}%` }} />
-                <span className="pitch-revenue-value">&pound;{r.display}</span>
+        <div className="pitch-col" style={{ flex: "0 0 55%" }}>
+          <ProductFrame title="princeps.app \u2014 DC Site Score: Waltham Cross">
+            <div style={{ padding: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <span style={{ fontSize: 32, fontWeight: 800, fontFamily: "var(--mono)", color: "var(--pg-green)" }}>78</span>
+                  <span style={{ fontSize: 8, fontFamily: "var(--mono)", color: "var(--text-dim)" }}>DC-SCORE</span>
+                </div>
+                <div className="pitch-verdict-badge" style={{ borderColor: "var(--pg-green)", color: "var(--pg-green)", fontSize: 14, padding: "4px 12px" }}>GO</div>
+                <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                  <div style={{ fontSize: 8, color: "var(--text-dim)", fontFamily: "var(--mono)" }}>GRID HEADROOM</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--mono)", color: "var(--pg-blue)" }}>87 MW</div>
+                  <div style={{ fontSize: 7, color: "var(--text-dim)" }}>UKPN Enfield 132kV</div>
+                </div>
               </div>
-            ))}
-          </div>
-          <div className="pitch-revenue-total">
-            Total: <strong style={{ color: "var(--pg-green)" }}>&pound;142-183K</strong> per MW/yr
-          </div>
-        </div>
-        <div className="pitch-col">
-          <h3 className="pitch-section-head">SOLAR YIELD (LIVE DATA)</h3>
-          <ProductFrame title="princeps.app \u2014 Solar Analysis">
-            <div className="pitch-live-component">
-              <SolarCard />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4, marginBottom: 8 }}>
+                {[
+                  { label: "CFE%", value: "52%", color: "#f1c21b" },
+                  { label: "PUE", value: "1.18", color: "#24a148" },
+                  { label: "IXP", value: "25km", color: "#3b82f6" },
+                  { label: "FLOOD", value: "Zone 1", color: "#24a148" },
+                  { label: "TCO", value: "\u00a318M", color: "#a56eff" },
+                ].map(k => (
+                  <div key={k.label} style={{ textAlign: "center", padding: "4px 0", background: "rgba(255,255,255,0.02)", borderRadius: 4 }}>
+                    <div style={{ fontSize: 7, color: "var(--text-dim)", fontFamily: "var(--mono)" }}>{k.label}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "var(--mono)", color: k.color }}>{k.value}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </ProductFrame>
-          <h3 className="pitch-section-head" style={{ marginTop: 12 }}>COST BENCHMARKS (2024)</h3>
-          <div className="pitch-cost-grid">
-            {costs.map(c => (
-              <div key={c.tech} className="pitch-cost-item">
-                <span className="pitch-cost-tech">{c.tech}</span>
-                <span className="pitch-cost-range">&pound;{c.range}<span className="pitch-cost-unit">{c.unit}</span></span>
-              </div>
-            ))}
+        </div>
+        <div className="pitch-col" style={{ flex: "0 0 40%", alignItems: "center" }}>
+          <DomainRadar domains={dcDimensions} keys={dcKeys} />
+          <div style={{ textAlign: "center", marginTop: 4 }}>
+            <span style={{ fontSize: 10, color: "var(--text-dim)", fontFamily: "var(--mono)" }}>15-DIMENSION RADAR</span>
           </div>
         </div>
       </div>
@@ -1086,82 +784,243 @@ function SlideFinancial() {
   );
 }
 
-function SlideCompetitive() {
-  const competitors = [
-    { name: "RatedPower", sub: "by Enverus", focus: "Utility-scale PV design & layout automation", strength: "Automated engineering design, financial modelling, bankable reports", gap: "No AI reasoning, no satellite CV, no UK regulatory engine, no site discovery", color: "var(--pg-blue)" },
-    { name: "PVcase Prospect", sub: "f. Anderson Optimization", focus: "GIS-based site prospecting & constraint mapping", strength: "Land parcel search near substations, slope analysis, buildable acreage", gap: "US-focused, no energy simulation, no AI verdicts, no computer vision", color: "var(--pg-purple)" },
-    { name: "Terabase Energy", sub: "$130M Series C", focus: "Full-lifecycle solar platform + construction robotics", strength: "PlantPredict simulation, Design Pro, construction automation", gap: "No AI feasibility engine, no satellite analysis, no regulatory compliance", color: "var(--pg-cyan)" },
-    { name: "Solargis Prospect", sub: "Irradiance leader", focus: "Solar resource data & pre-feasibility yield estimates", strength: "Best-in-class irradiance data, 30+ map layers, site comparison", gap: "Data only — no design, no AI, no grid analysis, no regulatory", color: "var(--pg-accent)" },
-    { name: "Traditional Consultants", sub: "WSP, Stantec, etc.", focus: "Manual feasibility studies & environmental impact assessment", strength: "Deep domain expertise, regulatory relationships, bankable reports", gap: "4-8 weeks per site, \u00a35-15K cost, not scalable, no software platform", color: "var(--pg-red)" },
+function SlideDCComparison() {
+  const sites = [
+    {
+      name: "Waltham Cross",
+      score: 78, verdict: "GO", verdictColor: "#24a148",
+      metrics: { "Grid Headroom": "87 MW", "CFE%": "52%", "PUE": "1.18", "IXP Distance": "25 km", "Flood Risk": "Zone 1", "Grid Voltage": "132 kV", "TCO (10yr)": "\u00a318M", "Planning": "Precedent" },
+      radarData: {
+        grid: { score: 85, status: "GO" }, cfe: { score: 52, status: "CAUTION" }, pue: { score: 78, status: "GO" },
+        connectivity: { score: 75, status: "GO" }, constraints: { score: 88, status: "GO" }, financial: { score: 68, status: "CAUTION" },
+      }
+    },
+    {
+      name: "Teesside",
+      score: 82, verdict: "GO", verdictColor: "#24a148",
+      metrics: { "Grid Headroom": "120 MW", "CFE%": "74%", "PUE": "1.14", "IXP Distance": "50 km", "Flood Risk": "Zone 1", "Grid Voltage": "275 kV", "TCO (10yr)": "\u00a315M", "Planning": "Freeport EZ" },
+      radarData: {
+        grid: { score: 92, status: "GO" }, cfe: { score: 74, status: "GO" }, pue: { score: 85, status: "GO" },
+        connectivity: { score: 50, status: "CAUTION" }, constraints: { score: 90, status: "GO" }, financial: { score: 80, status: "GO" },
+      }
+    },
   ];
-  const capabilities = [
-    { cap: "AI feasibility verdict", us: true, rp: false, pv: false, tb: false, sg: false, tc: false },
-    { cap: "Satellite computer vision", us: true, rp: false, pv: false, tb: false, sg: false, tc: false },
-    { cap: "Energy simulation (SAM)", us: true, rp: true, pv: false, tb: true, sg: false, tc: false },
-    { cap: "Site prospecting / discovery", us: true, rp: false, pv: true, tb: false, sg: false, tc: false },
-    { cap: "Grid & DNO analysis", us: true, rp: false, pv: false, tb: false, sg: false, tc: true },
-    { cap: "UK regulatory compliance", us: true, rp: false, pv: false, tb: false, sg: false, tc: false },
-    { cap: "Conversational AI interface", us: true, rp: false, pv: false, tb: false, sg: false, tc: false },
-    { cap: "3D Digital Twin", us: true, rp: true, pv: false, tb: true, sg: false, tc: false },
-    { cap: "Earth Engine satellite data", us: true, rp: false, pv: false, tb: false, sg: true, tc: false },
-    { cap: "5-min full assessment", us: true, rp: false, pv: false, tb: false, sg: false, tc: false },
-  ];
-  const Dot = ({ on }) => (
-    <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: on ? "var(--pg-green)" : "rgba(255,255,255,0.08)", border: on ? "none" : "1px solid rgba(255,255,255,0.12)" }} />
-  );
   return (
     <div className="pitch-slide">
-      <SlideTitle num="11" title="COMPETITIVE LANDSCAPE" accent="var(--pg-green)" badge="MARKET MAP" />
+      <SlideTitle num="08" title="MULTI-SITE COMPARISON" accent="var(--pg-purple)" badge="HEAD-TO-HEAD" />
+      <div className="pitch-cols" style={{ gap: 20 }}>
+        {sites.map(s => (
+          <div key={s.name} className="pitch-col">
+            <div className="pitch-stage-card" style={{ borderTopColor: s.verdictColor, padding: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <span style={{ fontSize: 24, fontWeight: 800, fontFamily: "var(--mono)", color: s.verdictColor }}>{s.score}</span>
+                <div className="pitch-verdict-badge" style={{ borderColor: s.verdictColor, color: s.verdictColor }}>{s.verdict}</div>
+                <span style={{ fontSize: 13, fontWeight: 700, marginLeft: "auto" }}>{s.name}</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4 }}>
+                {Object.entries(s.metrics).map(([k, v]) => (
+                  <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "2px 4px", background: "rgba(255,255,255,0.02)", borderRadius: 3 }}>
+                    <span style={{ fontSize: 8, color: "var(--text-dim)", fontFamily: "var(--mono)" }}>{k}</span>
+                    <span style={{ fontSize: 9, fontWeight: 700, fontFamily: "var(--mono)", color: "var(--text-bright)" }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <DomainRadar domains={s.radarData} keys={Object.keys(s.radarData)} />
+          </div>
+        ))}
+      </div>
+      <div className="pitch-callout pitch-callout-accent" style={{ marginTop: 6 }}>
+        <strong>Key deltas:</strong> Teesside wins on CFE% (+22%), grid headroom (+33 MW), PUE (1.14 vs 1.18), and TCO (-&pound;3M). Waltham Cross wins on connectivity (-25km IXP distance) and existing planning precedent.
+      </div>
+    </div>
+  );
+}
+
+function SlideDCGoogleSites() {
+  const googleSites = [
+    { name: "Waltham Cross", lat: 51.69, lon: -0.03, score: 78, verdict: "GO", verdictColor: "#24a148", headroom: "87 MW", cfe: "52%", pue: "1.18" },
+    { name: "North Weald", lat: 51.72, lon: 0.16, score: 74, verdict: "GO", verdictColor: "#24a148", headroom: "65 MW", cfe: "48%", pue: "1.20" },
+    { name: "Purfleet", lat: 51.48, lon: 0.24, score: 71, verdict: "CAUTION", verdictColor: "#f1c21b", headroom: "110 MW", cfe: "45%", pue: "1.22" },
+    { name: "Teesside", lat: 54.60, lon: -1.07, score: 82, verdict: "GO", verdictColor: "#24a148", headroom: "120 MW", cfe: "74%", pue: "1.14" },
+  ];
+  return (
+    <div className="pitch-slide">
+      <SlideTitle num="09" title="GOOGLE UK SITES" accent="var(--pg-blue)" badge="PRE-SCORED" />
+      <div className="pitch-cols">
+        <div className="pitch-col" style={{ flex: "0 0 45%" }}>
+          {/* Simplified UK map with site pins */}
+          <div style={{ background: "rgba(255,255,255,0.02)", borderRadius: 8, padding: 12, border: "1px solid rgba(255,255,255,0.06)", position: "relative", height: 320 }}>
+            <svg viewBox="0 0 200 320" style={{ width: "100%", height: "100%" }}>
+              {/* Simplified UK outline */}
+              <path d="M80,20 C90,15 110,18 115,25 C120,35 125,45 120,60 C118,70 122,80 125,90 C130,105 135,115 130,130 C125,140 128,150 132,160 C138,175 140,185 135,200 C130,210 125,220 120,230 C115,240 110,248 105,255 C100,262 95,268 90,275 C85,280 80,285 78,290 C75,295 72,298 70,300 C68,295 65,285 68,275 C70,265 72,255 68,245 C65,235 60,225 62,215 C64,205 68,195 70,185 C72,175 70,165 68,155 C65,145 62,135 65,125 C68,115 72,105 70,95 C68,85 65,75 68,65 C70,55 75,45 78,35 C79,28 80,24 80,20Z"
+                fill="rgba(124,92,252,0.06)" stroke="rgba(124,92,252,0.2)" strokeWidth="1" />
+              {/* Site markers */}
+              {googleSites.map(s => {
+                // Map lat/lon to SVG coordinates (approximate)
+                const x = 85 + (s.lon + 1.5) * 30;
+                const y = 320 - ((s.lat - 50) * 55);
+                return (
+                  <g key={s.name}>
+                    <circle cx={x} cy={y} r="6" fill={s.verdictColor} opacity="0.3" />
+                    <circle cx={x} cy={y} r="3" fill={s.verdictColor} />
+                    <text x={x + 10} y={y + 3} fill="var(--text-bright)" fontSize="7" fontWeight="600">{s.name}</text>
+                    <text x={x + 10} y={y + 11} fill={s.verdictColor} fontSize="6" fontFamily="var(--mono)">{s.score} {s.verdict}</text>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+        <div className="pitch-col" style={{ flex: "0 0 50%" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {googleSites.map(s => (
+              <div key={s.name} className="pitch-stage-card" style={{ borderTopColor: s.verdictColor, padding: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 20, fontWeight: 800, fontFamily: "var(--mono)", color: s.verdictColor }}>{s.score}</span>
+                  <div className="pitch-verdict-badge" style={{ borderColor: s.verdictColor, color: s.verdictColor, fontSize: 10, padding: "2px 8px" }}>{s.verdict}</div>
+                  <span style={{ fontWeight: 700, fontSize: 12 }}>{s.name}</span>
+                </div>
+                <div style={{ display: "flex", gap: 12 }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 7, color: "var(--text-dim)", fontFamily: "var(--mono)" }}>HEADROOM</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "var(--mono)", color: "var(--pg-blue)" }}>{s.headroom}</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 7, color: "var(--text-dim)", fontFamily: "var(--mono)" }}>CFE%</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "var(--mono)", color: "var(--pg-green)" }}>{s.cfe}</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 7, color: "var(--text-dim)", fontFamily: "var(--mono)" }}>PUE</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "var(--mono)", color: "var(--pg-accent)" }}>{s.pue}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="pitch-callout pitch-callout-accent" style={{ marginTop: 10, fontSize: 9 }}>
+            <strong>Pre-scored and ready for your team.</strong> Each site assessed across all 15 dimensions with real DNO data. Export as PDF, share via API, or explore interactively.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SlideDCCompetitive() {
+  const features = [
+    { cap: "Real Grid Headroom (MW)", us: true, athena: false, romonet: false, cbre: false, peaknode: false },
+    { cap: "24/7 CFE% Modelling", us: true, athena: false, romonet: false, cbre: false, peaknode: false },
+    { cap: "PUE Modelling", us: true, athena: false, romonet: true, cbre: false, peaknode: false },
+    { cap: "Constraint Overlay", us: true, athena: false, romonet: false, cbre: true, peaknode: false },
+    { cap: "Financial TCO", us: true, athena: true, romonet: false, cbre: true, peaknode: false },
+    { cap: "AI Prospecting", us: true, athena: false, romonet: false, cbre: false, peaknode: false },
+    { cap: "Multi-site Compare", us: true, athena: true, romonet: false, cbre: true, peaknode: true },
+    { cap: "15-Dimension Scoring", us: true, athena: false, romonet: false, cbre: false, peaknode: false },
+    { cap: "All 6 UK DNOs", us: true, athena: false, romonet: false, cbre: false, peaknode: false },
+    { cap: "Satellite Intelligence", us: true, athena: false, romonet: false, cbre: false, peaknode: false },
+  ];
+  const Dot = ({ on }) => (
+    <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: on ? "var(--pg-green)" : "rgba(255,69,58,0.4)", border: on ? "none" : "1px solid rgba(255,69,58,0.3)" }} />
+  );
+  const competitors = [
+    { code: "ATH", name: "Athena (Compass)", gap: "No real grid data, no CFE%, proprietary only", color: "#ff6b6b" },
+    { code: "ROM", name: "Romonet (Vertiv)", gap: "PUE modelling only, no site selection or grid", color: "#f1c21b" },
+    { code: "CBRE", name: "CBRE DataSite", gap: "Advisory service, not automated, weeks per report", color: "#3b82f6" },
+    { code: "PEAK", name: "Peaknode", gap: "Headroom shows N/A, no CFE%, no constraints", color: "#a56eff" },
+  ];
+  return (
+    <div className="pitch-slide">
+      <SlideTitle num="10" title="VS COMPETITORS" accent="var(--pg-green)" badge="DC MARKET MAP" />
       <div className="pitch-cols" style={{ gap: 16 }}>
-        {/* Left: Named competitor cards */}
-        <div className="pitch-col" style={{ flex: "0 0 42%", gap: 6 }}>
+        <div className="pitch-col" style={{ flex: "0 0 40%", gap: 6 }}>
           {competitors.map(c => (
-            <div key={c.name} className="pitch-competitor-card">
+            <div key={c.code} className="pitch-competitor-card">
               <div className="pitch-competitor-head">
                 <span className="pitch-competitor-dot" style={{ background: c.color }} />
                 <span className="pitch-competitor-name">{c.name}</span>
-                <span className="pitch-competitor-sub">{c.sub}</span>
               </div>
-              <div className="pitch-competitor-focus">{c.focus}</div>
               <div className="pitch-competitor-gap">{c.gap}</div>
             </div>
           ))}
         </div>
-        {/* Right: Capability matrix */}
         <div className="pitch-col" style={{ flex: 1 }}>
           <div className="pitch-cap-matrix">
             <div className="pitch-cap-header">
               <span className="pitch-cap-label">CAPABILITY</span>
               <span className="pitch-cap-col" style={{ color: "var(--pg-green)" }}>US</span>
-              <span className="pitch-cap-col">RP</span>
-              <span className="pitch-cap-col">PV</span>
-              <span className="pitch-cap-col">TB</span>
-              <span className="pitch-cap-col">SG</span>
-              <span className="pitch-cap-col">TC</span>
+              <span className="pitch-cap-col">ATH</span>
+              <span className="pitch-cap-col">ROM</span>
+              <span className="pitch-cap-col">CBRE</span>
+              <span className="pitch-cap-col">PEAK</span>
             </div>
-            {capabilities.map(r => (
+            {features.map(r => (
               <div key={r.cap} className="pitch-cap-row">
                 <span className="pitch-cap-label">{r.cap}</span>
                 <span className="pitch-cap-col"><Dot on={r.us} /></span>
-                <span className="pitch-cap-col"><Dot on={r.rp} /></span>
-                <span className="pitch-cap-col"><Dot on={r.pv} /></span>
-                <span className="pitch-cap-col"><Dot on={r.tb} /></span>
-                <span className="pitch-cap-col"><Dot on={r.sg} /></span>
-                <span className="pitch-cap-col"><Dot on={r.tc} /></span>
+                <span className="pitch-cap-col"><Dot on={r.athena} /></span>
+                <span className="pitch-cap-col"><Dot on={r.romonet} /></span>
+                <span className="pitch-cap-col"><Dot on={r.cbre} /></span>
+                <span className="pitch-cap-col"><Dot on={r.peaknode} /></span>
               </div>
             ))}
             <div className="pitch-cap-legend">
-              RP = RatedPower &middot; PV = PVcase &middot; TB = Terabase &middot; SG = Solargis &middot; TC = Trad. Consultants
+              ATH = Athena/Compass &middot; ROM = Romonet/Vertiv &middot; CBRE = CBRE DataSite &middot; PEAK = Peaknode
             </div>
           </div>
         </div>
       </div>
       <div className="pitch-callout pitch-callout-accent" style={{ marginTop: 8 }}>
-        <strong>Only Princeps</strong> fuses NREL energy simulation, Earth Engine satellite intelligence, 12 GeoAI computer vision models, and Claude AI reasoning into one platform — purpose-built for UK regulatory requirements. No competitor covers all four layers.
+        <strong>No competitor integrates real grid headroom + 24/7 CFE% + PUE + constraint overlay + financial TCO + AI prospecting.</strong> Princeps is the only platform that does all six.
       </div>
     </div>
   );
 }
+
+function SlideDCData() {
+  const dataSources = [
+    { category: "Grid (6 UK DNOs)", sources: ["UKPN", "NGED", "NPG", "SPEN", "ENWL", "SSEN"], color: "var(--pg-blue)", icon: "\u26A1" },
+    { category: "Carbon & Energy", sources: ["Carbon Intensity API", "REPD", "TEC Register", "BMRS Demand"], color: "var(--pg-green)", icon: "\u2600" },
+    { category: "Environmental", sources: ["Natural England (SSSI/AONB/ALC)", "EA Flood Data", "EA Water Resources"], color: "#24a148", icon: "\uD83C\uDF3F" },
+    { category: "Connectivity", sources: ["PeeringDB", "Ofcom", "OS MasterMap"], color: "var(--pg-purple)", icon: "\uD83C\uDF10" },
+    { category: "Satellite (GeeFlow)", sources: ["DynamicWorld", "ERA5-Land", "Sentinel-2", "NASADEM"], color: "#7c5cfc", icon: "\uD83D\uDEF0" },
+    { category: "Planning & Land", sources: ["Planning Portal", "Land Registry", "INSPIRE WMS"], color: "var(--pg-accent)", icon: "\uD83D\uDCCB" },
+  ];
+  return (
+    <div className="pitch-slide">
+      <SlideTitle num="11" title="DATA STACK" accent="var(--pg-purple)" badge="20+ SOURCES" />
+      <div className="pitch-domains-grid pitch-domains-compact" style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+        {dataSources.map(d => (
+          <div key={d.category} className="pitch-stage-card" style={{ borderTopColor: d.color, padding: 10 }}>
+            <div className="pitch-stage-title" style={{ fontSize: 11 }}>
+              <span style={{ marginRight: 6 }}>{d.icon}</span>{d.category}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+              {d.sources.map(s => (
+                <span key={s} className="pitch-intent-chip" style={{ fontSize: 8 }}>{s}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="pitch-cols" style={{ marginTop: 12 }}>
+        <div className="pitch-col">
+          <div className="pitch-callout pitch-callout-accent">
+            <strong>20+ data sources, all free or open, all real-time.</strong> No manual data entry. No stale spreadsheets. Princeps pulls live data from every UK DNO, government agency, and satellite platform on every assessment.
+          </div>
+        </div>
+      </div>
+      <div className="pitch-hero-stats" style={{ marginTop: 12 }}>
+        <StatBox label="DATA SOURCES" value="20+" color="var(--pg-blue)" />
+        <StatBox label="UK DNOs" value="6/6" color="var(--pg-green)" />
+        <StatBox label="SUBSTATIONS" value="500+" color="var(--pg-accent)" />
+        <StatBox label="REPD ASSETS" value="12K+" color="var(--pg-purple)" />
+      </div>
+    </div>
+  );
+}
+
+/* ── KEPT SLIDES (architecture, traction, business, team) ── */
 
 function SlideArchitecture() {
   return (
@@ -1192,20 +1051,17 @@ function SlideArchitecture() {
           {/* 3D Digital Twin */}
           <div className="ps-twin-preview ps-twin-large">
             <div className="ps-twin-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" strokeWidth="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c5cfc" strokeWidth="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
               <span>3D DIGITAL TWIN</span>
               <span className="ps-twin-live">LIVE</span>
             </div>
             <div className="ps-twin-body">
               <svg viewBox="0 0 480 280" className="ps-twin-svg">
                 <defs>
-                  {/* Isometric grid pattern */}
                   <pattern id="isoGrid" width="24" height="14" patternUnits="userSpaceOnUse">
                     <path d="M0 14 L12 7 L24 14 M12 7 L12 0" fill="none" stroke="rgba(0,229,255,0.06)" strokeWidth="0.3" />
                   </pattern>
-                  {/* Energy flow animation */}
                   <filter id="glow"><feGaussianBlur stdDeviation="2" result="g" /><feMerge><feMergeNode in="g" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
-                  {/* Panel gradient */}
                   <linearGradient id="panelFace" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#1a6b8a" /><stop offset="100%" stopColor="#0d3a4a" />
                   </linearGradient>
@@ -1217,36 +1073,29 @@ function SlideArchitecture() {
                   </linearGradient>
                 </defs>
 
-                {/* Ground plane */}
                 <polygon points="240,240 480,160 240,80 0,160" fill="rgba(15,25,35,0.8)" stroke="rgba(0,229,255,0.1)" strokeWidth="0.5" />
                 <rect x="0" y="80" width="480" height="160" fill="url(#isoGrid)" />
 
-                {/* Ground contour lines */}
                 {[0,1,2,3].map(i => (
                   <ellipse key={`c${i}`} cx="240" cy={160 + i * 8} rx={200 - i * 20} ry={30 - i * 3} fill="none" stroke="rgba(36,161,72,0.08)" strokeWidth="0.5" />
                 ))}
 
-                {/* === SOLAR ARRAY (3 rows x 4 panels) === */}
                 {[0,1,2].map(row => (
                   [0,1,2,3].map(col => {
                     const bx = 60 + col * 42 + row * 18;
                     const by = 130 + row * 22 - col * 10;
                     return (
                       <g key={`p${row}${col}`}>
-                        {/* Panel face (tilted) */}
                         <polygon points={`${bx},${by - 16} ${bx + 36},${by - 26} ${bx + 36},${by - 18} ${bx},${by - 8}`} fill="url(#panelFace)" stroke="#00bcd4" strokeWidth="0.6" opacity="0.9" />
-                        {/* Panel cell grid lines */}
                         <line x1={bx + 12} y1={by - 19.3} x2={bx + 12} y2={by - 11.3} stroke="rgba(0,229,255,0.2)" strokeWidth="0.3" />
                         <line x1={bx + 24} y1={by - 22.6} x2={bx + 24} y2={by - 14.6} stroke="rgba(0,229,255,0.2)" strokeWidth="0.3" />
                         <line x1={bx} y1={by - 12} x2={bx + 36} y2={by - 22} stroke="rgba(0,229,255,0.15)" strokeWidth="0.3" />
-                        {/* Support post */}
                         <line x1={bx + 18} y1={by - 12} x2={bx + 18} y2={by} stroke="#3a5a6a" strokeWidth="1" />
                       </g>
                     );
                   })
                 ))}
 
-                {/* === INVERTER CABINETS (2x) === */}
                 {[0,1].map(i => {
                   const ix = 260 + i * 30, iy = 165 + i * 14;
                   return (
@@ -1254,36 +1103,28 @@ function SlideArchitecture() {
                       <polygon points={`${ix},${iy} ${ix + 14},${iy - 6} ${ix + 14},${iy + 10} ${ix},${iy + 16}`} fill="#2a3a5a" stroke="#4a6a8a" strokeWidth="0.5" />
                       <polygon points={`${ix + 14},${iy - 6} ${ix + 22},${iy - 2} ${ix + 22},${iy + 14} ${ix + 14},${iy + 10}`} fill="#1a2a4a" stroke="#4a6a8a" strokeWidth="0.5" />
                       <polygon points={`${ix},${iy} ${ix + 14},${iy - 6} ${ix + 22},${iy - 2} ${ix + 8},${iy + 4}`} fill="#3a4a6a" stroke="#4a6a8a" strokeWidth="0.5" />
-                      {/* Status LED */}
                       <circle cx={ix + 4} cy={iy + 5} r="1.5" fill="#24a148" filter="url(#glow)" />
                       <text x={ix + 11} y={iy + 24} textAnchor="middle" fill="rgba(255,255,255,0.35)" fontSize="4">INV</text>
                     </g>
                   );
                 })}
 
-                {/* === BATTERY STORAGE (BESS container) === */}
                 <g>
                   <polygon points="340,145 380,128 380,158 340,175" fill="url(#battGrad)" stroke="#24a148" strokeWidth="0.6" />
                   <polygon points="380,128 410,140 410,170 380,158" fill="#153020" stroke="#24a148" strokeWidth="0.6" />
                   <polygon points="340,145 380,128 410,140 370,157" fill="#1a4030" stroke="#24a148" strokeWidth="0.6" />
-                  {/* Battery cells inside */}
                   {[0,1,2,3].map(c => (
                     <rect key={`bc${c}`} x={345 + c * 8} y={152 + c * 0.5} width="5" height="12" rx="0.5" fill={c < 3 ? "#24a148" : "#1a3a2a"} opacity="0.7" transform={`skewY(-8)`} />
                   ))}
-                  {/* Charge indicator */}
                   <circle cx="350" cy="150" r="2" fill="#24a148" filter="url(#glow)" />
                   <text x="375" y="182" textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="5">BESS 5MWh</text>
                 </g>
 
-                {/* === SUBSTATION / TRANSFORMER === */}
                 <g>
-                  {/* Base */}
                   <polygon points="400,155 430,142 455,154 425,167" fill="#2a2a1a" stroke="#f1c21b" strokeWidth="0.5" />
-                  {/* Transformer body */}
                   <polygon points="410,135 430,126 430,152 410,161" fill="#3a3a2a" stroke="#f1c21b" strokeWidth="0.5" />
                   <polygon points="430,126 445,133 445,159 430,152" fill="#2a2a1a" stroke="#f1c21b" strokeWidth="0.5" />
                   <polygon points="410,135 430,126 445,133 425,142" fill="#4a4a2a" stroke="#f1c21b" strokeWidth="0.5" />
-                  {/* HV bushings */}
                   <line x1="420" y1="135" x2="420" y2="120" stroke="#f1c21b" strokeWidth="1.5" />
                   <circle cx="420" cy="118" r="2.5" fill="none" stroke="#f1c21b" strokeWidth="0.8" />
                   <line x1="438" y1="130" x2="438" y2="118" stroke="#f1c21b" strokeWidth="1.5" />
@@ -1291,19 +1132,13 @@ function SlideArchitecture() {
                   <text x="428" y="174" textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="5">33kV Tx</text>
                 </g>
 
-                {/* === POWER LINES / CABLES === */}
-                {/* Panels → Inverters */}
-                <path d="M220,160 Q240,155 258,168" fill="none" stroke="#00e5ff" strokeWidth="0.8" strokeDasharray="3,2" opacity="0.5" />
-                {/* Inverters → BESS */}
+                <path d="M220,160 Q240,155 258,168" fill="none" stroke="#7c5cfc" strokeWidth="0.8" strokeDasharray="3,2" opacity="0.5" />
                 <path d="M310,178 Q325,165 338,155" fill="none" stroke="#24a148" strokeWidth="0.8" strokeDasharray="3,2" opacity="0.5" />
-                {/* BESS → Substation */}
                 <path d="M395,160 L400,158" fill="none" stroke="#f1c21b" strokeWidth="0.8" strokeDasharray="3,2" opacity="0.5" />
-                {/* Grid export line */}
                 <path d="M450,135 L470,125 L470,90" fill="none" stroke="#f1c21b" strokeWidth="1" strokeDasharray="4,3" />
                 <text x="470" y="86" textAnchor="middle" fill="#f1c21b" fontSize="5" fontWeight="700">GRID</text>
 
-                {/* === ENERGY FLOW PARTICLES === */}
-                <circle r="2" fill="#00e5ff" filter="url(#glow)" opacity="0.9">
+                <circle r="2" fill="#7c5cfc" filter="url(#glow)" opacity="0.9">
                   <animateMotion dur="3s" repeatCount="indefinite" path="M180,155 Q240,150 270,170 Q320,165 350,155 L420,140" />
                 </circle>
                 <circle r="1.5" fill="#24a148" filter="url(#glow)" opacity="0.8">
@@ -1313,45 +1148,36 @@ function SlideArchitecture() {
                   <animateMotion dur="2.5s" repeatCount="indefinite" begin="0.5s" path="M420,140 L450,130 L470,100" />
                 </circle>
 
-                {/* === SUN + PATH === */}
                 <path d="M30,50 Q150,8 380,25 Q440,30 460,50" fill="none" stroke="rgba(241,194,27,0.2)" strokeWidth="0.8" strokeDasharray="4,3" />
                 <circle cx="240" cy="18" r="12" fill="rgba(241,194,27,0.15)" />
                 <circle cx="240" cy="18" r="7" fill="rgba(241,194,27,0.6)" filter="url(#glow)" />
-                {/* Sun rays */}
                 {[0,1,2,3,4,5].map(i => {
                   const angle = (i * 60) * Math.PI / 180;
                   return <line key={`ray${i}`} x1={240 + 10 * Math.cos(angle)} y1={18 + 10 * Math.sin(angle)} x2={240 + 16 * Math.cos(angle)} y2={18 + 16 * Math.sin(angle)} stroke="rgba(241,194,27,0.3)" strokeWidth="0.5" />;
                 })}
 
-                {/* === FLOATING KPI BADGES === */}
-                {/* Power output */}
                 <g>
                   <rect x="5" y="5" width="72" height="30" rx="5" fill="rgba(10,15,30,0.85)" stroke="rgba(0,229,255,0.3)" strokeWidth="0.5" />
                   <text x="12" y="16" fill="rgba(255,255,255,0.5)" fontSize="5" fontWeight="600">OUTPUT</text>
-                  <text x="12" y="28" fill="#00e5ff" fontSize="10" fontWeight="800">4.8 MW</text>
+                  <text x="12" y="28" fill="#7c5cfc" fontSize="10" fontWeight="800">4.8 MW</text>
                 </g>
-                {/* Storage */}
                 <g>
                   <rect x="5" y="40" width="72" height="30" rx="5" fill="rgba(10,15,30,0.85)" stroke="rgba(36,161,72,0.3)" strokeWidth="0.5" />
                   <text x="12" y="51" fill="rgba(255,255,255,0.5)" fontSize="5" fontWeight="600">BESS SOC</text>
                   <text x="12" y="63" fill="#24a148" fontSize="10" fontWeight="800">78%</text>
                 </g>
-                {/* Grid export */}
                 <g>
                   <rect x="403" y="78" width="72" height="30" rx="5" fill="rgba(10,15,30,0.85)" stroke="rgba(241,194,27,0.3)" strokeWidth="0.5" />
                   <text x="410" y="89" fill="rgba(255,255,255,0.5)" fontSize="5" fontWeight="600">GRID EXPORT</text>
                   <text x="410" y="101" fill="#f1c21b" fontSize="10" fontWeight="800">3.2 MW</text>
                 </g>
 
-                {/* === COMPONENT LABELS === */}
                 <text x="130" y="210" textAnchor="middle" fill="rgba(0,229,255,0.5)" fontSize="5.5" fontWeight="600">SOLAR ARRAY</text>
                 <text x="130" y="218" textAnchor="middle" fill="rgba(255,255,255,0.25)" fontSize="4">12 \u00D7 450W panels per string</text>
 
-                {/* Access road */}
                 <path d="M0,200 Q80,190 160,210 Q240,230 320,220 Q400,210 480,220" fill="none" stroke="rgba(120,120,100,0.2)" strokeWidth="4" />
                 <path d="M0,200 Q80,190 160,210 Q240,230 320,220 Q400,210 480,220" fill="none" stroke="rgba(120,120,100,0.08)" strokeWidth="8" />
 
-                {/* Fence perimeter */}
                 <polygon points="30,200 240,100 460,190 240,250" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="0.5" strokeDasharray="6,4" />
               </svg>
             </div>
@@ -1366,12 +1192,12 @@ function SlideTraction() {
   const metrics = [
     { label: "Assessment speed", value: "1000x", sub: "Full feasibility in 5 minutes vs. 4-8 weeks with traditional consultants", color: "var(--pg-green)" },
     { label: "Cost per site", value: "10-30x", sub: "~&pound;500 per assessment vs. &pound;5-15K consultancy — dramatically lowers the bar for site screening", color: "var(--pg-blue)" },
-    { label: "API surface", value: "120+", sub: "Production-ready REST endpoints covering sites, grid, planning, finance, satellite, and procurement", color: "var(--pg-accent)" },
-    { label: "Analysis intents", value: "11", sub: "Specialised AI assessments: feasibility, grid, financial, planning, environmental, satellite, legacy, procurement, grid efficiency, prospecting, BESS", color: "var(--pg-purple)" },
-    { label: "Chat tools", value: "30+", sub: "Claude AI orchestrates 30+ callable tools — grid study, SAM simulation, GeoJSON generation, planning search, financial modelling", color: "var(--pg-blue)" },
-    { label: "Fused data sources", value: "20+", sub: "Google Earth Engine, NREL SAM, OS data, EA flood maps, BEIS grid data, Mapbox, planning APIs — all integrated", color: "var(--pg-green)" },
+    { label: "Customer discovery", value: "100+", sub: "Interviews with UK developers, IPPs, asset managers, DNOs. Validated pain points, pricing, and workflow integration requirements.", color: "var(--pg-accent)" },
+    { label: "Analysis intents", value: "18", sub: "Feasibility, grid study, grid connection, demand forecast, financial, planning, environmental, satellite, legacy, procurement, grid efficiency, prospecting, BESS +5 more", color: "var(--pg-purple)" },
+    { label: "Pilot pipeline", value: "Active", sub: "Discussions with major UK data centre company. Early adopter program designed for 5 developers with active grid applications.", color: "var(--pg-green)" },
+    { label: "Fused data sources", value: "20+", sub: "Google Earth Engine, NREL SAM, 6 UK DNO APIs, BMRS demand data, EA flood maps, Mapbox, planning APIs — all integrated", color: "var(--pg-blue)" },
     { label: "CV models deployed", value: "12", sub: "Prithvi EO, GroundedSAM, DINOv3, Moondream VLM, torchange, OmniCloudMask, OpenSR — production inference", color: "#ff6b6b" },
-    { label: "Regulatory checks", value: "8", sub: "G99/G100, CDM, BNG, EIA, NPPF, ALC, Flood Test, NSIP — automated compliance screening", color: "var(--pg-accent)" },
+    { label: "Platform maturity", value: "120+", sub: "Production REST endpoints. Full-stack: PostGIS + FastAPI + React + Claude AI + PySAM + pandapower + deck.gl 3D twin", color: "var(--pg-accent)" },
   ];
   return (
     <div className="pitch-slide">
@@ -1389,69 +1215,51 @@ function SlideTraction() {
   );
 }
 
-function SlideMarket() {
-  return (
-    <div className="pitch-slide">
-      <SlideTitle num="14" title="MARKET SIZE" accent="var(--pg-accent)" />
-      <div className="pitch-market-stack">
-        <div className="pitch-market-ring pitch-market-tam">
-          <div className="pitch-market-inner">
-            <span className="pitch-market-value">&pound;2B+</span>
-            <span className="pitch-market-label">TAM</span>
-            <span className="pitch-market-desc">UK energy infrastructure consultancy, planning, and due diligence services</span>
-          </div>
-        </div>
-        <div className="pitch-market-ring pitch-market-sam-ring">
-          <div className="pitch-market-inner">
-            <span className="pitch-market-value">&pound;500M</span>
-            <span className="pitch-market-label">SAM</span>
-            <span className="pitch-market-desc">Solar, BESS, and wind site feasibility assessments and grid connection studies</span>
-          </div>
-        </div>
-        <div className="pitch-market-ring pitch-market-som">
-          <div className="pitch-market-inner">
-            <span className="pitch-market-value">&pound;50M</span>
-            <span className="pitch-market-label">SOM</span>
-            <span className="pitch-market-desc">UK solar developers, IPPs, and asset managers actively assessing sites today</span>
-          </div>
-        </div>
-      </div>
-      <div className="pitch-market-pipeline">
-        <div className="pitch-market-pipe-item">
-          <span className="pitch-market-pipe-val" style={{ color: "var(--pg-accent)" }}>50+ GW</span>
-          <span>UK solar pipeline by 2035</span>
-        </div>
-        <div className="pitch-market-pipe-item">
-          <span className="pitch-market-pipe-val" style={{ color: "var(--pg-blue)" }}>25+ GW</span>
-          <span>Battery storage planned</span>
-        </div>
-        <div className="pitch-market-pipe-item">
-          <span className="pitch-market-pipe-val" style={{ color: "var(--pg-green)" }}>10,000s</span>
-          <span>Sites to assess per year</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function SlideBusiness() {
   const models = [
-    { model: "Per-site fee", range: "&pound;500-2,000/site", desc: "Pay-per-assessment — instant feasibility reports replace &pound;5-15K consultancy. 10-30x cost reduction drives adoption." },
-    { model: "SaaS subscription", range: "&pound;2-5K/mo per seat", desc: "Monthly subscription for unlimited assessments, portfolio management, and real-time monitoring. Land-and-expand within organisations." },
-    { model: "Enterprise API", range: "&pound;25-100K/yr", desc: "Volume licensing for large developers and DNOs managing 100+ site portfolios. White-label integration into existing workflows." },
-    { model: "Revenue share", range: "0.5-2% of connection value", desc: "Success-based upside on grid connections facilitated through the platform. Aligns incentives — we earn when sites succeed." },
+    { model: "Platform subscription", range: "&pound;50-60K ACV", desc: "Per-developer account with unlimited site assessments, portfolio dashboard, and AI chat. Each project slots underneath. Primary revenue driver.", primary: true },
+    { model: "Volume-based fee", range: "5-10% of assessment value", desc: "Variable fee on advanced analyses — Tier 2 power flow, demand forecasts, connection cost estimates. Scales with usage, aligns with value delivered." },
+    { model: "Enterprise API", range: "&pound;25-100K/yr", desc: "White-label integration for DNOs, grid operators, and large IPPs. Embed Princeps intelligence into their existing Salesforce/Oracle workflows." },
+    { model: "Success fee", range: "0.5-2% of connection value", desc: "Upside on grid connections facilitated through the platform. Aligns incentives — we earn when sites get energised." },
+  ];
+  const unitEcon = [
+    { label: "Gross margin", value: "85%+", color: "var(--pg-green)" },
+    { label: "CAC target", value: "\u00a35-8K", color: "var(--pg-blue)" },
+    { label: "LTV:CAC", value: ">10x", color: "var(--pg-accent)" },
+    { label: "Payback", value: "<3 months", color: "var(--pg-purple)" },
   ];
   return (
     <div className="pitch-slide">
-      <SlideTitle num="15" title="BUSINESS MODEL" accent="var(--pg-blue)" />
-      <div className="pitch-business-grid">
-        {models.map(m => (
-          <div key={m.model} className="pitch-business-card">
-            <span className="pitch-business-model">{m.model}</span>
-            <span className="pitch-business-range" dangerouslySetInnerHTML={{ __html: m.range }} />
-            <span className="pitch-business-desc">{m.desc}</span>
+      <SlideTitle num="14" title="BUSINESS MODEL" accent="var(--pg-blue)" badge="MARKET-AS-A-SERVICE" />
+      <div className="pitch-cols" style={{ gap: 16 }}>
+        <div className="pitch-col" style={{ flex: "0 0 55%" }}>
+          <div className="pitch-business-grid">
+            {models.map(m => (
+              <div key={m.model} className={`pitch-business-card${m.primary ? " pitch-business-primary" : ""}`}>
+                <span className="pitch-business-model">{m.model}</span>
+                <span className="pitch-business-range" dangerouslySetInnerHTML={{ __html: m.range }} />
+                <span className="pitch-business-desc">{m.desc}</span>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+        <div className="pitch-col" style={{ flex: 1 }}>
+          <h3 className="pitch-section-head">UNIT ECONOMICS</h3>
+          <div className="pitch-terrain-stats">
+            {unitEcon.map(u => (
+              <div key={u.label} className="pitch-terrain-stat">
+                <span className="pitch-terrain-label">{u.label}</span>
+                <span className="pitch-terrain-value" style={{ color: u.color }}>{u.value}</span>
+              </div>
+            ))}
+          </div>
+          <h3 className="pitch-section-head" style={{ marginTop: 14 }}>WHY THIS WORKS</h3>
+          <div className="pitch-feature-list">
+            <Feature icon=">" text="Replaces \u00a35-15K consultancy per site" detail="Developers currently pay external firms for each grid feasibility study. At \u00a3500-2K per AI assessment, adoption is a no-brainer." />
+            <Feature icon=">" text="Power doubling in price from grid" detail="Co-location with renewables is now the cheapest form of new generation. Princeps helps developers find and validate these opportunities." />
+            <Feature icon=">" text="Flexibility as revenue" detail="Behind-the-meter batteries, demand-side response, local renewable generation — all require the site intelligence that Princeps provides." />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1465,7 +1273,7 @@ function SlideTeam() {
       <span className="pitch-hero-eyebrow">INVESTMENT OPPORTUNITY</span>
       <h1 className="pitch-hero-title" style={{ fontSize: 48 }}>THE ASK</h1>
       <p className="pitch-hero-sub" style={{ maxWidth: 560 }}>
-        Building the intelligence layer for the UK's energy transition. We are seeking pre-seed investment to scale the platform, build the team, and capture the first-mover advantage in AI-powered site feasibility.
+        Building the intelligence layer for energy infrastructure. Seeking pre-seed investment to run an early adopter program with 5 UK developers, build the advisory board, and capture first-mover advantage.
       </p>
       <div className="pitch-team-cta">
         <div className="pitch-team-cta-item">
@@ -1474,11 +1282,21 @@ function SlideTeam() {
         </div>
         <div className="pitch-team-cta-item">
           <span className="pitch-team-cta-label">USE OF FUNDS</span>
-          <span className="pitch-team-cta-value">Engineering, data partnerships, first enterprise pilots</span>
+          <span className="pitch-team-cta-value">Engineering, early adopter pilots, data partnerships</span>
         </div>
         <div className="pitch-team-cta-item">
           <span className="pitch-team-cta-label">TIMELINE</span>
           <span className="pitch-team-cta-value">12 months to revenue</span>
+        </div>
+      </div>
+      <div className="pitch-team-cta" style={{ marginTop: 16 }}>
+        <div className="pitch-team-cta-item">
+          <span className="pitch-team-cta-label">ADVISORY BOARD</span>
+          <span className="pitch-team-cta-value" style={{ fontSize: 11 }}>Senior DNO engineering, offshore (Orsted, Enel), grid operator perspective</span>
+        </div>
+        <div className="pitch-team-cta-item">
+          <span className="pitch-team-cta-label">ACCELERATORS</span>
+          <span className="pitch-team-cta-value" style={{ fontSize: 11 }}>Free Electron, KIC (Horizon Europe)</span>
         </div>
       </div>
     </div>

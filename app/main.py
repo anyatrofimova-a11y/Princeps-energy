@@ -170,6 +170,8 @@ async def health_check(request: Request):
 # ---------------------------------------------------------------------------
 # Register all routers
 # ---------------------------------------------------------------------------
+from app.graph import router as graph_router  # noqa: E402
+
 from app.routers import (  # noqa: E402
     site, geeflow, grid, demand, strategy, market,
     legacy, procurement, grid_efficiency, prospector, scoring,
@@ -179,6 +181,10 @@ from app.routers import (  # noqa: E402
     assessments, workflows as workflows_v1, auth,
     cim as cim_router,
     datacentre, reports,
+    hardware,
+    teaser as teaser_router,
+    dc_planner as dc_planner_router,
+    eurosat as eurosat_router,
 )
 
 _routers = [
@@ -193,7 +199,13 @@ _routers = [
     cim_router.router,
     datacentre.router,
     reports.router,
+    hardware.router,
+    teaser_router.router,
+    dc_planner_router.router,
+    eurosat_router.router,
 ]
+
+app.include_router(graph_router)
 
 for r in _routers:
     app.include_router(r)

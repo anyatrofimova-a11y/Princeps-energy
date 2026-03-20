@@ -1,6 +1,9 @@
 # Python
 .venv/
 .venv-sam/
+.venv-forecast/
+.venv-geeflow/
+.venv-grid/
 __pycache__/
 *.pyc
 *.egg-info/
@@ -10,6 +13,9 @@ node_modules/
 
 # Environment
 .env
+
+# Vendored/cloned dependencies
+vendor/
 
 # Cloned repos (large, tracked separately)
 SAM/
@@ -35,6 +41,9 @@ pypsa-eur/
 nebula.gl/
 octopus-agile-pi-prices/
 octopus-energy-rates-card/
+
+# Vite cache
+.vite/
 
 # Old/external frontend and build artifacts
 frontend/

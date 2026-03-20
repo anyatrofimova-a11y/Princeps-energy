@@ -85,7 +85,7 @@ function ForecastChart({ forecasts, capacityMw, width = 600, height = 200, slide
       <path d={bandPath} fill="rgba(15,98,254,0.15)" />
 
       {/* P50 line */}
-      <path d={p50Line} fill="none" stroke="#0f62fe" strokeWidth={1.5} />
+      <path d={p50Line} fill="none" stroke="#7c5cfc" strokeWidth={1.5} />
 
       {/* Slider indicator */}
       {sliderIdx != null && sliderIdx < forecasts.length && (
@@ -93,7 +93,7 @@ function ForecastChart({ forecasts, capacityMw, width = 600, height = 200, slide
           <line x1={x(sliderIdx)} y1={pad.t} x2={x(sliderIdx)} y2={pad.t + h}
             stroke="rgba(255,255,255,0.4)" strokeWidth={1} strokeDasharray="2 2" />
           <circle cx={x(sliderIdx)} cy={y(forecasts[sliderIdx].p50_mw)} r={4}
-            fill="#0f62fe" stroke="#fff" strokeWidth={1.5} />
+            fill="#7c5cfc" stroke="#fff" strokeWidth={1.5} />
         </>
       )}
 
@@ -151,7 +151,7 @@ function ScenarioChart({ annual, scenarios, width = 600, height = 220 }) {
               height={Math.max(1, y(a.p10_mw) - y(a.p90_mw))}
               fill={exceed ? "rgba(245,34,45,0.25)" : "rgba(15,98,254,0.2)"} rx={2} />
             <line x1={xc - barW / 3} y1={y(a.p50_mw)} x2={xc + barW / 3} y2={y(a.p50_mw)}
-              stroke={exceed ? "#f5222d" : "#0f62fe"} strokeWidth={2} />
+              stroke={exceed ? "#f5222d" : "#7c5cfc"} strokeWidth={2} />
             <text x={xc} y={height - 6} textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="8">
               {a.year}
             </text>
@@ -363,7 +363,7 @@ export default function DemandForecastPanel({ onClose }) {
                       </span>
                       <span className="df-slider-vals">
                         P10: <b>{sliderPoint.p10_mw.toFixed(0)}</b> &nbsp;
-                        P50: <b style={{ color: "#0f62fe" }}>{sliderPoint.p50_mw.toFixed(0)}</b> &nbsp;
+                        P50: <b style={{ color: "#7c5cfc" }}>{sliderPoint.p50_mw.toFixed(0)}</b> &nbsp;
                         P90: <b>{sliderPoint.p90_mw.toFixed(0)}</b> MW
                       </span>
                     </div>

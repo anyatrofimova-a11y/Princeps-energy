@@ -1,21 +1,36 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { useSite } from "../../SiteContext";
+import api from "../../services/api";
+
+const EUROSAT_COLORS = {
+  AnnualCrop: "#ffc107", Forest: "#2e7d32", HerbaceousVegetation: "#8bc34a",
+  Highway: "#78909c", Industrial: "#607d8b", Pasture: "#aed581",
+  PermanentCrop: "#ff9800", Residential: "#9e9e9e", River: "#42a5f5", SeaLake: "#1565c0",
+};
+const SUIT_COLOR = { good: "#4caf50", moderate: "#ff9800", poor: "#f44336" };
 
 /**
- * LandClassifierCard — 3-tab card for enriched 21-class land use
- * classification, retrofitting assessment, and land use forecasting.
+ * LandClassifierCard — 4-tab card for enriched 21-class land use
+ * classification, retrofitting assessment, land use forecasting, and EuroSAT 10-class.
  */
 export default function LandClassifierCard() {
   const { pickedLocation, setChatLayers } = useSite();
-  const lat = pickedLocation?.[0];
-  const lon = pickedLocation?.[1];
-  const [view, setView] = useState("classify"); // classify | retrofit | forecast
+  const lat = pickedLocation?.lat;
+  const lon = pickedLocation?.lon;
+  const [view, setView] = useState("classify"); // classify | retrofit | forecast | eurosat
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [eurosatData, setEurosatData] = useState(null);
+  const [eurosatClasses, setEurosatClasses] = useState(null);
 
-  // Reset result when view changes
-  useEffect(() => setResult(null), [view]);
+  // Reset result when view changes (except eurosat which persists)
+  useEffect(() => { if (view !== "eurosat") setResult(null); }, [view]);
+
+  // Fetch EuroSAT classes metadata on mount
+  useEffect(() => {
+    api.classification.classes().then(c => { if (c) setEurosatClasses(c); }).catch(() => {});
+  }, []);
 
   const runClassify = useCallback(async () => {
     if (!lat || !lon) return;
@@ -62,6 +77,21 @@ export default function LandClassifierCard() {
     }
   }, [lat, lon]);
 
+  const runEurosat = useCallback(async () => {
+    if (!lat || !lon) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await api.classification.location(lat, lon);
+      if (res?.error) throw new Error(res.error);
+      setEurosatData(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [lat, lon]);
+
   const showOnMap = useCallback(async () => {
     if (!lat || !lon) return;
     try {
@@ -100,25 +130,25 @@ export default function LandClassifierCard() {
     <div className="card" style={{ borderLeft: `3px solid ${themeColor}` }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
         <h3 style={{ margin: 0, color: themeColor, flex: 1 }}>Land Classifier</h3>
-        {["classify", "retrofit", "forecast"].map(v => (
+        {["classify", "eurosat", "retrofit", "forecast"].map(v => (
           <button
             key={v}
             className={`tab-btn-sm ${view === v ? "active" : ""}`}
             style={view === v ? { background: themeColor, color: "#fff" } : { color: themeColor }}
             onClick={() => setView(v)}
-          >{v === "classify" ? "Classify" : v === "retrofit" ? "Retrofit" : "Forecast"}</button>
+          >{v === "classify" ? "DW-21" : v === "eurosat" ? "EuroSAT" : v === "retrofit" ? "Retrofit" : "Forecast"}</button>
         ))}
       </div>
 
       <button
-        onClick={view === "classify" ? runClassify : view === "retrofit" ? runRetrofit : runForecast}
+        onClick={view === "classify" ? runClassify : view === "eurosat" ? runEurosat : view === "retrofit" ? runRetrofit : runForecast}
         disabled={loading || !lat || !lon}
         style={{
           background: themeColor, color: "#fff", border: "none", borderRadius: 4,
           padding: "6px 14px", fontSize: 12, cursor: "pointer", width: "100%", marginBottom: 8,
         }}
       >
-        {loading ? "Analysing..." : view === "classify" ? "Run Classification" : view === "retrofit" ? "Assess Retrofitting" : "Forecast Changes"}
+        {loading ? "Analysing..." : view === "classify" ? "Run DW-21 Classification" : view === "eurosat" ? "Run EuroSAT Classification" : view === "retrofit" ? "Assess Retrofitting" : "Forecast Changes"}
       </button>
 
       {error && <p style={{ color: "#f44336", fontSize: 12 }}>{error}</p>}
@@ -285,6 +315,123 @@ export default function LandClassifierCard() {
           {result.risk_summary && (
             <div style={{ marginTop: 8, fontSize: 11, color: "#aaa", fontStyle: "italic" }}>
               {result.risk_summary}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── EuroSAT tab ─────────────────────────────────── */}
+      {view === "eurosat" && eurosatData && (
+        <div>
+          {/* Primary class + confidence */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{
+              padding: "3px 10px", borderRadius: 8, fontSize: 12, fontWeight: "bold",
+              background: EUROSAT_COLORS[eurosatData.class] || "#666", color: "#fff",
+            }}>
+              {eurosatData.class?.replace(/([A-Z])/g, " $1").trim()}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>
+              {(eurosatData.confidence * 100).toFixed(0)}%
+            </span>
+            {eurosatData.feasibility?.suitability && (
+              <span style={{
+                padding: "2px 8px", borderRadius: 8, fontSize: 10, fontWeight: 600,
+                background: SUIT_COLOR[eurosatData.feasibility.suitability], color: "#fff",
+              }}>
+                {eurosatData.feasibility.suitability} suitability
+              </span>
+            )}
+          </div>
+
+          {/* Probability distribution */}
+          {eurosatData.probabilities && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", height: 18, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
+                {Object.entries(eurosatData.probabilities).map(([cls, prob]) => (
+                  prob > 0.02 ? (
+                    <div
+                      key={cls}
+                      style={{
+                        width: `${prob * 100}%`, minWidth: 2,
+                        background: EUROSAT_COLORS[cls] || "#666",
+                      }}
+                      title={`${cls.replace(/([A-Z])/g, " $1").trim()}: ${(prob * 100).toFixed(1)}%`}
+                    />
+                  ) : null
+                ))}
+              </div>
+              {/* Legend */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {Object.entries(eurosatData.probabilities).filter(([, p]) => p > 0.03).map(([cls, prob]) => (
+                  <div key={cls} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: 2, background: EUROSAT_COLORS[cls] || "#666" }} />
+                    <span style={{ color: "#ccc" }}>
+                      {cls.replace(/([A-Z])/g, " $1").trim()} {(prob * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Spectral indices */}
+          {eurosatData.indices && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: "#aaa", marginBottom: 4 }}>Spectral Indices</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6 }}>
+                {Object.entries(eurosatData.indices).map(([idx, val]) => (
+                  <div key={idx} className="stat-box" style={{ padding: 4, textAlign: "center" }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: val > 0 ? "#4caf50" : "#f44336" }}>
+                      {val.toFixed(3)}
+                    </div>
+                    <div style={{ fontSize: 9, color: "#888", textTransform: "uppercase" }}>{idx}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Feasibility assessment */}
+          {eurosatData.feasibility && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, color: "#aaa", marginBottom: 4 }}>Feasibility Assessment</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                <div className="stat-box" style={{ padding: 4 }}>
+                  <div style={{ fontSize: 11, color: eurosatData.feasibility.solar_ok ? "#4caf50" : "#f44336", fontWeight: 600 }}>
+                    {eurosatData.feasibility.solar_ok ? "Suitable" : "Unsuitable"}
+                  </div>
+                  <div style={{ fontSize: 9, color: "#888" }}>Solar</div>
+                </div>
+                <div className="stat-box" style={{ padding: 4 }}>
+                  <div style={{ fontSize: 11, color: eurosatData.feasibility.grid_constraint ? "#f44336" : "#4caf50", fontWeight: 600 }}>
+                    {eurosatData.feasibility.grid_constraint ? "Constrained" : "Clear"}
+                  </div>
+                  <div style={{ fontSize: 9, color: "#888" }}>Grid</div>
+                </div>
+                <div className="stat-box" style={{ padding: 4 }}>
+                  <div style={{
+                    fontSize: 11, fontWeight: 600,
+                    color: eurosatData.feasibility.planning_risk === "high" ? "#f44336" : eurosatData.feasibility.planning_risk === "moderate" ? "#ff9800" : "#4caf50",
+                  }}>
+                    {eurosatData.feasibility.planning_risk}
+                  </div>
+                  <div style={{ fontSize: 9, color: "#888" }}>Planning Risk</div>
+                </div>
+                <div className="stat-box" style={{ padding: 4 }}>
+                  <div style={{ fontSize: 11, color: themeColor, fontWeight: 600 }}>
+                    {eurosatData.dynamicworld_equiv}
+                  </div>
+                  <div style={{ fontSize: 9, color: "#888" }}>DW Equiv</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Location & method */}
+          {eurosatData.location && (
+            <div style={{ fontSize: 10, color: "#666" }}>
+              {eurosatData.region} · {eurosatData.location.lat.toFixed(3)}, {eurosatData.location.lon.toFixed(3)} · {eurosatData.method}
             </div>
           )}
         </div>

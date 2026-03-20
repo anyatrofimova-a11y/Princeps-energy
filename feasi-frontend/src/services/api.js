@@ -286,6 +286,31 @@ const api = {
     modes: () => get("/geoai/modes"),
   },
 
+  classification: {
+    classes: () => get("/api/classification/classes"),
+    classify: (bands) => post("/api/classification/classify", { bands }),
+    location: (lat, lon, date) => get(`/api/classification/location?lat=${lat}&lon=${lon}${date ? `&date=${date}` : ""}`),
+    compare: (eurosatClass, dwClass) => get(`/api/classification/compare?eurosat_class=${enc(eurosatClass)}&dw_class=${enc(dwClass)}`),
+  },
+
+  bess: {
+    score: (lat, lon) => get(`/bess/score?lat=${lat}&lon=${lon}`),
+    sizing: (capacityMw, durationHours, strategy, gridConstraintMw) =>
+      post("/bess/sizing", { capacity_mw: capacityMw, duration_hours: durationHours, revenue_strategy: strategy, grid_constraint_mw: gridConstraintMw }),
+    revenue: (powerMw, energyMwh, strategy) =>
+      post("/bess/revenue", { power_mw: powerMw, energy_mwh: energyMwh, strategy }),
+    bidder: (powerMw, energyMwh, strategy = "coordinated", hours = 24, efficiency = 0.86) =>
+      get(`/bess/bidder/simulate?power_mw=${powerMw}&energy_mwh=${energyMwh}&strategy=${enc(strategy)}&hours=${hours}&efficiency=${efficiency}`),
+  },
+
+  bipv: {
+    catalogue: () => get("/bipv/catalogue"),
+    annual: (parcelId, area, moduleType, surfaceType) =>
+      get(`/site/${enc(parcelId)}/bipv/annual?area_m2=${area}&module_type=${enc(moduleType)}&surface_type=${enc(surfaceType)}`),
+    profile: (parcelId, date, area, moduleType, surfaceType) =>
+      get(`/site/${enc(parcelId)}/bipv/profile?date=${enc(date)}&area_m2=${area}&module_type=${enc(moduleType)}&surface_type=${enc(surfaceType)}`),
+  },
+
   scoring: {
     learned: (lat, lon) => get(`/scoring/learned?lat=${lat}&lon=${lon}`),
     similar: (lat, lon, k = 5) => get(`/sites/similar?lat=${lat}&lon=${lon}&k=${k}`),
@@ -441,6 +466,65 @@ const api = {
       get(`/api/investment/report/risk-matrix?capacity_mw=${mw}&technology=${enc(tech)}&region=${enc(region)}`),
     actionPlan: (mw = 50, tech = "wind", region = "Scotland") =>
       get(`/api/investment/report/action-plan?capacity_mw=${mw}&technology=${enc(tech)}&region=${enc(region)}`),
+  },
+
+  dc: {
+    score: (lat, lon, mw = 10, profile = "colocation") =>
+      post(`/api/dc/score?lat=${lat}&lon=${lon}&capacity_mw=${mw}&profile=${enc(profile)}`),
+    scoreExtended: (lat, lon, mw = 100, profile = "google_hyperscale") =>
+      post(`/api/dc/score-extended?lat=${lat}&lon=${lon}&capacity_mw=${mw}&profile=${enc(profile)}`),
+    scan: (profile = "colocation", mw = 10, limit = 50) =>
+      post(`/api/dc/scan?profile=${enc(profile)}&capacity_mw=${mw}&limit=${limit}`),
+    compare: (sites, capacityMw = 100, profile = "google_hyperscale", customWeights) =>
+      post("/api/dc/compare", { sites, capacity_mw: capacityMw, profile, custom_weights: customWeights }),
+    infrastructure: (lat, lon, radius = 20) =>
+      get(`/api/dc/infrastructure?lat=${lat}&lon=${lon}&radius_km=${radius}`),
+    profiles: () => get("/api/dc/profiles"),
+    capacityMap: (profile = "colocation", minHr = 5) =>
+      get(`/api/dc/capacity-map?profile=${enc(profile)}&min_headroom_mw=${minHr}`),
+    cfe: (lat, lon, mw = 100, target = 90) =>
+      get(`/api/dc/cfe?lat=${lat}&lon=${lon}&capacity_mw=${mw}&target_cfe_pct=${target}`),
+    cooling: (lat, lon, mw = 10, coolingType = "hybrid") =>
+      get(`/api/dc/cooling?lat=${lat}&lon=${lon}&capacity_mw=${mw}&cooling_type=${enc(coolingType)}`),
+    constraints: (lat, lon, radiusM = 1000) =>
+      get(`/api/dc/constraints?lat=${lat}&lon=${lon}&radius_m=${radiusM}`),
+    waterStress: (lat, lon, mw = 10) =>
+      get(`/api/dc/water-stress?lat=${lat}&lon=${lon}&capacity_mw=${mw}`),
+    incentives: (lat, lon, mw = 100) =>
+      get(`/api/dc/incentives?lat=${lat}&lon=${lon}&capacity_mw=${mw}`),
+    regulatory: (lat, lon, mw = 100) =>
+      get(`/api/dc/regulatory?lat=${lat}&lon=${lon}&capacity_mw=${mw}`),
+    report: (lat, lon, siteName = "Candidate Site", mw = 100, profile = "google_hyperscale") =>
+      fetch(`/api/dc/report?lat=${lat}&lon=${lon}&site_name=${enc(siteName)}&capacity_mw=${mw}&profile=${enc(profile)}`, { method: "POST" })
+        .then(r => { if (!r.ok) throw new Error(`Report failed: ${r.status}`); return r.blob(); }),
+    googleSites: (mw = 100, profile = "google_hyperscale") =>
+      get(`/api/dc/google-sites?capacity_mw=${mw}&profile=${enc(profile)}`),
+    prospect: (query, mw = 100, profile = "google_hyperscale", minHr = 50, limit = 20) =>
+      post("/api/dc/prospect", { query, capacity_mw: mw, profile, min_headroom_mw: minHr, limit }),
+  },
+
+  assessments: {
+    createSnapshot: (parcelId, projectId, label) =>
+      post("/api/v1/assessments/snapshot", { parcel_id: parcelId, project_id: projectId, label }),
+    listSnapshots: (parcelId) => get(`/api/v1/assessments/${enc(parcelId)}`),
+    getSnapshot: (id) => get(`/api/v1/assessments/snapshot/${enc(id)}`),
+    compare: (a, b) => get(`/api/v1/assessments/compare/${enc(a)}/${enc(b)}`),
+    addEvidence: (snapId, data) =>
+      post(`/api/v1/assessments/snapshot/${enc(snapId)}/evidence`, data),
+    addNote: (snapId, text) =>
+      post(`/api/v1/assessments/snapshot/${enc(snapId)}/note`, { text }),
+  },
+
+  reports: {
+    siteAssessment: (lat, lon, siteName, capacityMw = 50) =>
+      fetch(`/api/reports/site-assessment?lat=${lat}&lon=${lon}&site_name=${enc(siteName)}&capacity_mw=${capacityMw}`, { method: "POST" })
+        .then(r => { if (!r.ok) throw new Error(`Report failed: ${r.status}`); return r.blob(); }),
+  },
+
+  bipv: {
+    catalogue: () => get("/bipv/catalogue"),
+    annual: (parcelId, area, moduleType, surfaceType) => get(`/site/${enc(parcelId)}/bipv/annual?area_m2=${area}&module_type=${enc(moduleType)}&surface_type=${enc(surfaceType)}`),
+    profile: (parcelId, date, area, moduleType, surfaceType) => get(`/site/${enc(parcelId)}/bipv/profile?date=${enc(date)}&area_m2=${area}&module_type=${enc(moduleType)}&surface_type=${enc(surfaceType)}`),
   },
 
   notifications: {

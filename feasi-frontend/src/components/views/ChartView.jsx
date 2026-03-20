@@ -50,7 +50,7 @@ export default function ChartView() {
   const charts = [];
 
   // Solar hourly production
-  if ((activeWorkspace === "feasibility" || activeWorkspace === "home") && solarHourly?.hours) {
+  if ((activeWorkspace === "analyse" || activeWorkspace === "home") && solarHourly?.hours) {
     const data = solarHourly.hours.map((h, i) => ({
       label: `${i}`,
       value: h.generation_kwh || 0,
@@ -61,7 +61,7 @@ export default function ChartView() {
   }
 
   // Monthly yield
-  if ((activeWorkspace === "feasibility" || activeWorkspace === "home") && solarYield?.monthly_kwh) {
+  if ((activeWorkspace === "analyse" || activeWorkspace === "home") && solarYield?.monthly_kwh) {
     const months = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
     const data = solarYield.monthly_kwh.map((v, i) => ({
       label: months[i],
@@ -73,7 +73,7 @@ export default function ChartView() {
   }
 
   // Demand forecast
-  if ((activeWorkspace === "grid" || activeWorkspace === "home") && demandForecast?.forecast) {
+  if ((activeWorkspace === "analyse" || activeWorkspace === "home") && demandForecast?.forecast) {
     const data = demandForecast.forecast.slice(0, 48).map((v, i) => ({
       label: i % 6 === 0 ? `${i}` : "",
       value: v.demand_mw || 0,

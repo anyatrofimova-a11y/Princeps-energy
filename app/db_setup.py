@@ -197,6 +197,13 @@ async def setup_database(pool: asyncpg.Pool) -> None:
         # ── Data centre infrastructure ──────────────────────────────────
         await setup_dc_tables(conn)
 
+        # ── DC constraint zones ────────────────────────────────────────
+        try:
+            from utils.dc_constraint_overlay import setup_constraint_tables
+            await setup_constraint_tables(conn)
+        except Exception as e:
+            log.warning("DC constraint tables setup skipped: %s", e)
+
         # ── Notifications / alerts ────────────────────────────────────────
         await setup_notifications_table(conn)
 

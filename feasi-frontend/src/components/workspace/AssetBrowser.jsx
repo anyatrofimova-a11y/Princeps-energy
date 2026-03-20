@@ -1,92 +1,73 @@
-import React, { useState } from "react";
+import React, { useState, lazy, Suspense } from "react";
 import { useSite } from "../../SiteContext";
 import { useWorkspace, WORKSPACE_INTENTS } from "../../contexts/WorkspaceContext";
 
-// Layer sections distributed by workspace
-const WORKSPACE_LAYERS = {
-  home: [],
-  grid: [
-    { id: "gridFlow", label: "Grid Flow", color: "#24a148" },
-    { id: "agilePricing", label: "Agile Pricing", color: "#f1c21b" },
-    { id: "demandOverlay", label: "Smart Meter", color: "#a56eff" },
-    { id: "flowFocus", label: "Flow Focus", color: "#08bdba" },
-    { id: "osmPower", label: "OSM Power", color: "#B54EB2" },
-    { id: "ngedSubs", label: "NGED Subs", color: "#1b5e20" },
-    { id: "gridCapacity", label: "Grid Capacity", color: "#0f62fe" },
-    { id: "demandGsps", label: "Demand GSPs", color: "#fa8c16" },
-    { id: "tecPipeline", label: "TEC Pipeline", color: "#0277bd" },
-    { id: "repdProjects", label: "REPD Projects", color: "#ff6f00" },
-    { id: "electricityZones", label: "Elec. Zones", color: "#24a148" },
-    { id: "hillshade", label: "Hillshade", color: "#8d6e63" },
-    { id: "contours", label: "Contours", color: "#24a148" },
-  ],
-  feasibility: [
-    { id: "hillshade", label: "Hillshade", color: "#8d6e63" },
-    { id: "slope", label: "Slope", color: "#0f62fe", hasOpacity: true },
-    { id: "contours", label: "Contours", color: "#24a148" },
-    { id: "lidarDtm", label: "LIDAR DTM", color: "#ef6c00" },
-    { id: "lidarDsm", label: "LIDAR DSM", color: "#d84315" },
-    { id: "ndvi", label: "NDVI (MODIS)", color: "#24a148" },
-    { id: "satellite", label: "Sentinel-2", color: "#0f62fe" },
-    { id: "aerial", label: "Aerial (ESRI)", color: "#a56eff" },
-    { id: "landsat", label: "Landsat 30m", color: "#1b5e20" },
-    { id: "viirs", label: "VIIRS Daily", color: "#0043ce" },
-  ],
-  environment: [
-    { id: "carbon", label: "Carbon (PBCC)", color: "#da1e28" },
-    { id: "la", label: "Local Authority", color: "#f1c21b" },
-    { id: "transport", label: "Transport", color: "#08bdba" },
-    { id: "environment", label: "Energy Assets", color: "#f1c21b" },
-    { id: "geeflowLandUse", label: "Land Use (GEE)", color: "#0f62fe" },
-    { id: "geeflowOpportunities", label: "Grid Opps (EO)", color: "#ff6f00" },
-    { id: "epcZones", label: "Neighbourhoods", color: "#24a148" },
-    { id: "epcDom", label: "Domestic EPC", color: "#0e7e58" },
-    { id: "epcNondom", label: "Non-Dom EPC", color: "#f1c21b" },
-    { id: "postcodes", label: "Postcodes Energy", color: "#0f62fe" },
-  ],
-  operations: [
-    { id: "gridFlow", label: "Grid Flow", color: "#24a148" },
-    { id: "gridCapacity", label: "Grid Capacity", color: "#0f62fe" },
-    { id: "demandGsps", label: "Demand GSPs", color: "#fa8c16" },
-    { id: "agilePricing", label: "Agile Pricing", color: "#f1c21b" },
-  ],
-  investment: [
-    { id: "gridCapacity", label: "Grid Capacity", color: "#0f62fe" },
-    { id: "repdProjects", label: "REPD Projects", color: "#ff6f00" },
-    { id: "tecPipeline", label: "TEC Pipeline", color: "#0277bd" },
-  ],
+const GridAssetTree = lazy(() => import("../grid/GridAssetTree"));
+
+const INTENT_META = {
+  grid_study:           { label: "Grid Study",           emoji: "zap",     desc: "Analyse network capacity" },
+  grid_connection:      { label: "Grid Connection",      emoji: "plug",    desc: "Connection feasibility & cost" },
+  demand_forecast:      { label: "Demand Forecast",      emoji: "chart",   desc: "Demand projections" },
+  advanced_grid:        { label: "Advanced Grid",        emoji: "flask",   desc: "N-1 contingency analysis" },
+  grid_efficiency:      { label: "Grid Efficiency",      emoji: "shield",  desc: "Losses & congestion" },
+  feasibility:          { label: "Feasibility",          emoji: "sun",     desc: "Site scoring & yield" },
+  financial:            { label: "Financial",            emoji: "dollar",  desc: "Revenue & ROI" },
+  bess_optimisation:    { label: "BESS Optimisation",    emoji: "battery", desc: "Storage sizing" },
+  satellite_analysis:   { label: "Satellite Analysis",   emoji: "globe",   desc: "Remote sensing" },
+  environmental:        { label: "Environmental",        emoji: "leaf",    desc: "Impact assessment" },
+  planning:             { label: "Planning",             emoji: "clip",    desc: "Applications & constraints" },
+  legacy_compliance:    { label: "Legacy Compliance",    emoji: "check",   desc: "UK regulatory" },
+  connection_strategy:  { label: "Connection Strategy",  emoji: "map",     desc: "Route planning" },
+  dispatch_optimisation:{ label: "Dispatch Optimisation", emoji: "clock",  desc: "Optimal scheduling" },
+  route_to_market:      { label: "Route to Market",      emoji: "trend",   desc: "Revenue streams" },
+  sustainability:       { label: "Sustainability",       emoji: "earth",   desc: "ESG & carbon" },
+  investment_readiness: { label: "Investment Readiness",  emoji: "coins",  desc: "Due diligence" },
+  site_prospecting:     { label: "Site Prospecting",     emoji: "pin",     desc: "Candidate scoring" },
+  procurement:          { label: "Procurement",          emoji: "cart",    desc: "Tender analysis" },
 };
 
-const INTENT_LABELS = {
-  grid_study: "Grid Study",
-  grid_connection: "Grid Connection",
-  demand_forecast: "Demand Forecast",
-  advanced_grid: "Advanced Grid",
-  grid_efficiency: "Grid Efficiency",
-  feasibility: "Feasibility",
-  financial: "Financial",
-  bess_optimisation: "BESS Optimisation",
-  satellite_analysis: "Satellite Analysis",
-  environmental: "Environmental",
-  planning: "Planning",
-  legacy_compliance: "Legacy Compliance",
-  connection_strategy: "Connection Strategy",
-  dispatch_optimisation: "Dispatch Optimisation",
-  route_to_market: "Route to Market",
-  sustainability: "Sustainability",
-  investment_readiness: "Investment Readiness",
+// Suggested quick prompts by workspace
+const SUGGESTED_PROMPTS = {
+  home: [
+    "Find a good solar site near Birmingham",
+    "Compare grid capacity across regions",
+    "What's the best location for a 50MW solar farm?",
+  ],
+  grid: [
+    "Show grid capacity on the map",
+    "What substations have spare capacity?",
+    "Run N-1 contingency for this area",
+  ],
+  feasibility: [
+    "Analyse this site for solar feasibility",
+    "What's the estimated yield?",
+    "Show slope and terrain overlays",
+  ],
+  environment: [
+    "Check environmental constraints here",
+    "Show land use classification",
+    "Any protected habitats nearby?",
+  ],
+  operations: [
+    "Show live grid demand",
+    "What's the current energy price?",
+    "Display demand forecast overlay",
+  ],
+  investment: [
+    "Calculate ROI for this site",
+    "Run financial analysis at 50MW",
+    "What's the investment readiness score?",
+  ],
 };
 
 export default function AssetBrowser() {
   const { activeWorkspace, browserOpen, toggleBrowser, navigateToIntent } = useWorkspace();
   const {
-    layers, toggleLayer,
-    slopeOpacity, setSlopeOpacity,
     activeIntent,
     parcelId, samCapacity, samDay, runAgent,
     workflowResults,
   } = useSite();
-  const [layersExpanded, setLayersExpanded] = useState(true);
+  const [searchQ, setSearchQ] = useState("");
 
   if (!browserOpen) {
     return (
@@ -99,7 +80,14 @@ export default function AssetBrowser() {
   }
 
   const intents = WORKSPACE_INTENTS[activeWorkspace] || [];
-  const wsLayers = WORKSPACE_LAYERS[activeWorkspace] || [];
+  const filtered = searchQ.trim()
+    ? intents.filter(i => {
+        const meta = INTENT_META[i];
+        if (!meta) return false;
+        const q = searchQ.toLowerCase();
+        return meta.label.toLowerCase().includes(q) || meta.desc.toLowerCase().includes(q);
+      })
+    : intents;
 
   const handleIntentClick = (intent) => {
     navigateToIntent(intent);
@@ -108,10 +96,45 @@ export default function AssetBrowser() {
     }
   };
 
+  // Dispatch a suggested prompt to the chat input
+  const handlePrompt = (prompt) => {
+    // Find the chat input and set its value + trigger send
+    const cbInput = document.querySelector(".cb-input");
+    if (cbInput) {
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype, "value"
+      ).set;
+      nativeInputValueSetter.call(cbInput, prompt);
+      cbInput.dispatchEvent(new Event("input", { bubbles: true }));
+      cbInput.focus();
+    }
+  };
+
+  // Grid workspace: smart asset tree
+  if (activeWorkspace === "analyse" && activeViewMode === "explore") {
+    return (
+      <div className="asset-browser">
+        <div className="ab-header">
+          <span className="ab-title">Grid Explorer</span>
+          <button className="ab-close" onClick={toggleBrowser} title="Collapse">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        </div>
+        <Suspense fallback={<div style={{ padding: 12, fontSize: 11, color: "var(--cds-text-helper)" }}>Loading...</div>}>
+          <GridAssetTree />
+        </Suspense>
+      </div>
+    );
+  }
+
+  const prompts = SUGGESTED_PROMPTS[activeWorkspace] || SUGGESTED_PROMPTS.home;
+
   return (
     <div className="asset-browser">
       <div className="ab-header">
-        <span className="ab-title">Browser</span>
+        <span className="ab-title">Navigator</span>
         <button className="ab-close" onClick={toggleBrowser} title="Collapse">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" />
@@ -120,68 +143,66 @@ export default function AssetBrowser() {
       </div>
 
       <div className="ab-body">
-        {/* Intent navigation for this workspace */}
-        {intents.length > 0 && (
+        {/* Search */}
+        <div className="ab-search">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Filter analysis..."
+            value={searchQ}
+            onChange={e => setSearchQ(e.target.value)}
+            className="ab-search-input"
+          />
+        </div>
+
+        {/* Suggested prompts */}
+        <div className="ab-section">
+          <div className="ab-section-title">Try asking</div>
+          <div className="ab-prompts">
+            {prompts.map((p, i) => (
+              <button key={i} className="ab-prompt-btn" onClick={() => handlePrompt(p)}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10 10 10 0 0 1-7.07-2.93" />
+                  <path d="M2 12h4l2-3 3 6 2-3h3" />
+                </svg>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Intent navigation */}
+        {filtered.length > 0 && (
           <div className="ab-section">
             <div className="ab-section-title">Analysis</div>
-            {intents.map((intent) => {
+            {filtered.map((intent) => {
+              const meta = INTENT_META[intent] || { label: intent, desc: "" };
               const isActive = activeIntent === intent;
               const result = workflowResults[intent];
-              let dotColor = null;
-              if (result?.verdict === "GO") dotColor = "#24a148";
-              else if (result?.verdict === "CAUTION") dotColor = "#f1c21b";
-              else if (result?.verdict === "NO-GO") dotColor = "#da1e28";
-              else if (result?.verdict === "ERROR") dotColor = "#795548";
+              let verdictClass = null;
+              if (result?.verdict === "GO") verdictClass = "go";
+              else if (result?.verdict === "CAUTION") verdictClass = "caution";
+              else if (result?.verdict === "NO-GO") verdictClass = "nogo";
               return (
                 <button
                   key={intent}
-                  className={`ab-intent-btn${isActive ? " active" : ""}`}
+                  className={`ab-intent-card${isActive ? " active" : ""}`}
                   onClick={() => handleIntentClick(intent)}
                 >
-                  {dotColor && <span className="ab-verdict-dot" style={{ background: dotColor }} />}
-                  {INTENT_LABELS[intent] || intent}
+                  <div className="ab-intent-card-main">
+                    <span className="ab-intent-card-label">{meta.label}</span>
+                    <span className="ab-intent-card-desc">{meta.desc}</span>
+                  </div>
+                  {verdictClass && (
+                    <span className={`ab-intent-verdict ab-verdict-${verdictClass}`}>
+                      {result.verdict}
+                    </span>
+                  )}
                 </button>
               );
             })}
-          </div>
-        )}
-
-        {/* Layer toggles */}
-        {wsLayers.length > 0 && (
-          <div className="ab-section">
-            <button
-              className="ab-section-title ab-section-toggle"
-              onClick={() => setLayersExpanded(p => !p)}
-            >
-              Layers
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                style={{ transform: layersExpanded ? "rotate(180deg)" : "rotate(0)", transition: "transform 0.15s" }}
-              >
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
-            {layersExpanded && wsLayers.map((l) => (
-              <div key={l.id}>
-                <label className="ab-layer-item">
-                  <input
-                    type="checkbox"
-                    checked={!!layers[l.id]}
-                    onChange={() => toggleLayer(l.id)}
-                  />
-                  <span className="layer-dot" style={{ background: l.color }} />
-                  {l.label}
-                </label>
-                {l.hasOpacity && layers[l.id] && (
-                  <input
-                    type="range" min="0" max="1" step="0.05"
-                    value={slopeOpacity}
-                    onChange={(e) => setSlopeOpacity(parseFloat(e.target.value))}
-                    className="sidebar-slider"
-                    style={{ marginLeft: 24, width: "calc(100% - 32px)" }}
-                  />
-                )}
-              </div>
-            ))}
           </div>
         )}
       </div>

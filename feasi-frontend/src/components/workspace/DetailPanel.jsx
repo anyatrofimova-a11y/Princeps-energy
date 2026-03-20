@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, lazy, Suspense } from "react";
 import { useSite } from "../../SiteContext";
 import { useWorkspace, INTENT_DETAIL_MAP } from "../../contexts/WorkspaceContext";
 import FloatingCards from "../FloatingCards";
@@ -11,21 +11,25 @@ import DispatchPanel from "../DispatchPanel";
 import RouteToMarketPanel from "../RouteToMarketPanel";
 import SustainabilityPanel from "../SustainabilityPanel";
 import InvestmentPanel from "../InvestmentPanel";
+import DataCentrePanel from "../DataCentrePanel";
+
+const GridPropertyInspector = lazy(() => import("../grid/GridPropertyInspector"));
 
 const DETAIL_TABS = [
   { id: "cards", label: "Overview" },
-  { id: "connection", label: "Connection", workspace: "grid" },
-  { id: "demand", label: "Demand", workspace: "grid" },
-  { id: "advanced", label: "Advanced", workspace: "grid" },
-  { id: "strategy", label: "Strategy", workspace: "operations" },
-  { id: "dispatch", label: "Dispatch", workspace: "operations" },
-  { id: "rtm", label: "Route", workspace: "operations" },
-  { id: "sustainability", label: "Sustain.", workspace: "operations" },
-  { id: "investment", label: "Invest", workspace: "investment" },
+  { id: "connection", label: "Connection", workspace: "analyse" },
+  { id: "demand", label: "Demand", workspace: "analyse" },
+  { id: "advanced", label: "Advanced", workspace: "analyse" },
+  { id: "strategy", label: "Strategy", workspace: "design" },
+  { id: "dispatch", label: "Dispatch", workspace: "design" },
+  { id: "rtm", label: "Route", workspace: "design" },
+  { id: "sustainability", label: "Sustain.", workspace: "design" },
+  { id: "investment", label: "Invest", workspace: "comply" },
+  { id: "datacentre", label: "DC", workspace: "analyse" },
 ];
 
 export default function DetailPanel() {
-  const { detailOpen, toggleDetail, detailSection, setDetailSection, activeWorkspace } = useWorkspace();
+  const { detailOpen, setDetailOpen, toggleDetail, detailSection, setDetailSection, activeWorkspace } = useWorkspace();
   const {
     activeIntent,
     setGridHighlightSub,
@@ -37,6 +41,7 @@ export default function DetailPanel() {
     rtmOpen, setRtmOpen,
     sustainabilityOpen, setSustainabilityOpen,
     investmentOpen, setInvestmentOpen,
+    dcPanelOpen, setDcPanelOpen,
     dashboardOpen,
     setLayers,
   } = useSite();
@@ -56,6 +61,7 @@ export default function DetailPanel() {
       if (section === "rtm") setRtmOpen(true);
       if (section === "sustainability") setSustainabilityOpen(true);
       if (section === "investment") setInvestmentOpen(true);
+      if (section === "datacentre") { setDcPanelOpen(true); setLayers(p => ({ ...p, dcCapacity: true })); }
     }
   }, [activeIntent]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -81,6 +87,7 @@ export default function DetailPanel() {
     : rtmOpen ? "rtm"
     : sustainabilityOpen ? "sustainability"
     : investmentOpen ? "investment"
+    : dcPanelOpen ? "datacentre"
     : null;
 
   const effectiveSection = activeDeepDive || detailSection;
@@ -97,6 +104,7 @@ export default function DetailPanel() {
       setRtmOpen(false);
       setSustainabilityOpen(false);
       setInvestmentOpen(false);
+      setDcPanelOpen(false);
     }
     // Open the relevant panel
     if (tabId === "connection") setGridConnectionOpen(true);
@@ -107,6 +115,7 @@ export default function DetailPanel() {
     if (tabId === "rtm") setRtmOpen(true);
     if (tabId === "sustainability") setSustainabilityOpen(true);
     if (tabId === "investment") setInvestmentOpen(true);
+    if (tabId === "datacentre") setDcPanelOpen(true);
   };
 
   const closeDeepDive = () => {
@@ -119,6 +128,7 @@ export default function DetailPanel() {
     setRtmOpen(false);
     setSustainabilityOpen(false);
     setInvestmentOpen(false);
+    setDcPanelOpen(false);
   };
 
   return (
@@ -145,7 +155,12 @@ export default function DetailPanel() {
       </div>
 
       <div className="dp-body">
-        {effectiveSection === "cards" && !dashboardOpen && <FloatingCards />}
+        {effectiveSection === "cards" && !dashboardOpen && activeWorkspace === "analyse" && (
+          <Suspense fallback={null}>
+            <GridPropertyInspector />
+          </Suspense>
+        )}
+        {effectiveSection === "cards" && !dashboardOpen && activeWorkspace !== "grid" && <FloatingCards />}
 
         {effectiveSection === "connection" && gridConnectionOpen && (
           <ErrorBoundary name="GridConnectionPanel">
@@ -196,6 +211,12 @@ export default function DetailPanel() {
         {effectiveSection === "investment" && investmentOpen && (
           <ErrorBoundary name="InvestmentPanel">
             <InvestmentPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "datacentre" && dcPanelOpen && (
+          <ErrorBoundary name="DataCentrePanel">
+            <DataCentrePanel onClose={closeDeepDive} />
           </ErrorBoundary>
         )}
       </div>

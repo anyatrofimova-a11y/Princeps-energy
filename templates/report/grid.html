@@ -1,0 +1,167 @@
+<!-- Grid Connection Section -->
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ site.name }} &mdash; Grid Connection Assessment</div>
+  </div>
+
+  <h2 class="section-title">Grid Connection Assessment</h2>
+
+  <!-- Grid Score + Connection Summary KPIs -->
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.scores['Grid Access'] }}</div>
+      <div class="kpi-label">Grid Score</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if site.distance_km %}{{ "%.1f"|format(site.distance_km) }} km{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Nearest Grid</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if site.voltage_kv %}{{ site.voltage_kv|int }} kV{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Voltage Tier</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">&pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp / 1000) }}k</div>
+      <div class="kpi-label">Est. Connection Cost</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ site.substations|length }}</div>
+      <div class="kpi-label">Substations Found</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <!-- Connection Summary -->
+      <div class="card card-accent">
+        <div class="card-header">Connection Summary</div>
+        <div class="stat-row">
+          <span class="stat-label">Nearest Substation</span>
+          <span class="stat-value">{{ site.nearest_substation }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Distance</span>
+          <span class="stat-value">{% if site.distance_km %}{{ "%.2f"|format(site.distance_km) }} km{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Voltage Tier</span>
+          <span class="stat-value">{% if site.voltage_kv %}{{ site.voltage_kv|int }} kV{% else %}Unknown{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Project Capacity</span>
+          <span class="stat-value">{{ site.capacity_mw }} MW</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Grid Access Score</span>
+          <span class="stat-value">
+            <span class="score-pill {% if site.scores['Grid Access'] >= 65 %}score-go{% elif site.scores['Grid Access'] >= 40 %}score-caution{% else %}score-nogo{% endif %}">
+              {{ site.scores['Grid Access'] }} / 100
+            </span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Connection Cost Estimates -->
+      <div class="card">
+        <div class="card-header">Estimated Connection Costs</div>
+        <div class="text-xs text-muted mb-8">Based on UK DNO published cost benchmarks</div>
+        {% if site.voltage_kv and site.distance_km %}
+        <table>
+          <tr><th>Scenario</th><th>Estimate</th><th>Basis</th></tr>
+          <tr>
+            <td><span class="tag" style="background: {{ brand.green }}20; color: {{ brand.green }};">P10</span> Optimistic</td>
+            <td class="bold">&pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp * 0.7) }}</td>
+            <td class="text-xs text-muted">Short route, existing capacity</td>
+          </tr>
+          <tr>
+            <td><span class="tag" style="background: {{ brand.amber }}20; color: {{ brand.amber }};">P50</span> Central</td>
+            <td class="bold">&pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp) }}</td>
+            <td class="text-xs text-muted">Standard connection offer</td>
+          </tr>
+          <tr>
+            <td><span class="tag" style="background: {{ brand.red }}20; color: {{ brand.red }};">P90</span> Conservative</td>
+            <td class="bold">&pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp * 1.5) }}</td>
+            <td class="text-xs text-muted">Reinforcement required</td>
+          </tr>
+        </table>
+        <div class="text-xs text-muted mt-4">
+          Cost rate: {% if site.voltage_kv >= 132 %}&pound;500k/km (132kV){% elif site.voltage_kv >= 66 %}&pound;300k/km (66kV){% elif site.voltage_kv >= 33 %}&pound;150k/km (33kV){% else %}&pound;80k/km (11kV){% endif %}
+          &times; {{ "%.1f"|format(site.distance_km) }} km
+        </div>
+        {% else %}
+        <div class="text-sm text-muted">Insufficient data for cost estimate. Voltage tier or distance unavailable.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div>
+      <!-- Grid Proximity Chart -->
+      {% if charts.grid_proximity %}
+      <div class="card center">
+        <div class="text-xs text-muted mb-4">SUBSTATION PROXIMITY MAP</div>
+        <img src="data:image/png;base64,{{ charts.grid_proximity }}" alt="Grid proximity" class="chart-img">
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Substations Table -->
+  {% if site.substations %}
+  <div class="card">
+    <div class="card-header">Nearby Substations ({{ site.substations|length }} found, multi-source)</div>
+    <table>
+      <tr>
+        <th>#</th>
+        <th>Name</th>
+        <th>Voltage</th>
+        <th>Distance</th>
+        <th>Source</th>
+        <th>Details</th>
+      </tr>
+      {% for sub in site.substations[:10] %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td class="bold">{{ sub.name or 'Unknown' }}</td>
+        <td>{% if sub.voltage_kv %}{{ sub.voltage_kv|int }} kV{% else %}&mdash;{% endif %}</td>
+        <td>{{ "%.2f"|format(sub.distance_km) }} km</td>
+        <td><span class="tag" style="background: {% if sub.source == 'NGED' %}#1b5e2020{% elif sub.source == 'OSM' %}#0f62fe20{% else %}#79554820{% endif %}; color: {% if sub.source == 'NGED' %}#1b5e20{% elif sub.source == 'OSM' %}#0f62fe{% else %}#795548{% endif %};">{{ sub.source }}</span></td>
+        <td class="text-xs text-muted">
+          {% if sub.region %}{{ sub.region }}{% endif %}
+          {% if sub.operator %}{{ sub.operator }}{% endif %}
+          {% if sub.capacity_kw %}{{ sub.capacity_kw }} kW{% endif %}
+          {% if sub.substation_type %}({{ sub.substation_type }}){% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    <div class="text-xs text-muted">Sources: NGED Open Data, OpenStreetMap (Overpass API), DNO published registers</div>
+  </div>
+  {% endif %}
+
+  <!-- Connection Queue / ECR -->
+  {% if site.ecr %}
+  <div class="card">
+    <div class="card-header">Connection Queue (ECR)</div>
+    <div class="text-xs text-muted mb-8">Embedded Capacity Register — existing and queued connections</div>
+    <table>
+      <tr>
+        <th>Node</th>
+        <th>Available Gen (MW)</th>
+        <th>Available Load (MW)</th>
+      </tr>
+      {% for e in site.ecr[:5] %}
+      <tr>
+        <td class="bold">{{ e.substation_name }}</td>
+        <td>{% if e.capacity_mw %}{{ "%.1f"|format(e.capacity_mw) }}{% else %}&mdash;{% endif %}</td>
+        <td>{% if e.available_load_mw %}{{ "%.1f"|format(e.available_load_mw) }}{% else %}&mdash;{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="page-footer">
+    Princeps Site Assessment &mdash; Grid Connection &mdash; {{ now }}
+  </div>
+</div>

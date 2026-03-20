@@ -325,7 +325,7 @@ export function ChatSection({ onMapLayer, onZoomTo }) {
               {/* Map layer buttons */}
               {msg.mapLayers?.map((layer, j) => (
                 <div key={j} className="chat-map-layer">
-                  <span className="chat-map-layer-dot" style={{ background: layer.color || "#00e5ff" }} />
+                  <span className="chat-map-layer-dot" style={{ background: layer.color || "#7c5cfc" }} />
                   {layer.name} added to map
                 </div>
               ))}

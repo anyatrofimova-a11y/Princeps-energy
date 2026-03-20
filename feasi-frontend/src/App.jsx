@@ -5,6 +5,8 @@ import { useSite } from "./SiteContext";
 import api from "./services/api";
 import MapView from "./components/MapView";
 import ComponentPalette from "./components/ComponentPalette";
+import AssetDock from "./components/AssetDock";
+import EnergyFlowPanel from "./components/EnergyFlowPanel";
 import AppShell from "./components/shell/AppShell";
 import WorkspaceRouter from "./components/workspace/WorkspaceRouter";
 import LayerRail from "./components/LayerRail";
@@ -15,11 +17,22 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import NOMExplorer from "./components/NOMExplorer";
 import SettingsPage from "./components/SettingsPage";
 import PitchPage from "./components/PitchPage";
+import CommandPalette from "./components/shell/CommandPalette";
 import SiteDashboard from "./components/SiteDashboard";
 import SitePicker from "./components/SitePicker";
 import DigitalTwin from "./components/DigitalTwin";
 import GridTwin from "./components/GridTwin";
+import BEMSDigitalTwin from "./components/BEMSDigitalTwin";
+import AssetInspector from "./components/AssetInspector";
+import GridGraphView from "./components/GridGraphView";
+import BESSFacilityTwin from "./components/BESSFacilityTwin";
+import HardwareConfigurator from "./components/HardwareConfigurator";
+import ThermalModelPanel from "./components/ThermalModelPanel";
+import DataCentreTwin from "./components/DataCentreTwin";
+import DCLandingPage from "./components/DCLandingPage";
+import DCComparisonDashboard from "./components/DCComparisonDashboard";
 import MapLegend from "./components/MapLegend";
+import MapAssetLayer from "./components/MapAssetLayer";
 import {
   MODES, createDrawState, handleClick as drawHandleClick, handleDoubleClick as drawHandleDoubleClick,
   moveVertex, insertVertex, deleteFeature, getMeasurements, findSnapTarget,
@@ -47,10 +60,52 @@ export default function App() {
     digitalTwinOpen, setDigitalTwinOpen, twinData,
     workflowStage,
     gridTwinOpen, setGridTwinOpen,
+    bemsOpen, setBemsOpen,
+    assetInspectorOpen, setAssetInspectorOpen,
+    gridGraphOpen, setGridGraphOpen,
+    bessFacilityOpen, setBessFacilityOpen,
+    hwConfigOpen, setHwConfigOpen,
+    thermalModelOpen, setThermalModelOpen,
+    dcTwinOpen, setDcTwinOpen,
+    dcLandingOpen, setDcLandingOpen,
+    dcComparisonOpen, setDcComparisonOpen,
+    dcComparisonSites, setDcComparisonSites,
     activeIntent,
+    placedAssets, addPlacedAsset, removePlacedAsset, clearPlacedAssets,
+    energyFlowOpen, setEnergyFlowOpen,
+    solarYield, gridContext,
   } = useSite();
 
   const [mapInstance, setMapInstance] = useState(null);
+
+  // ── Map drop handler: place asset at lat/lon ──
+  const handleMapDrop = useCallback((e) => {
+    e.preventDefault();
+    const raw = e.dataTransfer.getData("application/princeps-asset");
+    if (!raw || !mapInstance) return;
+    try {
+      const asset = JSON.parse(raw);
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const lngLat = mapInstance.unproject([x, y]);
+      addPlacedAsset({
+        assetType: asset.id,
+        label: asset.label,
+        color: asset.color,
+        mw: asset.defaultMW || 0,
+        lat: lngLat.lat,
+        lon: lngLat.lng,
+      });
+    } catch (err) {
+      console.error("Drop parse error:", err);
+    }
+  }, [mapInstance, addPlacedAsset]);
+
+  const handleMapDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  }, []);
 
   // Handle map layers from chat — add layer + auto-zoom to fit
   const handleChatMapLayer = useCallback((layer) => {
@@ -96,6 +151,19 @@ export default function App() {
   const [nomMode, setNomMode] = useState(false);
   const [settingsMode, setSettingsMode] = useState(false);
   const [pitchMode, setPitchMode] = useState(false);
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+
+  // Cmd+K / Ctrl+K to open command palette
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setCmdPaletteOpen(p => !p);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
 
   const handleNomAnalyse = useCallback((sub) => {
     setNomMode(false);
@@ -250,7 +318,7 @@ export default function App() {
 
   // Map content (rendered inside CenterCanvas via WorkspaceRouter)
   const mapContent = (
-    <div className="map-area-inner">
+    <div className="map-area-inner" onDrop={handleMapDrop} onDragOver={handleMapDragOver}>
       <ErrorBoundary name="Map">
         <MapView
           slopeOpacity={slopeOpacity}
@@ -270,6 +338,8 @@ export default function App() {
           onMapReady={setMapInstance}
         />
       </ErrorBoundary>
+
+      <MapAssetLayer map={mapInstance} />
 
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
       <MapLegend chatLayers={chatLayers} />
@@ -300,25 +370,79 @@ export default function App() {
         <ComponentPalette catalogue={solarCatalogue} />
       )}
 
+      {/* Asset Dock — drag components onto map */}
+      <AssetDock
+        placedAssets={placedAssets}
+        mapInstance={mapInstance}
+        onAssetPlaced={addPlacedAsset}
+      />
+
+      {/* Energy Flow Panel — right side Sankey */}
+      {energyFlowOpen && (
+        <EnergyFlowPanel
+          placedAssets={placedAssets}
+          solarYield={solarYield}
+          gridContext={gridContext}
+          onClose={() => setEnergyFlowOpen(false)}
+        />
+      )}
+
       {/* Site dashboard overlay */}
       {dashboardOpen && (
         <SiteDashboard onClose={() => setDashboardOpen(false)} />
       )}
+
     </div>
   );
+
+  const handleCmdAction = useCallback((action) => {
+    switch (action) {
+      case "twin": setGridTwinOpen(true); break;
+      case "bems": setBemsOpen(true); break;
+      case "inspect": setAssetInspectorOpen(true); break;
+      case "graph": setGridGraphOpen(true); break;
+      case "pitch": setPitchMode(true); break;
+      case "nom": setNomMode(true); break;
+      case "bess-facility": setBessFacilityOpen(true); break;
+      case "hardware": setHwConfigOpen(true); break;
+      case "thermal": setThermalModelOpen(true); break;
+      case "dc-twin": setDcTwinOpen(true); break;
+      case "dc-landing": setDcLandingOpen(true); break;
+      case "dc-compare": setDcComparisonOpen(true); break;
+      case "settings": setSettingsMode(true); break;
+      default: break;
+    }
+  }, []);
 
   return (
     <AppShell
       onGridTwin={() => setGridTwinOpen(true)}
+      onBems={() => setBemsOpen(true)}
+      onAssetInspect={() => setAssetInspectorOpen(true)}
+      onGridGraph={() => setGridGraphOpen(true)}
+      onBessFacility={() => setBessFacilityOpen(true)}
+      onHardware={() => setHwConfigOpen(true)}
+      onThermal={() => setThermalModelOpen(true)}
+      onDcTwin={() => setDcTwinOpen(true)}
+      onDcLanding={() => setDcLandingOpen(true)}
+      onDcCompare={() => setDcComparisonOpen(true)}
       onPitch={() => setPitchMode(true)}
       onNomExplorer={() => setNomMode(true)}
       onSettings={() => setSettingsMode(true)}
+      onCommandPalette={() => setCmdPaletteOpen(true)}
     >
       <div className="app-shell-content">
         <WorkspaceRouter mapContent={mapContent} />
       </div>
 
       <CommandBar onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} />
+
+      {/* Command Palette */}
+      <CommandPalette
+        open={cmdPaletteOpen}
+        onClose={() => setCmdPaletteOpen(false)}
+        onAction={handleCmdAction}
+      />
 
       {/* 3D Site Digital Twin overlay */}
       {digitalTwinOpen && twinData && (
@@ -328,6 +452,69 @@ export default function App() {
       {/* 3D Grid Digital Twin overlay */}
       {gridTwinOpen && (
         <GridTwin onClose={() => setGridTwinOpen(false)} />
+      )}
+
+      {/* BEMS Digital Twin overlay */}
+      {bemsOpen && (
+        <BEMSDigitalTwin onClose={() => setBemsOpen(false)} />
+      )}
+
+      {/* Asset Inspector (LiDAR) overlay */}
+      {assetInspectorOpen && (
+        <AssetInspector onClose={() => setAssetInspectorOpen(false)} />
+      )}
+
+      {/* Grid Graph Topology overlay */}
+      {gridGraphOpen && (
+        <GridGraphView
+          lat={pickedLocation?.lat}
+          lon={pickedLocation?.lon}
+          onClose={() => setGridGraphOpen(false)}
+        />
+      )}
+
+      {/* BESS Facility Digital Twin overlay */}
+      {bessFacilityOpen && (
+        <BESSFacilityTwin onClose={() => setBessFacilityOpen(false)} />
+      )}
+
+      {/* Data Centre Digital Twin overlay */}
+      {dcTwinOpen && (
+        <DataCentreTwin onClose={() => setDcTwinOpen(false)} />
+      )}
+
+      {/* DC Landing Page overlay */}
+      {dcLandingOpen && (
+        <DCLandingPage
+          onClose={() => setDcLandingOpen(false)}
+          onScoreSite={(lat, lon, mw, profile) => {
+            setDcLandingOpen(false);
+            setPickedLocation({ lat, lon });
+          }}
+          onCompareSites={(sites) => {
+            setDcLandingOpen(false);
+            setDcComparisonSites(sites);
+            setDcComparisonOpen(true);
+          }}
+        />
+      )}
+
+      {/* DC Comparison Dashboard overlay */}
+      {dcComparisonOpen && (
+        <DCComparisonDashboard
+          onClose={() => setDcComparisonOpen(false)}
+          initialSites={dcComparisonSites}
+        />
+      )}
+
+      {/* Hardware Configurator panel */}
+      {hwConfigOpen && (
+        <HardwareConfigurator onClose={() => setHwConfigOpen(false)} />
+      )}
+
+      {/* Thermal Model panel */}
+      {thermalModelOpen && (
+        <ThermalModelPanel onClose={() => setThermalModelOpen(false)} />
       )}
     </AppShell>
   );

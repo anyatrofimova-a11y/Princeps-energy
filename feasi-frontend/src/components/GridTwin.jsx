@@ -8,7 +8,7 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const SCENARIOS = [
-  { id: "baseline", label: "Baseline", color: "#0f62fe" },
+  { id: "baseline", label: "Baseline", color: "#7c5cfc" },
   { id: "leading_the_way", label: "Leading the Way", color: "#f5222d" },
   { id: "consumer_transformation", label: "Consumer Transform.", color: "#fa8c16" },
   { id: "system_transformation", label: "System Transform.", color: "#1890ff" },
@@ -323,7 +323,7 @@ export default function GridTwin({ onClose }) {
       {/* ── Top toolbar ── */}
       <div className="gt-toolbar">
         <div className="gt-toolbar-left">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0f62fe" strokeWidth="2">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c5cfc" strokeWidth="2">
             <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
             <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
             <line x1="12" y1="22.08" x2="12" y2="12"/>

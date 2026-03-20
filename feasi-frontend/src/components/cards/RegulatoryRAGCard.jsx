@@ -40,7 +40,7 @@ export default function RegulatoryRAGCard() {
           placeholder="Ask about UK energy regulation..."
           style={{
             flex: 1, padding: "6px 8px", fontSize: 13,
-            background: "#1a1a2e", border: `1px solid ${ACCENT}`,
+            background: "#F7F8FA", border: `1px solid ${ACCENT}`,
             color: "#eee", borderRadius: 4,
           }}
         />
@@ -49,7 +49,7 @@ export default function RegulatoryRAGCard() {
           onChange={(e) => setSource(e.target.value)}
           style={{
             padding: "4px 6px", fontSize: 12,
-            background: "#1a1a2e", border: `1px solid ${ACCENT}`,
+            background: "#F7F8FA", border: `1px solid ${ACCENT}`,
             color: "#eee", borderRadius: 4,
           }}
         >
@@ -70,7 +70,7 @@ export default function RegulatoryRAGCard() {
       {result && (
         <div>
           <div style={{
-            background: "#1a1a2e", borderRadius: 6, padding: 10,
+            background: "#F7F8FA", borderRadius: 6, padding: 10,
             fontSize: 13, lineHeight: 1.5, marginBottom: 8,
             borderLeft: `3px solid ${ACCENT}`,
           }}>

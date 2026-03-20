@@ -40,7 +40,13 @@ export default defineConfig({
       "/tracker": "http://localhost:8000",
       "/rag": "http://localhost:8000",
       "/notifications": "http://localhost:8000",
+      "/hardware": "http://localhost:8000",
+      "/teaser": "http://localhost:8000",
       "/alerts": "http://localhost:8000",
+      "/api/dc": "http://localhost:8000",
+      "/api/classification": "http://localhost:8000",
+      "/api/reports": "http://localhost:8000",
+      "/ws": { target: "http://localhost:8000", ws: true },
       "/pmtiles-proxy": {
         target: "https://pbcc.blob.core.windows.net",
         changeOrigin: true,

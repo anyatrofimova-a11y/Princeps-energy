@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useCallback } from "react";
 import { useSite } from "../SiteContext";
 import api from "../services/api";
 
@@ -186,7 +186,7 @@ function RadarChart({ scores, size = 200 }) {
       {/* Data polygon */}
       <polygon
         points={dataPoints.map(p => p.join(",")).join(" ")}
-        fill="rgba(15, 98, 254, 0.15)"
+        fill="rgba(124, 92, 252, 0.15)"
         stroke="var(--cds-interactive)"
         strokeWidth="1.5"
       />
@@ -252,6 +252,31 @@ export default function SiteDashboard({ onClose }) {
     runWorkflow,
   } = useSite();
 
+  // PDF report download
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const downloadPdf = useCallback(async () => {
+    if (pdfLoading) return;
+    setPdfLoading(true);
+    try {
+      const lat = explain?.lat ?? explain?.location?.lat ?? pickedLocation?.lat;
+      const lon = explain?.lon ?? explain?.location?.lon ?? pickedLocation?.lon;
+      if (!lat || !lon) { alert("No site location available"); return; }
+      const name = explain?.name || parcelId || "Site";
+      const blob = await api.reports.siteAssessment(lat, lon, name, samCapacity / 1000 || 50);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `princeps-report-${name.replace(/[^\w-]/g, "-")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("PDF download failed:", e);
+      alert("Report generation failed — see console for details.");
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [explain, pickedLocation, parcelId, samCapacity, pdfLoading]);
+
   const scores = computeScores({
     solarYield, gridContext, slopeStats, explain, agentResult, geeflowData, visionData,
   });
@@ -299,6 +324,23 @@ export default function SiteDashboard({ onClose }) {
             {parcelId && <span className="sd-parcel">{parcelId.slice(0, 12)}</span>}
           </div>
           <div style={{ display: "flex", gap: 6 }}>
+            {/* Download PDF Report — primary CTA */}
+            <button
+              className="sd-map-btn"
+              style={pdfLoading ? {
+                background: "rgba(105,112,119,0.2)",
+                borderColor: "rgba(105,112,119,0.3)",
+                color: "#a0a0a0",
+              } : {}}
+              disabled={pdfLoading}
+              onClick={downloadPdf}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <path d="M14 2v6h6" /><path d="M12 18v-6" /><path d="M9 15l3 3 3-3" />
+              </svg>
+              {pdfLoading ? "Generating..." : "Download PDF"}
+            </button>
             <button className="sd-map-btn" onClick={handleExploreMap}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
@@ -435,7 +477,7 @@ export default function SiteDashboard({ onClose }) {
               <div className="sd-workflow-btns">
                 {[
                   { preset: "full_feasibility", label: "Full Feasibility", desc: "7-step comprehensive assessment", color: "#24a148" },
-                  { preset: "grid_deep_dive", label: "Grid Deep Dive", desc: "Grid + BESS + financial", color: "#0f62fe" },
+                  { preset: "grid_deep_dive", label: "Grid Deep Dive", desc: "Grid + BESS + financial", color: "#7c5cfc" },
                   { preset: "investment_ready", label: "Investment Ready", desc: "Due-diligence package", color: "#a56eff" },
                 ].map((wf) => {
                   const isRunning = workflowRunning && workflowProgress?.preset === wf.preset;

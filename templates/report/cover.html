@@ -1,0 +1,65 @@
+<!-- Cover Page -->
+<div style="height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background: linear-gradient(135deg, {{ brand.dark }} 0%, #16213e 50%, #0d1b3e 100%); color: #fff; padding: 60px; position: relative;">
+
+  <!-- Top accent line -->
+  <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, {{ brand.primary }}, {{ brand.green }}, {{ brand.primary }});"></div>
+
+  <div style="font-size: 42px; font-weight: 800; letter-spacing: 6px; color: {{ brand.primary }}; margin-bottom: 4px;">
+    PRINCEPS
+  </div>
+  <div style="font-size: 12px; letter-spacing: 3px; color: #a0a0a0; margin-bottom: 60px; text-transform: uppercase;">
+    Energy Infrastructure Intelligence
+  </div>
+
+  <div style="width: 80px; height: 2px; background: {{ brand.primary }}; margin-bottom: 40px;"></div>
+
+  <div style="font-size: 26px; font-weight: 700; margin-bottom: 8px; text-align: center; letter-spacing: 0.5px;">
+    Site Feasibility Assessment
+  </div>
+  <div style="font-size: 20px; color: #c0c0c0; margin-bottom: 40px; text-align: center; font-weight: 300;">
+    {{ site.name }}
+  </div>
+
+  <div class="verdict-badge verdict-{{ site.verdict }}" style="margin-bottom: 12px; font-size: 22px; padding: 10px 32px;">
+    {{ site.verdict }}
+  </div>
+  <div style="font-size: 13px; color: #a0a0a0; margin-bottom: 50px;">
+    Overall Score: {{ site.score_pct }}% ({{ site.score_total }} / {{ (site.scores|length) * 100 }})
+  </div>
+
+  <!-- Key metrics row -->
+  <div style="display: flex; gap: 50px; margin-bottom: 40px;">
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Coordinates</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ "%.4f"|format(site.lat) }}N, {{ "%.4f"|format(site.lon|abs) }}{% if site.lon < 0 %}W{% else %}E{% endif %}</div>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Capacity</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ site.capacity_mw }} MW</div>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Annual Yield</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ site.kpis.annual_yield_gwh }} GWh</div>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Est. IRR</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ site.kpis.irr_pct }}%</div>
+    </div>
+  </div>
+
+  <!-- Score summary strip -->
+  <div style="display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;">
+    {% for axis, score in site.scores.items() %}
+    <div style="text-align: center; min-width: 70px;">
+      <div style="font-size: 18px; font-weight: 800; color: {% if score >= 65 %}{{ brand.green }}{% elif score >= 40 %}{{ brand.amber }}{% else %}{{ brand.red }}{% endif %};">{{ score }}</div>
+      <div style="font-size: 8px; color: #888; text-transform: uppercase; letter-spacing: 0.5px;">{{ axis }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Footer -->
+  <div style="position: absolute; bottom: 30px; text-align: center;">
+    <div style="font-size: 10px; color: #555;">Confidential &mdash; {{ site.generated_at }}</div>
+    <div style="font-size: 9px; color: #444; margin-top: 4px;">Prepared by Princeps Platform &mdash; For informational purposes only</div>
+  </div>
+</div>

@@ -62,8 +62,8 @@ export default function HomeRetrofitCard() {
   const [conservation, setConservation] = useState(false);
   const [budget, setBudget] = useState("");
 
-  const lat = pickedLocation?.[0] || pickedLocation?.lat || 52.5;
-  const lon = pickedLocation?.[1] || pickedLocation?.lon || -1.5;
+  const lat = pickedLocation?.lat || 52.5;
+  const lon = pickedLocation?.lon || -1.5;
 
   const runAssess = useCallback(async () => {
     setLoading(true);
@@ -185,7 +185,7 @@ export default function HomeRetrofitCard() {
 
       {view === "results" && result && (
         <div style={{ fontSize: 12 }}>
-          <div style={{ marginBottom: 8, padding: 6, background: "#1a1a2e", borderRadius: 6 }}>
+          <div style={{ marginBottom: 8, padding: 6, background: "#F7F8FA", borderRadius: 6 }}>
             <strong>{result.archetype}</strong>
             <span style={{ float: "right", opacity: 0.7 }}>{result.matched_cases?.length || 0} similar cases found</span>
           </div>
@@ -196,7 +196,7 @@ export default function HomeRetrofitCard() {
             const pb = planBadge(pl.route);
             const savingPct = en.energy_saving_pct || 0;
             return (
-              <div key={i} style={{ marginBottom: 8, padding: 8, background: "#1a1a2e", borderRadius: 6, borderLeft: `3px solid ${themeColor}` }}>
+              <div key={i} style={{ marginBottom: 8, padding: 8, background: "#F7F8FA", borderRadius: 6, borderLeft: `3px solid ${themeColor}` }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
                   <strong>{opt.name}</strong>
                   <span style={{
@@ -239,13 +239,13 @@ export default function HomeRetrofitCard() {
 
           {/* Solar & Heat Pump summary */}
           {result.solar_potential && (
-            <div style={{ padding: 6, background: "#1a1a2e", borderRadius: 6, marginBottom: 6 }}>
+            <div style={{ padding: 6, background: "#F7F8FA", borderRadius: 6, marginBottom: 6 }}>
               <strong>Solar PV Potential:</strong> {result.solar_potential.capacity_kw} kWp, {result.solar_potential.annual_kwh?.toLocaleString()} kWh/yr,
               payback {result.solar_potential.payback_years} yrs
             </div>
           )}
           {result.heat_pump_assessment && (
-            <div style={{ padding: 6, background: "#1a1a2e", borderRadius: 6 }}>
+            <div style={{ padding: 6, background: "#F7F8FA", borderRadius: 6 }}>
               <strong>Heat Pump:</strong> Recommended: <span style={{ color: themeColor, fontWeight: 600 }}>
                 {result.heat_pump_assessment.recommendation?.toUpperCase() || "None"}
               </span>
@@ -267,7 +267,7 @@ export default function HomeRetrofitCard() {
         <div style={{ fontSize: 12 }}>
           <div style={{ marginBottom: 6, fontWeight: 600 }}>Matched Cases ({result.matched_cases.length})</div>
           {result.matched_cases.map((c, i) => (
-            <div key={i} style={{ padding: 6, marginBottom: 4, background: "#1a1a2e", borderRadius: 4 }}>
+            <div key={i} style={{ padding: 6, marginBottom: 4, background: "#F7F8FA", borderRadius: 4 }}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <strong>{c.case_ref}</strong>
                 <span style={{ opacity: 0.7 }}>{(c.similarity * 100).toFixed(0)}% match</span>

@@ -13,7 +13,7 @@ const SECTIONS = [
     layers: [
       { id: "hillshade", label: "Hillshade", color: "#8d6e63" },
       { id: "slope", label: "Slope", color: "#2196f3", hasOpacity: true },
-      { id: "contours", label: "Contours", color: "#00ff88" },
+      { id: "contours", label: "Contours", color: "#22c55e" },
       { id: "lidarDtm", label: "LIDAR DTM", color: "#ef6c00" },
       { id: "lidarDsm", label: "LIDAR DSM", color: "#d84315" },
     ],
@@ -215,7 +215,7 @@ export default function Sidebar({ chatLayers, onRemoveChatLayer }) {
           <div className="sidebar-flyout-title">AI Layers</div>
           {chatLayers.map((l) => (
             <label key={l.id} className="layer-item">
-              <span className="layer-dot" style={{ background: l.color || "#00e5ff" }} />
+              <span className="layer-dot" style={{ background: l.color || "#7c5cfc" }} />
               {l.name}
               <button
                 className="chat-layer-remove"

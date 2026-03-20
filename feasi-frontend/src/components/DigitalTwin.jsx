@@ -530,17 +530,17 @@ export default function DigitalTwin({ data, onClose }) {
             </svg>
           </button>
           <span style={{ fontWeight: 700, fontSize: 13, color: "#7c4dff", letterSpacing: 1 }}>3D DIGITAL TWIN</span>
-          {data?.lat && <span style={{ fontSize: 11, color: "#888" }}>{data.lat.toFixed(4)}N, {Math.abs(data.lon).toFixed(4)}{data.lon < 0 ? "W" : "E"}</span>}
+          {data?.lat && <span style={{ fontSize: 11, color: "#4B5563" }}>{data.lat.toFixed(4)}N, {Math.abs(data.lon).toFixed(4)}{data.lon < 0 ? "W" : "E"}</span>}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {/* Time of day slider */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 10, color: "#888" }}>TIME</span>
+            <span style={{ fontSize: 10, color: "#4B5563" }}>TIME</span>
             <input type="range" min="5" max="20" step="0.5" value={timeOfDay}
               onChange={(e) => setTimeOfDay(parseFloat(e.target.value))}
               style={{ width: 100, accentColor: "#7c4dff" }} />
-            <span style={{ fontSize: 11, color: "#ccc", minWidth: 36 }}>{Math.floor(timeOfDay)}:{String(Math.round((timeOfDay % 1) * 60)).padStart(2, "0")}</span>
+            <span style={{ fontSize: 11, color: "#4B5563", minWidth: 36 }}>{Math.floor(timeOfDay)}:{String(Math.round((timeOfDay % 1) * 60)).padStart(2, "0")}</span>
           </div>
 
           {/* Season toggle */}
@@ -549,10 +549,10 @@ export default function DigitalTwin({ data, onClose }) {
               <button key={s} onClick={() => setSeason(s)}
                 style={{
                   padding: "3px 8px", fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-                  border: "1px solid " + (season === s ? "#7c4dff" : "#393939"),
+                  border: "1px solid " + (season === s ? "#7c4dff" : "rgba(0,0,0,0.1)"),
                   borderRadius: 2, cursor: "pointer", fontFamily: "inherit",
                   background: season === s ? "rgba(124,77,255,0.2)" : "transparent",
-                  color: season === s ? "#7c4dff" : "#888",
+                  color: season === s ? "#7c4dff" : "#4B5563",
                 }}>
                 {s.slice(0, 3)}
               </button>
@@ -566,10 +566,10 @@ export default function DigitalTwin({ data, onClose }) {
                 title={key.replace(/_/g, " ")}
                 style={{
                   padding: "3px 6px", fontSize: 9, fontWeight: 700,
-                  border: "1px solid " + (layers[key] ? "#525252" : "#333"),
+                  border: "1px solid " + (layers[key] ? "rgba(0,0,0,0.15)" : "rgba(0,0,0,0.1)"),
                   borderRadius: 2, cursor: "pointer", fontFamily: "inherit",
-                  background: layers[key] ? "rgba(255,255,255,0.05)" : "transparent",
-                  color: layers[key] ? "#ccc" : "#555",
+                  background: layers[key] ? "rgba(0,0,0,0.05)" : "transparent",
+                  color: layers[key] ? "#1A1D23" : "#9CA3AF",
                   textTransform: "uppercase",
                 }}>
                 {key.slice(0, 4)}
@@ -582,10 +582,10 @@ export default function DigitalTwin({ data, onClose }) {
             title="Measure distance"
             style={{
               padding: "4px 8px", fontSize: 10, fontWeight: 700,
-              border: "1px solid " + (measureMode ? "#00e5ff" : "#393939"),
+              border: "1px solid " + (measureMode ? "#7c5cfc" : "rgba(0,0,0,0.1)"),
               borderRadius: 2, cursor: "pointer", fontFamily: "inherit",
               background: measureMode ? "rgba(0,229,255,0.15)" : "transparent",
-              color: measureMode ? "#00e5ff" : "#888",
+              color: measureMode ? "#7c5cfc" : "#4B5563",
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
@@ -593,8 +593,8 @@ export default function DigitalTwin({ data, onClose }) {
           </button>
           <button onClick={handleScreenshot} title="Screenshot"
             style={{
-              padding: "4px 8px", border: "1px solid #393939", borderRadius: 2,
-              cursor: "pointer", background: "transparent", color: "#888",
+              padding: "4px 8px", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 2,
+              cursor: "pointer", background: "transparent", color: "#4B5563",
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
@@ -610,9 +610,9 @@ export default function DigitalTwin({ data, onClose }) {
       {/* Info panel */}
       {info && (
         <div className="twin-info-panel">
-          <div style={{ fontSize: 12, color: "#f4f4f4" }}>{info}</div>
+          <div style={{ fontSize: 12, color: "#1A1D23" }}>{info}</div>
           <button onClick={() => setInfo(null)}
-            style={{ position: "absolute", top: 6, right: 8, background: "none", border: "none", color: "#888", cursor: "pointer", fontSize: 14 }}>
+            style={{ position: "absolute", top: 6, right: 8, background: "none", border: "none", color: "#4B5563", cursor: "pointer", fontSize: 14 }}>
             x
           </button>
         </div>

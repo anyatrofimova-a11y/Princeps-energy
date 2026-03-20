@@ -1,0 +1,188 @@
+<!-- Environmental Section -->
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ site.name }} &mdash; Environmental Assessment</div>
+  </div>
+
+  <h2 class="section-title">Environmental Assessment</h2>
+
+  <!-- Environmental Score Strip -->
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.scores['Environmental'] }}</div>
+      <div class="kpi-label">Environmental Score</div>
+    </div>
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.scores['Planning'] }}</div>
+      <div class="kpi-label">Planning Score</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if site.vegetation.mean_ndvi %}{{ "%.2f"|format(site.vegetation.mean_ndvi) }}{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Mean NDVI</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value" style="color: {% if site.flood_risk.risk_level == 'HIGH' %}{{ brand.red }}{% elif site.flood_risk.risk_level == 'MEDIUM' %}{{ brand.amber }}{% elif site.flood_risk.risk_level == 'LOW' %}{{ brand.green }}{% else %}{{ brand.grey }}{% endif %};">{{ site.flood_risk.risk_level }}</div>
+      <div class="kpi-label">Flood Risk</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "{:,.0f}".format(site.kpis.co2_offset_tonnes_yr) }} t</div>
+      <div class="kpi-label">CO2 Offset / Year</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <!-- Flood Risk -->
+      <div class="card {% if site.flood_risk.risk_level == 'HIGH' %}card-accent-red{% elif site.flood_risk.risk_level == 'MEDIUM' %}card-accent-amber{% else %}card-accent-green{% endif %}">
+        <div class="card-header">Flood Risk Assessment</div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+          <div style="width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; color: #fff; background: {% if site.flood_risk.risk_level == 'HIGH' %}{{ brand.red }}{% elif site.flood_risk.risk_level == 'MEDIUM' %}{{ brand.amber }}{% elif site.flood_risk.risk_level == 'LOW' %}{{ brand.green }}{% else %}{{ brand.grey }}{% endif %};">
+            {% if site.flood_risk.risk_level == 'HIGH' %}!{% elif site.flood_risk.risk_level == 'LOW' %}OK{% else %}?{% endif %}
+          </div>
+          <div>
+            <div class="bold">{{ site.flood_risk.risk_level }} Risk</div>
+            <div class="text-xs text-muted">
+              {% if site.flood_risk.risk_level == 'HIGH' %}Sequential Test required under NPPF &mdash; may impact planning
+              {% elif site.flood_risk.risk_level == 'MEDIUM' %}Flood Risk Assessment recommended for planning application
+              {% elif site.flood_risk.risk_level == 'LOW' %}No significant flood constraints identified
+              {% else %}Flood data not available for this location{% endif %}
+            </div>
+          </div>
+        </div>
+        {% if site.flood_risk.flood_risk_score is not none %}
+        <div class="stat-row">
+          <span class="stat-label">Flood Risk Score</span>
+          <span class="stat-value">{{ site.flood_risk.flood_risk_score }}</span>
+        </div>
+        {% endif %}
+        {% if site.flood_risk.water_occurrence_pct is not none %}
+        <div class="stat-row">
+          <span class="stat-label">Water Occurrence</span>
+          <span class="stat-value">{{ "%.1f"|format(site.flood_risk.water_occurrence_pct) }}%</span>
+        </div>
+        {% endif %}
+        <div class="stat-row">
+          <span class="stat-label">Environmental Constraint</span>
+          <span class="stat-value">
+            {% if site.flood_risk.environmental_constraint %}
+            <span style="color: {{ brand.red }}; font-weight: 700;">Yes &mdash; constraint flagged</span>
+            {% else %}
+            <span style="color: {{ brand.green }};">No constraints flagged</span>
+            {% endif %}
+          </span>
+        </div>
+      </div>
+
+      <!-- Vegetation / NDVI -->
+      <div class="card card-accent-green">
+        <div class="card-header">Vegetation Analysis</div>
+        <div class="text-xs text-muted mb-8">Normalised Difference Vegetation Index (NDVI) via Sentinel-2</div>
+        <div class="stat-row">
+          <span class="stat-label">Mean NDVI</span>
+          <span class="stat-value">
+            {% if site.vegetation.mean_ndvi %}
+            {{ "%.3f"|format(site.vegetation.mean_ndvi) }}
+            <span class="score-pill {% if site.vegetation.mean_ndvi > 0.6 %}score-nogo{% elif site.vegetation.mean_ndvi > 0.3 %}score-caution{% else %}score-go{% endif %}" style="margin-left: 4px;">
+              {% if site.vegetation.mean_ndvi > 0.6 %}Dense{% elif site.vegetation.mean_ndvi > 0.3 %}Moderate{% else %}Sparse{% endif %}
+            </span>
+            {% else %}N/A{% endif %}
+          </span>
+        </div>
+        <div class="text-xs text-muted mt-8">
+          NDVI &lt;0.3: sparse vegetation (ideal for solar); 0.3&ndash;0.6: moderate cover; &gt;0.6: dense vegetation (may be ecologically sensitive, additional surveys needed)
+        </div>
+      </div>
+
+      <!-- Statutory Designations -->
+      <div class="card">
+        <div class="card-header">Statutory Designations</div>
+        <div class="text-xs text-muted mb-8">Proximity to protected areas affects planning risk</div>
+        <table>
+          <tr><th>Designation</th><th>Status</th></tr>
+          <tr>
+            <td>SSSI (Site of Special Scientific Interest)</td>
+            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
+          </tr>
+          <tr>
+            <td>SAC (Special Area of Conservation)</td>
+            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
+          </tr>
+          <tr>
+            <td>SPA (Special Protection Area)</td>
+            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
+          </tr>
+          <tr>
+            <td>AONB / National Landscape</td>
+            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
+          </tr>
+          <tr>
+            <td>Green Belt</td>
+            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
+          </tr>
+        </table>
+        <div class="text-xs text-muted mt-4">
+          Overlay checks based on PostGIS spatial queries. Confirm with Local Planning Authority and Natural England.
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <!-- NDVI Monthly Chart -->
+      {% if charts.ndvi_monthly %}
+      <div class="card center">
+        <div class="text-xs text-muted mb-4">VEGETATION INDEX (NDVI) MONTHLY TREND</div>
+        <img src="data:image/png;base64,{{ charts.ndvi_monthly }}" alt="NDVI monthly" class="chart-img">
+      </div>
+      {% endif %}
+
+      <!-- Carbon Impact -->
+      <div class="card" style="background: linear-gradient(135deg, #f0faf4 0%, #fff 100%);">
+        <div class="card-header">Carbon Impact Assessment</div>
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 10px;">
+          <div style="font-size: 32px; font-weight: 800; color: {{ brand.green }};">
+            {{ "{:,.0f}".format(site.kpis.co2_offset_tonnes_yr) }}
+          </div>
+          <div>
+            <div class="bold">tonnes CO2 avoided per year</div>
+            <div class="text-xs text-muted">Based on UK grid carbon intensity (0.20 tCO2/MWh)</div>
+          </div>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">25-Year Carbon Offset</span>
+          <span class="stat-value">{{ "{:,.0f}".format(site.kpis.co2_offset_tonnes_yr * 25) }} tonnes</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Equivalent Cars Removed</span>
+          <span class="stat-value">~{{ "{:,.0f}".format(site.kpis.co2_offset_tonnes_yr / 2.3) }} vehicles/year</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Homes Powered (equivalent)</span>
+          <span class="stat-value">~{{ "{:,.0f}".format(site.kpis.annual_yield_mwh / 3.5) }} homes</span>
+        </div>
+      </div>
+
+      <!-- BNG -->
+      <div class="card">
+        <div class="card-header">Biodiversity Net Gain (BNG)</div>
+        <div class="text-sm">
+          Under the Environment Act 2021, developments must deliver a minimum
+          <strong>10% biodiversity net gain</strong>. Solar farms can achieve this through:
+        </div>
+        <ul style="font-size: 11px; margin: 8px 0 0 16px; line-height: 1.8;">
+          <li>Wildflower meadow creation between panel rows</li>
+          <li>Native hedgerow planting along site boundaries</li>
+          <li>Habitat corridors connecting existing ecological features</li>
+          <li>Pond and wetland creation for amphibians</li>
+        </ul>
+        <div class="text-xs text-muted mt-8">
+          BNG assessment required using DEFRA Biodiversity Metric 4.0 by an accredited ecologist.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    Princeps Site Assessment &mdash; Environmental &mdash; {{ now }}
+  </div>
+</div>

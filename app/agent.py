@@ -231,6 +231,17 @@ INTENT_PROMPTS: dict[str, str] = {
         "Reference NESO Connections Reform, G99/CUSC processes, DNO queue positions, and "
         "UK wholesale price assumptions. Provide GO / CAUTION / NO-GO verdict with confidence."
     ),
+    "monitoring_kit": (
+        "You are a UK energy infrastructure IoT monitoring specialist. "
+        "Recommend a modular sensor monitoring kit for the site based on its type, "
+        "capacity, and environmental conditions. Consider IEC 61724 compliance for "
+        "solar, NFPA 855 for BESS, IEC 61400-12 for wind. Specify sensor types "
+        "(pyranometers, weather stations, power meters, thermal cameras, environmental "
+        "sensors), quantities, communication protocols (MQTT, Modbus, LoRaWAN), and "
+        "edge gateway requirements. Include bankability requirements for pre-construction "
+        "resource assessment. Estimate total monitoring kit cost and ongoing O&M. "
+        "Provide GO / CAUTION / NO-GO verdict on monitoring readiness."
+    ),
     "advanced_grid": (
         "You are a UK transmission and distribution grid analysis specialist. "
         "Analyse dynamic line ratings (IEEE 738 thermal model), transmission boundary "
@@ -351,6 +362,46 @@ INTENT_PROMPTS: dict[str, str] = {
         "Provide a GO / CAUTION / NO-GO verdict with confidence score.\n\n"
         + DATA_DOMAINS_CONTEXT
     ),
+    "dc_colocation": (
+        "You are a UK data centre site selection specialist assessing co-location suitability. "
+        "Evaluate 15 dimensions: (1) Power Capacity — nearest substation voltage tier and "
+        "transformer rating match for requested IT load, (2) Grid Headroom — REAL demand "
+        "headroom from DNO data (not N/A), RAG status, queue depth, (3) Fibre Proximity — "
+        "distance to nearest telecom exchange/POP, (4) IXP Proximity — distance to nearest "
+        "Internet Exchange Point (LINX, LONAP, etc.), (5) Water Cooling — distance to rivers/"
+        "reservoirs for cooling, (6) Latency — composite IXP + population centre + fibre "
+        "propagation model, (7) Land & Planning — brownfield bonus, flood risk, planning "
+        "constraints, (8) Resilience — dual-feed capability, independent substations at "
+        "different voltage tiers, (9) Connection Speed — fibre provider count, dark fibre, "
+        "carrier-neutral exchanges, (10) 24/7 CFE% — carbon-free energy percentage using "
+        "Carbon Intensity API + nearby REPD wind/solar for PPA overlay (Google targets 95%), "
+        "(11) Cooling & Climate — PUE/WUE estimation, free cooling hours, UKCP18 projections, "
+        "(12) Constraint Clearance — SSSI/SAC/SPA/Ramsar/AONB/Green Belt/ALC exclusion zones, "
+        "(13) Water Stress — EA CAMS catchment status for cooling strategy (Google water-positive "
+        "by 2030), (14) Incentives — Enterprise Zones, Freeports, AI Growth Zones, Investment "
+        "Zones with rates relief and capital allowances, (15) Regulatory Pathway — NSIP "
+        "eligibility (opt-in above 50MW), TM04+ gate status, planning authority track record. "
+        "Apply facility profile weights: google_hyperscale (100-500MW, CFE-focused), "
+        "Hyperscale/Colocation/Edge and gate thresholds. Our KEY advantage: REAL MW headroom "
+        "from all 6 UK DNOs + 24/7 CFE% scoring — no competitor integrates both. Reference "
+        "specific substations, distances, headroom, costs, CFE%, and PUE. Provide GO / "
+        "CAUTION / NO-GO verdict with confidence."
+    ),
+    "dc_comparison": (
+        "You are a UK data centre site comparison specialist. Compare multiple candidate sites "
+        "across all 15 scoring dimensions. For each site, provide the DC-SCORE, verdict, and "
+        "key differentiators. Identify which site wins on each dimension. Highlight trade-offs "
+        "(e.g. Site A has better CFE% but Site B has lower connection cost). Recommend the "
+        "overall best site with justification. Reference Google's UK known sites (Waltham Cross, "
+        "North Weald, Purfleet, Teesside) as benchmarks where relevant."
+    ),
+    "dc_prospecting": (
+        "You are a UK data centre site discovery specialist. Find candidate sites matching "
+        "specified criteria (capacity, CFE%, cooling, constraints, incentives). Use grid headroom "
+        "data from all 6 UK DNOs to identify substations with sufficient capacity. Rank results "
+        "by 15-dimension DC-SCORE. Highlight Enterprise Zones, Freeports, and AI Growth Zones. "
+        "Reference Google's target criteria: 100-500MW, 95% CFE, water-positive, low PUE."
+    ),
 }
 
 OUTPUT_SCHEMA = """\
@@ -398,12 +449,45 @@ def _extract_json(text: str) -> dict:
     return validated.model_dump()
 
 
+async def _persist_analysis(pool, context: dict, intent: str, result: dict,
+                            model: str, input_tokens: int | None,
+                            output_tokens: int | None, elapsed: float) -> None:
+    """Write agent analysis to agent_analyses table (best-effort)."""
+    try:
+        from uuid import UUID as _UUID
+        parcel_id = None
+        pid_str = context.get("parcel_id")
+        if pid_str:
+            try:
+                parcel_id = _UUID(str(pid_str))
+            except (ValueError, TypeError):
+                pass
+        await pool.execute(
+            """INSERT INTO agent_analyses
+               (parcel_id, intent, verdict, confidence, summary,
+                risks, opportunities, result_data, model,
+                input_tokens, output_tokens, elapsed_s)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)""",
+            parcel_id, intent,
+            result.get("verdict", "CAUTION"),
+            result.get("confidence", 0.5),
+            result.get("summary", ""),
+            json.dumps(result.get("risks", [])),
+            json.dumps(result.get("opportunities", [])),
+            json.dumps(result),
+            model, input_tokens, output_tokens, elapsed,
+        )
+    except Exception as e:
+        log.warning("Failed to persist agent analysis: %s", e)
+
+
 async def run_structured_agent(
     client: anthropic.AsyncAnthropic,
     model: str,
     context: dict[str, Any],
     intent: str = "feasibility",
     max_tokens: int = 1200,
+    pool=None,
 ) -> dict[str, Any]:
     """
     Run a structured agent analysis using Claude.
@@ -414,6 +498,7 @@ async def run_structured_agent(
         context: dict of parcel/site data
         intent: one of INTENT_PROMPTS keys
         max_tokens: response length limit
+        pool: optional asyncpg pool for persisting results
 
     Returns:
         Parsed JSON dict with verdict, risks, etc.
@@ -442,6 +527,9 @@ async def run_structured_agent(
         # Always use validated actions — Claude hallucinates endpoints
         agent_output["actions"] = _default_actions(intent, context)
 
+        input_tok = getattr(message.usage, "input_tokens", None)
+        output_tok = getattr(message.usage, "output_tokens", None)
+
         _audit_log(
             {
                 "ts": datetime.now(timezone.utc).isoformat(),
@@ -451,10 +539,18 @@ async def run_structured_agent(
                 "elapsed_s": elapsed,
                 "verdict": agent_output.get("verdict"),
                 "confidence": agent_output.get("confidence"),
-                "input_tokens": getattr(message.usage, "input_tokens", None),
-                "output_tokens": getattr(message.usage, "output_tokens", None),
+                "input_tokens": input_tok,
+                "output_tokens": output_tok,
             }
         )
+
+        # Persist to PostgreSQL (alongside NDJSON audit log)
+        if pool is not None:
+            await _persist_analysis(
+                pool, context, intent, agent_output,
+                model, input_tok, output_tok, elapsed,
+            )
+
         return agent_output
 
     except (anthropic.APIError, json.JSONDecodeError, ValueError, KeyError) as exc:
@@ -507,6 +603,11 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "method": "GET",
                 "payload": {},
             },
+            {
+                "label": "Configure Monitoring Kit",
+                "action": "open_panel",
+                "panel": "hardware",
+            },
         ]
     elif intent == "grid_study":
         load_mw = cap / 1000
@@ -555,6 +656,27 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "endpoint": "/nged/opportunities?west=-3&south=51&east=-2&north=52&min_headroom_mw=1",
                 "method": "GET",
                 "payload": {},
+            },
+        ]
+    elif intent == "monitoring_kit":
+        cap_mw = cap / 1000
+        actions = [
+            {
+                "label": "Configure Monitoring Kit",
+                "endpoint": f"/hardware/recommend?site_type=solar_farm&capacity_mw={cap_mw}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View Sensor Catalogue",
+                "endpoint": "/hardware/catalogue",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Open Hardware Configurator",
+                "action": "open_panel",
+                "panel": "hardware",
             },
         ]
     elif intent == "satellite_analysis":
@@ -1113,6 +1235,106 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "endpoint": "/rag/query",
                 "method": "POST",
                 "payload": {"query": "grid connection reform"},
+            },
+        ]
+
+    elif intent == "dc_colocation":
+        load_mw = cap / 1000
+        actions = [
+            {
+                "label": "Score Site (15D Extended)",
+                "endpoint": f"/api/dc/score-extended?lat={lat}&lon={lon}&capacity_mw={load_mw}&profile=google_hyperscale",
+                "method": "POST",
+                "payload": {},
+            },
+            {
+                "label": "Score Site (9D Standard)",
+                "endpoint": f"/api/dc/score?lat={lat}&lon={lon}&capacity_mw={load_mw}&profile=colocation",
+                "method": "POST",
+                "payload": {},
+            },
+            {
+                "label": "Check 24/7 CFE%",
+                "endpoint": f"/api/dc/cfe?lat={lat}&lon={lon}&capacity_mw={load_mw}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Cooling Analysis",
+                "endpoint": f"/api/dc/cooling?lat={lat}&lon={lon}&capacity_mw={load_mw}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Check Constraints",
+                "endpoint": f"/api/dc/constraints?lat={lat}&lon={lon}",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Scan Region for DC Sites",
+                "endpoint": f"/api/dc/scan?profile=google_hyperscale&capacity_mw={load_mw}&limit=10",
+                "method": "POST",
+                "payload": {},
+            },
+            {
+                "label": "View DC Infrastructure",
+                "endpoint": f"/api/dc/infrastructure?lat={lat}&lon={lon}&radius_km=20",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Generate DC Report",
+                "endpoint": f"/api/dc/report?lat={lat}&lon={lon}&capacity_mw={load_mw}&profile=google_hyperscale",
+                "method": "POST",
+                "payload": {},
+            },
+        ]
+
+    elif intent == "dc_comparison":
+        load_mw = cap / 1000
+        actions = [
+            {
+                "label": "Score Google UK Sites",
+                "endpoint": f"/api/dc/google-sites?capacity_mw={load_mw}&profile=google_hyperscale",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Compare Sites",
+                "endpoint": "/api/dc/compare",
+                "method": "POST",
+                "payload": {
+                    "sites": [
+                        {"name": "Waltham Cross", "lat": 51.6945, "lon": -0.0334},
+                        {"name": "Teesside", "lat": 54.5973, "lon": -1.0737},
+                    ],
+                    "capacity_mw": load_mw,
+                    "profile": "google_hyperscale",
+                },
+            },
+        ]
+
+    elif intent == "dc_prospecting":
+        load_mw = cap / 1000
+        actions = [
+            {
+                "label": "AI Site Discovery",
+                "endpoint": "/api/dc/prospect",
+                "method": "POST",
+                "payload": {
+                    "query": f"Find sites with >{load_mw}MW headroom near good fibre",
+                    "capacity_mw": load_mw,
+                    "profile": "google_hyperscale",
+                    "min_headroom_mw": load_mw * 0.5,
+                    "limit": 20,
+                },
+            },
+            {
+                "label": "View DC Capacity Map",
+                "endpoint": f"/api/dc/capacity-map?profile=google_hyperscale&min_headroom_mw={load_mw * 0.5}",
+                "method": "GET",
+                "payload": {},
             },
         ]
 

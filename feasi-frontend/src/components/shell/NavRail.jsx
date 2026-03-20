@@ -39,7 +39,9 @@ export default function NavRail() {
 
   return (
     <nav className="nav-rail">
-      <div className="nav-rail-brand">P</div>
+      <div className="nav-rail-brand">
+        <div className="nav-rail-brand-letter">P</div>
+      </div>
       <div className="nav-rail-items">
         {WORKSPACES.map((ws) => (
           <button

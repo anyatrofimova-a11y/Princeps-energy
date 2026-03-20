@@ -45,7 +45,7 @@ export default function Dashboard() {
 
   // Tab definitions for the strip
   const TABS = [
-    { id: "overview", label: "Overview", color: "#00ff88" },
+    { id: "overview", label: "Overview", color: "#22c55e" },
     { id: "solar", label: "Solar", color: "#ff9800" },
     { id: "terrain", label: "Terrain", color: "#2196f3" },
     { id: "bipv", label: "BIPV", color: "#00bcd4" },
@@ -65,7 +65,7 @@ export default function Dashboard() {
     { id: "prospector", label: "Prospector", color: "#009688" },
     { id: "bess", label: "BESS", color: "#4caf50" },
     { id: "classify", label: "Classify", color: "#ff6f00" },
-    { id: "analytics", label: "AI Energy", color: "#00e5ff" },
+    { id: "analytics", label: "AI Energy", color: "#7c5cfc" },
     { id: "agent", label: "Analysis", color: "#7c4dff" },
   ];
 

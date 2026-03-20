@@ -1,0 +1,171 @@
+<!-- Appendix Section -->
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ site.name }} &mdash; Appendix</div>
+  </div>
+
+  <h2 class="section-title">Appendix &mdash; Data Sources &amp; Methodology</h2>
+
+  <div class="two-col">
+    <div>
+      <!-- Data Sources -->
+      <div class="card">
+        <div class="card-header">Data Sources</div>
+        <table>
+          <tr><th>Dataset</th><th>Source</th><th>Resolution</th></tr>
+          <tr>
+            <td class="bold">Substation locations</td>
+            <td>NGED, DNO Open Data, OSM</td>
+            <td>Point locations</td>
+          </tr>
+          <tr>
+            <td class="bold">Connection queue</td>
+            <td>National Grid ESO (ECR)</td>
+            <td>Per-substation</td>
+          </tr>
+          <tr>
+            <td class="bold">Land use</td>
+            <td>Google DynamicWorld V1</td>
+            <td>10m, Sentinel-2</td>
+          </tr>
+          <tr>
+            <td class="bold">Terrain</td>
+            <td>NASA SRTM / NASADEM</td>
+            <td>30m</td>
+          </tr>
+          <tr>
+            <td class="bold">Solar irradiance</td>
+            <td>ERA5-Land (ECMWF / GEE)</td>
+            <td>0.1&deg; (~11km), hourly</td>
+          </tr>
+          <tr>
+            <td class="bold">Vegetation (NDVI)</td>
+            <td>Sentinel-2 via GEE</td>
+            <td>10m</td>
+          </tr>
+          <tr>
+            <td class="bold">Flood risk</td>
+            <td>JRC Global Surface Water</td>
+            <td>30m</td>
+          </tr>
+          <tr>
+            <td class="bold">Demand outturn</td>
+            <td>BMRS Insights API (Elexon)</td>
+            <td>Half-hourly</td>
+          </tr>
+          <tr>
+            <td class="bold">Demand scenarios</td>
+            <td>NESO FES 2024</td>
+            <td>4 pathways to 2050</td>
+          </tr>
+          <tr>
+            <td class="bold">Statutory designations</td>
+            <td>Natural England / NRW</td>
+            <td>Polygon boundaries</td>
+          </tr>
+          <tr>
+            <td class="bold">Grid infrastructure</td>
+            <td>OpenStreetMap (Overpass)</td>
+            <td>Community-maintained</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Scoring Methodology -->
+      <div class="card">
+        <div class="card-header">Scoring Methodology</div>
+        <div class="text-sm" style="line-height: 1.7;">
+          <p><strong>8-Axis Framework:</strong> Each dimension scored 0&ndash;100 from quantitative data:</p>
+          <table style="margin: 8px 0;">
+            <tr><th>Axis</th><th>Key Drivers</th></tr>
+            <tr><td class="bold">Solar Resource</td><td>Annual GHI (kWh/m&sup2;/yr), UK range benchmarking</td></tr>
+            <tr><td class="bold">Wind Resource</td><td>Elevation-based proxy (terrain exposure)</td></tr>
+            <tr><td class="bold">Terrain</td><td>Mean slope (&deg;), P90 slope, south-facing %</td></tr>
+            <tr><td class="bold">Land Use</td><td>Developable area %, land class suitability</td></tr>
+            <tr><td class="bold">Grid Access</td><td>Distance to nearest substation (km), voltage tier</td></tr>
+            <tr><td class="bold">Planning</td><td>Flood risk, environmental constraints, land type</td></tr>
+            <tr><td class="bold">Financial</td><td>Composite: 35% solar + 30% grid + 20% terrain + 15% land</td></tr>
+            <tr><td class="bold">Environmental</td><td>Water occurrence, NDVI, flood risk level</td></tr>
+          </table>
+          <p><strong>Verdict:</strong> GO (&ge;65%), CAUTION (40&ndash;65%), NO-GO (&lt;40%) of max possible score.</p>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <!-- Financial Assumptions -->
+      <div class="card">
+        <div class="card-header">Financial Assumptions</div>
+        <table>
+          <tr><th>Parameter</th><th>Value</th><th>Basis</th></tr>
+          <tr><td class="bold">Capex</td><td>&pound;550k/MW</td><td>UK utility-scale solar, 2024</td></tr>
+          <tr><td class="bold">Opex</td><td>&pound;10k/MW/yr</td><td>O&amp;M industry benchmark</td></tr>
+          <tr><td class="bold">PPA Price</td><td>&pound;55/MWh</td><td>UK corporate PPA market</td></tr>
+          <tr><td class="bold">Performance Ratio</td><td>82%</td><td>UK climate assumption</td></tr>
+          <tr><td class="bold">Project Life</td><td>25 years</td><td>Standard solar project</td></tr>
+          <tr><td class="bold">Degradation</td><td>Not modelled</td><td>Typically 0.5%/yr</td></tr>
+          <tr><td class="bold">Carbon intensity</td><td>0.20 tCO2/MWh</td><td>UK grid average (2024)</td></tr>
+        </table>
+        <table style="margin-top: 8px;">
+          <tr><th>Grid Connection</th><th>Cost/km</th></tr>
+          <tr><td>11 kV</td><td>&pound;80,000</td></tr>
+          <tr><td>33 kV</td><td>&pound;150,000</td></tr>
+          <tr><td>66 kV</td><td>&pound;300,000</td></tr>
+          <tr><td>132 kV</td><td>&pound;500,000</td></tr>
+        </table>
+      </div>
+
+      <!-- Site Data Summary -->
+      <div class="card">
+        <div class="card-header">Report Parameters</div>
+        <div class="stat-row">
+          <span class="stat-label">Site Name</span>
+          <span class="stat-value">{{ site.name }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Coordinates</span>
+          <span class="stat-value">{{ "%.6f"|format(site.lat) }}N, {{ "%.6f"|format(site.lon|abs) }}{% if site.lon < 0 %}W{% else %}E{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Proposed Capacity</span>
+          <span class="stat-value">{{ site.capacity_mw }} MW</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">GeeFlow Modes Available</span>
+          <span class="stat-value">{{ site.geeflow|length }} ({{ site.geeflow.keys()|list|join(', ') }})</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Substations Found</span>
+          <span class="stat-value">{{ site.substations|length }} (NGED: {{ site.nged_substations|length }}, OSM: {{ site.osm_substations|length }}, DNO: {{ site.dno_substations|length }})</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Report Generated</span>
+          <span class="stat-value">{{ site.generated_at }}</span>
+        </div>
+      </div>
+
+      <!-- Disclaimer -->
+      <div class="card" style="background: #fff8f0; border-color: {{ brand.amber }};">
+        <div class="card-header">Disclaimer</div>
+        <div class="text-xs" style="line-height: 1.7; color: {{ brand.grey }};">
+          This report is generated automatically by the Princeps platform for informational purposes only.
+          It does not constitute professional advice, a grid connection offer, planning consent, or an
+          investment recommendation. All data is sourced from publicly available datasets and may contain
+          inaccuracies or omissions. Users should verify all information with appropriate professional
+          advisors (grid connection consultant, planning consultant, ecologist, financial modeller)
+          before making investment or development decisions. Princeps accepts no liability for
+          decisions made on the basis of this report.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Closing -->
+  <div style="text-align: center; margin-top: 30px; padding: 20px;">
+    <div style="width: 60px; height: 2px; background: {{ brand.primary }}; margin: 0 auto 12px;"></div>
+    <div style="font-size: 18px; font-weight: 800; letter-spacing: 3px; color: {{ brand.primary }};">PRINCEPS</div>
+    <div class="text-xs text-muted">Energy Infrastructure Intelligence Platform</div>
+    <div class="text-xs text-muted mt-8">Report generated {{ now }}</div>
+  </div>
+</div>

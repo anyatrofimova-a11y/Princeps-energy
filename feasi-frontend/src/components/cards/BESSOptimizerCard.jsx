@@ -7,8 +7,8 @@ import { useSite } from "../../SiteContext";
  */
 export default function BESSOptimizerCard() {
   const { pickedLocation, samCapacity } = useSite();
-  const lat = pickedLocation?.[0];
-  const lon = pickedLocation?.[1];
+  const lat = pickedLocation?.lat;
+  const lon = pickedLocation?.lon;
   const [view, setView] = useState("score"); // score | sizing | revenue | colocation
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -133,7 +133,7 @@ export default function BESSOptimizerCard() {
             onChange={e => setCapacityMw(Number(e.target.value))}
             style={{
               width: 60, padding: "3px 6px", fontSize: 11,
-              background: "#1a1a2e", color: "#ccc", border: "1px solid #333", borderRadius: 4,
+              background: "#F7F8FA", color: "#4B5563", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 4,
             }}
           />
           <label style={{ fontSize: 10, color: "#aaa" }}>Strategy:</label>
@@ -154,7 +154,7 @@ export default function BESSOptimizerCard() {
                 onChange={e => setGridConstraintMw(Number(e.target.value))}
                 style={{
                   width: 60, padding: "3px 6px", fontSize: 11,
-                  background: "#1a1a2e", color: "#ccc", border: "1px solid #333", borderRadius: 4,
+                  background: "#F7F8FA", color: "#4B5563", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 4,
                 }}
               />
             </>
@@ -261,7 +261,7 @@ export default function BESSOptimizerCard() {
                   display: "flex", justifyContent: "space-between",
                   padding: "3px 0", fontSize: 12, borderBottom: "1px solid #222",
                 }}>
-                  <span style={{ color: "#ccc" }}>{s.duration_hr}hr — {s.energy_mwh} MWh</span>
+                  <span style={{ color: "#4B5563" }}>{s.duration_hr}hr — {s.energy_mwh} MWh</span>
                   <span style={{ color: s.npv_20yr_gbp > 0 ? "#4caf50" : "#f44336", fontWeight: 600 }}>
                     NPV {(s.npv_20yr_gbp / 1e6).toFixed(1)}M | IRR {s.irr_pct}%
                   </span>
@@ -283,7 +283,7 @@ export default function BESSOptimizerCard() {
             return (
               <div key={k} style={{ marginBottom: 6 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                  <span style={{ color: "#ccc" }}>{k.replace(/_/g, " ")}</span>
+                  <span style={{ color: "#4B5563" }}>{k.replace(/_/g, " ")}</span>
                   <span style={{ color: "#fff", fontWeight: 600 }}>
                     {(v / 1000).toFixed(0)}k ({pct.toFixed(0)}%)
                   </span>

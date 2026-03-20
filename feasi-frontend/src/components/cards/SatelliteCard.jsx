@@ -196,7 +196,7 @@ function ScoreGauge({ score }) {
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
         <div style={{
           width: "100%", height: 10, borderRadius: 5,
-          background: "#1a1a2e", overflow: "hidden",
+          background: "#F7F8FA", overflow: "hidden",
         }}>
           <div style={{
             width: `${pct}%`, height: "100%",
@@ -219,6 +219,105 @@ function ScoreGauge({ score }) {
   );
 }
 
+const EUROSAT_COLORS = {
+  AnnualCrop: "#ffc107", Forest: "#2e7d32", HerbaceousVegetation: "#8bc34a",
+  Highway: "#78909c", Industrial: "#607d8b", Pasture: "#aed581",
+  PermanentCrop: "#ff9800", Residential: "#9e9e9e", River: "#42a5f5", SeaLake: "#1565c0",
+};
+
+const SUIT_COLOR = { good: "#4caf50", moderate: "#ff9800", poor: "#f44336" };
+
+function EuroSATSection({ data, dwClass }) {
+  if (!data || data.error) return null;
+  const probs = data.probabilities ? Object.entries(data.probabilities).slice(0, 5) : [];
+  const feas = data.feasibility || {};
+  const xref = data.dynamicworld_equiv;
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div className="card-label">EuroSAT Classification</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span style={{
+          padding: "2px 8px", borderRadius: 8, fontSize: 11, fontWeight: "bold",
+          background: EUROSAT_COLORS[data.class] || "#666", color: "#fff",
+        }}>
+          {data.class?.replace(/([A-Z])/g, " $1").trim()}
+        </span>
+        <span style={{ fontSize: 12 }}>
+          {(data.confidence * 100).toFixed(0)}% confidence
+        </span>
+        {feas.suitability && (
+          <span style={{
+            padding: "1px 6px", borderRadius: 6, fontSize: 10, fontWeight: 600,
+            background: SUIT_COLOR[feas.suitability] || "#666", color: "#fff",
+          }}>
+            {feas.suitability}
+          </span>
+        )}
+      </div>
+
+      {/* Probability bars (top 5) */}
+      {probs.length > 0 && (
+        <div style={{ marginBottom: 6 }}>
+          {probs.map(([cls, prob]) => (
+            <div key={cls} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+              <span style={{ fontSize: 10, width: 90, color: "#aaa", textAlign: "right" }}>
+                {cls.replace(/([A-Z])/g, " $1").trim()}
+              </span>
+              <div style={{ flex: 1, height: 6, background: "#F7F8FA", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{
+                  width: `${prob * 100}%`, height: "100%", borderRadius: 3,
+                  background: EUROSAT_COLORS[cls] || "#666",
+                }} />
+              </div>
+              <span style={{ fontSize: 10, color: "#888", width: 32, textAlign: "right" }}>
+                {(prob * 100).toFixed(0)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Spectral indices */}
+      {data.indices && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 11, marginBottom: 6 }}>
+          <span>NDVI: <b style={{ color: data.indices.ndvi > 0.3 ? "#4caf50" : "#ff9800" }}>{data.indices.ndvi}</b></span>
+          <span>NDWI: <b style={{ color: data.indices.ndwi > 0 ? "#2196f3" : "#888" }}>{data.indices.ndwi}</b></span>
+          <span>NDBI: <b style={{ color: data.indices.ndbi > 0 ? "#f44336" : "#888" }}>{data.indices.ndbi}</b></span>
+        </div>
+      )}
+
+      {/* Feasibility row */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 10 }}>
+        {feas.solar_ok != null && (
+          <span style={{ color: feas.solar_ok ? "#4caf50" : "#f44336" }}>
+            Solar: {feas.solar_ok ? "suitable" : "unsuitable"}
+          </span>
+        )}
+        {feas.grid_constraint != null && (
+          <span style={{ color: feas.grid_constraint ? "#f44336" : "#4caf50" }}>
+            Grid: {feas.grid_constraint ? "constrained" : "clear"}
+          </span>
+        )}
+        {feas.planning_risk && (
+          <span style={{ color: feas.planning_risk === "high" ? "#f44336" : feas.planning_risk === "moderate" ? "#ff9800" : "#4caf50" }}>
+            Planning risk: {feas.planning_risk}
+          </span>
+        )}
+      </div>
+
+      {/* DynamicWorld cross-reference */}
+      {xref && dwClass && (
+        <div style={{ marginTop: 4, fontSize: 10, color: xref === dwClass ? "#4caf50" : "#ff9800" }}>
+          {xref === dwClass
+            ? `Classifiers agree (both → ${xref})`
+            : `EuroSAT→${xref} vs DynamicWorld→${dwClass} — review recommended`}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const BASIC_MODES = ["land_use", "terrain", "solar_resource", "vegetation"];
 const FULL_MODES = [...BASIC_MODES, "sar_backscatter", "flood_risk", "ndvi_timeseries"];
 
@@ -230,6 +329,7 @@ export default function SatelliteCard() {
   } = useSite();
 
   const [fullMode, setFullMode] = useState(true);
+  const [eurosat, setEurosat] = useState(null);
   const pollRef = useRef(null);
 
   // Poll for job completion
@@ -252,6 +352,14 @@ export default function SatelliteCard() {
     pollRef.current = poll;
     return () => clearInterval(poll);
   }, [geeflowJobId, setGeeflowData, setGeeflowLoading, setGeeflowJobId]);
+
+  // Auto-fetch EuroSAT classification when location is picked
+  useEffect(() => {
+    if (!pickedLocation?.lat || !pickedLocation?.lon) { setEurosat(null); return; }
+    api.classification.location(pickedLocation.lat, pickedLocation.lon)
+      .then(r => { if (r && !r.error) setEurosat(r); })
+      .catch(() => {});
+  }, [pickedLocation?.lat, pickedLocation?.lon]);
 
   const handleRun = async () => {
     if (!pickedLocation) return;
@@ -309,9 +417,17 @@ export default function SatelliteCard() {
       )}
 
       {geeflowLoading && (
-        <div style={{ textAlign: "center", padding: "16px 0", color: "#00e5ff" }}>
+        <div style={{ textAlign: "center", padding: "16px 0", color: "#7c5cfc" }}>
           <div className="spinner" /> Analysing satellite data...
         </div>
+      )}
+
+      {/* EuroSAT — shows even before GeeFlow runs */}
+      {eurosat && !geeflowLoading && (
+        <EuroSATSection
+          data={eurosat}
+          dwClass={extractions.land_use?.dominant_class}
+        />
       )}
 
       {geeflowData && (

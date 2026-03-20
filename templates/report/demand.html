@@ -1,0 +1,161 @@
+<!-- Demand Forecast Section -->
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ site.name }} &mdash; Demand Forecast &amp; Solar Resource</div>
+  </div>
+
+  <h2 class="section-title">Solar Resource &amp; Demand Analysis</h2>
+
+  <!-- Solar Resource KPI Strip -->
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.scores['Solar Resource'] }}</div>
+      <div class="kpi-label">Solar Score</div>
+    </div>
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.scores['Wind Resource'] }}</div>
+      <div class="kpi-label">Wind Score</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if site.solar_resource.annual_ghi_kwh_m2 %}{{ site.solar_resource.annual_ghi_kwh_m2 }}{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Annual GHI (kWh/m&sup2;)</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if site.solar_resource.mean_ghi_kwh_m2_day %}{{ "%.2f"|format(site.solar_resource.mean_ghi_kwh_m2_day) }}{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Daily GHI (kWh/m&sup2;)</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if site.solar_resource.mean_annual_temp_c %}{{ "%.1f"|format(site.solar_resource.mean_annual_temp_c) }}&deg;C{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Mean Temperature</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <!-- Solar Resource Detail -->
+      <div class="card card-accent">
+        <div class="card-header">Solar Resource Analysis</div>
+        <div class="text-xs text-muted mb-8">Source: {{ site.solar_resource.source or 'ERA5-Land (ECMWF via Google Earth Engine)' }}</div>
+
+        <div class="stat-row">
+          <span class="stat-label">Annual GHI</span>
+          <span class="stat-value">
+            {% if site.solar_resource.annual_ghi_kwh_m2 %}
+            {{ site.solar_resource.annual_ghi_kwh_m2 }} kWh/m&sup2;/yr
+            <span class="score-pill {% if site.solar_resource.annual_ghi_kwh_m2 >= 1050 %}score-go{% elif site.solar_resource.annual_ghi_kwh_m2 >= 900 %}score-caution{% else %}score-nogo{% endif %}" style="margin-left: 4px;">
+              {% if site.solar_resource.annual_ghi_kwh_m2 >= 1050 %}Excellent{% elif site.solar_resource.annual_ghi_kwh_m2 >= 950 %}Good{% elif site.solar_resource.annual_ghi_kwh_m2 >= 850 %}Average{% else %}Below avg{% endif %}
+            </span>
+            {% else %}Data not available{% endif %}
+          </span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Mean Daily GHI</span>
+          <span class="stat-value">{% if site.solar_resource.mean_ghi_kwh_m2_day %}{{ "%.3f"|format(site.solar_resource.mean_ghi_kwh_m2_day) }} kWh/m&sup2;/day{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Mean Temperature</span>
+          <span class="stat-value">{% if site.solar_resource.mean_annual_temp_c %}{{ "%.1f"|format(site.solar_resource.mean_annual_temp_c) }}&deg;C{% else %}N/A{% endif %}</span>
+        </div>
+        {% if site.solar_resource.peak_month_ghi %}
+        <div class="stat-row">
+          <span class="stat-label">Peak Month</span>
+          <span class="stat-value">
+            {% set pm = site.solar_resource.peak_month_ghi %}
+            {% set months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+            {% if pm.month %}{{ months[pm.month - 1] }}{% endif %} &mdash; {{ "%.2f"|format(pm.ghi_kwh_m2_day) }} kWh/m&sup2;/day
+          </span>
+        </div>
+        {% endif %}
+
+        <div class="text-xs text-muted mt-8">
+          UK GHI range: ~800 kWh/m&sup2;/yr (Scotland) to ~1200 kWh/m&sup2;/yr (south coast).
+          Temperature affects panel efficiency via thermal derating (~0.4%/&deg;C above 25&deg;C).
+        </div>
+      </div>
+
+      <!-- Monthly Solar Data Table -->
+      {% if site.solar_resource.monthly and site.solar_resource.monthly|length >= 12 %}
+      <div class="card">
+        <div class="card-header">Monthly Solar Resource Data</div>
+        <table>
+          <tr>
+            <th>Month</th>
+            <th>GHI (kWh/m&sup2;/day)</th>
+            <th>Temp (&deg;C)</th>
+            <th>Monthly Total</th>
+          </tr>
+          {% set months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'] %}
+          {% set days_in_month = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] %}
+          {% for m in site.solar_resource.monthly|sort(attribute='month') %}
+          <tr>
+            <td class="bold">{{ months[m.month - 1] }}</td>
+            <td>{{ "%.2f"|format(m.ghi_kwh_m2_day) }}</td>
+            <td>{% if m.temperature_c is not none %}{{ "%.1f"|format(m.temperature_c) }}{% else %}&mdash;{% endif %}</td>
+            <td>{{ "%.0f"|format(m.ghi_kwh_m2_day * days_in_month[m.month - 1]) }} kWh/m&sup2;</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+      {% endif %}
+    </div>
+
+    <div>
+      <!-- Solar Monthly Chart -->
+      {% if charts.solar_monthly %}
+      <div class="card center">
+        <div class="text-xs text-muted mb-4">MONTHLY GHI &amp; TEMPERATURE PROFILE</div>
+        <img src="data:image/png;base64,{{ charts.solar_monthly }}" alt="Monthly solar" class="chart-img">
+      </div>
+      {% endif %}
+
+      <!-- Demand Forecast -->
+      {% if site.demand_forecast %}
+      <div class="card card-accent">
+        <div class="card-header">Local Demand Forecast</div>
+        <div class="stat-row">
+          <span class="stat-label">Grid Supply Point</span>
+          <span class="stat-value">{{ site.demand_forecast.gsp_id }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Forecast Model</span>
+          <span class="stat-value">{{ site.demand_forecast.model }}</span>
+        </div>
+        {% set fc = site.demand_forecast.data.forecast %}
+        {% if fc %}
+        <div class="stat-row">
+          <span class="stat-label">Forecast Points</span>
+          <span class="stat-value">{{ fc|length }} hours</span>
+        </div>
+        {% set p50_vals = [] %}
+        {% for p in fc %}{% if p50_vals.append(p.p50) %}{% endif %}{% endfor %}
+        <div class="stat-row">
+          <span class="stat-label">P50 Range</span>
+          <span class="stat-value">{{ "%.1f"|format(p50_vals|min) }} &ndash; {{ "%.1f"|format(p50_vals|max) }} MW</span>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- Demand Forecast Chart -->
+      {% if charts.demand_forecast %}
+      <div class="card center">
+        <div class="text-xs text-muted mb-4">DEMAND FORECAST (P10 / P50 / P90)</div>
+        <img src="data:image/png;base64,{{ charts.demand_forecast }}" alt="Demand forecast" class="chart-img">
+      </div>
+      {% endif %}
+
+      {% else %}
+      <div class="card">
+        <div class="card-header">Local Demand Forecast</div>
+        <div class="text-sm text-muted">
+          No demand forecast data available. Run a demand forecast analysis from the Princeps platform to populate this section with Prophet and TFT model outputs.
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="page-footer">
+    Princeps Site Assessment &mdash; Solar Resource &amp; Demand &mdash; {{ now }}
+  </div>
+</div>

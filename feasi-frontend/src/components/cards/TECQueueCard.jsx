@@ -89,7 +89,7 @@ export default function TECQueueCard() {
               placeholder="Connection site name..."
               value={siteFilter}
               onChange={(e) => setSiteFilter(e.target.value)}
-              style={{ flex: 1, padding: 4, fontSize: 12, background: "#1a1a2e", border: `1px solid ${ACCENT}`, color: "#eee", borderRadius: 4 }}
+              style={{ flex: 1, padding: 4, fontSize: 12, background: "#F7F8FA", border: `1px solid ${ACCENT}`, color: "#1A1D23", borderRadius: 4 }}
             />
             <button className="tab-btn-sm" style={{ background: ACCENT, color: "#000" }} onClick={loadQueue}>Search</button>
           </div>

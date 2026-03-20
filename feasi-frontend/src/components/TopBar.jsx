@@ -2,7 +2,7 @@ import React from "react";
 import { useSite } from "../SiteContext";
 
 const INTENTS = [
-  { value: "overview", label: "Overview", color: "#00ff88" },
+  { value: "overview", label: "Overview", color: "#22c55e" },
   { value: "feasibility", label: "Feasibility", color: "#4caf50" },
   { value: "grid_study", label: "Grid", color: "#2196f3" },
   { value: "financial", label: "Financial", color: "#ff9800" },

@@ -12,7 +12,7 @@ const SECTIONS = [
     ),
     layers: [
       { id: "hillshade", label: "Hillshade", color: "#8d6e63" },
-      { id: "slope", label: "Slope", color: "#0f62fe", hasOpacity: true },
+      { id: "slope", label: "Slope", color: "#7c5cfc", hasOpacity: true },
       { id: "contours", label: "Contours", color: "#24a148" },
       { id: "lidarDtm", label: "LIDAR DTM", color: "#ef6c00" },
       { id: "lidarDsm", label: "LIDAR DSM", color: "#d84315" },
@@ -33,11 +33,26 @@ const SECTIONS = [
       { id: "flowFocus", label: "Flow Focus", color: "#08bdba" },
       { id: "osmPower", label: "OSM Power", color: "#B54EB2" },
       { id: "ngedSubs", label: "NGED Subs", color: "#1b5e20" },
-      { id: "gridCapacity", label: "Grid Capacity", color: "#0f62fe" },
+      { id: "gridCapacity", label: "Grid Capacity", color: "#7c5cfc" },
       { id: "demandGsps", label: "Demand GSPs", color: "#fa8c16" },
       { id: "tecPipeline", label: "TEC Pipeline", color: "#0277bd" },
       { id: "repdProjects", label: "REPD Projects", color: "#ff6f00" },
       { id: "electricityZones", label: "Elec. Zones", color: "#24a148" },
+    ],
+  },
+  {
+    id: "datacentre",
+    label: "Data Centre",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="2" y="2" width="20" height="8" rx="2" /><rect x="2" y="14" width="20" height="8" rx="2" />
+        <circle cx="6" cy="6" r="1" fill="currentColor" /><circle cx="6" cy="18" r="1" fill="currentColor" />
+      </svg>
+    ),
+    layers: [
+      { id: "dcCapacity", label: "DC Capacity", color: "#6c5ce7" },
+      { id: "dcFibre", label: "Fibre POPs", color: "#a855f7" },
+      { id: "dcIxp", label: "IXP Nodes", color: "#3b82f6" },
     ],
   },
   {
@@ -54,7 +69,7 @@ const SECTIONS = [
       { id: "la", label: "Local Authority", color: "#f1c21b" },
       { id: "transport", label: "Transport", color: "#08bdba" },
       { id: "environment", label: "Energy Assets", color: "#f1c21b" },
-      { id: "geeflowLandUse", label: "Land Use (GEE)", color: "#0f62fe" },
+      { id: "geeflowLandUse", label: "Land Use (GEE)", color: "#7c5cfc" },
       { id: "geeflowOpportunities", label: "Grid Opps (EO)", color: "#ff6f00" },
     ],
   },
@@ -68,7 +83,7 @@ const SECTIONS = [
     ),
     layers: [
       { id: "ndvi", label: "NDVI (MODIS)", color: "#24a148" },
-      { id: "satellite", label: "Sentinel-2", color: "#0f62fe" },
+      { id: "satellite", label: "Sentinel-2", color: "#7c5cfc" },
       { id: "aerial", label: "Aerial (ESRI)", color: "#a56eff" },
       { id: "landsat", label: "Landsat 30m", color: "#1b5e20" },
       { id: "viirs", label: "VIIRS Daily", color: "#0043ce" },
@@ -86,7 +101,7 @@ const SECTIONS = [
       { id: "epcZones", label: "Neighbourhoods", color: "#24a148", hasSelect: "epcZonesField" },
       { id: "epcDom", label: "Domestic EPC", color: "#0e7e58", hasSelect: "epcDomField" },
       { id: "epcNondom", label: "Non-Dom EPC", color: "#f1c21b", hasSelect: "epcNondomField" },
-      { id: "postcodes", label: "Postcodes Energy", color: "#0f62fe", hasSelect: "postcodesField" },
+      { id: "postcodes", label: "Postcodes Energy", color: "#7c5cfc", hasSelect: "postcodesField" },
     ],
   },
 ];
@@ -216,7 +231,7 @@ export default function LayerRail({ chatLayers, onRemoveChatLayer }) {
           <div className="layer-rail-flyout-title">AI Layers</div>
           {chatLayers.map((l) => (
             <label key={l.id} className="layer-item">
-              <span className="layer-dot" style={{ background: l.color || "#0f62fe" }} />
+              <span className="layer-dot" style={{ background: l.color || "#7c5cfc" }} />
               {l.name}
               <button
                 className="chat-layer-remove"

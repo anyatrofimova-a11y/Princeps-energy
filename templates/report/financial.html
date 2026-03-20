@@ -1,0 +1,201 @@
+<!-- Financial Section -->
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ site.name }} &mdash; Financial Analysis</div>
+  </div>
+
+  <h2 class="section-title">Financial Analysis</h2>
+
+  <!-- Financial KPIs -->
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.scores['Financial'] }}</div>
+      <div class="kpi-label">Financial Score</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">&pound;{{ site.kpis.capex_m }}m</div>
+      <div class="kpi-label">Total Capex</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ site.kpis.irr_pct }}%</div>
+      <div class="kpi-label">Levered IRR</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">&pound;{{ site.kpis.lcoe_gbp_mwh }}/MWh</div>
+      <div class="kpi-label">LCOE</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ site.kpis.payback_years }} yr</div>
+      <div class="kpi-label">Payback</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">&pound;{{ site.kpis.npv_25y_m }}m</div>
+      <div class="kpi-label">25-Year NPV</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <!-- Energy Yield -->
+      <div class="card card-accent">
+        <div class="card-header">Energy Yield Estimate</div>
+        <div class="text-xs text-muted mb-8">Based on GHI data from ERA5-Land via Google Earth Engine</div>
+        <div class="stat-row">
+          <span class="stat-label">Installed Capacity</span>
+          <span class="stat-value">{{ site.kpis.capacity_mw }} MWp</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Annual GHI</span>
+          <span class="stat-value">{% if site.kpis.annual_ghi_kwh_m2 %}{{ site.kpis.annual_ghi_kwh_m2 }} kWh/m&sup2;{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Performance Ratio</span>
+          <span class="stat-value">82% (assumed)</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Capacity Factor</span>
+          <span class="stat-value">
+            {{ site.kpis.capacity_factor_pct }}%
+            <span class="score-pill {% if site.kpis.capacity_factor_pct >= 11 %}score-go{% elif site.kpis.capacity_factor_pct >= 9 %}score-caution{% else %}score-nogo{% endif %}" style="margin-left: 4px;">
+              {% if site.kpis.capacity_factor_pct >= 11 %}Good{% elif site.kpis.capacity_factor_pct >= 9 %}Average{% else %}Below avg{% endif %}
+            </span>
+          </span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Annual Energy Yield</span>
+          <span class="stat-value bold" style="color: {{ brand.primary }};">{{ "{:,.0f}".format(site.kpis.annual_yield_mwh) }} MWh ({{ site.kpis.annual_yield_gwh }} GWh)</span>
+        </div>
+        <div class="text-xs text-muted mt-8">
+          UK solar CF typically 9&ndash;12%. South coast sites may reach 12%+; Scotland 8&ndash;10%.
+          Confirm with PVsyst or SAM detailed modelling.
+        </div>
+      </div>
+
+      <!-- Solar Resource Chart -->
+      {% if charts.solar_monthly %}
+      <div class="card center">
+        <div class="text-xs text-muted mb-4">MONTHLY SOLAR IRRADIANCE &amp; TEMPERATURE</div>
+        <img src="data:image/png;base64,{{ charts.solar_monthly }}" alt="Monthly solar" class="chart-img">
+      </div>
+      {% endif %}
+    </div>
+
+    <div>
+      <!-- Revenue Projection -->
+      <div class="card card-accent-green">
+        <div class="card-header">Revenue Projection</div>
+
+        <div class="section-subtitle">Annual Revenue</div>
+        <div class="stat-row">
+          <span class="stat-label">PPA Price (assumed)</span>
+          <span class="stat-value">&pound;{{ site.kpis.ppa_price_gbp_mwh }}/MWh</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Gross Revenue</span>
+          <span class="stat-value">&pound;{{ "{:,.0f}".format(site.kpis.annual_revenue_k) }}k / year</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Operating Costs</span>
+          <span class="stat-value">&pound;{{ "{:,.0f}".format(site.kpis.annual_opex_k) }}k / year</span>
+        </div>
+        <div class="stat-row mb-8">
+          <span class="stat-label">Net Revenue</span>
+          <span class="stat-value bold" style="color: {{ brand.green }};">&pound;{{ "{:,.0f}".format(site.kpis.annual_net_revenue_k) }}k / year</span>
+        </div>
+
+        <div class="section-subtitle">Investment Summary</div>
+        <div class="stat-row">
+          <span class="stat-label">Total Capex</span>
+          <span class="stat-value">&pound;{{ site.kpis.capex_m }}m</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">&mdash; of which Grid Connection</span>
+          <span class="stat-value">&pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp) }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Capex per MW</span>
+          <span class="stat-value">&pound;{{ "{:,.0f}".format(site.kpis.capex_m * 1000 / site.kpis.capacity_mw) }}k/MW</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Simple Payback</span>
+          <span class="stat-value">{{ site.kpis.payback_years }} years</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">25-Year Gross Revenue</span>
+          <span class="stat-value">&pound;{{ "{:,.1f}".format(site.kpis.annual_revenue_k * 25 / 1000) }}m</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">25-Year NPV</span>
+          <span class="stat-value bold" style="color: {% if site.kpis.npv_25y_m > 0 %}{{ brand.green }}{% else %}{{ brand.red }}{% endif %};">&pound;{{ site.kpis.npv_25y_m }}m</span>
+        </div>
+      </div>
+
+      <!-- Financial Score -->
+      <div class="card center" style="background: {{ brand.light }};">
+        <div style="display: flex; align-items: center; justify-content: center; gap: 16px;">
+          <div style="font-size: 42px; font-weight: 800; color: {% if site.scores['Financial'] >= 65 %}{{ brand.green }}{% elif site.scores['Financial'] >= 40 %}{{ brand.amber }}{% else %}{{ brand.red }}{% endif %};">{{ site.scores['Financial'] }}</div>
+          <div style="text-align: left;">
+            <div class="text-xs text-muted">FINANCIAL SCORE</div>
+            <div class="bold">
+              {% if site.scores['Financial'] >= 70 %}Attractive investment case
+              {% elif site.scores['Financial'] >= 55 %}Moderate returns, viable with optimisation
+              {% elif site.scores['Financial'] >= 40 %}Marginal — sensitive to assumptions
+              {% else %}Below investment threshold{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sensitivity Analysis -->
+  <div class="card">
+    <div class="card-header">Sensitivity Analysis</div>
+    <div class="text-xs text-muted mb-8">Impact of key variable changes on project returns</div>
+    <table>
+      <tr>
+        <th>Variable</th>
+        <th>Base Case</th>
+        <th>-10%</th>
+        <th>+10%</th>
+        <th>Revenue Impact</th>
+      </tr>
+      <tr>
+        <td class="bold">PPA Price</td>
+        <td>&pound;{{ site.kpis.ppa_price_gbp_mwh }}/MWh</td>
+        <td>&pound;{{ "%.1f"|format(site.kpis.ppa_price_gbp_mwh * 0.9) }}/MWh</td>
+        <td>&pound;{{ "%.1f"|format(site.kpis.ppa_price_gbp_mwh * 1.1) }}/MWh</td>
+        <td>&plusmn;&pound;{{ "{:,.0f}".format(site.kpis.annual_revenue_k * 0.1) }}k/yr</td>
+      </tr>
+      <tr>
+        <td class="bold">Capacity Factor</td>
+        <td>{{ site.kpis.capacity_factor_pct }}%</td>
+        <td>{{ "%.1f"|format(site.kpis.capacity_factor_pct * 0.9) }}%</td>
+        <td>{{ "%.1f"|format(site.kpis.capacity_factor_pct * 1.1) }}%</td>
+        <td>&plusmn;&pound;{{ "{:,.0f}".format(site.kpis.annual_revenue_k * 0.1) }}k/yr</td>
+      </tr>
+      <tr>
+        <td class="bold">Capex</td>
+        <td>&pound;{{ site.kpis.capex_m }}m</td>
+        <td>&pound;{{ "%.2f"|format(site.kpis.capex_m * 0.9) }}m</td>
+        <td>&pound;{{ "%.2f"|format(site.kpis.capex_m * 1.1) }}m</td>
+        <td>&plusmn;&pound;{{ "%.2f"|format(site.kpis.capex_m * 0.1) }}m total</td>
+      </tr>
+      <tr>
+        <td class="bold">Connection Cost</td>
+        <td>&pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp) }}</td>
+        <td colspan="2" class="text-xs text-muted">P10&ndash;P90 range: &pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp * 0.7) }} &ndash; &pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp * 1.5) }}</td>
+        <td>&plusmn;&pound;{{ "{:,.0f}".format(site.kpis.connection_cost_gbp * 0.3) }}</td>
+      </tr>
+    </table>
+    <div class="text-xs text-muted mt-4">
+      Financial estimates are indicative. Capex benchmark: &pound;550k/MW (UK utility-scale solar, 2024).
+      Opex: &pound;10k/MW/yr. A full financial model with Monte Carlo simulation is recommended for investment-grade decisions.
+    </div>
+  </div>
+
+  <div class="page-footer">
+    Princeps Site Assessment &mdash; Financial Analysis &mdash; {{ now }}
+  </div>
+</div>

@@ -1,0 +1,203 @@
+<!-- Terrain & Land Use Section -->
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ site.name }} &mdash; Terrain &amp; Land Use Analysis</div>
+  </div>
+
+  <h2 class="section-title">Terrain &amp; Land Use Analysis</h2>
+
+  <!-- Score strip -->
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.scores['Terrain'] }}</div>
+      <div class="kpi-label">Terrain Score</div>
+    </div>
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ site.scores['Land Use'] }}</div>
+      <div class="kpi-label">Land Use Score</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if site.terrain.elevation_mean_m %}{{ "%.0f"|format(site.terrain.elevation_mean_m) }}m{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Mean Elevation</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if site.terrain.slope_mean_deg %}{{ "%.1f"|format(site.terrain.slope_mean_deg) }}&deg;{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Mean Slope</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if site.land_use.developable_area_pct %}{{ "%.0f"|format(site.land_use.developable_area_pct) }}%{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Developable Area</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <!-- Terrain Statistics -->
+      <div class="card card-accent">
+        <div class="card-header">Terrain Statistics</div>
+        <div class="text-xs text-muted mb-8">Source: NASADEM (30m resolution) via Google Earth Engine</div>
+
+        <div class="section-subtitle">Elevation</div>
+        <div class="stat-row">
+          <span class="stat-label">Mean Elevation</span>
+          <span class="stat-value">{% if site.terrain.elevation_mean_m %}{{ "%.1f"|format(site.terrain.elevation_mean_m) }} m{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Min / Max</span>
+          <span class="stat-value">{% if site.terrain.elevation_min_m %}{{ "%.0f"|format(site.terrain.elevation_min_m) }}{% else %}?{% endif %} &mdash; {% if site.terrain.elevation_max_m %}{{ "%.0f"|format(site.terrain.elevation_max_m) }}{% else %}?{% endif %} m</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Elevation Std Dev</span>
+          <span class="stat-value">{% if site.terrain.elevation_std_m %}&plusmn;{{ "%.1f"|format(site.terrain.elevation_std_m) }} m{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row mb-8">
+          <span class="stat-label">Relief (max - min)</span>
+          <span class="stat-value">{% if site.terrain.elevation_max_m and site.terrain.elevation_min_m %}{{ "%.0f"|format(site.terrain.elevation_max_m - site.terrain.elevation_min_m) }} m{% else %}N/A{% endif %}</span>
+        </div>
+
+        <div class="section-subtitle">Slope</div>
+        <div class="stat-row">
+          <span class="stat-label">Mean Slope</span>
+          <span class="stat-value">
+            {% if site.terrain.slope_mean_deg %}
+            {{ "%.1f"|format(site.terrain.slope_mean_deg) }}&deg;
+            <span class="score-pill {% if site.terrain.slope_mean_deg <= 5 %}score-go{% elif site.terrain.slope_mean_deg <= 12 %}score-caution{% else %}score-nogo{% endif %}" style="margin-left: 4px;">
+              {% if site.terrain.slope_mean_deg <= 3 %}Ideal{% elif site.terrain.slope_mean_deg <= 5 %}Good{% elif site.terrain.slope_mean_deg <= 8 %}Moderate{% elif site.terrain.slope_mean_deg <= 12 %}Challenging{% else %}Steep{% endif %}
+            </span>
+            {% else %}N/A{% endif %}
+          </span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">P90 Slope</span>
+          <span class="stat-value">{% if site.terrain.slope_p90_deg %}{{ "%.1f"|format(site.terrain.slope_p90_deg) }}&deg;{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Max Slope</span>
+          <span class="stat-value">{% if site.terrain.slope_max_deg %}{{ "%.1f"|format(site.terrain.slope_max_deg) }}&deg;{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row mb-8">
+          <span class="stat-label">South-Facing Area</span>
+          <span class="stat-value">{% if site.terrain.south_facing_pct %}{{ "%.0f"|format(site.terrain.south_facing_pct) }}%{% else %}N/A{% endif %}</span>
+        </div>
+
+        <div class="section-subtitle">Aspect</div>
+        <div class="stat-row">
+          <span class="stat-label">Mean Aspect</span>
+          <span class="stat-value">{% if site.terrain.aspect_mean_deg %}{{ "%.0f"|format(site.terrain.aspect_mean_deg) }}&deg;{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="text-xs text-muted mt-4">
+          Solar panels perform best on slopes &le;5&deg; with south-facing aspect (135&ndash;225&deg;). Sites with mean slope &gt;12&deg; typically require significant earthworks.
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <!-- Terrain Profile Chart -->
+      {% if charts.terrain_profile %}
+      <div class="card center">
+        <div class="text-xs text-muted mb-4">ELEVATION &amp; SLOPE ANALYSIS</div>
+        <img src="data:image/png;base64,{{ charts.terrain_profile }}" alt="Terrain profile" class="chart-img">
+      </div>
+      {% endif %}
+
+      <!-- Land Use Pie Chart -->
+      {% if charts.land_use_pie %}
+      <div class="card center">
+        <div class="text-xs text-muted mb-4">LAND USE BREAKDOWN (DynamicWorld V1)</div>
+        <img src="data:image/png;base64,{{ charts.land_use_pie }}" alt="Land use" class="chart-img" style="max-width: 340px;">
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Land Use Detail Table -->
+  {% if site.land_use.class_percentages %}
+  <div class="card">
+    <div class="card-header">Land Cover Classification</div>
+    <div class="text-xs text-muted mb-8">Source: Google DynamicWorld V1 (Sentinel-2, 10m resolution, annual mode composite)</div>
+    <div class="two-col">
+      <div>
+        <table>
+          <tr><th>Land Class</th><th>Coverage</th><th>Suitability</th></tr>
+          {% for cls, pct in site.land_use.class_percentages.items() %}
+          {% if pct > 0.5 %}
+          <tr>
+            <td class="bold">{{ cls|replace('_', ' ')|title }}</td>
+            <td>
+              {{ "%.1f"|format(pct) }}%
+              <div class="progress-bar" style="width: 80px; display: inline-block; vertical-align: middle; margin-left: 6px;">
+                <div class="progress-fill" style="width: {{ pct }}%; background: {% if cls in ['crops', 'grass', 'bare'] %}{{ brand.green }}{% elif cls in ['shrub_and_scrub'] %}{{ brand.amber }}{% elif cls in ['built', 'water', 'trees'] %}{{ brand.red }}{% else %}{{ brand.grey }}{% endif %};"></div>
+              </div>
+            </td>
+            <td class="text-xs">
+              {% if cls in ['crops', 'grass', 'bare'] %}
+              <span style="color: {{ brand.green }};">Suitable for development</span>
+              {% elif cls == 'shrub_and_scrub' %}
+              <span style="color: {{ brand.amber }};">May require clearance</span>
+              {% elif cls == 'built' %}
+              <span style="color: {{ brand.amber }};">Brownfield potential</span>
+              {% elif cls == 'trees' %}
+              <span style="color: {{ brand.red }};">Protected / constrained</span>
+              {% elif cls == 'water' %}
+              <span style="color: {{ brand.red }};">Not developable</span>
+              {% else %}
+              <span style="color: {{ brand.grey }};">Assess on-site</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </table>
+      </div>
+      <div>
+        <div class="card" style="background: {{ brand.light }};">
+          <div class="card-header">Area Summary</div>
+          {% if site.land_use.total_area_m2 %}
+          <div class="stat-row">
+            <span class="stat-label">Total Surveyed Area</span>
+            <span class="stat-value">{{ "%.0f"|format(site.land_use.total_area_m2 / 10000) }} ha</span>
+          </div>
+          {% endif %}
+          {% if site.land_use.developable_area_pct %}
+          <div class="stat-row">
+            <span class="stat-label">Developable Proportion</span>
+            <span class="stat-value">
+              {{ "%.0f"|format(site.land_use.developable_area_pct) }}%
+              <span class="score-pill {% if site.land_use.developable_area_pct >= 60 %}score-go{% elif site.land_use.developable_area_pct >= 30 %}score-caution{% else %}score-nogo{% endif %}" style="margin-left: 4px;">
+                {% if site.land_use.developable_area_pct >= 60 %}Good{% elif site.land_use.developable_area_pct >= 30 %}Limited{% else %}Constrained{% endif %}
+              </span>
+            </span>
+          </div>
+          {% endif %}
+          <div class="stat-row">
+            <span class="stat-label">Land Required ({{ site.capacity_mw }} MW)</span>
+            <span class="stat-value">{{ site.kpis.land_required_ha }} ha</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Nearby Parcels -->
+  {% if site.nearby_parcels %}
+  <div class="card">
+    <div class="card-header">Nearby Land Parcels</div>
+    <table>
+      <tr><th>Parcel ID</th><th>Area (ha)</th><th>Distance to Substation</th></tr>
+      {% for p in site.nearby_parcels %}
+      <tr>
+        <td class="bold">{{ p.parcel_id }}</td>
+        <td>{% if p.area_ha %}{{ p.area_ha }}{% else %}&mdash;{% endif %}</td>
+        <td>{% if p.distance_to_sub_km %}{{ "%.1f"|format(p.distance_to_sub_km) }} km{% else %}&mdash;{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="page-footer">
+    Princeps Site Assessment &mdash; Terrain &amp; Land Use &mdash; {{ now }}
+  </div>
+</div>

@@ -29,7 +29,7 @@ export function AITopBanner() {
     GREEN: { bg: "rgba(76,175,80,0.12)", border: "#4caf50", text: "#4caf50", label: "GO" },
     AMBER: { bg: "rgba(255,152,0,0.12)", border: "#ff9800", text: "#ff9800", label: "CAUTION" },
     RED: { bg: "rgba(244,67,54,0.12)", border: "#f44336", text: "#f44336", label: "NO-GO" },
-    STANDBY: { bg: "rgba(0,229,255,0.06)", border: "#00e5ff44", text: "#00e5ff", label: "STANDBY" },
+    STANDBY: { bg: "rgba(124,92,252,0.06)", border: "#7c5cfc44", text: "#7c5cfc", label: "STANDBY" },
   };
   const st = statusColors[statusLevel];
 
@@ -69,7 +69,7 @@ export function AITopBanner() {
         <div className="ai-metric-sep" />
         <div className="ai-metric">
           <span className="ai-metric-label">FORECAST</span>
-          <span className="ai-metric-value" style={{ color: "#00e5ff" }}>
+          <span className="ai-metric-value" style={{ color: "#7c5cfc" }}>
             {solarForecast ? `${solarForecast.daily_yield_kwh} kWh/d` : "--"}
           </span>
         </div>
@@ -189,7 +189,7 @@ export function AIBottomBar() {
       {/* Grid connection */}
       <div className="ai-bottom-cell">
         <span className="ai-bottom-label">GRID CONN</span>
-        <span className="ai-bottom-val" style={{ color: "#00e5ff" }}>
+        <span className="ai-bottom-val" style={{ color: "#7c5cfc" }}>
           {gridContext?.nearest_substation_km ? `${gridContext.nearest_substation_km.toFixed(1)}km` : "--"}
         </span>
       </div>

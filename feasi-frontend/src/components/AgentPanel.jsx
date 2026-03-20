@@ -15,6 +15,7 @@ const INTENTS = [
   { value: "bess_optimisation", label: "BESS", color: "#4caf50" },
   { value: "home_retrofit", label: "Home Retrofit", color: "#8e24aa" },
   { value: "infrastructure_retrofit", label: "Infra Retrofit", color: "#607d8b" },
+  { value: "dc_colocation", label: "DC Co-location", color: "#6c5ce7" },
 ];
 
 function verdictColor(v) {

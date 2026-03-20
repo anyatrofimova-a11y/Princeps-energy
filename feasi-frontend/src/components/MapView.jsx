@@ -636,6 +636,11 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       // Demand GSP source
       map.addSource("demand-gsps", { type: "geojson", data: EMPTY_FC });
 
+      // DC infrastructure sources
+      map.addSource("dc-capacity", { type: "geojson", data: EMPTY_FC });
+      map.addSource("dc-fibre", { type: "geojson", data: EMPTY_FC });
+      map.addSource("dc-ixp", { type: "geojson", data: EMPTY_FC });
+
       // Flow glow (wide blurred line — FlowmapBlue cyan style)
       map.addLayer({
         id: "grid-flow-glow",
@@ -1365,7 +1370,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           "circle-radius": 18,
           "circle-color": "transparent",
           "circle-stroke-width": 3,
-          "circle-stroke-color": "#0f62fe",
+          "circle-stroke-color": "#7c5cfc",
           "circle-opacity": 1,
         },
         layout: { visibility: "visible" },
@@ -1385,6 +1390,84 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       });
       map.on("mouseenter", "gc-capacity-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "gc-capacity-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── DC Capacity circles (green-yellow-red by suitability) ──
+      map.addLayer({
+        id: "dc-capacity-circles",
+        type: "circle",
+        source: "dc-capacity",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 5, 10, 10, 14, 16],
+          "circle-color": ["coalesce", ["get", "color"], "#6c5ce7"],
+          "circle-opacity": 0.8,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "rgba(255,255,255,0.5)",
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "dc-capacity-labels",
+        type: "symbol",
+        source: "dc-capacity",
+        paint: { "text-color": "#f4f4f4", "text-halo-color": "rgba(0,0,0,0.8)", "text-halo-width": 1.5 },
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["get", "name"], "\n", ["to-string", ["round", ["coalesce", ["get", "headroom_mw"], 0]]], " MW"],
+          "text-size": 10, "text-offset": [0, 1.8], "text-anchor": "top", "text-optional": true,
+        },
+        minzoom: 9,
+      });
+      map.on("click", "dc-capacity-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new mapboxgl.Popup({ maxWidth: "240px" }).setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px"><strong>${p.name||"Substation"}</strong><br/>Headroom: <strong>${p.headroom_mw||"--"} MW</strong><br/>Voltage: ${p.voltage_kv||"--"} kV<br/>Suitability: ${p.suitability||"--"}</div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "dc-capacity-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "dc-capacity-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── DC Fibre POP circles (purple) ──
+      map.addLayer({
+        id: "dc-fibre-circles",
+        type: "circle",
+        source: "dc-fibre",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 2, 10, 5, 14, 8],
+          "circle-color": "#a855f7",
+          "circle-opacity": 0.7,
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "rgba(168,85,247,0.5)",
+        },
+        layout: { visibility: "none" },
+      });
+
+      // ── DC IXP circles (blue diamonds via circle) ──
+      map.addLayer({
+        id: "dc-ixp-circles",
+        type: "circle",
+        source: "dc-ixp",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 6, 10, 10, 14, 14],
+          "circle-color": "#3b82f6",
+          "circle-opacity": 0.8,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#fff",
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "dc-ixp-labels",
+        type: "symbol",
+        source: "dc-ixp",
+        paint: { "text-color": "#93c5fd", "text-halo-color": "rgba(0,0,0,0.8)", "text-halo-width": 1.5 },
+        layout: {
+          visibility: "none",
+          "text-field": ["get", "name"],
+          "text-size": 11, "text-offset": [0, 1.5], "text-anchor": "top", "text-optional": true,
+        },
+        minzoom: 8,
+      });
 
       // ── Demand GSP circles ──
       map.addLayer({
@@ -2102,6 +2185,9 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       geeflowLandUse: ["geeflow-landuse-fill"],
       geeflowOpportunities: ["geeflow-opp-circles", "geeflow-opp-labels"],
       electricityZones: ["electricity-zones-fill", "electricity-zones-line", "electricity-zones-labels"],
+      dcCapacity: ["dc-capacity-circles", "dc-capacity-labels"],
+      dcFibre: ["dc-fibre-circles"],
+      dcIxp: ["dc-ixp-circles", "dc-ixp-labels"],
     };
 
     // Handle lazy raster layers — add source+layer on first toggle on
@@ -2541,6 +2627,85 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       if (s2) s2.setData(EMPTY_FC);
     };
   }, [layers.gridCapacity]);
+
+  // DC capacity map — viewport-based loading
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.dcCapacity) return;
+
+    let abortCtrl = new AbortController();
+    let timer = null;
+
+    const loadDC = async () => {
+      const bounds = map.getBounds();
+      const bbox = `west=${bounds.getWest()}&south=${bounds.getSouth()}&east=${bounds.getEast()}&north=${bounds.getNorth()}`;
+      try {
+        const res = await fetch(`/api/dc/capacity-map?profile=colocation&min_headroom_mw=5&${bbox}`);
+        if (abortCtrl.signal.aborted || !res.ok) return;
+        const data = await res.json();
+        const src = map.getSource("dc-capacity");
+        if (src && data) src.setData(data);
+      } catch (err) {
+        if (err.name !== "AbortError") console.warn("DC capacity load error:", err);
+      }
+    };
+
+    const debouncedLoad = () => { if (timer) clearTimeout(timer); timer = setTimeout(loadDC, 300); };
+    loadDC();
+    map.on("moveend", debouncedLoad);
+
+    return () => {
+      abortCtrl.abort();
+      if (timer) clearTimeout(timer);
+      map.off("moveend", debouncedLoad);
+      const s = map.getSource("dc-capacity");
+      if (s) s.setData(EMPTY_FC);
+    };
+  }, [layers.dcCapacity]);
+
+  // DC fibre POPs — load on toggle
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.dcFibre) return;
+    let cancel = false;
+    (async () => {
+      const lat = map.getCenter().lat, lon = map.getCenter().lng;
+      try {
+        const res = await fetch(`/api/dc/infrastructure?lat=${lat}&lon=${lon}&radius_km=100`);
+        if (cancel || !res.ok) return;
+        const data = await res.json();
+        const fc = { type: "FeatureCollection", features: (data.fibre_pops || []).map(p => ({
+          type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+          properties: { name: p.name, operator: p.operator },
+        })) };
+        const src = map.getSource("dc-fibre");
+        if (src) src.setData(fc);
+      } catch (e) { console.warn("DC fibre load:", e); }
+    })();
+    return () => { cancel = true; const s = map.getSource("dc-fibre"); if (s) s.setData(EMPTY_FC); };
+  }, [layers.dcFibre]);
+
+  // DC IXP nodes — load on toggle
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !layers.dcIxp) return;
+    let cancel = false;
+    (async () => {
+      const lat = map.getCenter().lat, lon = map.getCenter().lng;
+      try {
+        const res = await fetch(`/api/dc/infrastructure?lat=${lat}&lon=${lon}&radius_km=500`);
+        if (cancel || !res.ok) return;
+        const data = await res.json();
+        const fc = { type: "FeatureCollection", features: (data.ixp_nodes || []).map(p => ({
+          type: "Feature", geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+          properties: { name: p.name, participants: p.participants },
+        })) };
+        const src = map.getSource("dc-ixp");
+        if (src) src.setData(fc);
+      } catch (e) { console.warn("DC IXP load:", e); }
+    })();
+    return () => { cancel = true; const s = map.getSource("dc-ixp"); if (s) s.setData(EMPTY_FC); };
+  }, [layers.dcIxp]);
 
   // Grid connection — highlight selected candidate substation
   useEffect(() => {
