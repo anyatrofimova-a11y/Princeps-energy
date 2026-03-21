@@ -139,6 +139,15 @@ const api = {
     // Time-to-Energisation estimator
     energisationTimeline: (lat, lon, mw, tech) =>
       post("/api/grid/energisation-timeline", { lat, lon, capacity_mw: mw, technology: tech }),
+    // Connection optimization (UK reform 2025-2026)
+    gateReadiness: (lat, lon, mw, tech, details) =>
+      post("/api/grid/gate-readiness", { lat, lon, capacity_mw: mw, technology: tech, ...details }),
+    queueReformImpact: (lat, lon, mw) =>
+      post("/api/grid/queue-reform-impact", { lat, lon, capacity_mw: mw }),
+    strategicAlignment: (lat, lon, mw, tech) =>
+      post("/api/grid/strategic-alignment", { lat, lon, capacity_mw: mw, technology: tech }),
+    optimizeConnection: (lat, lon, mw, tech) =>
+      post("/api/grid/optimize-connection", { lat, lon, capacity_mw: mw, technology: tech }),
   },
 
   energy: {

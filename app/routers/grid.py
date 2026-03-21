@@ -1699,3 +1699,51 @@ async def api_environmental_constraints(
     Returns: CLEAR/CONSTRAINED/BLOCKED verdict with required consultations and legislation."""
     from utils.environmental_constraints import check_all_constraints
     return await check_all_constraints(lat, lon, radius_m=radius_m)
+
+
+# ══════════════════════════════════════════════════════════
+# Grid Connection Optimization (UK Reform 2025-2026)
+# ══════════════════════════════════════════════════════════
+
+@router.post("/api/grid/gate-readiness")
+async def api_gate_readiness(
+    lat: float = Query(...), lon: float = Query(...),
+    capacity_mw: float = Query(50), technology: str = Query("solar"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Score project readiness for each gate in the reformed UK connections process."""
+    from utils.connection_optimizer import score_gate_readiness
+    return await score_gate_readiness(pool, lat, lon, capacity_mw, technology)
+
+
+@router.post("/api/grid/queue-reform-impact")
+async def api_queue_reform_impact(
+    lat: float = Query(...), lon: float = Query(...),
+    capacity_mw: float = Query(50),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Predict queue position improvement from Ofgem reform (speculative project removal)."""
+    from utils.connection_optimizer import model_queue_reform_impact
+    return await model_queue_reform_impact(pool, lat, lon, capacity_mw)
+
+
+@router.post("/api/grid/strategic-alignment")
+async def api_strategic_alignment(
+    lat: float = Query(...), lon: float = Query(...),
+    capacity_mw: float = Query(50), technology: str = Query("solar"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Score alignment with NESO Strategic Spatial Energy Plan priorities."""
+    from utils.connection_optimizer import score_strategic_alignment
+    return await score_strategic_alignment(pool, lat, lon, capacity_mw, technology)
+
+
+@router.post("/api/grid/optimize-connection")
+async def api_optimize_connection(
+    lat: float = Query(...), lon: float = Query(...),
+    capacity_mw: float = Query(50), technology: str = Query("solar"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Recommend optimal connection strategy — substation, voltage, timing, approach."""
+    from utils.connection_optimizer import optimize_connection_strategy
+    return await optimize_connection_strategy(pool, lat, lon, capacity_mw, technology)
