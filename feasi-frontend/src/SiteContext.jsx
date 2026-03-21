@@ -155,21 +155,70 @@ export function SiteProvider({ children }) {
   const [solarCatalogue, setSolarCatalogue] = useState(null);
   const bomAbortRef = useRef(null);
 
-  // ── Placed assets (map drag-drop) ──
+  // ── Placed assets (map drag-drop) with persistence + validation ──
   const [placedAssets, setPlacedAssets] = useState([]);
   const [energyFlowOpen, setEnergyFlowOpen] = useState(false);
+  const [assetValidations, setAssetValidations] = useState({});
+  const [designProjectId, setDesignProjectId] = useState(null);
+  const [designDirty, setDesignDirty] = useState(false);
 
   const addPlacedAsset = useCallback((asset) => {
-    setPlacedAssets(prev => [...prev, { ...asset, id: `${asset.assetType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` }]);
+    const newAsset = { ...asset, id: `${asset.assetType}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` };
+    setPlacedAssets(prev => [...prev, newAsset]);
     setEnergyFlowOpen(true);
+    setDesignDirty(true);
+
+    // Auto-validate placement (fire-and-forget)
+    if (asset.lat && asset.lon) {
+      import("./services/api").then(({ default: api }) => {
+        api.design.validate(asset.lat, asset.lon, asset.assetType, asset.mw || 0).then(val => {
+          if (val) setAssetValidations(prev => ({ ...prev, [newAsset.id]: val }));
+        });
+      });
+    }
   }, []);
 
   const removePlacedAsset = useCallback((id) => {
     setPlacedAssets(prev => prev.filter(a => a.id !== id));
+    setAssetValidations(prev => { const n = { ...prev }; delete n[id]; return n; });
+    setDesignDirty(true);
   }, []);
 
   const clearPlacedAssets = useCallback(() => {
     setPlacedAssets([]);
+    setAssetValidations({});
+    setDesignDirty(true);
+  }, []);
+
+  // Save design to backend (called manually or on finalize)
+  const saveDesign = useCallback(async (projectId) => {
+    if (!projectId || placedAssets.length === 0) return null;
+    const { default: api } = await import("./services/api");
+    const assets = placedAssets.map((a, i) => ({
+      asset_type: a.assetType, lat: a.lat, lon: a.lon || a.lng,
+      capacity_mw: a.mw || 0, label: a.label, color: a.color,
+      rotation_deg: a.rotation || 0, sort_order: i,
+      bom_item_id: a.bomItemId || null,
+    }));
+    const result = await api.design.saveBulk(projectId, assets);
+    if (result) setDesignDirty(false);
+    return result;
+  }, [placedAssets]);
+
+  // Load design from backend
+  const loadDesign = useCallback(async (projectId) => {
+    const { default: api } = await import("./services/api");
+    const assets = await api.design.listAssets(projectId);
+    if (assets && Array.isArray(assets)) {
+      setPlacedAssets(assets.map(a => ({
+        id: a.asset_id, assetType: a.asset_type, label: a.label,
+        mw: a.capacity_mw, lat: a.lat, lon: a.lon, lng: a.lon,
+        color: a.color, rotation: a.rotation_deg,
+        bomItemId: a.bom_item_id, validation: a.validation,
+      })));
+      setDesignProjectId(projectId);
+      setDesignDirty(false);
+    }
   }, []);
 
   // ── EPC ──
@@ -505,6 +554,7 @@ export function SiteProvider({ children }) {
     bomAbortRef,
     // Placed assets (map drag-drop)
     placedAssets, setPlacedAssets, addPlacedAsset, removePlacedAsset, clearPlacedAssets,
+    assetValidations, designProjectId, setDesignProjectId, designDirty, saveDesign, loadDesign,
     energyFlowOpen, setEnergyFlowOpen,
     // EPC
     selectedLsoa, setSelectedLsoa,

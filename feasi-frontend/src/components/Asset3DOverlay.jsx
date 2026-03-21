@@ -144,7 +144,10 @@ function buildFlowLines(assets) {
   return { type: "FeatureCollection", features };
 }
 
-function buildBuildingsGeoJSON(assets) {
+function buildBuildingsGeoJSON(assets, validations = {}) {
+  const VERDICT_COLORS = { GO: "#16a34a", CAUTION: "#D4A018", "NO-GO": "#dc2626" };
+  const VERDICT_ICONS = { GO: "\u2713", CAUTION: "\u26A0", "NO-GO": "\u2717" };
+
   const features = assets
     .filter((a) => a.lat && a.lon)
     .map((a) => {
@@ -154,6 +157,12 @@ function buildBuildingsGeoJSON(assets) {
       const width = vis.widthM * scale;
       const depth = vis.depthM * scale;
       const height = Math.max(vis.baseH, Math.min(vis.maxH, vis.baseH + mw * vis.heightPerMW));
+
+      const val = validations[a.id];
+      const verdict = val?.verdict;
+      const color = verdict ? VERDICT_COLORS[verdict] || vis.color : vis.color;
+      const badge = verdict ? ` ${VERDICT_ICONS[verdict] || ""}` : "";
+      const costStr = val?.costs?.cable_cost_gbp ? `\n£${(val.costs.cable_cost_gbp / 1000).toFixed(0)}k cable` : "";
 
       return {
         type: "Feature",
@@ -167,8 +176,8 @@ function buildBuildingsGeoJSON(assets) {
           assetType: a.assetType,
           mw,
           height,
-          color: vis.color,
-          label_text: `${vis.label}\n${mw > 0 ? mw + " MW" : ""}`,
+          color,
+          label_text: `${vis.label}${badge}\n${mw > 0 ? mw + " MW" : ""}${costStr}`,
         },
       };
     });
@@ -176,14 +185,14 @@ function buildBuildingsGeoJSON(assets) {
   return { type: "FeatureCollection", features };
 }
 
-export default function Asset3DOverlay({ mapInstance, assets = [] }) {
+export default function Asset3DOverlay({ mapInstance, assets = [], validations = {} }) {
   const addedRef = useRef(false);
 
   useEffect(() => {
     const map = mapInstance;
     if (!map || !map.isStyleLoaded()) return;
 
-    const buildings = buildBuildingsGeoJSON(assets);
+    const buildings = buildBuildingsGeoJSON(assets, validations);
     const flows = buildFlowLines(assets);
 
     if (!map.getSource(SRC_BUILDINGS)) {

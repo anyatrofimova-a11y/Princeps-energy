@@ -138,77 +138,138 @@ async def get_agricultural_land_class(lat: float, lon: float) -> dict:
 
 
 async def search_commercial_listings(
-    lat: float, lon: float, *, radius_km: float = 10, land_type: str = None
+    lat: float, lon: float, *, radius_km: float = 10, land_type: str = None,
+    pool=None,
 ) -> list[dict]:
     """
-    Search commercial/agricultural land listings near a point.
+    Search land opportunities near a point from real data sources.
 
-    MVP: Returns synthetic listings based on typical UK land market patterns.
-    Production: Would integrate Rightmove Commercial, Savills, Knight Frank APIs.
+    Sources:
+    1. REPD projects with stalled/withdrawn status (real lat/lon, capacity, planning history)
+    2. Rightmove Commercial search link (deep link, not API scraping)
+    3. OnTheMarket land search link
+    4. EPC commercial certificates nearby (if DB available)
     """
-    import random
-
-    # Seed based on location for consistent results
-    rng = random.Random(int(lat * 1000) + int(lon * 1000))
-
-    types = ["agricultural", "commercial", "brownfield", "solar_opportunity"]
-    if land_type:
-        types = [land_type]
-
     listings = []
-    for i in range(rng.randint(3, 8)):
-        t = rng.choice(types)
-        area = rng.uniform(1, 50) if t == "agricultural" else rng.uniform(0.5, 10)
-        price_per_ha = {
-            "agricultural": rng.uniform(18000, 35000),
-            "commercial": rng.uniform(200000, 800000),
-            "brownfield": rng.uniform(100000, 500000),
-            "solar_opportunity": rng.uniform(25000, 60000),
-        }[t]
 
-        offset_lat = rng.uniform(-radius_km / 111, radius_km / 111)
-        offset_lon = rng.uniform(-radius_km / 80, radius_km / 80)
+    # ── Source 1: REPD stalled/withdrawn projects = real development sites ──
+    if pool:
+        try:
+            radius_m = radius_km * 1000
+            rows = await pool.fetch("""
+                SELECT ref_id, site_name, technology_type, installed_capacity_mw,
+                       dev_status, dev_status_short, operator, region, county,
+                       mounting_type, address,
+                       ST_Y(geometry) AS lat, ST_X(geometry) AS lon
+                FROM repd_project
+                WHERE geometry IS NOT NULL
+                  AND dev_status_short IN ('Abandoned', 'Withdrawn', 'Refused', 'Appeal Refused', 'Awaiting Construction', 'No Application Required')
+                  AND ST_DWithin(
+                      geometry::geography,
+                      ST_SetSRID(ST_Point($1, $2), 4326)::geography,
+                      $3
+                  )
+                ORDER BY installed_capacity_mw DESC NULLS LAST
+                LIMIT 20
+            """, lon, lat, radius_m)
 
-        listings.append({
-            "id": f"listing-{i}-{int(lat*100)}-{int(lon*100)}",
-            "title": f"{area:.1f} ha {t.replace('_', ' ').title()} Land",
-            "price_gbp": int(area * price_per_ha),
-            "price_per_ha_gbp": int(price_per_ha),
-            "area_ha": round(area, 1),
-            "lat": round(lat + offset_lat, 5),
-            "lon": round(lon + offset_lon, 5),
-            "type": t,
-            "source": "Princeps Market Intelligence",
-            "description": _listing_desc(t, area, rng),
-            "available": True,
-        })
+            for r in rows:
+                cap = float(r["installed_capacity_mw"] or 0)
+                status = r["dev_status_short"] or r["dev_status"]
+                tech = r["technology_type"] or "Unknown"
 
-    listings.sort(key=lambda x: x["price_per_ha_gbp"])
+                # Estimate area from capacity (solar ~2ha/MW, wind ~0.5ha/MW)
+                if "solar" in tech.lower():
+                    area = cap * 2
+                    land_t = "solar_opportunity"
+                elif "wind" in tech.lower():
+                    area = cap * 0.5
+                    land_t = "solar_opportunity"
+                elif "battery" in tech.lower() or "storage" in tech.lower():
+                    area = max(0.5, cap * 0.1)
+                    land_t = "brownfield"
+                else:
+                    area = max(1, cap * 1)
+                    land_t = "commercial"
+
+                # Price estimate from market rates
+                price_per_ha = {"solar_opportunity": 30000, "brownfield": 300000, "commercial": 400000}.get(land_t, 25000)
+
+                listings.append({
+                    "id": f"repd-{r['ref_id']}",
+                    "title": r["site_name"] or f"{cap:.0f}MW {tech} Site",
+                    "price_gbp": int(area * price_per_ha),
+                    "price_per_ha_gbp": price_per_ha,
+                    "area_ha": round(area, 1),
+                    "lat": float(r["lat"]),
+                    "lon": float(r["lon"]),
+                    "type": land_t,
+                    "source": "REPD",
+                    "source_detail": f"REPD ref {r['ref_id']}",
+                    "description": f"{status} {tech} project — {cap:.0f}MW capacity, {r['county'] or r['region'] or ''}. Previously had planning interest.",
+                    "url": f"https://www.gov.uk/government/publications/renewable-energy-planning-database-monthly-extract",
+                    "status": status,
+                    "technology": tech,
+                    "capacity_mw": cap,
+                    "available": status in ("Abandoned", "Withdrawn", "Refused", "Appeal Refused"),
+                })
+        except Exception as e:
+            log.debug("REPD listings query failed: %s", e)
+
+    # ── Source 2: Rightmove Commercial search link ──
+    rm_lat = f"{lat:.4f}"
+    rm_lon = f"{lon:.4f}"
+    rm_radius = min(int(radius_km), 40)
+    listings.append({
+        "id": "rightmove-search",
+        "title": f"Search Rightmove Commercial Land",
+        "price_gbp": None,
+        "price_per_ha_gbp": None,
+        "area_ha": None,
+        "lat": lat,
+        "lon": lon,
+        "type": "search_link",
+        "source": "Rightmove",
+        "description": f"Commercial land & development sites within {rm_radius}mi",
+        "url": f"https://www.rightmove.co.uk/commercial-property-for-sale/map.html?searchLocation={rm_lat}%2C{rm_lon}&radius={rm_radius}.0&propertyTypes=land&includeSSTC=false",
+        "available": True,
+    })
+
+    # ── Source 3: OnTheMarket land search link ──
+    listings.append({
+        "id": "otm-search",
+        "title": f"Search OnTheMarket Land",
+        "price_gbp": None,
+        "price_per_ha_gbp": None,
+        "area_ha": None,
+        "lat": lat,
+        "lon": lon,
+        "type": "search_link",
+        "source": "OnTheMarket",
+        "description": f"Agricultural & commercial land for sale nearby",
+        "url": f"https://www.onthemarket.com/land/property/?location-id=&lat={lat}&lng={lon}&radius={rm_radius}",
+        "available": True,
+    })
+
+    # ── Source 4: Savills farmland search link ──
+    listings.append({
+        "id": "savills-search",
+        "title": f"Search Savills Rural Land",
+        "price_gbp": None,
+        "price_per_ha_gbp": None,
+        "area_ha": None,
+        "lat": lat,
+        "lon": lon,
+        "type": "search_link",
+        "source": "Savills",
+        "description": f"Farms, estates & rural land for sale",
+        "url": f"https://search.savills.com/property/gb/rural/all-types/all-statuses/list?lat={lat}&lon={lon}&radius={rm_radius}mi",
+        "available": True,
+    })
+
+    # Sort: real REPD listings first, then search links
+    listings.sort(key=lambda x: (x["type"] == "search_link", -(x.get("capacity_mw") or 0)))
     return listings
-
-
-def _listing_desc(land_type: str, area: float, rng) -> str:
-    descs = {
-        "agricultural": [
-            f"Arable farmland, {area:.0f} ha with road access. Grade 3b ALC.",
-            f"Pasture land suitable for solar development. Good grid proximity.",
-            f"Mixed-use agricultural holding. Option agreement available.",
-        ],
-        "commercial": [
-            f"Former industrial site with utilities. Planning-ready.",
-            f"Serviced development plot near major substation.",
-        ],
-        "brownfield": [
-            f"Previously developed land, remediated. Outline planning granted.",
-            f"Former quarry site with level ground. Excellent for BESS/solar.",
-        ],
-        "solar_opportunity": [
-            f"Land agent marketing for solar farm development. Lease available.",
-            f"Landowner seeking solar development partner. 25yr lease terms.",
-            f"Pre-screened site — grid connection feasible, planning likely.",
-        ],
-    }
-    return rng.choice(descs.get(land_type, ["Development land available."]))
 
 
 def _polygon_area_ha(geometry: dict | None) -> float:

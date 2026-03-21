@@ -46,6 +46,7 @@ GEOAI_RUNNER = str(Path(os.path.join(os.path.dirname(__file__), "..", "utils", "
 FORECAST_PYTHON = str(Path(os.path.dirname(__file__)).resolve().parent / ".venv-forecast" / "bin" / "python")
 DEMAND_INGESTER_SCRIPT = str(Path(os.path.dirname(__file__)).resolve().parent / "utils" / "demand_data_ingester.py")
 DEMAND_FORECAST_SCRIPT = str(Path(os.path.dirname(__file__)).resolve().parent / "utils" / "demand_forecaster.py")
+CARBON_FORECAST_SCRIPT = str(Path(os.path.dirname(__file__)).resolve().parent / "utils" / "carbon_intensity_forecaster.py")
 
 MAPBOX_TOKEN = os.environ.get("VITE_MAPBOX_TOKEN", os.environ.get("MAPBOX_TOKEN", ""))
 ELECTRICITYMAPS_API_KEY = os.environ.get("ELECTRICITYMAPS_API_KEY", "")

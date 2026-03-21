@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+import asyncpg
+from fastapi import APIRouter, Depends, Query
+
+from app.deps import get_pool
 
 router = APIRouter(tags=["land"])
 
@@ -29,7 +32,8 @@ async def land_alc(lat: float = Query(...), lon: float = Query(...)):
 async def land_listings(
     lat: float = Query(...), lon: float = Query(...),
     radius_km: float = Query(10), land_type: str = Query(None),
+    pool: asyncpg.Pool = Depends(get_pool),
 ):
-    """Commercial/agricultural land listings near a point."""
+    """Land listings from REPD stalled projects + portal search links."""
     from utils.land_registry import search_commercial_listings
-    return await search_commercial_listings(lat, lon, radius_km=radius_km, land_type=land_type)
+    return await search_commercial_listings(lat, lon, radius_km=radius_km, land_type=land_type, pool=pool)

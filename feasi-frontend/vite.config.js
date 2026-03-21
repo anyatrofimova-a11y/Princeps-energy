@@ -3,6 +3,23 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Vendor: heavy 3D/map libs in separate chunks (loaded on demand)
+          "vendor-three": ["three"],
+          "vendor-r3f": ["@react-three/fiber", "@react-three/drei"],
+          "vendor-mapbox": ["mapbox-gl"],
+          "vendor-deck": ["@deck.gl/core", "@deck.gl/layers", "@deck.gl/mapbox"],
+          "vendor-d3": ["d3-force"],
+          // App chunks
+          "react-core": ["react", "react-dom"],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 800,
+  },
   server: {
     port: 3000,
     proxy: {
@@ -50,6 +67,8 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/pmtiles-proxy/, "/pbcc-pmtiles"),
       },
+      "/vision": "http://localhost:8000",
+      "/retrofit": "http://localhost:8000",
     },
   },
 });

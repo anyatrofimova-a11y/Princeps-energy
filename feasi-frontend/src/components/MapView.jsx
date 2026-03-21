@@ -641,6 +641,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.addSource("queue-depth", { type: "geojson", data: EMPTY_FC });
       // Land registry parcels source
       map.addSource("land-parcels", { type: "geojson", data: EMPTY_FC });
+      // Highlight pulse marker for selected land listing
+      map.addSource("land-highlight", { type: "geojson", data: EMPTY_FC });
 
       // DC infrastructure sources
       map.addSource("dc-capacity", { type: "geojson", data: EMPTY_FC });
@@ -1557,6 +1559,73 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       });
       map.on("mouseenter", "land-parcels-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "land-parcels-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── Land highlight pulse (selected listing) ──
+      map.addLayer({
+        id: "land-highlight-pulse",
+        type: "circle",
+        source: "land-highlight",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 10, 20, 14, 40, 18, 60],
+          "circle-color": "#D4A018",
+          "circle-opacity": 0.3,
+          "circle-stroke-width": 3,
+          "circle-stroke-color": "#D4A018",
+          "circle-stroke-opacity": 0.8,
+        },
+      });
+      map.addLayer({
+        id: "land-highlight-core",
+        type: "circle",
+        source: "land-highlight",
+        paint: {
+          "circle-radius": 8,
+          "circle-color": "#D4A018",
+          "circle-opacity": 0.9,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#fff",
+        },
+      });
+      map.addLayer({
+        id: "land-highlight-label",
+        type: "symbol",
+        source: "land-highlight",
+        layout: {
+          "text-field": ["get", "label"],
+          "text-size": 12,
+          "text-anchor": "bottom",
+          "text-offset": [0, -2],
+          "text-allow-overlap": true,
+          "text-font": ["Noto Sans Bold"],
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-halo-color": "#D4A018",
+          "text-halo-width": 2,
+        },
+      });
+
+      // Listen for land highlight events from copilot
+      const landHighlightHandler = (e) => {
+        const { lat, lon, id } = e.detail;
+        const src = map.getSource("land-highlight");
+        if (src) {
+          src.setData({
+            type: "FeatureCollection",
+            features: [{
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [lon, lat] },
+              properties: { id, label: "Selected Site" },
+            }],
+          });
+          // Auto-clear after 8 seconds
+          setTimeout(() => {
+            const s = map.getSource("land-highlight");
+            if (s) s.setData({ type: "FeatureCollection", features: [] });
+          }, 8000);
+        }
+      };
+      window.addEventListener("princeps-land-highlight", landHighlightHandler);
 
       // ── Queue Depth circles at substations ──
       map.addLayer({

@@ -748,18 +748,44 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
             {!landLoading && landListings.length > 0 && (
               <>
                 <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.4px", color: "var(--cds-text-helper)", padding: "4px 0" }}>
-                  {landListings.length} listings within 10km
+                  {landListings.filter(l => l.type !== "search_link").length} sites + {landListings.filter(l => l.type === "search_link").length} portals
                 </div>
                 {landListings.map((l) => (
-                  <div key={l.id} className="land-listing-card" onClick={() => onZoomTo?.({ lat: l.lat, lon: l.lon, zoom: 15 })}>
+                  <div key={l.id} className={`land-listing-card${l.type === "search_link" ? " land-listing-link" : ""}`}
+                    onClick={() => {
+                      if (l.type === "search_link" && l.url) {
+                        window.open(l.url, "_blank", "noopener");
+                      } else {
+                        // Zoom to listing and dispatch highlight event
+                        onZoomTo?.({ lat: l.lat, lon: l.lon, zoom: 16 });
+                        window.dispatchEvent(new CustomEvent("princeps-land-highlight", { detail: { lat: l.lat, lon: l.lon, id: l.id } }));
+                      }
+                    }}>
                     <div className="land-listing-header">
-                      <span className={`land-listing-type land-type-${l.type}`}>{l.type.replace(/_/g, " ")}</span>
-                      <span className="land-listing-price">£{(l.price_gbp / 1000).toFixed(0)}k</span>
+                      <span className={`land-listing-type land-type-${l.type}`}>
+                        {l.type === "search_link" ? l.source : l.type.replace(/_/g, " ")}
+                      </span>
+                      {l.price_gbp ? (
+                        <span className="land-listing-price">£{(l.price_gbp / 1000).toFixed(0)}k</span>
+                      ) : (
+                        <span className="land-listing-price" style={{ fontSize: 10, color: "var(--cds-interactive)" }}>
+                          {l.type === "search_link" ? "Open" : "--"}
+                          {l.type === "search_link" && (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 3, verticalAlign: "middle" }}>
+                              <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                            </svg>
+                          )}
+                        </span>
+                      )}
                     </div>
                     <div className="land-listing-title">{l.title}</div>
                     <div className="land-listing-meta">
-                      {l.area_ha} ha &middot; £{(l.price_per_ha_gbp / 1000).toFixed(0)}k/ha &middot; {l.source}
+                      {l.area_ha ? `${l.area_ha} ha` : ""}
+                      {l.area_ha && l.price_per_ha_gbp ? ` · £${(l.price_per_ha_gbp / 1000).toFixed(0)}k/ha` : ""}
+                      {l.source && l.type !== "search_link" ? ` · ${l.source}` : ""}
+                      {l.status ? ` · ${l.status}` : ""}
                     </div>
+                    {l.description && <div className="land-listing-desc">{l.description}</div>}
                   </div>
                 ))}
               </>

@@ -1,10 +1,10 @@
-"""Demand router — demand forecasting, GSP data, scenarios."""
+"""Demand router — demand forecasting, GSP data, scenarios, carbon intensity."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Query
 
-from app.helpers import _run_forecast_subprocess, DEMAND_INGESTER_SCRIPT
+from app.helpers import _run_forecast_subprocess, DEMAND_INGESTER_SCRIPT, CARBON_FORECAST_SCRIPT
 from utils.grid_data_platform import record_metric
 
 router = APIRouter(tags=["demand"])
@@ -133,4 +133,60 @@ async def api_demand_summary():
                 max_peak = max(s["peak_mw"] for s in summaries)
                 p["recent_peak_mw"] = max_peak
                 p["utilisation"] = round(max_peak / p["capacity_mw"], 3) if p["capacity_mw"] else None
+    return result
+
+
+# ─── Carbon intensity forecasting ─────────────────────────────────────────────
+
+@router.get("/api/carbon/history")
+async def api_carbon_history(
+    region_id: int = Query(13, description="UK Carbon Intensity region (1-17)"),
+    days: int = Query(14, ge=1, le=90),
+):
+    """Fetch historical carbon intensity from National Grid ESO API."""
+    result = await _run_forecast_subprocess(
+        {"command": "fetch_history", "region_id": region_id, "days": days},
+        script=CARBON_FORECAST_SCRIPT,
+    )
+    record_metric("carbon_history", days, labels={"region_id": str(region_id)})
+    return result
+
+
+@router.get("/api/carbon/forecast")
+async def api_carbon_forecast(
+    region_id: int = Query(13, description="UK Carbon Intensity region (1-17)"),
+    horizon_hours: int = Query(48, ge=1, le=168),
+    model: str = Query("analytical", description="analytical | prophet | tft"),
+    history_days: int = Query(14, ge=1, le=60),
+    epochs: int = Query(15, ge=1, le=50),
+):
+    """
+    Carbon intensity forecast with P10/P50/P90 probabilistic bands.
+
+    Models:
+    - analytical: instant, sinusoidal model calibrated to current intensity
+    - prophet: seconds, Facebook Prophet with daily/weekly/yearly seasonality
+    - tft: minutes, Temporal Fusion Transformer (Darts) with hour/dow/month covariates
+    """
+    if model == "analytical":
+        result = await _run_forecast_subprocess(
+            {"command": "forecast_analytical", "region_id": region_id, "horizon_hours": horizon_hours},
+            script=CARBON_FORECAST_SCRIPT,
+        )
+    elif model == "prophet":
+        result = await _run_forecast_subprocess(
+            {"command": "forecast_prophet", "region_id": region_id,
+             "horizon_hours": horizon_hours, "history_days": history_days},
+            script=CARBON_FORECAST_SCRIPT,
+        )
+    elif model == "tft":
+        result = await _run_forecast_subprocess(
+            {"command": "forecast_tft", "region_id": region_id,
+             "horizon_hours": horizon_hours, "history_days": history_days, "epochs": epochs},
+            script=CARBON_FORECAST_SCRIPT,
+        )
+    else:
+        return {"error": f"Unknown model: {model}. Use analytical, prophet, or tft."}
+
+    record_metric("carbon_forecast", horizon_hours, labels={"region_id": str(region_id), "model": model})
     return result

@@ -1,41 +1,46 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
 import mapboxgl from "mapbox-gl";
 import { useSite } from "./SiteContext";
-// WorkspaceContext is used by child components (AssetBrowser, DetailPanel, etc.)
 import api from "./services/api";
-import MapView from "./components/MapView";
-import ComponentPalette from "./components/ComponentPalette";
-import AssetDock from "./components/AssetDock";
-import EnergyFlowPanel from "./components/EnergyFlowPanel";
-import ProjectPipeline from "./components/ProjectPipeline";
+
+// ── Core layout (always loaded) ──
 import AppShell from "./components/shell/AppShell";
 import WorkspaceRouter from "./components/workspace/WorkspaceRouter";
-import LayerRail from "./components/LayerRail";
+import MapView from "./components/MapView";
 import CopilotWidget from "./components/CopilotWidget";
-import DrawingToolbar from "./components/DrawingToolbar";
-import CameraToolbar from "./components/CameraToolbar";
 import ErrorBoundary from "./components/ErrorBoundary";
-import NOMExplorer from "./components/NOMExplorer";
-import SettingsPage from "./components/SettingsPage";
-import PitchPage from "./components/PitchPage";
-import CommandPalette from "./components/shell/CommandPalette";
-import SiteDashboard from "./components/SiteDashboard";
-import SitePicker from "./components/SitePicker";
-import DigitalTwin from "./components/DigitalTwin";
-import GridTwin from "./components/GridTwin";
-import BEMSDigitalTwin from "./components/BEMSDigitalTwin";
-import AssetInspector from "./components/AssetInspector";
-import GridGraphView from "./components/GridGraphView";
-import BESSFacilityTwin from "./components/BESSFacilityTwin";
-import HardwareConfigurator from "./components/HardwareConfigurator";
-import ThermalModelPanel from "./components/ThermalModelPanel";
-import DataCentreTwin from "./components/DataCentreTwin";
-import DCLandingPage from "./components/DCLandingPage";
-import DCComparisonDashboard from "./components/DCComparisonDashboard";
+import LayerRail from "./components/LayerRail";
 import MapLegend from "./components/MapLegend";
 import MapAssetLayer from "./components/MapAssetLayer";
 import DCMapOverlay from "./components/DCMapOverlay";
 import Asset3DOverlay from "./components/Asset3DOverlay";
+import CameraToolbar from "./components/CameraToolbar";
+import SitePicker from "./components/SitePicker";
+
+// ── Lazy-loaded overlays (split into separate chunks) ──
+const DigitalTwin = lazy(() => import("./components/DigitalTwin"));
+const GridTwin = lazy(() => import("./components/GridTwin"));
+const BEMSDigitalTwin = lazy(() => import("./components/BEMSDigitalTwin"));
+const BESSFacilityTwin = lazy(() => import("./components/BESSFacilityTwin"));
+const DataCentreTwin = lazy(() => import("./components/DataCentreTwin"));
+const AssetInspector = lazy(() => import("./components/AssetInspector"));
+const GridGraphView = lazy(() => import("./components/GridGraphView"));
+const HardwareConfigurator = lazy(() => import("./components/HardwareConfigurator"));
+const ThermalModelPanel = lazy(() => import("./components/ThermalModelPanel"));
+const DCLandingPage = lazy(() => import("./components/DCLandingPage"));
+const DCComparisonDashboard = lazy(() => import("./components/DCComparisonDashboard"));
+const NOMExplorer = lazy(() => import("./components/NOMExplorer"));
+const SettingsPage = lazy(() => import("./components/SettingsPage"));
+const PitchPage = lazy(() => import("./components/PitchPage"));
+const ProjectPipeline = lazy(() => import("./components/ProjectPipeline"));
+const SiteDashboard = lazy(() => import("./components/SiteDashboard"));
+const CommandPalette = lazy(() => import("./components/shell/CommandPalette"));
+const DrawingToolbar = lazy(() => import("./components/DrawingToolbar"));
+const ComponentPalette = lazy(() => import("./components/ComponentPalette"));
+const AssetDock = lazy(() => import("./components/AssetDock"));
+const EnergyFlowPanel = lazy(() => import("./components/EnergyFlowPanel"));
+
+const LazyFallback = () => <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", zIndex: 9999, color: "#fff", fontSize: 13 }}>Loading...</div>;
 import {
   MODES, createDrawState, handleClick as drawHandleClick, handleDoubleClick as drawHandleDoubleClick,
   moveVertex, insertVertex, deleteFeature, getMeasurements, findSnapTarget,
@@ -75,6 +80,7 @@ export default function App() {
     dcComparisonSites, setDcComparisonSites,
     activeIntent,
     placedAssets, addPlacedAsset, removePlacedAsset, clearPlacedAssets,
+    assetValidations, designProjectId, setDesignProjectId, designDirty, saveDesign, loadDesign,
     energyFlowOpen, setEnergyFlowOpen,
     solarYield, gridContext,
   } = useSite();
@@ -345,7 +351,7 @@ export default function App() {
 
       <MapAssetLayer map={mapInstance} />
       <DCMapOverlay mapInstance={mapInstance} dcAssets={placedAssets.filter(a => a.assetType === "data_centre")} />
-      <Asset3DOverlay mapInstance={mapInstance} assets={placedAssets} />
+      <Asset3DOverlay mapInstance={mapInstance} assets={placedAssets} validations={assetValidations} />
 
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
       <MapLegend chatLayers={chatLayers} />

@@ -1,4 +1,4 @@
-"""PDF report generation endpoints."""
+"""Report generation endpoints — PDF + XLSX exports."""
 
 from __future__ import annotations
 
@@ -8,9 +8,11 @@ import re
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from app.deps import get_pool
 from utils.report_renderer import generate_report
+from utils.xlsx_export import generate_xlsx
 
 log = logging.getLogger("princeps.reports")
 router = APIRouter(tags=["reports"])
@@ -48,5 +50,37 @@ async def api_site_assessment_report(
     return StreamingResponse(
         iter([pdf_bytes]),
         media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+class XlsxExportRequest(BaseModel):
+    """Data payload for XLSX financial export."""
+    site: dict = {}
+    verdict: dict = {}
+    yield_data: dict = {}
+    grid: dict = {}
+    financials: dict = {}
+    constraints: dict = {}
+    satellite: dict = {}
+    placed_assets: list = []
+
+
+@router.post("/api/reports/financial-xlsx")
+async def api_financial_xlsx(req: XlsxExportRequest):
+    """Generate a multi-tab XLSX financial input workbook.
+    Tabs: Summary, Yield, Grid, Financials, Constraints, Satellite, Assets."""
+    try:
+        xlsx_bytes = generate_xlsx(req.model_dump())
+    except Exception as e:
+        log.exception("XLSX generation failed")
+        raise HTTPException(status_code=500, detail=f"XLSX generation failed: {e}")
+
+    site_name = req.site.get("name", "site")
+    filename = f"princeps-financial-{_safe_filename(site_name)}.xlsx"
+
+    return StreamingResponse(
+        iter([xlsx_bytes]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

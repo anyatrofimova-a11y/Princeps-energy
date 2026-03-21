@@ -109,6 +109,12 @@ const api = {
     listings: (lat, lon, radiusKm = 10) => get(`/api/land/listings?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
   },
 
+  carbon: {
+    history:  (regionId = 13, days = 14) => get(`/api/carbon/history?region_id=${regionId}&days=${days}`),
+    forecast: (regionId = 13, horizonHours = 48, model = "analytical", historyDays = 14, epochs = 15) =>
+      get(`/api/carbon/forecast?region_id=${regionId}&horizon_hours=${horizonHours}&model=${enc(model)}&history_days=${historyDays}&epochs=${epochs}`),
+  },
+
   demand: {
     gsps:       () => get("/api/demand/gsps"),
     historical: (gspId, days = 30, startDate) =>
@@ -525,6 +531,33 @@ const api = {
       get(`/api/dc/google-sites?capacity_mw=${mw}&profile=${enc(profile)}`),
     prospect: (query, mw = 100, profile = "google_hyperscale", minHr = 50, limit = 20) =>
       post("/api/dc/prospect", { query, capacity_mw: mw, profile, min_headroom_mw: minHr, limit }),
+  },
+
+  design: {
+    assetTypes: () => get("/api/v1/design/asset-types"),
+    // Asset CRUD
+    listAssets: (projectId) => get(`/api/v1/design/projects/${enc(projectId)}/assets`),
+    createAsset: (projectId, data) => post(`/api/v1/design/projects/${enc(projectId)}/assets`, data),
+    saveBulk: (projectId, assets) => post(`/api/v1/design/projects/${enc(projectId)}/assets/bulk`, { assets }),
+    updateAsset: (assetId, data) =>
+      fetch(`/api/v1/design/assets/${enc(assetId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(json),
+    deleteAsset: (assetId) =>
+      fetch(`/api/v1/design/assets/${enc(assetId)}`, { method: "DELETE" }).then(json),
+    // Validation
+    validate: (lat, lon, assetType = "solar_array", capacityMw = 50) =>
+      get(`/api/v1/design/validate?lat=${lat}&lon=${lon}&asset_type=${enc(assetType)}&capacity_mw=${capacityMw}`),
+    validateProject: (projectId) => post(`/api/v1/design/projects/${enc(projectId)}/validate`),
+    // BOM
+    matchBom: (assetType, capacityMw) =>
+      get(`/api/v1/design/bom/match?asset_type=${enc(assetType)}&capacity_mw=${capacityMw}`),
+    linkBom: (assetId, bomItemId, qty = 1) =>
+      fetch(`/api/v1/design/assets/${enc(assetId)}/link-bom?bom_item_id=${enc(bomItemId)}&qty=${qty}`, { method: "PATCH" }).then(json),
+    // Finalize
+    finalize: (projectId, data = {}) => post(`/api/v1/design/projects/${enc(projectId)}/finalize`, data),
   },
 
   projects: {

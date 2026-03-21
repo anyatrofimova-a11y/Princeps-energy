@@ -34,14 +34,15 @@ import GridUpgradeCard from "./cards/GridUpgradeCard";
 import RegulatoryRAGCard from "./cards/RegulatoryRAGCard";
 import AlertsCard from "./cards/AlertsCard";
 import GridConnectionCard from "./cards/GridConnectionCard";
+import FinancialCard from "./cards/FinancialCard";
 import GridDataPanel from "./GridDataPanel";
 import AgentPanel from "./AgentPanel";
 
 // Study sub-step -> card names
 const STUDY_CARD_MAP = {
-  feasibility:        ["ScoreCard", "SolarCard", "TerrainCard", "GridContextCard", "PlanningCard", "AssetTrackerCard", "REPDTrackerCard", "VisionCard"],
+  feasibility:        ["ScoreCard", "SolarCard", "FinancialCard", "TerrainCard", "GridContextCard", "PlanningCard", "AssetTrackerCard", "REPDTrackerCard", "VisionCard"],
   grid_study:         ["GridContextCard", "GridEfficiencyCard", "CIMCircuitCard", "NGEDOpportunityCard", "AssetTrackerCard", "TECQueueCard", "GridUpgradeCard", "StabilityCard", "GridDataPanel"],
-  financial:          ["PricingCard", "DeferralCard", "StorageCard", "BESSOptimizerCard", "EnergyAnalyticsCard"],
+  financial:          ["FinancialCard", "PricingCard", "DeferralCard", "StorageCard", "BESSOptimizerCard", "EnergyAnalyticsCard"],
   environmental:      ["SatelliteCard", "LandClassifierCard", "PlanningCard", "TerrainCard", "VisionCard"],
   planning:           ["PlanningCard", "DeferralCard", "InventoryCard", "EnergySystemCard", "AssetTrackerCard", "REPDTrackerCard"],
   satellite_analysis: ["SatelliteCard", "LandClassifierCard", "TerrainCard", "VisionCard"],
@@ -67,7 +68,7 @@ const CARD_COMPONENTS = {
   SiteProspectorCard, BESSOptimizerCard, LandClassifierCard,
   HomeRetrofitCard, VisionCard, CIMCircuitCard, AssetTrackerCard,
   REPDTrackerCard, TECQueueCard, GridUpgradeCard, RegulatoryRAGCard, AlertsCard,
-  GridConnectionCard, GridDataPanel, AgentPanel,
+  GridConnectionCard, FinancialCard, GridDataPanel, AgentPanel,
 };
 
 const INTENT_LABELS = {

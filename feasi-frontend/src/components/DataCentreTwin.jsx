@@ -58,7 +58,7 @@ const LERP_SPEED = 5;
 const REDUNDANCY_OPTIONS = ["N", "N+1", "2N", "2N+1"];
 const COOLING_OPTIONS = ["mechanical", "free_cooling", "hybrid", "evaporative"];
 const TIER_OPTIONS = [1, 2, 3, 4];
-const VIEW_MODES = ["plan", "monitor", "feasibility"];
+const VIEW_MODES = ["plan", "monitor", "simulate", "feasibility"];
 
 /* ═══════════════════════════════════════════════════════════════════════════
    3D Scene Components — Rack-level DC visualization
@@ -637,6 +637,147 @@ function PowerChainDiagram({ power }) {
   );
 }
 
+/* ── 24h Simulation Chart (SVG) ── */
+function SimulationChart({ data, height = 180 }) {
+  if (!data?.hourly) return null;
+  const hourly = data.hourly;
+  const w = 440, h = height, pad = 30;
+  const chartW = w - pad * 2, chartH = h - pad * 1.5;
+  const maxPue = Math.max(...hourly.map(d => d.pue || 0), 1.5);
+  const maxKw = Math.max(...hourly.map(d => (d.it_kw || 0) + (d.hvac_kw || 0)), 1);
+
+  const puePoints = hourly.map((d, i) => {
+    const x = pad + (i / 23) * chartW;
+    const y = pad + chartH - ((d.pue || 1) / maxPue) * chartH;
+    return `${x},${y}`;
+  }).join(" ");
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 10, color: T.textSec, fontWeight: 600, marginBottom: 4 }}>24h SIMULATION</div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", maxHeight: h }}>
+        {/* IT load area */}
+        <path d={hourly.map((d, i) => {
+          const x = pad + (i / 23) * chartW;
+          const y = pad + chartH - ((d.it_kw || 0) / maxKw) * chartH;
+          return `${i === 0 ? "M" : "L"}${x},${y}`;
+        }).join(" ") + ` L${pad + chartW},${pad + chartH} L${pad},${pad + chartH} Z`}
+          fill="rgba(24, 144, 255, 0.15)" />
+
+        {/* HVAC area (stacked) */}
+        <path d={hourly.map((d, i) => {
+          const x = pad + (i / 23) * chartW;
+          const y = pad + chartH - (((d.it_kw || 0) + (d.hvac_kw || 0)) / maxKw) * chartH;
+          return `${i === 0 ? "M" : "L"}${x},${y}`;
+        }).join(" ") + ` L${pad + chartW},${pad + chartH} L${pad},${pad + chartH} Z`}
+          fill="rgba(0, 188, 212, 0.12)" />
+
+        {/* PUE line */}
+        <polyline points={puePoints} fill="none" stroke={T.accent} strokeWidth={2} />
+
+        {/* Carbon dots */}
+        {hourly.map((d, i) => {
+          const x = pad + (i / 23) * chartW;
+          const norm = Math.min(1, (d.carbon_gco2_kwh || 0) / 400);
+          return (
+            <circle key={i} cx={x} cy={pad + chartH + 10} r={3}
+              fill={`hsl(${120 - norm * 120}, 70%, 45%)`} opacity={0.7} />
+          );
+        })}
+
+        {/* Axes */}
+        <line x1={pad} y1={pad} x2={pad} y2={pad + chartH} stroke="#ccc" strokeWidth={0.5} />
+        <line x1={pad} y1={pad + chartH} x2={pad + chartW} y2={pad + chartH} stroke="#ccc" strokeWidth={0.5} />
+        {[0, 6, 12, 18, 23].map(hr => (
+          <text key={hr} x={pad + (hr / 23) * chartW} y={h - 2}
+            textAnchor="middle" fontSize={8} fill="#999">{hr}:00</text>
+        ))}
+
+        {/* Legend */}
+        <rect x={pad} y={2} width={8} height={8} fill="rgba(24,144,255,0.3)" rx={1} />
+        <text x={pad + 11} y={9} fontSize={7} fill="#666">IT</text>
+        <rect x={pad + 30} y={2} width={8} height={8} fill="rgba(0,188,212,0.25)" rx={1} />
+        <text x={pad + 41} y={9} fontSize={7} fill="#666">HVAC</text>
+        <line x1={pad + 65} y1={6} x2={pad + 80} y2={6} stroke={T.accent} strokeWidth={2} />
+        <text x={pad + 83} y={9} fontSize={7} fill="#666">PUE</text>
+      </svg>
+
+      {/* Summary */}
+      {data.summary && (
+        <div style={{ display: "flex", gap: 12, marginTop: 4 }}>
+          {[
+            { label: "Avg PUE", value: data.summary.avg_pue?.toFixed(3), color: T.accent },
+            { label: "Peak PUE", value: data.summary.peak_pue?.toFixed(3), color: T.orange },
+            { label: "Total Energy", value: `${(data.summary.total_energy_kwh / 1000).toFixed(0)} MWh`, color: T.blue },
+            { label: "Carbon", value: `${(data.summary.total_carbon_kg / 1000).toFixed(1)} t`, color: T.green },
+          ].map(m => (
+            <div key={m.label} style={{ textAlign: "center", flex: 1 }}>
+              <div style={{ fontSize: 7, color: T.textSec, textTransform: "uppercase" }}>{m.label}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: m.color }}>{m.value || "—"}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Carbon Optimisation Comparison ── */
+function CarbonComparison({ baseline, optimised }) {
+  if (!baseline || !optimised) return null;
+  const bCarbon = baseline.summary?.total_carbon_kg || 0;
+  const oCarbon = optimised.summary?.total_carbon_kg || 0;
+  const savings = bCarbon - oCarbon;
+  const pct = bCarbon > 0 ? (savings / bCarbon * 100) : 0;
+
+  return (
+    <div style={{ marginTop: 12, padding: 10, background: "#f0fdf4", borderRadius: 8, border: "1px solid #bbf7d0" }}>
+      <div style={{ fontSize: 10, color: T.green, fontWeight: 700, marginBottom: 6 }}>CARBON OPTIMISATION</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 8, color: T.textSec }}>BASELINE</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: T.textSec }}>{(bCarbon / 1000).toFixed(1)}t</div>
+        </div>
+        <div style={{ fontSize: 18, color: T.green }}>→</div>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 8, color: T.green }}>OPTIMISED</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: T.green }}>{(oCarbon / 1000).toFixed(1)}t</div>
+        </div>
+        <div style={{ textAlign: "center", padding: "4px 10px", background: "#dcfce7", borderRadius: 8 }}>
+          <div style={{ fontSize: 8, color: T.green }}>SAVED</div>
+          <div style={{ fontSize: 14, fontWeight: 900, color: T.green }}>{pct.toFixed(0)}%</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Lifecycle Carbon Breakdown ── */
+function LifecycleCarbon({ data }) {
+  if (!data) return null;
+  const op = data.operational_carbon_tco2 || 0;
+  const em = data.embodied_carbon_tco2 || 0;
+  const total = op + em;
+  const opPct = total > 0 ? (op / total * 100) : 0;
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 10, color: T.textSec, fontWeight: 600, marginBottom: 4 }}>LIFECYCLE CARBON</div>
+      <div style={{ height: 12, background: "#eee", borderRadius: 6, overflow: "hidden", display: "flex" }}>
+        <div style={{ width: `${opPct}%`, background: T.orange, height: "100%" }} title={`Operational: ${op.toFixed(0)} tCO₂`} />
+        <div style={{ flex: 1, background: "#78909c", height: "100%" }} title={`Embodied: ${em.toFixed(0)} tCO₂`} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+        <span style={{ fontSize: 9, color: T.orange }}>Operational {opPct.toFixed(0)}% ({op.toFixed(0)}t)</span>
+        <span style={{ fontSize: 9, color: "#78909c" }}>Embodied {(100 - opPct).toFixed(0)}% ({em.toFixed(0)}t)</span>
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 900, color: T.text, textAlign: "center", marginTop: 4 }}>
+        {total.toFixed(0)} <span style={{ fontSize: 10, fontWeight: 400, color: T.textSec }}>tCO₂ lifetime</span>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -663,6 +804,12 @@ export default function DataCentreTwin({ onClose }) {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+
+  // Simulation state
+  const [sim24h, setSim24h] = useState(null);
+  const [optimised, setOptimised] = useState(null);
+  const [lifecycle, setLifecycle] = useState(null);
+  const [simLoading, setSimLoading] = useState(false);
 
   const wsRef = useRef(null);
 
@@ -722,9 +869,42 @@ export default function DataCentreTwin({ onClose }) {
     return () => { ws.close(); wsRef.current = null; };
   }, [viewMode, itLoadKw, coolingType, plan?.layout?.rack_count]);
 
+  // Run 24h simulation + carbon optimisation + lifecycle
+  const run24hSimulation = useCallback(async () => {
+    setSimLoading(true);
+    const loadMw = itLoadKw / 1000;
+    try {
+      const [simRes, optRes, lcRes] = await Promise.all([
+        fetch("/api/dc/simulate-24h", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ it_load_mw: loadMw, cooling_type: coolingType }),
+        }).then(r => r.ok ? r.json() : null),
+        fetch("/api/dc/optimise", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ it_load_mw: loadMw, battery_mwh: loadMw * 2 }),
+        }).then(r => r.ok ? r.json() : null),
+        fetch("/api/dc/lifecycle-carbon", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            annual_energy_mwh: loadMw * 8760 * 0.6,
+            num_servers: plan?.layout?.rack_count ? plan.layout.rack_count * 40 : 4000,
+          }),
+        }).then(r => r.ok ? r.json() : null),
+      ]);
+      if (simRes) setSim24h(simRes);
+      if (optRes) setOptimised(optRes);
+      if (lcRes) setLifecycle(lcRes);
+    } catch (e) { console.error("DC simulation failed:", e); }
+    setSimLoading(false);
+  }, [itLoadKw, coolingType, plan]);
+
   // Fetch feasibility when switching to that view
   useEffect(() => {
     if (viewMode === "feasibility" && !feasibility) fetchFeasibility();
+    if (viewMode === "feasibility" && !sim24h) run24hSimulation();
   }, [viewMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rackLayout = plan?.rack_layout || [];
@@ -1051,6 +1231,33 @@ export default function DataCentreTwin({ onClose }) {
                 </>
               )}
 
+              {/* Simulate mode — 24h physics + carbon + lifecycle */}
+              {viewMode === "simulate" && (
+                <>
+                  <div style={{ fontSize: 11, color: T.accent, fontWeight: 700, marginBottom: 8 }}>PHYSICS SIMULATION</div>
+                  <div style={{ fontSize: 10, color: T.textSec, marginBottom: 8 }}>
+                    HPE SustainDC thermal model · OpenDC power curves · 24h hourly resolution
+                  </div>
+
+                  <button onClick={run24hSimulation} disabled={simLoading} style={{
+                    width: "100%", padding: "8px", borderRadius: 6, border: "none",
+                    background: T.accent, color: "#fff", fontWeight: 700, fontSize: 12,
+                    cursor: simLoading ? "wait" : "pointer", opacity: simLoading ? 0.6 : 1,
+                    marginBottom: 12,
+                  }}>{simLoading ? "Simulating..." : "Run 24h Simulation"}</button>
+
+                  {sim24h && <SimulationChart data={sim24h} height={200} />}
+                  {sim24h && optimised && <CarbonComparison baseline={sim24h} optimised={optimised} />}
+                  {lifecycle && <LifecycleCarbon data={lifecycle} />}
+
+                  {!sim24h && !simLoading && (
+                    <div style={{ textAlign: "center", padding: "30px 0", color: T.textSec, fontSize: 11 }}>
+                      Click "Run 24h Simulation" to model hourly IT load, HVAC demand, PUE, and carbon intensity using real physics engines.
+                    </div>
+                  )}
+                </>
+              )}
+
               {/* Feasibility mode — DC score + radar */}
               {viewMode === "feasibility" && (
                 <>
@@ -1119,6 +1326,27 @@ export default function DataCentreTwin({ onClose }) {
                             <div key={i} style={{ fontSize: 10, color: T.text, padding: "2px 0 2px 8px", borderLeft: `2px solid ${T.red}`, marginBottom: 2 }}>{r}</div>
                           ))}
                         </div>
+                      )}
+
+                      {/* 24h Simulation Chart */}
+                      {sim24h && <SimulationChart data={sim24h} />}
+
+                      {/* Carbon Optimisation */}
+                      {sim24h && optimised && (
+                        <CarbonComparison baseline={sim24h} optimised={optimised} />
+                      )}
+
+                      {/* Lifecycle Carbon */}
+                      {lifecycle && <LifecycleCarbon data={lifecycle} />}
+
+                      {/* Run simulation button */}
+                      {!sim24h && (
+                        <button onClick={run24hSimulation} disabled={simLoading} style={{
+                          width: "100%", padding: "8px", borderRadius: 6, border: "none",
+                          background: T.cyan, color: "#fff", fontWeight: 700, fontSize: 11,
+                          cursor: simLoading ? "wait" : "pointer", marginTop: 12,
+                          opacity: simLoading ? 0.6 : 1,
+                        }}>{simLoading ? "Simulating..." : "Run 24h Physics Simulation"}</button>
                       )}
                     </>
                   ) : (
