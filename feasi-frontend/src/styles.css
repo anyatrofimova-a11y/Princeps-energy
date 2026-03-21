@@ -14220,3 +14220,144 @@ input[type="range"] { accent-color: var(--accent); }
   font-size: 10px; color: #888; font-weight: 600;
   letter-spacing: 0.04em; text-transform: uppercase;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Portfolio Map Overlay — project pins legend
+   ══════════════════════════════════════════════════════════ */
+.portfolio-legend {
+  position: absolute;
+  top: 54px;
+  right: 8px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+.portfolio-legend-title {
+  font-size: 8px; font-weight: 900;
+  letter-spacing: 0.1em; color: var(--cds-text-helper);
+}
+.portfolio-legend-item {
+  display: flex; align-items: center; gap: 3px;
+}
+.portfolio-legend-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+.portfolio-legend-label {
+  font-size: 8px; color: var(--cds-text-secondary);
+  text-transform: capitalize;
+}
+.portfolio-legend-count {
+  font-size: 8px; font-weight: 700; color: var(--cds-text-primary);
+}
+.portfolio-legend-total {
+  font-size: 9px; font-weight: 700; color: var(--cds-interactive);
+  margin-left: 4px;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Financial Strip — persistent bottom economics bar
+   ══════════════════════════════════════════════════════════ */
+.financial-strip {
+  position: absolute;
+  bottom: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  max-width: 95%;
+}
+.fstrip-tech {
+  display: flex; gap: 2px;
+}
+.fstrip-tech-btn {
+  border: none; background: transparent;
+  padding: 2px 6px; border-radius: 8px;
+  font-size: 8px; font-weight: 700;
+  color: var(--cds-text-helper); cursor: pointer;
+  transition: all 0.15s; letter-spacing: 0.02em;
+}
+.fstrip-tech-btn:hover { color: var(--cds-text-primary); }
+.fstrip-tech-btn.active {
+  background: var(--cds-interactive); color: #fff;
+}
+.fstrip-divider {
+  width: 1px; height: 24px;
+  background: var(--cds-border-subtle);
+  flex-shrink: 0;
+}
+.fstrip-metric {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 0;
+  padding: 0 4px; min-width: 40px;
+}
+.fstrip-hero { min-width: 52px; }
+.fstrip-value {
+  font-size: 13px; font-weight: 900;
+  color: var(--cds-text-primary);
+  font-family: "Roboto", sans-serif;
+  line-height: 1.1;
+}
+.fstrip-hero .fstrip-value { font-size: 16px; }
+.fstrip-label {
+  font-size: 7px; font-weight: 600;
+  color: var(--cds-text-helper);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Revenue Waterfall Card ── */
+.waterfall-chart-container {
+  width: 100%;
+  height: 200px;
+  margin-bottom: 8px;
+}
+.waterfall-kpi-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 0;
+  border-top: 1px solid rgba(100, 120, 160, 0.12);
+}
+.waterfall-kpi {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+}
+.waterfall-kpi-value {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--cds-text-primary);
+  line-height: 1;
+}
+.waterfall-kpi-label {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--cds-text-helper);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* ── Timeline / Energisation Card ── */
+.timeline-chart-container {
+  width: 100%;
+  height: 180px;
+  margin-bottom: 8px;
+}

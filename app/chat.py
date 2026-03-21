@@ -714,6 +714,102 @@ TOOLS: list[dict] = [
             "required": ["candidates"],
         },
     },
+    {
+        "name": "calculate_shadow_flicker",
+        "description": "Calculate shadow flicker from wind turbines on nearby receptors (dwellings). Models hourly blade shadow patterns for 365 days. UK threshold: 30 hrs/year, 30 min/day. Auto-detects receptors from PostGIS if none provided.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Site latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Site longitude (WGS84)"},
+                "turbine_specs": {
+                    "type": "object",
+                    "description": "Turbine specifications",
+                    "properties": {
+                        "hub_height_m": {"type": "number", "default": 80},
+                        "rotor_diameter_m": {"type": "number", "default": 100},
+                        "count": {"type": "integer", "default": 1},
+                        "positions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "lat": {"type": "number"},
+                                    "lon": {"type": "number"},
+                                },
+                            },
+                        },
+                    },
+                },
+                "receptors": {
+                    "type": "array",
+                    "description": "Receptor locations (houses, roads). If empty, auto-detected from DB.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "lat": {"type": "number"},
+                            "lon": {"type": "number"},
+                            "name": {"type": "string"},
+                            "height_m": {"type": "number", "default": 6},
+                        },
+                    },
+                },
+            },
+            "required": ["lat", "lon", "turbine_specs"],
+        },
+    },
+    {
+        "name": "calculate_glint_glare",
+        "description": "Calculate glint-glare from solar panels towards nearby receptors. Models specular reflection using hourly solar geometry for 365 days. Checks reflected beam intersection within 2-degree cone. Auto-detects receptors if none provided.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Site latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Site longitude (WGS84)"},
+                "panel_specs": {
+                    "type": "object",
+                    "description": "Solar panel specifications",
+                    "properties": {
+                        "tilt_deg": {"type": "number", "default": 25},
+                        "azimuth_deg": {"type": "number", "default": 180},
+                        "width_m": {"type": "number", "default": 2},
+                        "height_m": {"type": "number", "default": 1},
+                        "area_ha": {"type": "number", "default": 20},
+                        "reflectivity": {"type": "number", "default": 0.05},
+                    },
+                },
+                "receptors": {
+                    "type": "array",
+                    "description": "Receptor locations. If empty, auto-detected from DB.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "lat": {"type": "number"},
+                            "lon": {"type": "number"},
+                            "name": {"type": "string"},
+                            "height_m": {"type": "number", "default": 6},
+                            "is_aviation": {"type": "boolean", "default": False},
+                        },
+                    },
+                },
+            },
+            "required": ["lat", "lon", "panel_specs"],
+        },
+    },
+    {
+        "name": "estimate_energisation_timeline",
+        "description": "Predict total months from application to first power export for a proposed energy project. Models 5 phases: pre-application, planning, connection offer, connection works, commissioning. Uses REPD benchmarks, ECR queue depth, and DNO processing times.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "capacity_mw": {"type": "number", "description": "Proposed capacity in MW", "default": 50},
+                "technology": {"type": "string", "description": "Technology: solar, wind, bess, solar+bess", "default": "solar"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
 ]
 
 
@@ -1409,6 +1505,44 @@ async def execute_tool(
                     }
                     for i, s in enumerate(ranked[:20])
                 ],
+            }
+
+        elif name == "calculate_shadow_flicker":
+            from utils.shadow_flicker import calculate_shadow_flicker as _sf
+            result = await _sf(
+                args["lat"], args["lon"],
+                args.get("turbine_specs", {}),
+                args.get("receptors", []),
+                pool=pool,
+            )
+            return result
+
+        elif name == "calculate_glint_glare":
+            from utils.shadow_flicker import calculate_glint_glare as _gg
+            result = await _gg(
+                args["lat"], args["lon"],
+                args.get("panel_specs", {}),
+                args.get("receptors", []),
+                pool=pool,
+            )
+            return result
+
+        elif name == "estimate_energisation_timeline":
+            from utils.energisation_estimator import estimate_energisation_timeline as _eet
+            result = await _eet(
+                pool,
+                lat=args["lat"],
+                lon=args["lon"],
+                capacity_mw=args.get("capacity_mw", 50),
+                technology=args.get("technology", "solar"),
+            )
+            return {
+                "total_months": result["total_months"],
+                "total_months_range": result["total_months_range"],
+                "phases": result["phases"],
+                "target_date": result.get("target_date"),
+                "risk_factors": result.get("risk_factors", []),
+                "benchmarks": result.get("benchmarks", {}),
             }
 
         else:

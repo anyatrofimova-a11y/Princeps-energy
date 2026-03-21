@@ -1,4 +1,4 @@
-"""Land registry router — property boundaries, ALC, and listings."""
+"""Land registry router — property boundaries, ALC, listings, price paid, and planning density."""
 
 from __future__ import annotations
 
@@ -37,3 +37,21 @@ async def land_listings(
     """Land listings from REPD stalled projects + portal search links."""
     from utils.land_registry import search_commercial_listings
     return await search_commercial_listings(lat, lon, radius_km=radius_km, land_type=land_type, pool=pool)
+
+
+@router.get("/api/land/price-paid")
+async def price_paid(postcode: str = Query(..., description="UK postcode e.g. SW1A 1AA")):
+    """HMLR Price Paid data for a postcode area."""
+    from utils.land_registry import get_price_paid
+    return await get_price_paid(postcode)
+
+
+@router.get("/api/land/planning-density")
+async def planning_density(
+    lat: float = Query(...), lon: float = Query(...),
+    radius_km: float = Query(10),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Planning application density around a point — REPD projects by status/technology."""
+    from utils.planning_density import get_planning_density
+    return await get_planning_density(pool, lat, lon, radius_km=radius_km)

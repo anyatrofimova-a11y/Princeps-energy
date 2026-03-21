@@ -52,6 +52,8 @@ const SECTIONS = [
       { id: "environment", label: "Energy Assets", color: "#ff9800" },
       { id: "geeflowLandUse", label: "Land Use (GEE)", color: "#1565c0" },
       { id: "geeflowOpportunities", label: "Grid Opps (EO)", color: "#ff6f00" },
+      { id: "landParcels", label: "HMLR Parcels", color: "#2563eb" },
+      { id: "planningDensity", label: "Planning Density", color: "#f59e0b" },
     ],
   },
   {

@@ -40,32 +40,53 @@ def _bbox_from_point(lat: float, lon: float, radius_km: float) -> tuple:
 # ---------------------------------------------------------------------------
 
 def detect_buildings(lat: float, lon: float, radius_km: float, **kwargs) -> dict:
-    """Detect building footprints using geoai BuildingFootprintExtractor."""
+    """Detect building footprints using geoai BuildingFootprintExtractor.
+
+    Attempts real deep-learning inference via Mask R-CNN on NAIP imagery
+    downloaded from Microsoft Planetary Computer. Falls back to Overture Maps
+    vector data, then to synthetic UK density estimate.
+    """
     try:
         from geoai.extract import BuildingFootprintExtractor
-    except ImportError:
-        return _fallback_buildings(lat, lon, radius_km)
-
-    bbox = _bbox_from_point(lat, lon, radius_km)
-    extractor = BuildingFootprintExtractor()
-
-    # Try to download NAIP or use local imagery
-    try:
         from geoai.download import download_naip
+
+        bbox = _bbox_from_point(lat, lon, radius_km)
+        extractor = BuildingFootprintExtractor(device="cpu")
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            raster = download_naip(bbox=bbox, output=os.path.join(tmpdir, "naip.tif"))
-            results = extractor.process_raster(raster)
+            raster_paths = download_naip(bbox=bbox, output_dir=tmpdir, max_items=1)
+            if not raster_paths:
+                raise RuntimeError("No NAIP tiles found for bbox")
+            raster_path = raster_paths[0]
+
+            gdf = extractor.process_raster(raster_path, batch_size=2)
+
             features = []
-            if hasattr(results, "__geo_interface__"):
-                geo = results.__geo_interface__
+            if hasattr(gdf, "__geo_interface__"):
+                geo = gdf.__geo_interface__
                 features = geo.get("features", [])
+            elif hasattr(gdf, "to_json"):
+                import json as _json
+                geo = _json.loads(gdf.to_json())
+                features = geo.get("features", [])
+
+            # Compute area per building if geometry is present
+            total_area_m2 = 0.0
+            for f in features:
+                props = f.get("properties", {})
+                total_area_m2 += props.get("area_m2", props.get("area", 0))
+
             return {
                 "mode": "building_footprints",
                 "building_count": len(features),
+                "total_area_m2": round(total_area_m2, 1),
                 "bbox": list(bbox),
                 "features": features[:200],  # cap for JSON size
-                "source": "geoai_naip",
+                "source": "geoai_mask_rcnn",
+                "model": "building_footprints_usa.pth",
             }
+    except ImportError:
+        return _fallback_buildings(lat, lon, radius_km, note="geoai not installed")
     except Exception as e:
         return _fallback_buildings(lat, lon, radius_km, note=str(e))
 
@@ -110,26 +131,38 @@ def _synthetic_buildings(lat: float, lon: float, radius_km: float) -> dict:
 # ---------------------------------------------------------------------------
 
 def detect_solar_panels(lat: float, lon: float, radius_km: float, **kwargs) -> dict:
-    """Detect existing solar installations using geoai SolarPanelDetector."""
+    """Detect existing solar installations using geoai SolarPanelDetector.
+
+    Uses Mask R-CNN fine-tuned on solar panel aerial imagery. Downloads NAIP
+    from Planetary Computer and runs panel instance segmentation.
+    """
     try:
         from geoai.extract import SolarPanelDetector
-    except ImportError:
-        return _synthetic_solar_panels(lat, lon, radius_km)
-
-    bbox = _bbox_from_point(lat, lon, radius_km)
-    detector = SolarPanelDetector()
-
-    try:
         from geoai.download import download_naip
+
+        bbox = _bbox_from_point(lat, lon, radius_km)
+        detector = SolarPanelDetector(device="cpu")
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            raster = download_naip(bbox=bbox, output=os.path.join(tmpdir, "naip.tif"))
-            results = detector.process_raster(raster)
+            raster_paths = download_naip(bbox=bbox, output_dir=tmpdir, max_items=1)
+            if not raster_paths:
+                raise RuntimeError("No NAIP tiles found for bbox")
+            raster_path = raster_paths[0]
+
+            gdf = detector.process_raster(raster_path, batch_size=2)
+
             features = []
-            if hasattr(results, "__geo_interface__"):
-                geo = results.__geo_interface__
+            if hasattr(gdf, "__geo_interface__"):
+                geo = gdf.__geo_interface__
                 features = geo.get("features", [])
+            elif hasattr(gdf, "to_json"):
+                import json as _json
+                geo = _json.loads(gdf.to_json())
+                features = geo.get("features", [])
+
             total_area_m2 = sum(
-                f.get("properties", {}).get("area_m2", 0) for f in features
+                f.get("properties", {}).get("area_m2", f.get("properties", {}).get("area", 0))
+                for f in features
             )
             return {
                 "mode": "solar_panel_detect",
@@ -138,8 +171,11 @@ def detect_solar_panels(lat: float, lon: float, radius_km: float, **kwargs) -> d
                 "estimated_capacity_kw": round(total_area_m2 * 0.2, 1),  # ~200 W/m²
                 "bbox": list(bbox),
                 "features": features[:100],
-                "source": "geoai_detector",
+                "source": "geoai_mask_rcnn",
+                "model": "solar_panel_detection.pth",
             }
+    except ImportError:
+        return _synthetic_solar_panels(lat, lon, radius_km)
     except Exception:
         return _synthetic_solar_panels(lat, lon, radius_km)
 
@@ -167,16 +203,64 @@ def _synthetic_solar_panels(lat: float, lon: float, radius_km: float) -> dict:
 
 def detect_changes(lat: float, lon: float, radius_km: float,
                    year_before: int = 2020, year_after: int = 2024, **kwargs) -> dict:
-    """Detect land use / structural changes between two time periods."""
+    """Detect land use / structural changes between two time periods.
+
+    Uses torchange AnyChange + SAM for instance-level change detection on
+    bi-temporal NAIP imagery. Requires two NAIP scenes from different years.
+    Falls back to synthetic UK change estimates if imagery or models unavailable.
+    """
     try:
         from geoai.change_detection import ChangeDetection
-    except ImportError:
-        return _synthetic_changes(lat, lon, radius_km, year_before, year_after)
+        from geoai.download import download_naip
 
-    bbox = _bbox_from_point(lat, lon, radius_km)
-    try:
-        cd = ChangeDetection()
-        # Would need bitemporal imagery — fall back to synthetic for now
+        bbox = _bbox_from_point(lat, lon, radius_km)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Download bi-temporal NAIP imagery
+            before_dir = os.path.join(tmpdir, "before")
+            after_dir = os.path.join(tmpdir, "after")
+            os.makedirs(before_dir)
+            os.makedirs(after_dir)
+
+            paths_before = download_naip(bbox=bbox, output_dir=before_dir,
+                                         year=year_before, max_items=1)
+            paths_after = download_naip(bbox=bbox, output_dir=after_dir,
+                                        year=year_after, max_items=1)
+
+            if not paths_before or not paths_after:
+                raise RuntimeError(
+                    f"Could not find NAIP for both {year_before} and {year_after}"
+                )
+
+            cd = ChangeDetection(sam_model_type="vit_b")  # vit_b is smallest
+            result = cd.detect_changes(
+                paths_before[0], paths_after[0],
+                return_detailed_results=True,
+            )
+
+            if isinstance(result, dict):
+                # Extract summary metrics from detailed results
+                num_changes = result.get("num_instances", 0)
+                total_area = result.get("total_change_area_m2", 0)
+                import math
+                area_km2 = math.pi * radius_km ** 2
+                change_pct = (total_area / (area_km2 * 1e6) * 100) if area_km2 > 0 else 0
+
+                return {
+                    "mode": "change_detection",
+                    "period": f"{year_before}-{year_after}",
+                    "total_area_km2": round(area_km2, 2),
+                    "num_change_instances": num_changes,
+                    "changed_area_m2": round(total_area, 1),
+                    "change_pct": round(min(change_pct, 100), 2),
+                    "detailed": {k: v for k, v in result.items()
+                                 if k not in ("masks", "rles")},  # skip large binary data
+                    "source": "torchange_anychange_sam",
+                    "model": "AnyChange + SAM vit_b",
+                }
+            raise RuntimeError("ChangeDetection returned unexpected type")
+
+    except ImportError:
         return _synthetic_changes(lat, lon, radius_km, year_before, year_after)
     except Exception:
         return _synthetic_changes(lat, lon, radius_km, year_before, year_after)
@@ -495,34 +579,114 @@ def _synthetic_super_resolution(lat, lon, radius_km):
 
 def extract_foundation_embeddings(lat: float, lon: float, radius_km: float,
                                    model_size: str = "100M-TL", **kwargs) -> dict:
-    """Extract site embeddings using Prithvi EO Foundation Model."""
-    model_dims = {
-        "tiny": 192, "small": 384, "base": 768,
-        "100M-TL": 768, "300M-TL": 1024, "600M-TL": 1280,
+    """Extract site embeddings using Prithvi EO 2.0 Foundation Model.
+
+    Loads the Prithvi MAE encoder from HuggingFace Hub and runs a forward pass
+    with mask_ratio=0 to produce a dense embedding (CLS token + mean-pooled
+    patch tokens). Requires a GeoTIFF of the site; downloads NAIP from
+    Planetary Computer as a proxy for multi-spectral imagery.
+    """
+    # Map short names to full HF model names and embed dims
+    model_map = {
+        "tiny": ("Prithvi-EO-2.0-tiny-TL", 192),
+        "100M-TL": ("Prithvi-EO-2.0-100M-TL", 768),
+        "300M": ("Prithvi-EO-2.0-300M", 1024),
+        "300M-TL": ("Prithvi-EO-2.0-300M-TL", 768),
+        "600M": ("Prithvi-EO-2.0-600M", 1280),
+        "600M-TL": ("Prithvi-EO-2.0-600M-TL", 1280),
     }
-    dim = model_dims.get(model_size, 768)
+    model_name, dim = model_map.get(model_size, ("Prithvi-EO-2.0-100M-TL", 768))
 
     try:
         from geoai.prithvi import PrithviProcessor
+        import torch
+        import numpy as np
+
+        bbox = _bbox_from_point(lat, lon, radius_km)
+
+        # Load processor (downloads weights from HF on first run)
+        processor = PrithviProcessor(model_name=model_name, device=torch.device("cpu"))
+
+        # Try to get a GeoTIFF -- use NAIP from Planetary Computer
+        embedding = None
+        with tempfile.TemporaryDirectory() as tmpdir:
+            raster_path = None
+            try:
+                from geoai.download import download_naip
+                paths = download_naip(bbox=bbox, output_dir=tmpdir, max_items=1)
+                if paths:
+                    raster_path = paths[0]
+            except Exception:
+                pass
+
+            if raster_path and os.path.isfile(raster_path):
+                # Read and preprocess the raster
+                img, meta, coords = processor.read_geotiff(raster_path)
+                # Select bands (NAIP has RGBN -- use all 4 or subset)
+                n_bands = img.shape[0]
+                n_model_bands = len(processor.bands)
+                # Pad or truncate bands to match model expectation
+                if n_bands < n_model_bands:
+                    pad = np.zeros((n_model_bands - n_bands, img.shape[1], img.shape[2]),
+                                   dtype=img.dtype)
+                    img = np.concatenate([img, pad], axis=0)
+                elif n_bands > n_model_bands:
+                    img = img[:n_model_bands]
+
+                preprocessed = processor.preprocess_image(img)
+
+                # Build input tensor: (B, C, T, H, W) -- single timestep
+                img_size = processor.img_size
+                h, w = preprocessed.shape[1], preprocessed.shape[2]
+                # Pad to multiple of img_size
+                pad_h = (img_size - h % img_size) % img_size
+                pad_w = (img_size - w % img_size) % img_size
+                if pad_h > 0 or pad_w > 0:
+                    preprocessed = np.pad(preprocessed,
+                                          ((0, 0), (0, pad_h), (0, pad_w)),
+                                          mode="reflect")
+
+                # Crop to single img_size x img_size patch (center crop)
+                ch, cw = preprocessed.shape[1] // 2, preprocessed.shape[2] // 2
+                half = img_size // 2
+                patch = preprocessed[:, ch - half:ch + half, cw - half:cw + half]
+
+                # Shape: (1, C, 1, H, W)
+                num_frames = processor.num_frames
+                # Repeat single frame to match num_frames
+                patch_t = np.stack([patch] * num_frames, axis=1)  # (C, T, H, W)
+                tensor_in = torch.tensor(patch_t[np.newaxis], dtype=torch.float32)
+
+                # Extract encoder embedding with mask_ratio=0 (no masking)
+                with torch.no_grad():
+                    x = tensor_in.to(processor.device)
+                    latent, mask, ids_restore = processor.model.encoder(
+                        x, None, None, mask_ratio=0.0
+                    )
+                    # latent: (1, num_patches+1, embed_dim)
+                    # Token 0 is CLS; rest are spatial patches
+                    cls_token = latent[0, 0, :]  # (embed_dim,)
+                    patch_mean = latent[0, 1:, :].mean(dim=0)  # (embed_dim,)
+                    # Concatenate CLS + mean for a richer embedding
+                    embedding = torch.cat([cls_token, patch_mean], dim=0).cpu().numpy()
+
+        if embedding is not None:
+            return {
+                "mode": "foundation_embeddings",
+                "model": model_name,
+                "embedding_dim": len(embedding),
+                "embedding": embedding.tolist(),
+                "bands": processor.bands[:6],
+                "source": "prithvi_eo_encoder",
+            }
+        raise RuntimeError("No raster available for embedding extraction")
+
     except ImportError:
         return _synthetic_embeddings(lat, lon, radius_km, model_size, dim)
-
-    try:
-        bbox = _bbox_from_point(lat, lon, radius_km)
-        processor = PrithviProcessor(model_size=model_size)
-        embedding = processor.extract_embedding(bbox=bbox)
-        if hasattr(embedding, "tolist"):
-            embedding = embedding.tolist()
-        return {
-            "mode": "foundation_embeddings",
-            "model": f"Prithvi-EO-2.0-{model_size}",
-            "embedding_dim": dim,
-            "embedding": embedding,
-            "bands": ["B2", "B3", "B4", "B8", "B11", "B12"],
-            "source": "prithvi_eo",
-        }
-    except Exception:
-        return _synthetic_embeddings(lat, lon, radius_km, model_size, dim)
+    except Exception as e:
+        result = _synthetic_embeddings(lat, lon, radius_km, model_size, dim)
+        result["fallback_reason"] = str(e)
+        return result
 
 
 def _synthetic_embeddings(lat, lon, radius_km, model_size, dim):
@@ -538,6 +702,125 @@ def _synthetic_embeddings(lat, lon, radius_km, model_size, dim):
                                    "100M-TL": 768, "300M-TL": 1024, "600M-TL": 1280}.keys()),
         "source": "synthetic_zero_vector",
     }
+
+
+# ---------------------------------------------------------------------------
+# Mode: prithvi_embeddings — lightweight embedding-only endpoint
+# ---------------------------------------------------------------------------
+
+def extract_prithvi_embeddings(lat: float, lon: float, radius_km: float,
+                                model_size: str = "300M-TL", **kwargs) -> dict:
+    """Extract Prithvi EO 2.0 embeddings for a lat/lon location.
+
+    This is a streamlined embedding-only mode (no reconstruction). It loads the
+    Prithvi encoder, downloads a NAIP tile, and returns the CLS + mean-pooled
+    embedding vector suitable for similarity search, clustering, or downstream
+    classification.
+    """
+    model_map = {
+        "tiny": ("Prithvi-EO-2.0-tiny-TL", 192),
+        "100M-TL": ("Prithvi-EO-2.0-100M-TL", 768),
+        "300M": ("Prithvi-EO-2.0-300M", 1024),
+        "300M-TL": ("Prithvi-EO-2.0-300M-TL", 768),
+        "600M": ("Prithvi-EO-2.0-600M", 1280),
+        "600M-TL": ("Prithvi-EO-2.0-600M-TL", 1280),
+    }
+    model_name, dim = model_map.get(model_size, ("Prithvi-EO-2.0-300M-TL", 768))
+
+    try:
+        from geoai.prithvi import PrithviProcessor
+        import torch
+        import numpy as np
+
+        bbox = _bbox_from_point(lat, lon, radius_km)
+        processor = PrithviProcessor(model_name=model_name, device=torch.device("cpu"))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            raster_path = None
+            try:
+                from geoai.download import download_naip
+                paths = download_naip(bbox=bbox, output_dir=tmpdir, max_items=1)
+                if paths:
+                    raster_path = paths[0]
+            except Exception:
+                pass
+
+            if not raster_path or not os.path.isfile(raster_path):
+                raise RuntimeError("No imagery available for Prithvi embedding")
+
+            img, meta, coords = processor.read_geotiff(raster_path)
+            n_bands = img.shape[0]
+            n_model_bands = len(processor.bands)
+            if n_bands < n_model_bands:
+                pad = np.zeros((n_model_bands - n_bands, img.shape[1], img.shape[2]),
+                               dtype=img.dtype)
+                img = np.concatenate([img, pad], axis=0)
+            elif n_bands > n_model_bands:
+                img = img[:n_model_bands]
+
+            preprocessed = processor.preprocess_image(img)
+
+            img_size = processor.img_size
+            h, w = preprocessed.shape[1], preprocessed.shape[2]
+            pad_h = (img_size - h % img_size) % img_size
+            pad_w = (img_size - w % img_size) % img_size
+            if pad_h > 0 or pad_w > 0:
+                preprocessed = np.pad(preprocessed,
+                                      ((0, 0), (0, pad_h), (0, pad_w)),
+                                      mode="reflect")
+
+            ch, cw = preprocessed.shape[1] // 2, preprocessed.shape[2] // 2
+            half = img_size // 2
+            patch = preprocessed[:, ch - half:ch + half, cw - half:cw + half]
+
+            num_frames = processor.num_frames
+            patch_t = np.stack([patch] * num_frames, axis=1)
+            tensor_in = torch.tensor(patch_t[np.newaxis], dtype=torch.float32)
+
+            with torch.no_grad():
+                x = tensor_in.to(processor.device)
+                latent, mask, ids_restore = processor.model.encoder(
+                    x, None, None, mask_ratio=0.0
+                )
+                cls_token = latent[0, 0, :]
+                patch_mean = latent[0, 1:, :].mean(dim=0)
+                embedding = torch.cat([cls_token, patch_mean], dim=0).cpu().numpy()
+
+            return {
+                "mode": "prithvi_embeddings",
+                "model": model_name,
+                "embedding_dim": len(embedding),
+                "embedding": embedding.tolist(),
+                "lat": lat,
+                "lon": lon,
+                "bbox": list(bbox),
+                "bands_used": processor.bands[:n_model_bands],
+                "input_bands_available": n_bands,
+                "source": "prithvi_eo_encoder",
+            }
+
+    except ImportError:
+        return {
+            "mode": "prithvi_embeddings",
+            "model": model_name,
+            "embedding_dim": dim * 2,  # CLS + mean
+            "embedding": [0.0] * (dim * 2),
+            "lat": lat,
+            "lon": lon,
+            "note": "Prithvi/torch not installed -- zero-vector fallback",
+            "source": "synthetic_zero_vector",
+        }
+    except Exception as e:
+        return {
+            "mode": "prithvi_embeddings",
+            "model": model_name,
+            "embedding_dim": dim * 2,
+            "embedding": [0.0] * (dim * 2),
+            "lat": lat,
+            "lon": lon,
+            "note": f"Prithvi inference failed: {e}",
+            "source": "synthetic_zero_vector",
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -832,6 +1115,7 @@ MODE_HANDLERS = {
     "cloud_mask": assess_cloud_mask,
     "super_resolution": run_super_resolution,
     "foundation_embeddings": extract_foundation_embeddings,
+    "prithvi_embeddings": extract_prithvi_embeddings,
     "patch_similarity": compute_patch_similarity,
     "site_caption": generate_site_caption,
     "infrastructure_detect": detect_infrastructure,

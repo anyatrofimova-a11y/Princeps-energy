@@ -1,6 +1,7 @@
 /**
  * Centralized API service — replaces scattered fetch() calls.
  * All endpoints return JSON or null on failure.
+ * Includes retry with exponential backoff and health polling.
  */
 
 const json = async (res) => {
@@ -8,10 +9,33 @@ const json = async (res) => {
   catch { return null; }
 };
 
-const get = (url) => fetch(url).then(json);
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
+/**
+ * Fetch with exponential backoff retry (1s, 2s, 4s).
+ * Only retries on network errors or 502/503/504 (backend starting).
+ */
+const fetchWithRetry = async (url, opts = {}) => {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url, opts);
+      if (res.ok || attempt === MAX_RETRIES || (res.status < 502 || res.status > 504)) {
+        return res;
+      }
+      // 502/503/504 — backend likely still starting, retry
+    } catch (err) {
+      // Network error (backend unreachable)
+      if (attempt === MAX_RETRIES) throw err;
+    }
+    await new Promise(r => setTimeout(r, BASE_DELAY_MS * Math.pow(2, attempt)));
+  }
+};
+
+const get = (url) => fetchWithRetry(url).then(json);
 
 const post = (url, body) =>
-  fetch(url, {
+  fetchWithRetry(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -109,6 +133,9 @@ const api = {
       if (contingency) q.set("contingency", "true");
       return post(`/grid/power-flow?${q}`);
     },
+    // Time-to-Energisation estimator
+    energisationTimeline: (lat, lon, mw, tech) =>
+      post("/api/grid/energisation-timeline", { lat, lon, capacity_mw: mw, technology: tech }),
   },
 
   energy: {
@@ -126,6 +153,13 @@ const api = {
     parcels:  (bbox) => get(`/api/land/parcels?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
     alc:      (lat, lon) => get(`/api/land/alc?lat=${lat}&lon=${lon}`),
     listings: (lat, lon, radiusKm = 10) => get(`/api/land/listings?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
+    pricePaid: (postcode) => get(`/api/land/price-paid?postcode=${enc(postcode)}`),
+    planningDensity: (lat, lon, radiusKm = 10) => get(`/api/land/planning-density?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
+  },
+
+  environment: {
+    assess: (lat, lon, capacityMw = 50, radiusM = 1000) =>
+      get(`/api/environment/assess?lat=${lat}&lon=${lon}&capacity_mw=${capacityMw}&radius_m=${radiusM}`),
   },
 
   carbon: {
@@ -402,6 +436,10 @@ const api = {
     torchgeoModels: () => get("/api/vision/torchgeo-models"),
     clayAnalyse: (lat, lon, radiusM = 500) =>
       post("/api/vision/clay-analyse", { lat, lon, radius_m: radiusM }),
+    shadowFlicker: (lat, lon, turbineSpecs, receptors = []) =>
+      post("/api/vision/shadow-flicker", { lat, lon, turbine_specs: turbineSpecs, receptors }),
+    glintGlare: (lat, lon, panelSpecs, receptors = []) =>
+      post("/api/vision/glint-glare", { lat, lon, panel_specs: panelSpecs, receptors }),
   },
 
   homeRetrofit: {
@@ -683,6 +721,39 @@ const api = {
       fetch(`/alerts/rules/${enc(id)}`, { method: "DELETE" }).then(json),
     checkNow: () => post("/alerts/check-now"),
   },
+
+  /**
+   * Health check — GET /health (no retry, fast fail).
+   * Returns { status, checks: { database, sam, claude, pool } } or null.
+   */
+  health: () => fetch("/health").then(json).catch(() => null),
+
+  /**
+   * Poll /health every 2s until status === "healthy".
+   * Calls onProgress({ status, checks }) on each poll so the UI can
+   * show per-subsystem progress. Returns a promise that resolves when ready.
+   * Pass an AbortSignal via opts.signal to cancel polling.
+   */
+  waitForReady: (onProgress, opts = {}) => new Promise((resolve) => {
+    const poll = async () => {
+      if (opts.signal?.aborted) return;
+      try {
+        const res = await fetch("/health", { signal: opts.signal });
+        const data = res.ok ? await res.json() : null;
+        if (data) {
+          onProgress?.(data);
+          if (data.status === "healthy") { resolve(data); return; }
+        } else {
+          onProgress?.({ status: "unreachable", checks: {} });
+        }
+      } catch (err) {
+        if (err.name === "AbortError") return;
+        onProgress?.({ status: "unreachable", checks: {} });
+      }
+      setTimeout(poll, 2000);
+    };
+    poll();
+  }),
 };
 
 export default api;

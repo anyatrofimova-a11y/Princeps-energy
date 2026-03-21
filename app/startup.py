@@ -25,16 +25,27 @@ from utils.grid_upgrade_tracker import ingest_nged_upgrades
 from utils.grid_data_ingester import ingest_all_dnos
 from utils.dc_infra_ingester import ingest_dc_infrastructure
 from utils.alert_engine import run_daily_alert_check
+from app.readiness import mark_ready, mark_loading, mark_failed, update_progress
 
 log = logging.getLogger("princeps")
 
 
-async def _safe_bg(name: str, coro_func, *args) -> None:
-    """Run a coroutine and log rather than crash on failure."""
+async def _safe_bg(name: str, coro_func, *args, subsystem: str | None = None) -> None:
+    """Run a coroutine and log rather than crash on failure.
+
+    If *subsystem* is provided, updates the readiness tracker on
+    completion or failure.
+    """
+    if subsystem:
+        mark_loading(subsystem)
     try:
         await coro_func(*args)
+        if subsystem:
+            mark_ready(subsystem)
     except Exception as e:
         log.warning("Background task %s failed: %s", name, e)
+        if subsystem:
+            mark_failed(subsystem, str(e))
 
 
 async def launch_background_tasks(pool: asyncpg.Pool) -> None:
@@ -43,6 +54,10 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
     Each task is launched via ``asyncio.create_task`` so they run
     concurrently without blocking the server startup.
     """
+
+    # ── Mark core subsystems ready (DB pool is already created) ─────
+    mark_ready("database")
+    mark_ready("core_api")
 
     # ── OSM power infrastructure seeding ──────────────────────────────
     asyncio.create_task(osm_power_seed(pool))
@@ -55,23 +70,30 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
     asyncio.create_task(repd_seed(pool))
 
     # ── Neo4j graph topology (graceful degradation) ───────────────────
+    mark_loading("neo4j")
     try:
         await neo4j_init()
         if neo4j_available():
-            asyncio.create_task(neo4j_seed(pool))
+            asyncio.create_task(_safe_bg("neo4j_seed", neo4j_seed, pool, subsystem="neo4j"))
+        else:
+            mark_failed("neo4j", "driver not available")
     except Exception as e:
         log.warning("Neo4j init skipped — graph features disabled: %s", e)
+        mark_failed("neo4j", str(e))
 
     # ── Regulatory intelligence background ingestion ──────────────────
-    asyncio.create_task(_safe_bg("repd_ingest", ingest_repd, pool))
+    asyncio.create_task(_safe_bg("repd_ingest", ingest_repd, pool, subsystem="demand_data"))
     asyncio.create_task(_safe_bg("tec_ingest", ingest_tec_register, pool))
     asyncio.create_task(_safe_bg("grid_upgrade_ingest", ingest_nged_upgrades, pool))
 
     # ── Grid Connection module — ingest all DNO data ──────────────────
-    asyncio.create_task(_safe_bg("grid_connection_ingest", ingest_all_dnos, pool))
+    asyncio.create_task(_safe_bg("grid_connection_ingest", ingest_all_dnos, pool, subsystem="grid_data"))
 
     # ── DC infrastructure — fibre POPs, IXPs, water bodies, DCs ─────
-    asyncio.create_task(_safe_bg("dc_infra_ingest", ingest_dc_infrastructure, pool))
+    asyncio.create_task(_safe_bg("dc_infra_ingest", ingest_dc_infrastructure, pool, subsystem="dc_infrastructure"))
+
+    # ── GeeFlow — mark ready (no startup ingestion, on-demand) ───────
+    mark_ready("geeflow")
 
     # ── Nightly data refresh scheduler ──────────────────────────────────
     asyncio.create_task(_nightly_refresh_loop(pool))

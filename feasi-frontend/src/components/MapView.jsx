@@ -648,6 +648,9 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       // Highlight pulse marker for selected land listing
       map.addSource("land-highlight", { type: "geojson", data: EMPTY_FC });
 
+      // Planning density source
+      map.addSource("planning-density", { type: "geojson", data: EMPTY_FC });
+
       // DC infrastructure sources
       map.addSource("dc-capacity", { type: "geojson", data: EMPTY_FC });
       map.addSource("dc-fibre", { type: "geojson", data: EMPTY_FC });
@@ -1552,13 +1555,16 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.on("click", "land-parcels-fill", (e) => {
         if (map._pickMode) return;
         const p = e.features[0].properties;
-        new mapboxgl.Popup({ maxWidth: "260px" })
+        const hmlrLink = p.hmlr_url ? `<br/><a href="${p.hmlr_url}" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:underline">View on HMLR</a>` : "";
+        new mapboxgl.Popup({ maxWidth: "280px" })
           .setLngLat(e.lngLat)
           .setHTML(`<div style="font-size:12px">
             <strong>${p.title_number || "Parcel"}</strong>
             <br/>Tenure: <span style="color:${p.color}">${p.tenure}</span>
             <br/>Area: ${p.area_ha} ha
+            ${p.poly_id ? `<br/>INSPIRE ID: ${p.poly_id}` : ""}
             ${p.available ? '<br/><span style="color:#16a34a;font-weight:600">Potentially available</span>' : ""}
+            ${hmlrLink}
           </div>`)
           .addTo(map);
       });
@@ -1631,6 +1637,64 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         }
       };
       window.addEventListener("princeps-land-highlight", landHighlightHandler);
+
+      // ── Planning Density circles ──
+      map.addLayer({
+        id: "planning-density-circles",
+        type: "circle",
+        source: "planning-density",
+        paint: {
+          "circle-radius": [
+            "interpolate", ["linear"], ["get", "capacity_mw"],
+            0, 4, 10, 8, 50, 14, 200, 20,
+          ],
+          "circle-color": ["get", "color"],
+          "circle-opacity": 0.75,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-opacity": 0.5,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "planning-density-labels",
+        type: "symbol",
+        source: "planning-density",
+        paint: {
+          "text-color": "#f4f4f4",
+          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-width": 1.2,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": ["get", "label"],
+          "text-size": 10,
+          "text-font": ["Noto Sans Regular"],
+          "text-anchor": "top",
+          "text-offset": [0, 1],
+          "text-allow-overlap": false,
+        },
+        minzoom: 12,
+      });
+      map.on("click", "planning-density-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new mapboxgl.Popup({ maxWidth: "300px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px">
+            <strong>${p.name || "Project"}</strong>
+            <br/>Status: <span style="color:${p.color};font-weight:600">${p.status}</span>
+            <br/>Technology: ${p.technology}
+            <br/>Capacity: ${p.capacity_mw} MW
+            ${p.operator ? `<br/>Operator: ${p.operator}` : ""}
+            ${p.planning_authority ? `<br/>LPA: ${p.planning_authority}` : ""}
+            <br/>Distance: ${p.distance_km} km
+            <br/><a href="https://www.gov.uk/government/publications/renewable-energy-planning-database-monthly-extract" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:underline">REPD ref ${p.ref_id}</a>
+          </div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "planning-density-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "planning-density-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
 
       // ── Queue Depth circles at substations ──
       map.addLayer({
@@ -2572,6 +2636,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       gridConstraints: ["constraint-zone-fill", "constraint-zone-outline", "constraint-zone-labels"],
       queueDepth: ["queue-depth-circles", "queue-depth-labels"],
       landParcels: ["land-parcels-fill", "land-parcels-outline", "land-parcels-labels", "land-available-markers"],
+      planningDensity: ["planning-density-circles", "planning-density-labels"],
       demandGsps: ["demand-gsp-circles", "demand-gsp-labels"],
       tecPipeline: ["eso-tec-circles", "eso-tec-labels"],
       repdProjects: ["repd-circles", "repd-labels"],
@@ -3105,6 +3170,37 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       if (src) src.setData(EMPTY_FC);
     };
   }, [mapReady, layers.landParcels]);
+
+  // Planning density — load around picked location or map centre
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !layers.planningDensity) return;
+    let cancelled = false;
+
+    const loadDensity = async () => {
+      const centre = pickedLocation || map.getCenter();
+      const lat = centre.lat;
+      const lon = centre.lng || centre.lon;
+      if (!lat || !lon) return;
+      try {
+        const data = await api.land.planningDensity(lat, lon, 10);
+        if (!cancelled && data?.geojson) {
+          const src = map.getSource("planning-density");
+          if (src) src.setData(data.geojson);
+        }
+      } catch (err) {
+        console.warn("Planning density load error:", err);
+      }
+    };
+
+    loadDensity();
+
+    return () => {
+      cancelled = true;
+      const src = map.getSource("planning-density");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [mapReady, layers.planningDensity, pickedLocation]);
 
   // DC capacity map — viewport-based loading
   useEffect(() => {

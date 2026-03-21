@@ -1427,33 +1427,6 @@ async def queue_summary(
 
 
 # ══════════════════════════════════════════════════════════
-# Constraint Cost Overlay
-# ══════════════════════════════════════════════════════════
-
-@router.get("/api/grid/constraints")
-async def get_constraints(
-    west: float = None, south: float = None,
-    east: float = None, north: float = None,
-    pool: asyncpg.Pool = Depends(get_pool),
-):
-    """Return constraint cost zones as GeoJSON for map overlay."""
-    from utils.constraint_overlay import get_constraint_zones
-    bbox = (west, south, east, north) if all(v is not None for v in [west, south, east, north]) else None
-    return await get_constraint_zones(pool, bbox=bbox)
-
-
-# ══════════════════════════════════════════════════════════
-# Live Grid Status
-# ══════════════════════════════════════════════════════════
-
-@router.get("/api/grid/live-status")
-async def live_grid_status():
-    """Real-time UK grid demand, carbon intensity, and generation mix."""
-    from utils.live_grid_status import get_live_status
-    return await get_live_status()
-
-
-# ══════════════════════════════════════════════════════════
 # Revenue Stacking Model
 # ══════════════════════════════════════════════════════════
 
@@ -1528,4 +1501,43 @@ async def api_dno_intelligence_by_code(
     from utils.dno_intelligence import analyse_dno
     result = await analyse_dno(pool, dno=dno)
     record_metric("dno_intelligence", 1, labels={"dno": dno})
+    return result
+
+
+# ══════════════════════════════════════════════════════════
+# Time-to-Energisation Estimator
+# ══════════════════════════════════════════════════════════
+
+from pydantic import BaseModel as _BaseModel
+
+
+class _EnergisationRequest(_BaseModel):
+    lat: float = 52.5
+    lon: float = -1.5
+    capacity_mw: float = 50.0
+    technology: str = "solar"
+
+
+@router.post("/api/grid/energisation-timeline")
+async def api_energisation_timeline(
+    req: _EnergisationRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Predict total months from application to first power export.
+
+    Models 5 phases: pre-application, planning, connection offer,
+    connection works, commissioning. Uses real REPD timelines,
+    ECR queue depth, and DNO processing benchmarks.
+    """
+    from utils.energisation_estimator import estimate_energisation_timeline
+    result = await estimate_energisation_timeline(
+        pool,
+        lat=req.lat,
+        lon=req.lon,
+        capacity_mw=req.capacity_mw,
+        technology=req.technology,
+    )
+    record_metric("energisation_timeline", req.capacity_mw,
+                  labels={"technology": req.technology, "lat": req.lat, "lon": req.lon})
     return result

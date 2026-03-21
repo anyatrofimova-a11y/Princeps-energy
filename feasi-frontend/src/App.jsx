@@ -14,11 +14,14 @@ import LayerRail from "./components/LayerRail";
 import MapLegend from "./components/MapLegend";
 import MapAssetLayer from "./components/MapAssetLayer";
 import DCMapOverlay from "./components/DCMapOverlay";
+import PortfolioMapOverlay from "./components/PortfolioMapOverlay";
+import FinancialStrip from "./components/FinancialStrip";
 import Asset3DOverlay from "./components/Asset3DOverlay";
 import CameraToolbar from "./components/CameraToolbar";
 import SitePicker from "./components/SitePicker";
 import LiveStrip from "./components/LiveStrip";
 import ConstraintTimeline from "./components/ConstraintTimeline";
+import StartupOverlay from "./components/StartupOverlay";
 
 // ── Lazy-loaded overlays (split into separate chunks) ──
 const DigitalTwin = lazy(() => import("./components/DigitalTwin"));
@@ -91,6 +94,8 @@ export default function App() {
   const [mapInstance, setMapInstance] = useState(null);
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(() => !localStorage.getItem("princeps_onboarded"));
+  const [backendReady, setBackendReady] = useState(false);
+  const handleBackendReady = useCallback(() => setBackendReady(true), []);
 
   // ── Map drop handler: place asset at lat/lon ──
   const handleMapDrop = useCallback((e) => {
@@ -274,9 +279,33 @@ export default function App() {
   const handleDrawDoubleClick = useCallback(() => {
     setDrawState(s => {
       const { state } = drawHandleDoubleClick(s);
+
+      // ── Draw-to-Analyze: when a polygon is completed, auto-run feasibility ──
+      const lastFeature = state.features.features[state.features.features.length - 1];
+      if (lastFeature?.geometry?.type === "Polygon" && lastFeature.geometry.coordinates[0]?.length >= 4) {
+        const coords = lastFeature.geometry.coordinates[0];
+        // Calculate centroid
+        let sumLat = 0, sumLon = 0;
+        for (const [lon, lat] of coords) { sumLat += lat; sumLon += lon; }
+        const centLat = sumLat / coords.length;
+        const centLon = sumLon / coords.length;
+
+        // Calculate approximate area (hectares) using Shoelace formula
+        let area = 0;
+        for (let i = 0; i < coords.length - 1; i++) {
+          area += coords[i][0] * coords[i + 1][1] - coords[i + 1][0] * coords[i][1];
+        }
+        const areaM2 = Math.abs(area) * 0.5 * 111320 * 111320 * Math.cos(centLat * Math.PI / 180);
+
+        // Auto-pick the centroid and create a site
+        setTimeout(() => {
+          handleMapPick({ lat: centLat, lon: centLon });
+        }, 300);
+      }
+
       return state;
     });
-  }, []);
+  }, [handleMapPick]);
 
   const handleDrawMouseMove = useCallback((coord) => {
     setDrawState(s => ({ ...s, mouseCoord: coord }));
@@ -356,6 +385,21 @@ export default function App() {
       <MapAssetLayer map={mapInstance} />
       <DCMapOverlay mapInstance={mapInstance} dcAssets={placedAssets.filter(a => a.assetType === "data_centre")} />
       <Asset3DOverlay mapInstance={mapInstance} assets={placedAssets} validations={assetValidations} />
+
+      {/* Portfolio pins — all pipeline projects on map */}
+      <PortfolioMapOverlay
+        map={mapInstance}
+        visible={workflowStage === "site" || !parcelId}
+        onSelectProject={(p) => {
+          if (p.lat && p.lon) {
+            setPickedLocation({ lat: p.lat, lon: p.lon });
+            mapInstance?.flyTo({ center: [p.lon, p.lat], zoom: 13, duration: 1500 });
+          }
+        }}
+      />
+
+      {/* Persistent financial strip */}
+      <FinancialStrip />
 
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
       <MapLegend chatLayers={chatLayers} />
@@ -571,6 +615,9 @@ export default function App() {
         <ThermalModelPanel onClose={() => setThermalModelOpen(false)} />
       )}
       </Suspense>
+
+      {/* Startup overlay — shown until backend health check passes */}
+      {!backendReady && <StartupOverlay onReady={handleBackendReady} />}
     </AppShell>
   );
 }

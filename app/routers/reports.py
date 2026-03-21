@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.deps import get_pool
+from utils.ml_site_classifier import predict_site, train_and_save, ensemble_score, FEATURE_NAMES
 from utils.report_renderer import generate_report
 from utils.xlsx_export import generate_xlsx
 from utils.g99_pack_generator import generate_g99_pack
@@ -252,3 +253,77 @@ async def financial_report(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ---------------------------------------------------------------------------
+# ML Site Viability Classifier
+# ---------------------------------------------------------------------------
+
+
+class MLSiteScoreRequest(BaseModel):
+    """17 features for ML site viability prediction."""
+    ghi_kwh_m2_yr: float = 1000.0
+    wind_speed_ms: float = 6.0
+    slope_mean_deg: float = 5.0
+    slope_p90_deg: float = 8.0
+    south_facing_pct: float = 40.0
+    elevation_m: float = 100.0
+    developable_pct: float = 55.0
+    built_pct: float = 12.0
+    trees_pct: float = 13.0
+    water_pct: float = 3.0
+    grid_distance_km: float = 5.0
+    grid_headroom_mw: float = 5.0
+    flood_risk_score: float = 10.0
+    ndvi_mean: float = 0.45
+    ndvi_trend_slope: float = 0.0
+    sar_vv_mean_db: float = -12.0
+    cloud_clear_pct: float = 42.0
+    # Optional ensemble inputs
+    rule_score: float | None = None
+    agent_confidence: float | None = None
+
+
+@router.post("/api/ml/site-score")
+async def ml_site_score(req: MLSiteScoreRequest):
+    """Predict site viability using XGBoost classifier + regressor.
+
+    Returns GO/CAUTION/NO-GO verdict, 0-100 score, confidence %,
+    SHAP feature importance values, and top contributing factors.
+
+    If rule_score or agent_confidence are provided, also returns an
+    ensemble meta-score blending rule + ML + agent signals.
+    """
+    features = {name: getattr(req, name) for name in FEATURE_NAMES}
+    result = predict_site(features)
+
+    if "error" in result:
+        raise HTTPException(status_code=503, detail=result["error"])
+
+    # Ensemble if extra signals provided
+    if req.rule_score is not None or req.agent_confidence is not None:
+        ens = ensemble_score(
+            rule_score=req.rule_score if req.rule_score is not None else result["score"],
+            ml_result=result,
+            agent_confidence=req.agent_confidence,
+        )
+        result["ensemble"] = ens
+
+    return result
+
+
+@router.post("/api/ml/train")
+async def ml_train(n_samples: int = Query(1000, ge=100, le=10000)):
+    """Retrain XGBoost site viability models on synthetic data.
+
+    Use this endpoint to regenerate models after code changes or
+    to increase training set size.
+    """
+    from utils.ml_site_classifier import _invalidate_cache
+    try:
+        meta = train_and_save(n_samples=n_samples)
+        _invalidate_cache()
+        return {"status": "ok", **meta}
+    except Exception as e:
+        log.exception("ML training failed")
+        raise HTTPException(status_code=500, detail=f"Training failed: {e}")

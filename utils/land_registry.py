@@ -74,13 +74,16 @@ async def get_land_parcels(bbox: tuple, *, min_area_ha: float = 0.5, max_feature
                         if area_ha < min_area_ha:
                             continue
 
+                        poly_id = props.get("POLY_ID") or props.get("poly_id", "")
+                        title_no = props.get("TITLE_NO") or props.get("title_no") or props.get("inspireid", "")
                         f["properties"] = {
-                            "title_number": props.get("TITLE_NO") or props.get("title_no") or props.get("inspireid", ""),
+                            "title_number": title_no,
                             "tenure": tenure,
                             "area_ha": round(area_ha, 2),
                             "color": "#2563eb" if tenure == "freehold" else "#ea580c",
                             "available": area_ha >= 2.0,  # Flag larger parcels as potentially available
-                            "poly_id": props.get("POLY_ID") or props.get("poly_id", ""),
+                            "poly_id": poly_id,
+                            "hmlr_url": f"https://search-property-information.service.gov.uk/search/search-by-inspire-id/{poly_id}" if poly_id else "",
                         }
                         all_features.append(f)
                 else:
@@ -270,6 +273,112 @@ async def search_commercial_listings(
     # Sort: real REPD listings first, then search links
     listings.sort(key=lambda x: (x["type"] == "search_link", -(x.get("capacity_mw") or 0)))
     return listings
+
+
+async def get_price_paid(postcode: str, *, max_results: int = 50) -> dict:
+    """
+    Fetch HMLR Price Paid data for a postcode area.
+
+    Uses the free public Land Registry linked data API:
+    https://landregistry.data.gov.uk/data/ppi/transaction-record.json
+
+    Returns recent transactions with price, date, property type, and address.
+    """
+    clean_pc = postcode.strip().upper()
+    transactions = []
+
+    async with httpx.AsyncClient(timeout=15) as client:
+        try:
+            # HMLR Price Paid API — free, public, no auth
+            resp = await client.get(
+                "https://landregistry.data.gov.uk/data/ppi/transaction-record.json",
+                params={
+                    "propertyAddress.postcode": clean_pc,
+                    "_pageSize": str(max_results),
+                    "_sort": "-transactionDate",
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                items = data.get("result", {}).get("items", [])
+                for item in items:
+                    addr = item.get("propertyAddress", {})
+                    transactions.append({
+                        "price_gbp": item.get("pricePaid"),
+                        "date": item.get("transactionDate"),
+                        "property_type": _ppi_property_type(item.get("propertyType", "")),
+                        "new_build": item.get("newBuild", False),
+                        "estate_type": _ppi_estate_type(item.get("estateType", "")),
+                        "address": {
+                            "paon": addr.get("paon", ""),
+                            "saon": addr.get("saon", ""),
+                            "street": addr.get("street", ""),
+                            "locality": addr.get("locality", ""),
+                            "town": addr.get("town", ""),
+                            "district": addr.get("district", ""),
+                            "county": addr.get("county", ""),
+                            "postcode": addr.get("postcode", clean_pc),
+                        },
+                    })
+            else:
+                log.debug("HMLR Price Paid API returned %s for %s", resp.status_code, clean_pc)
+        except Exception as e:
+            log.warning("HMLR Price Paid fetch failed for %s: %s", clean_pc, e)
+
+    # Summary statistics
+    prices = [t["price_gbp"] for t in transactions if t["price_gbp"]]
+    avg_price = round(sum(prices) / len(prices)) if prices else None
+    min_price = min(prices) if prices else None
+    max_price = max(prices) if prices else None
+
+    return {
+        "postcode": clean_pc,
+        "total": len(transactions),
+        "transactions": transactions,
+        "summary": {
+            "avg_price_gbp": avg_price,
+            "min_price_gbp": min_price,
+            "max_price_gbp": max_price,
+            "by_type": _count_by(transactions, "property_type"),
+            "by_estate": _count_by(transactions, "estate_type"),
+        },
+        "source": "HM Land Registry Price Paid Data",
+    }
+
+
+def _ppi_property_type(uri: str) -> str:
+    """Extract readable property type from HMLR URI."""
+    mapping = {
+        "detached": "Detached",
+        "semi-detached": "Semi-Detached",
+        "terraced": "Terraced",
+        "flat-maisonette": "Flat/Maisonette",
+        "other": "Other",
+    }
+    lower = uri.lower()
+    for key, val in mapping.items():
+        if key in lower:
+            return val
+    return uri.split("/")[-1] if "/" in uri else (uri or "Unknown")
+
+
+def _ppi_estate_type(uri: str) -> str:
+    """Extract readable estate type from HMLR URI."""
+    lower = uri.lower()
+    if "freehold" in lower:
+        return "Freehold"
+    if "leasehold" in lower:
+        return "Leasehold"
+    return uri.split("/")[-1] if "/" in uri else (uri or "Unknown")
+
+
+def _count_by(items: list[dict], key: str) -> dict[str, int]:
+    """Count items by a key field."""
+    counts: dict[str, int] = {}
+    for item in items:
+        val = item.get(key, "Unknown")
+        counts[val] = counts.get(val, 0) + 1
+    return dict(sorted(counts.items(), key=lambda x: -x[1]))
 
 
 def _polygon_area_ha(geometry: dict | None) -> float:

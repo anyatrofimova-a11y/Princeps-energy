@@ -6,15 +6,26 @@ import App from "./App";
 import "./styles.css";
 
 class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
+  constructor(props) { super(props); this.state = { error: null, info: null }; }
   static getDerivedStateFromError(error) { return { error }; }
+  componentDidCatch(error, info) {
+    console.error("ErrorBoundary caught:", error, info);
+    this.setState({ info });
+  }
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: 20, fontFamily: "monospace" }}>
+        <div style={{ padding: 20, fontFamily: "monospace", maxWidth: "90vw" }}>
           <h2>Something went wrong</h2>
-          <pre>{this.state.error.message}</pre>
-          <button onClick={() => this.setState({ error: null })}>Retry</button>
+          <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", fontSize: 12, color: "#dc2626" }}>{this.state.error.message}</pre>
+          {this.state.info?.componentStack && (
+            <details style={{ marginTop: 10 }}>
+              <summary style={{ cursor: "pointer", fontSize: 12 }}>Component Stack</summary>
+              <pre style={{ whiteSpace: "pre-wrap", fontSize: 10, color: "#6b7280", maxHeight: 300, overflow: "auto" }}>{this.state.info.componentStack}</pre>
+            </details>
+          )}
+          <button onClick={() => this.setState({ error: null, info: null })} style={{ marginTop: 10, padding: "8px 16px", cursor: "pointer" }}>Retry</button>
+          <button onClick={() => window.location.reload()} style={{ marginTop: 10, marginLeft: 8, padding: "8px 16px", cursor: "pointer" }}>Hard Reload</button>
         </div>
       );
     }

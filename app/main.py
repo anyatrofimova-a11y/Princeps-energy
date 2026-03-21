@@ -31,6 +31,7 @@ from app.db_setup import setup_database
 from app.startup import launch_background_tasks
 from app.errors import APIError, api_error_handler
 from app.helpers import SAM_PYTHON, CLAUDE_MODEL
+from app.readiness import get_status as readiness_status, core_ready as _core_ready, reset_start_time
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -67,6 +68,7 @@ async def lifespan(_app: FastAPI):
     _app.state.pool = pool
     _app.state.claude = anthropic.AsyncAnthropic(api_key=CLAUDE_API_KEY)
     _app.state._start_time = _time.time()
+    reset_start_time()
 
     # Initialize persistent modules with pool reference
     import jobs
@@ -164,7 +166,26 @@ async def health_check(request: Request):
     # Uptime
     uptime = _time.time() - getattr(request.app.state, "_start_time", _time.time())
 
-    return {"status": overall, "checks": checks, "uptime_s": round(uptime, 1)}
+    return {
+        "status": overall,
+        "checks": checks,
+        "uptime_s": round(uptime, 1),
+        "core_ready": _core_ready(),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Readiness — progressive subsystem startup tracking
+# ---------------------------------------------------------------------------
+@app.get("/api/readiness")
+async def readiness_endpoint():
+    """Progressive readiness status for all subsystems.
+
+    Returns overall state (starting/ready/degraded), per-subsystem status,
+    and a core_ready flag the frontend can use to start making API calls
+    before all background ingestion finishes.
+    """
+    return readiness_status()
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +210,7 @@ from app.routers import (  # noqa: E402
     projects as projects_router,
     finance as finance_router,
     site_design as site_design_router,
+    environment as environment_router,
 )
 
 _routers = [
@@ -211,6 +233,7 @@ _routers = [
     projects_router.router,
     finance_router.router,
     site_design_router.router,
+    environment_router.router,
 ]
 
 app.include_router(graph_router)

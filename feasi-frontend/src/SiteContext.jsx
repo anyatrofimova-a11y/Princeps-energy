@@ -300,6 +300,7 @@ export function SiteProvider({ children }) {
     gridConstraints: false,
     queueDepth: false,
     landParcels: false,
+    planningDensity: false,
   });
   const toggleLayer = useCallback((id) => {
     setLayers(l => ({ ...l, [id]: !l[id] }));

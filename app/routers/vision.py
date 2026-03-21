@@ -895,6 +895,52 @@ async def torchgeo_list_models():
 
 
 # ---------------------------------------------------------------------------
+# Prithvi EO 2.0 — foundation model embeddings
+# ---------------------------------------------------------------------------
+
+class PrithviEmbedRequest(BaseModel):
+    lat: float
+    lon: float
+    radius_km: float = 2.0
+    model_size: str = "300M-TL"  # tiny, 100M-TL, 300M, 300M-TL, 600M, 600M-TL
+
+
+@router.post("/api/vision/prithvi-embed")
+async def prithvi_embed(body: PrithviEmbedRequest):
+    """Extract Prithvi EO 2.0 foundation model embeddings for a location.
+
+    Downloads NAIP imagery, runs the Prithvi ViT encoder with mask_ratio=0,
+    and returns a CLS + mean-pooled embedding vector. Useful for site
+    similarity search, clustering, and downstream classification.
+
+    Falls back to a zero-vector if the model or imagery is unavailable.
+    """
+    try:
+        result = await run_geoai_subprocess(
+            mode="prithvi_embeddings",
+            lat=body.lat,
+            lon=body.lon,
+            radius_km=body.radius_km,
+            model_size=body.model_size,
+            timeout=300,  # model download + inference can be slow
+        )
+    except Exception as exc:
+        log.warning("Prithvi embedding extraction failed: %s", exc)
+        raise HTTPException(status_code=502, detail=f"Prithvi embedding failed: {exc}")
+
+    return {
+        "lat": body.lat,
+        "lon": body.lon,
+        "radius_km": body.radius_km,
+        "model": result.get("model"),
+        "embedding_dim": result.get("embedding_dim"),
+        "embedding": result.get("embedding"),
+        "source": result.get("source"),
+        "note": result.get("note"),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Clay Foundation Model — spectral analysis & embeddings
 # ---------------------------------------------------------------------------
 
@@ -1003,3 +1049,64 @@ async def clay_analyse(
         } if not embedding_result.get("error") else {"error": embedding_result["error"]},
         "similar_sites": similar_sites,
     }
+
+
+# ---------------------------------------------------------------------------
+# Shadow Flicker & Glint-Glare
+# ---------------------------------------------------------------------------
+
+class ShadowFlickerRequest(BaseModel):
+    lat: float
+    lon: float
+    turbine_specs: dict
+    receptors: list[dict] = []
+
+
+@router.post("/api/vision/shadow-flicker")
+async def shadow_flicker(
+    body: ShadowFlickerRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Calculate shadow flicker for wind turbines near receptors.
+
+    Uses hourly solar geometry for 365 days to model rotating blade shadow
+    patterns on nearby dwellings.  UK planning threshold: 30 hrs/year,
+    30 min/day.  If no receptors are provided, auto-detects from PostGIS.
+    """
+    from utils.shadow_flicker import calculate_shadow_flicker
+    return await calculate_shadow_flicker(
+        body.lat,
+        body.lon,
+        body.turbine_specs,
+        body.receptors,
+        pool=pool,
+    )
+
+
+class GlintGlareRequest(BaseModel):
+    lat: float
+    lon: float
+    panel_specs: dict
+    receptors: list[dict] = []
+
+
+@router.post("/api/vision/glint-glare")
+async def glint_glare(
+    body: GlintGlareRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Calculate glint-glare for solar panels towards receptors.
+
+    Models specular reflection from tilted panels using hourly solar geometry
+    for 365 days.  Checks if reflected beam intersects receptor viewpoints
+    within a 2-degree cone.  Auto-detects receptors from PostGIS if none
+    are provided.
+    """
+    from utils.shadow_flicker import calculate_glint_glare
+    return await calculate_glint_glare(
+        body.lat,
+        body.lon,
+        body.panel_specs,
+        body.receptors,
+        pool=pool,
+    )
