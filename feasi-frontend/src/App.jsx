@@ -314,8 +314,12 @@ export default function App() {
   const [drawState, setDrawState] = useState(createDrawState);
 
   const handleDrawModeChange = useCallback((mode) => {
+    // Clear pick mode when entering a draw mode — they are mutually exclusive
+    if (mode && mode !== "view") {
+      setPickMode(false);
+    }
     setDrawState(s => ({ ...s, mode, clickSequence: [], mouseCoord: null, selectedIndex: -1 }));
-  }, []);
+  }, [setPickMode]);
 
   const handleDrawClick = useCallback((coord, handleIndex) => {
     setDrawState(s => {

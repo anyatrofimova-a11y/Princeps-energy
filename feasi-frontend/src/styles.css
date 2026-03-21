@@ -8915,24 +8915,24 @@ input[type="range"] { accent-color: var(--accent); }
   gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--cds-border-subtle);
-  background: rgba(38, 38, 38, 0.5);
+  background: var(--cds-layer-01);
 }
 .gc-input-group { display: flex; flex-direction: column; gap: 2px; }
 .gc-input-label {
   font-size: 9px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: var(--cds-text-helper);
+  color: var(--cds-text-secondary, #525252);
 }
 .gc-input {
-  background: rgba(22, 22, 22, 0.8);
-  border: 1px solid var(--cds-border-subtle);
-  border-radius: 3px;
+  background: var(--cds-field, #f4f4f4);
+  border: 1px solid var(--cds-border-strong, #8d8d8d);
+  border-radius: 4px;
   color: var(--cds-text-primary);
   font-family: var(--mono);
-  font-size: 12px;
-  padding: 5px 8px;
+  font-size: 13px;
+  padding: 6px 10px;
   transition: border-color 0.15s;
 }
 .gc-input:focus { outline: none; border-color: var(--cds-interactive); }
@@ -9036,7 +9036,7 @@ input[type="range"] { accent-color: var(--accent); }
 
 /* ── Candidate Substations ── */
 .gc-candidate {
-  background: rgba(38, 38, 38, 0.5);
+  background: var(--cds-layer-02, #e0e0e0);
   border: 1px solid var(--cds-border-subtle);
   border-radius: 4px;
   padding: 10px 12px;
@@ -9047,8 +9047,8 @@ input[type="range"] { accent-color: var(--accent); }
   overflow: hidden;
 }
 .gc-candidate:hover {
-  background: rgba(38, 38, 38, 0.8);
-  border-color: var(--cds-border-subtle);
+  background: var(--cds-layer-hover, #d1d1d1);
+  border-color: var(--cds-border-strong, #8d8d8d);
 }
 .gc-candidate--selected {
   border-color: var(--cds-interactive);
@@ -9199,7 +9199,7 @@ input[type="range"] { accent-color: var(--accent); }
   text-align: center;
   padding: 6px 0;
   border-radius: 3px;
-  background: rgba(38, 38, 38, 0.5);
+  background: var(--cds-layer-02, #e0e0e0);
 }
 .gc-cost-range-label {
   font-size: 9px;
@@ -9226,7 +9226,7 @@ input[type="range"] { accent-color: var(--accent); }
   height: 24px;
   border-radius: 3px;
   overflow: hidden;
-  background: rgba(38, 38, 38, 0.5);
+  background: var(--cds-layer-02, #e0e0e0);
   margin-bottom: 4px;
 }
 .gc-timeline-phase {
