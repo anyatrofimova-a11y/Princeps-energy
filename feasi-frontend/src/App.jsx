@@ -8,6 +8,7 @@ import AppShell from "./components/shell/AppShell";
 import WorkspaceRouter from "./components/workspace/WorkspaceRouter";
 import MapView from "./components/MapView";
 import CopilotWidget from "./components/CopilotWidget";
+import OnboardingDemo from "./components/OnboardingDemo";
 import ErrorBoundary from "./components/ErrorBoundary";
 import LayerRail from "./components/LayerRail";
 import MapLegend from "./components/MapLegend";
@@ -16,6 +17,8 @@ import DCMapOverlay from "./components/DCMapOverlay";
 import Asset3DOverlay from "./components/Asset3DOverlay";
 import CameraToolbar from "./components/CameraToolbar";
 import SitePicker from "./components/SitePicker";
+import LiveStrip from "./components/LiveStrip";
+import ConstraintTimeline from "./components/ConstraintTimeline";
 
 // ── Lazy-loaded overlays (split into separate chunks) ──
 const DigitalTwin = lazy(() => import("./components/DigitalTwin"));
@@ -87,6 +90,7 @@ export default function App() {
 
   const [mapInstance, setMapInstance] = useState(null);
   const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [demoOpen, setDemoOpen] = useState(() => !localStorage.getItem("princeps_onboarded"));
 
   // ── Map drop handler: place asset at lat/lon ──
   const handleMapDrop = useCallback((e) => {
@@ -355,6 +359,8 @@ export default function App() {
 
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
       <MapLegend chatLayers={chatLayers} />
+      <LiveStrip />
+      <ConstraintTimeline map={mapInstance} visible={!!layers.gridConstraints} />
 
       <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
 
@@ -422,6 +428,7 @@ export default function App() {
       case "dc-landing": setDcLandingOpen(true); break;
       case "dc-compare": setDcComparisonOpen(true); break;
       case "pipeline": setPipelineOpen(true); break;
+      case "demo": setDemoOpen(true); break;
       case "settings": setSettingsMode(true); break;
       default: break;
     }
@@ -458,12 +465,30 @@ export default function App() {
         onAction={handleCmdAction}
       />
 
+      {/* Onboarding Demo */}
+      {demoOpen && (
+        <OnboardingDemo onClose={() => { setDemoOpen(false); localStorage.setItem("princeps_onboarded", "1"); }} />
+      )}
+
       {/* Project Pipeline — Kanban board */}
       {pipelineOpen && (
         <ProjectPipeline
           onClose={() => setPipelineOpen(false)}
-          onSelectProject={(p) => {
-            if (p.lat && p.lon) setPickedLocation({ lat: p.lat, lon: p.lon });
+          onSelectProject={async (p) => {
+            if (p.lat && p.lon) {
+              setPickedLocation({ lat: p.lat, lon: p.lon });
+              if (mapInstance) {
+                mapInstance.flyTo({ center: [p.lon, p.lat], zoom: 14, pitch: 60, duration: 2000 });
+              }
+              // Load site data for the selected project
+              try {
+                const data = await api.site.fromLocation(p.lat, p.lon);
+                if (data?.parcel_id) {
+                  setParcelId(data.parcel_id);
+                  await loadSite(data.parcel_id, samCapacity, samDay);
+                }
+              } catch (e) { console.warn("Pipeline site load:", e); }
+            }
           }}
         />
       )}

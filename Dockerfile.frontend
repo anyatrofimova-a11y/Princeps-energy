@@ -1,0 +1,41 @@
+# Multi-stage build: Node 20 build -> nginx serve
+# Build args: VITE_MAPBOX_TOKEN, VITE_API_URL
+
+# --- Stage 1: Build ---
+FROM node:20-slim AS builder
+WORKDIR /app
+
+COPY feasi-frontend/package.json feasi-frontend/package-lock.json* ./
+RUN npm ci --ignore-scripts 2>/dev/null || npm install
+
+COPY feasi-frontend/ .
+
+ARG VITE_MAPBOX_TOKEN=""
+ARG VITE_API_URL=""
+ENV VITE_MAPBOX_TOKEN=$VITE_MAPBOX_TOKEN
+ENV VITE_API_URL=$VITE_API_URL
+
+RUN npm run build
+
+# --- Stage 2: Serve ---
+FROM nginx:1.27-alpine
+
+# Remove default config
+RUN rm /etc/nginx/conf.d/default.conf
+
+# Copy custom nginx config (template)
+COPY nginx.conf /etc/nginx/templates/default.conf.template
+
+# Copy built assets from builder
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Default backend host — overridden by BACKEND_HOST env var
+ENV BACKEND_HOST=princeps-api.internal
+
+# Use entrypoint script to substitute BACKEND_HOST at startup
+COPY docker-entrypoint-frontend.sh /docker-entrypoint.d/40-backend-host.sh
+RUN chmod +x /docker-entrypoint.d/40-backend-host.sh
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

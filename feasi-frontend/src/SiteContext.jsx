@@ -168,13 +168,11 @@ export function SiteProvider({ children }) {
     setEnergyFlowOpen(true);
     setDesignDirty(true);
 
-    // Auto-validate placement (fire-and-forget)
+    // Auto-validate placement (fire-and-forget, no Suspense)
     if (asset.lat && asset.lon) {
-      import("./services/api").then(({ default: api }) => {
-        api.design.validate(asset.lat, asset.lon, asset.assetType, asset.mw || 0).then(val => {
-          if (val) setAssetValidations(prev => ({ ...prev, [newAsset.id]: val }));
-        });
-      });
+      api.design?.validate(asset.lat, asset.lon, asset.assetType, asset.mw || 0).then(val => {
+        if (val) setAssetValidations(prev => ({ ...prev, [newAsset.id]: val }));
+      }).catch(() => {});
     }
   }, []);
 
@@ -193,7 +191,6 @@ export function SiteProvider({ children }) {
   // Save design to backend (called manually or on finalize)
   const saveDesign = useCallback(async (projectId) => {
     if (!projectId || placedAssets.length === 0) return null;
-    const { default: api } = await import("./services/api");
     const assets = placedAssets.map((a, i) => ({
       asset_type: a.assetType, lat: a.lat, lon: a.lon || a.lng,
       capacity_mw: a.mw || 0, label: a.label, color: a.color,
@@ -207,7 +204,6 @@ export function SiteProvider({ children }) {
 
   // Load design from backend
   const loadDesign = useCallback(async (projectId) => {
-    const { default: api } = await import("./services/api");
     const assets = await api.design.listAssets(projectId);
     if (assets && Array.isArray(assets)) {
       setPlacedAssets(assets.map(a => ({
@@ -254,14 +250,37 @@ export function SiteProvider({ children }) {
   const [workflowProgress, setWorkflowProgress] = useState(null); // { step, total, intent, preset }
   const workflowAbortRef = useRef(null);
 
-  const navigateWorkflow = useCallback((stage) => {
+  const navigateWorkflow = useCallback(async (stage) => {
     setWorkflowStage(stage);
     setWorkflowHistory(prev => prev.includes(stage) ? prev : [...prev, stage]);
     if (stage === "site") { setPickMode(true); setLayoutMode(false); }
     if (stage === "plan") { setLayoutMode(true); }
     if (stage === "study") { setLayoutMode(false); setStudySubStep("feasibility"); setActiveIntent("feasibility"); }
-    if (stage === "act") { setLayoutMode(false); }
-  }, [setPickMode, setLayoutMode, setActiveIntent]);
+    if (stage === "act") {
+      setLayoutMode(false);
+      // Auto-create pipeline project when entering ACT stage
+      const siteName = explain?.location_name || parcelId || "Untitled Site";
+      const lat = explain?.lat ?? pickedLocation?.lat;
+      const lon = explain?.lon ?? pickedLocation?.lon;
+      if (lat && lon && parcelId) {
+        try {
+          const { default: apiMod } = await import("./services/api");
+          await apiMod.projects.create({
+            name: siteName,
+            capacity_mw: (samCapacity || 5000) / 1000,
+            technology: "solar",
+            stage: "screened",
+            verdict: agentResult?.verdict || "CAUTION",
+            lat, lon,
+            description: agentResult?.summary || `Site assessment for ${siteName}`,
+          });
+        } catch (e) {
+          // Silently fail — pipeline creation is best-effort
+          console.warn("Auto-create pipeline project failed:", e);
+        }
+      }
+    }
+  }, [setPickMode, setLayoutMode, setActiveIntent, explain, pickedLocation, parcelId, samCapacity, agentResult]);
 
   // ── Layers ──
   const [layers, setLayers] = useState({

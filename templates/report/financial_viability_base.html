@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Princeps Financial Viability Assessment — {{ site_name }}</title>
+<style>
+  /* === Reset & Base === */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 13px; }
+  body {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #262626;
+    background: #fff;
+    line-height: 1.55;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* === Page breaks === */
+  .page-break { page-break-after: always; break-after: page; }
+  .section { page-break-inside: avoid; }
+
+  /* === Header bar === */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 28px;
+    background: #1a1a2e;
+    color: #fff;
+    margin-bottom: 20px;
+    border-bottom: 3px solid #D4A018;
+  }
+  .page-header .logo {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    color: #D4A018;
+  }
+  .page-header .meta {
+    font-size: 10px;
+    color: #a0a0a0;
+    letter-spacing: 0.5px;
+  }
+
+  /* === Section titles === */
+  .section-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #1a1a2e;
+    border-bottom: 3px solid #D4A018;
+    padding-bottom: 5px;
+    margin-bottom: 14px;
+    letter-spacing: 0.3px;
+  }
+  .section-subtitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  /* === Cards === */
+  .card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .card-header {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin-bottom: 8px;
+  }
+  .card-accent { border-left: 4px solid #D4A018; }
+  .card-accent-green { border-left: 4px solid #24a148; }
+  .card-accent-amber { border-left: 4px solid #f1c21b; }
+  .card-accent-red { border-left: 4px solid #da1e28; }
+
+  /* === KPI strip === */
+  .kpi-strip {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .kpi-box {
+    flex: 1;
+    min-width: 100px;
+    background: #f4f4f4;
+    border-radius: 8px;
+    padding: 10px 8px;
+    text-align: center;
+    border: 1px solid #e8e8e8;
+  }
+  .kpi-box-highlight {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: none;
+  }
+  .kpi-box-highlight .kpi-value { color: #D4A018; }
+  .kpi-box-highlight .kpi-label { color: #a0a0a0; }
+  .kpi-value {
+    font-size: 20px;
+    font-weight: 800;
+    color: #1a1a2e;
+  }
+  .kpi-label {
+    font-size: 9px;
+    color: #697077;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  /* === Verdict badge === */
+  .verdict-badge {
+    display: inline-block;
+    padding: 8px 24px;
+    border-radius: 6px;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #fff;
+  }
+  .verdict-ATTRACTIVE { background: #24a148; }
+  .verdict-MARGINAL { background: #f1c21b; color: #1a1a2e; }
+  .verdict-BELOW-HURDLE { background: #da1e28; }
+
+  /* === Tables === */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+  th {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 7px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  th.gold { background: #D4A018; color: #1a1a2e; }
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #e8e8e8;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #fafafa; }
+  .td-right { text-align: right; }
+  .td-bold { font-weight: 700; }
+
+  /* === Chart image === */
+  .chart-img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 6px auto;
+  }
+
+  /* === Layout === */
+  .two-col {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .two-col > div { flex: 1; }
+  .three-col {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .three-col > div { flex: 1; }
+
+  /* === Stat row === */
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .stat-label { color: #697077; font-size: 11px; }
+  .stat-value { font-weight: 700; font-size: 11px; color: #1a1a2e; }
+
+  /* === Risk indicator === */
+  .risk-high { color: #da1e28; font-weight: 700; }
+  .risk-medium { color: #f1c21b; font-weight: 700; }
+  .risk-low { color: #24a148; font-weight: 700; }
+
+  /* === Footer === */
+  .page-footer {
+    text-align: center;
+    font-size: 9px;
+    color: #a0a0a0;
+    padding: 10px 0;
+    border-top: 1px solid #e8e8e8;
+    margin-top: 20px;
+  }
+
+  /* === Utility === */
+  .text-muted { color: #697077; }
+  .text-sm { font-size: 11px; }
+  .text-xs { font-size: 9px; }
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mb-4 { margin-bottom: 4px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-16 { margin-bottom: 16px; }
+  .p-16 { padding: 16px; }
+  .bold { font-weight: 700; }
+  .center { text-align: center; }
+  .gold { color: #D4A018; }
+
+  @page {
+    size: A4;
+    margin: 10mm 10mm 15mm 10mm;
+  }
+  @media print {
+    .page-break { page-break-after: always; break-after: page; height: 0; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     COVER PAGE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div style="height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0d1b3e 100%); color: #fff; padding: 60px; position: relative;">
+  <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, #D4A018, #e8c547, #D4A018);"></div>
+
+  <div style="font-size: 42px; font-weight: 800; letter-spacing: 6px; color: #D4A018; margin-bottom: 4px;">PRINCEPS</div>
+  <div style="font-size: 12px; letter-spacing: 3px; color: #a0a0a0; margin-bottom: 60px; text-transform: uppercase;">Energy Infrastructure Intelligence</div>
+
+  <div style="width: 80px; height: 2px; background: #D4A018; margin-bottom: 40px;"></div>
+
+  <div style="font-size: 26px; font-weight: 700; margin-bottom: 8px; text-align: center; letter-spacing: 0.5px;">Financial Viability Assessment</div>
+  <div style="font-size: 20px; color: #c0c0c0; margin-bottom: 40px; text-align: center; font-weight: 300;">{{ site_name }}</div>
+
+  <div class="verdict-badge verdict-{{ verdict_class }}" style="margin-bottom: 12px; font-size: 22px; padding: 10px 32px;">{{ verdict }}</div>
+  <div style="font-size: 13px; color: #a0a0a0; margin-bottom: 50px;">Project IRR: {{ "%.1f"|format(finance.project_irr or 0) }}% | NPV: {{ npv_display }} | LCOE: {{ "%.1f"|format(finance.lcoe or 0) }} £/MWh</div>
+
+  <div style="display: flex; gap: 50px; margin-bottom: 40px;">
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Capacity</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ capacity_mw }} MW</div>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Technology</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ technology_label }}</div>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Location</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ "%.4f"|format(lat) }}N, {{ "%.4f"|format(lon|abs) }}{% if lon < 0 %}W{% else %}E{% endif %}</div>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">PPA Price</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ "%.0f"|format(ppa_price) }} £/MWh</div>
+    </div>
+  </div>
+
+  <div style="position: absolute; bottom: 30px; text-align: center;">
+    <div style="font-size: 10px; color: #555;">Confidential — {{ generated_at }}</div>
+    <div style="font-size: 9px; color: #444; margin-top: 4px;">Prepared by Princeps Platform — For informational purposes only</div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     EXECUTIVE SUMMARY
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <div class="logo">PRINCEPS</div>
+  <div class="meta">Financial Viability Assessment — {{ site_name }}</div>
+</div>
+
+<div class="section-title">1. Executive Summary</div>
+
+<div class="kpi-strip">
+  <div class="kpi-box kpi-box-highlight">
+    <div class="kpi-value">{{ "%.1f"|format(finance.project_irr or 0) }}%</div>
+    <div class="kpi-label">Project IRR</div>
+  </div>
+  <div class="kpi-box kpi-box-highlight">
+    <div class="kpi-value">{{ npv_display }}</div>
+    <div class="kpi-label">NPV (8%)</div>
+  </div>
+  <div class="kpi-box kpi-box-highlight">
+    <div class="kpi-value">{{ "%.1f"|format(finance.lcoe or 0) }}</div>
+    <div class="kpi-label">LCOE (£/MWh)</div>
+  </div>
+  <div class="kpi-box kpi-box-highlight">
+    <div class="kpi-value">{{ finance.simple_payback_years or "N/A" }}</div>
+    <div class="kpi-label">Payback (Yrs)</div>
+  </div>
+  <div class="kpi-box kpi-box-highlight">
+    <div class="kpi-value" style="color: {% if verdict == 'ATTRACTIVE' %}#24a148{% elif verdict == 'MARGINAL' %}#f1c21b{% else %}#da1e28{% endif %};">{{ verdict }}</div>
+    <div class="kpi-label">Verdict</div>
+  </div>
+</div>
+
+<div class="card card-accent">
+  <div class="card-header">Investment Thesis</div>
+  <p class="text-sm">
+    The proposed {{ capacity_mw }} MW {{ technology_label }} project at {{ site_name }}
+    {% if verdict == "ATTRACTIVE" %}
+    demonstrates attractive financial returns with a project IRR of {{ "%.1f"|format(finance.project_irr or 0) }}%,
+    exceeding the benchmark WACC of {{ "%.1f"|format(finance.wacc * 100) }}%. The NPV at 8% discount rate is positive at {{ npv_display }},
+    confirming value creation. The project achieves simple payback in year {{ finance.simple_payback_years or "N/A" }}
+    and an LCOE of {{ "%.1f"|format(finance.lcoe or 0) }} £/MWh, competitive against current PPA pricing.
+    {% elif verdict == "MARGINAL" %}
+    shows marginal financial returns with a project IRR of {{ "%.1f"|format(finance.project_irr or 0) }}%,
+    broadly in line with the benchmark WACC of {{ "%.1f"|format(finance.wacc * 100) }}%. Returns are sensitive to
+    PPA pricing and capacity factor assumptions. Further optimisation of CAPEX or revenue structure may improve viability.
+    {% else %}
+    falls below the required hurdle rate with a project IRR of {{ "%.1f"|format(finance.project_irr or 0) }}%,
+    below the benchmark WACC of {{ "%.1f"|format(finance.wacc * 100) }}%. The project does not generate sufficient
+    returns to justify investment at current assumptions. Significant cost reduction or revenue enhancement required.
+    {% endif %}
+  </p>
+</div>
+
+{% if equity %}
+<div class="two-col">
+  <div class="card">
+    <div class="card-header">Equity Returns</div>
+    <div class="stat-row"><span class="stat-label">Pre-tax Equity IRR</span><span class="stat-value">{{ "%.1f"|format(equity.equity_irr_pre_tax_pct or 0) }}%</span></div>
+    <div class="stat-row"><span class="stat-label">Post-tax Equity IRR</span><span class="stat-value">{{ "%.1f"|format(equity.equity_irr_post_tax_pct or 0) }}%</span></div>
+    <div class="stat-row"><span class="stat-label">Equity Multiple</span><span class="stat-value">{{ "%.2f"|format(equity.equity_multiple or 0) }}x</span></div>
+    <div class="stat-row"><span class="stat-label">Cash-on-Cash Yield</span><span class="stat-value">{{ "%.1f"|format(equity.cash_on_cash_yield_pct or 0) }}%</span></div>
+  </div>
+  <div class="card">
+    <div class="card-header">Project Metrics</div>
+    <div class="stat-row"><span class="stat-label">Total CAPEX</span><span class="stat-value">{{ capex_display }}</span></div>
+    <div class="stat-row"><span class="stat-label">Annual Generation</span><span class="stat-value">{{ "{:,.0f}"|format(finance.annual_generation_mwh) }} MWh</span></div>
+    <div class="stat-row"><span class="stat-label">Construction Period</span><span class="stat-value">{{ finance.construction_years }} years</span></div>
+    <div class="stat-row"><span class="stat-label">Project Life</span><span class="stat-value">{{ finance.project_life_years }} years</span></div>
+  </div>
+</div>
+{% endif %}
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     PROJECT PARAMETERS
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <div class="logo">PRINCEPS</div>
+  <div class="meta">Financial Viability Assessment — {{ site_name }}</div>
+</div>
+
+<div class="section-title">2. Project Parameters</div>
+
+<div class="two-col">
+  <div class="card card-accent">
+    <div class="card-header">Site Details</div>
+    <div class="stat-row"><span class="stat-label">Site Name</span><span class="stat-value">{{ site_name }}</span></div>
+    <div class="stat-row"><span class="stat-label">Coordinates</span><span class="stat-value">{{ "%.4f"|format(lat) }}N, {{ "%.4f"|format(lon|abs) }}{% if lon < 0 %}W{% else %}E{% endif %}</span></div>
+    <div class="stat-row"><span class="stat-label">Technology</span><span class="stat-value">{{ technology_label }}</span></div>
+    <div class="stat-row"><span class="stat-label">Installed Capacity</span><span class="stat-value">{{ capacity_mw }} MW</span></div>
+    <div class="stat-row"><span class="stat-label">Land Requirement</span><span class="stat-value">{{ "%.0f"|format(land_ha) }} ha (est.)</span></div>
+  </div>
+  <div class="card card-accent">
+    <div class="card-header">Financial Assumptions</div>
+    <div class="stat-row"><span class="stat-label">Discount Rate (WACC)</span><span class="stat-value">{{ "%.1f"|format(finance.wacc * 100) }}%</span></div>
+    <div class="stat-row"><span class="stat-label">Corporation Tax</span><span class="stat-value">25%</span></div>
+    <div class="stat-row"><span class="stat-label">Inflation (CPI)</span><span class="stat-value">2.5%</span></div>
+    <div class="stat-row"><span class="stat-label">Project Life</span><span class="stat-value">{{ finance.project_life_years }} years</span></div>
+    <div class="stat-row"><span class="stat-label">Construction Period</span><span class="stat-value">{{ finance.construction_years }} years</span></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     CAPITAL COSTS
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">3. Capital Costs</div>
+
+<div class="card card-accent">
+  <table>
+    <tr>
+      <th>Component</th>
+      <th class="td-right">£/MW</th>
+      <th class="td-right">Total (£)</th>
+      <th class="td-right">% of Total</th>
+    </tr>
+    {% for item in capex_breakdown %}
+    <tr{% if item.is_total %} style="font-weight: 700; background: #f0f0f0;"{% endif %}>
+      <td{% if item.is_total %} class="td-bold"{% endif %}>{{ item.component }}</td>
+      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}"|format(item.per_mw) }}</td>
+      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}"|format(item.total) }}</td>
+      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "%.1f"|format(item.pct) }}%</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% if charts.capex_pie %}
+<div class="center">
+  <img src="data:image/png;base64,{{ charts.capex_pie }}" class="chart-img" style="max-width: 400px;" alt="CAPEX Breakdown">
+</div>
+{% endif %}
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     OPERATING COSTS
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <div class="logo">PRINCEPS</div>
+  <div class="meta">Financial Viability Assessment — {{ site_name }}</div>
+</div>
+
+<div class="section-title">4. Operating Costs</div>
+
+<div class="card card-accent">
+  <table>
+    <tr>
+      <th>Cost Item</th>
+      <th class="td-right">Annual (£)</th>
+      <th class="td-right">£/MW/yr</th>
+      <th class="td-right">Notes</th>
+    </tr>
+    {% for item in opex_breakdown %}
+    <tr{% if item.is_total %} style="font-weight: 700; background: #f0f0f0;"{% endif %}>
+      <td{% if item.is_total %} class="td-bold"{% endif %}>{{ item.component }}</td>
+      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}"|format(item.annual) }}</td>
+      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}"|format(item.per_mw) }}</td>
+      <td class="text-muted text-sm">{{ item.notes }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="text-xs text-muted mt-4">All OPEX figures escalated at 2.5% CPI p.a. over project lifetime.</p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     REVENUE MODEL
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">5. Revenue Model</div>
+
+<div class="two-col">
+  <div class="card card-accent-green">
+    <div class="card-header">Generation Profile</div>
+    <div class="stat-row"><span class="stat-label">Annual Generation (Yr 1)</span><span class="stat-value">{{ "{:,.0f}"|format(finance.annual_generation_mwh) }} MWh</span></div>
+    <div class="stat-row"><span class="stat-label">Capacity Factor</span><span class="stat-value">{{ "%.1f"|format(capacity_factor_pct) }}%</span></div>
+    <div class="stat-row"><span class="stat-label">Degradation Rate</span><span class="stat-value">0.5% p.a.</span></div>
+    <div class="stat-row"><span class="stat-label">Performance Ratio</span><span class="stat-value">82%</span></div>
+  </div>
+  <div class="card card-accent-green">
+    <div class="card-header">Revenue Assumptions</div>
+    <div class="stat-row"><span class="stat-label">PPA Price</span><span class="stat-value">{{ "%.0f"|format(ppa_price) }} £/MWh</span></div>
+    <div class="stat-row"><span class="stat-label">PPA Escalation</span><span class="stat-value">CPI (2.5% p.a.)</span></div>
+    <div class="stat-row"><span class="stat-label">Year 1 Revenue</span><span class="stat-value">{{ "{:,.0f}"|format(year1_revenue) }} £</span></div>
+    <div class="stat-row"><span class="stat-label">25-Year Total Revenue</span><span class="stat-value">{{ total_revenue_display }}</span></div>
+  </div>
+</div>
+
+{% if charts.revenue_projection %}
+<div class="card">
+  <div class="card-header">Revenue Projection (Years 1-25)</div>
+  <img src="data:image/png;base64,{{ charts.revenue_projection }}" class="chart-img" alt="Revenue Projection">
+</div>
+{% endif %}
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     CASHFLOW MODEL
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <div class="logo">PRINCEPS</div>
+  <div class="meta">Financial Viability Assessment — {{ site_name }}</div>
+</div>
+
+<div class="section-title">6. Cashflow Model</div>
+
+{% if charts.cashflow %}
+<div class="card">
+  <div class="card-header">Annual Net Cashflow & Cumulative Cashflow</div>
+  <img src="data:image/png;base64,{{ charts.cashflow }}" class="chart-img" alt="Cashflow Model">
+</div>
+{% endif %}
+
+<div class="card">
+  <table>
+    <tr>
+      <th>Year</th>
+      <th class="td-right">Revenue (£)</th>
+      <th class="td-right">OPEX (£)</th>
+      <th class="td-right">EBITDA (£)</th>
+      <th class="td-right">Tax (£)</th>
+      <th class="td-right">Net CF (£)</th>
+      <th class="td-right">Cumulative (£)</th>
+    </tr>
+    {% for row in cashflow_table %}
+    <tr{% if row.is_payback %} style="background: #e8f5e9;"{% endif %}>
+      <td class="td-bold">{{ row.year }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.revenue) }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.opex) }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.ebitda) }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.tax) }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.net_cashflow) }}</td>
+      <td class="td-right" style="color: {% if row.cumulative >= 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}"|format(row.cumulative) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="text-xs text-muted mt-4">Construction CAPEX of {{ capex_display }} split across {{ finance.construction_years }}-year build period. Green row indicates payback year.</p>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SENSITIVITY ANALYSIS
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <div class="logo">PRINCEPS</div>
+  <div class="meta">Financial Viability Assessment — {{ site_name }}</div>
+</div>
+
+<div class="section-title">7. Sensitivity Analysis</div>
+
+{% if charts.sensitivity %}
+<div class="card">
+  <div class="card-header">IRR Sensitivity — Tornado Chart</div>
+  <img src="data:image/png;base64,{{ charts.sensitivity }}" class="chart-img" alt="Sensitivity Analysis">
+</div>
+{% endif %}
+
+<div class="card card-accent">
+  <div class="card-header">IRR Sensitivity Matrix</div>
+  <table>
+    <tr>
+      <th>Parameter</th>
+      <th class="td-right">Low Case</th>
+      <th class="td-right">IRR (Low)</th>
+      <th class="td-right">Base Case</th>
+      <th class="td-right">IRR (Base)</th>
+      <th class="td-right">High Case</th>
+      <th class="td-right">IRR (High)</th>
+    </tr>
+    {% for row in sensitivity_table %}
+    <tr>
+      <td class="td-bold">{{ row.parameter }}</td>
+      <td class="td-right">{{ row.low_case }}</td>
+      <td class="td-right" style="color: {% if row.irr_low >= hurdle_rate %}#24a148{% else %}#da1e28{% endif %};">{{ "%.1f"|format(row.irr_low) }}%</td>
+      <td class="td-right">{{ row.base_case }}</td>
+      <td class="td-right">{{ "%.1f"|format(row.irr_base) }}%</td>
+      <td class="td-right">{{ row.high_case }}</td>
+      <td class="td-right" style="color: {% if row.irr_high >= hurdle_rate %}#24a148{% else %}#da1e28{% endif %};">{{ "%.1f"|format(row.irr_high) }}%</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="text-xs text-muted mt-4">Hurdle rate: {{ "%.1f"|format(hurdle_rate) }}% (WACC). Values in green exceed the hurdle rate.</p>
+</div>
+
+<div class="card">
+  <div class="card-header">NPV at Multiple Discount Rates</div>
+  <div class="three-col">
+    <div class="kpi-box">
+      <div class="kpi-value" style="color: {% if finance.npv_6pct > 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}"|format(finance.npv_6pct or 0) }}</div>
+      <div class="kpi-label">NPV @ 6%</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value" style="color: {% if finance.npv_8pct > 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}"|format(finance.npv_8pct or 0) }}</div>
+      <div class="kpi-label">NPV @ 8%</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value" style="color: {% if finance.npv_10pct > 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}"|format(finance.npv_10pct or 0) }}</div>
+      <div class="kpi-label">NPV @ 10%</div>
+    </div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     DEBT STRUCTURE
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <div class="logo">PRINCEPS</div>
+  <div class="meta">Financial Viability Assessment — {{ site_name }}</div>
+</div>
+
+<div class="section-title">8. Debt Structure</div>
+
+{% if debt %}
+<div class="two-col">
+  <div class="card card-accent">
+    <div class="card-header">Capital Structure</div>
+    <div class="stat-row"><span class="stat-label">Total CAPEX</span><span class="stat-value">{{ capex_display }}</span></div>
+    <div class="stat-row"><span class="stat-label">Senior Debt ({{ "%.0f"|format(debt.gearing_pct) }}%)</span><span class="stat-value">{{ "{:,.0f}"|format(debt.debt_amount) }} £</span></div>
+    <div class="stat-row"><span class="stat-label">Equity ({{ "%.0f"|format(100 - debt.gearing_pct) }}%)</span><span class="stat-value">{{ "{:,.0f}"|format(debt.equity_amount) }} £</span></div>
+    <div class="stat-row"><span class="stat-label">Interest Rate</span><span class="stat-value">{{ "%.1f"|format(debt.interest_rate_pct) }}%</span></div>
+    <div class="stat-row"><span class="stat-label">Debt Term</span><span class="stat-value">{{ debt.debt_term_years }} years</span></div>
+  </div>
+  <div class="card card-accent">
+    <div class="card-header">DSCR Profile</div>
+    <div class="stat-row"><span class="stat-label">Target DSCR</span><span class="stat-value">{{ "%.2f"|format(debt.target_dscr) }}x</span></div>
+    <div class="stat-row"><span class="stat-label">Average DSCR</span><span class="stat-value">{{ "%.2f"|format(debt.avg_dscr) }}x</span></div>
+    <div class="stat-row"><span class="stat-label">Minimum DSCR</span><span class="stat-value" style="color: {% if debt.min_dscr >= 1.15 %}#24a148{% elif debt.min_dscr >= 1.05 %}#f1c21b{% else %}#da1e28{% endif %};">{{ "%.2f"|format(debt.min_dscr) }}x</span></div>
+    <div class="stat-row"><span class="stat-label">Lock-up DSCR</span><span class="stat-value">{{ "%.2f"|format(debt.lock_up_dscr) }}x</span></div>
+    <div class="stat-row"><span class="stat-label">Covenant Status</span><span class="stat-value" style="color: {% if debt.covenant_status == 'PASS' %}#24a148{% else %}#da1e28{% endif %};">{{ debt.covenant_status }}</span></div>
+  </div>
+</div>
+
+{% if charts.dscr_profile %}
+<div class="card">
+  <div class="card-header">DSCR & Debt Service Profile</div>
+  <img src="data:image/png;base64,{{ charts.dscr_profile }}" class="chart-img" alt="DSCR Profile">
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header">Sculpted Repayment Schedule</div>
+  <table>
+    <tr>
+      <th>Year</th>
+      <th class="td-right">CFADS (£)</th>
+      <th class="td-right">Debt Service (£)</th>
+      <th class="td-right">Principal (£)</th>
+      <th class="td-right">Interest (£)</th>
+      <th class="td-right">Outstanding (£)</th>
+      <th class="td-right">DSCR</th>
+    </tr>
+    {% for row in debt_schedule %}
+    <tr>
+      <td class="td-bold">{{ row.year }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.cfads) }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.debt_service) }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.principal) }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.interest) }}</td>
+      <td class="td-right">{{ "{:,.0f}"|format(row.outstanding) }}</td>
+      <td class="td-right" style="color: {% if row.dscr >= 1.3 %}#24a148{% elif row.dscr >= 1.15 %}#f1c21b{% else %}#da1e28{% endif %};">{{ "%.2f"|format(row.dscr) }}x</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% else %}
+<div class="card"><p class="text-sm text-muted">Debt structure data unavailable.</p></div>
+{% endif %}
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     RISK ASSESSMENT
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <div class="logo">PRINCEPS</div>
+  <div class="meta">Financial Viability Assessment — {{ site_name }}</div>
+</div>
+
+<div class="section-title">9. Risk Assessment</div>
+
+<div class="card card-accent">
+  <table>
+    <tr>
+      <th>Risk Category</th>
+      <th>Description</th>
+      <th class="td-right">Likelihood</th>
+      <th class="td-right">Impact</th>
+      <th>Mitigation</th>
+    </tr>
+    {% for risk in risks %}
+    <tr>
+      <td class="td-bold">{{ risk.category }}</td>
+      <td class="text-sm">{{ risk.description }}</td>
+      <td class="td-right"><span class="risk-{{ risk.likelihood|lower }}">{{ risk.likelihood }}</span></td>
+      <td class="td-right"><span class="risk-{{ risk.impact|lower }}">{{ risk.impact }}</span></td>
+      <td class="text-sm">{{ risk.mitigation }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     APPENDIX
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <div class="logo">PRINCEPS</div>
+  <div class="meta">Financial Viability Assessment — {{ site_name }}</div>
+</div>
+
+<div class="section-title">10. Appendix</div>
+
+<div class="section-subtitle">A. CB7 Reference Parameters</div>
+<div class="card">
+  <table>
+    <tr><th>Parameter</th><th class="td-right">Value</th><th>Source</th></tr>
+    <tr><td>UK Solar Capacity Factor</td><td class="td-right">10.8%</td><td class="text-muted">ERA5 / Renewables.ninja</td></tr>
+    <tr><td>UK Onshore Wind CF</td><td class="td-right">29.3%</td><td class="text-muted">DESNZ / DUKES 2024</td></tr>
+    <tr><td>Solar LCOE (CB7)</td><td class="td-right">30 £/MWh</td><td class="text-muted">CCC 7th Carbon Budget</td></tr>
+    <tr><td>Discount Rate</td><td class="td-right">5.0%</td><td class="text-muted">CCC CB7 (real)</td></tr>
+    <tr><td>WACC (nominal)</td><td class="td-right">7.5%</td><td class="text-muted">Market benchmark</td></tr>
+    <tr><td>Corporation Tax</td><td class="td-right">25%</td><td class="text-muted">HMRC 2024/25</td></tr>
+    <tr><td>CPI Inflation</td><td class="td-right">2.5%</td><td class="text-muted">BoE long-run target</td></tr>
+    <tr><td>Solar CAPEX</td><td class="td-right">450 £/kW</td><td class="text-muted">Utility-scale ground-mount</td></tr>
+    <tr><td>Solar Degradation</td><td class="td-right">0.5% p.a.</td><td class="text-muted">IEC 61724 / NREL</td></tr>
+    <tr><td>Grid Connection (33kV)</td><td class="td-right">150,000 £/km</td><td class="text-muted">DNO schedule of charges</td></tr>
+    <tr><td>TNUoS Charge</td><td class="td-right">50 £/kW/yr</td><td class="text-muted">NESO tariff schedule</td></tr>
+    <tr><td>BSUoS Charge</td><td class="td-right">5 £/MWh</td><td class="text-muted">NESO balancing costs</td></tr>
+  </table>
+</div>
+
+<div class="section-subtitle">B. Methodology</div>
+<div class="card">
+  <p class="text-sm" style="line-height: 1.7;">
+    The financial model uses a nominal, post-tax discounted cashflow (DCF) approach over a {{ finance.project_life_years }}-year
+    operating period preceded by a {{ finance.construction_years }}-year construction phase. Revenue is modelled using a fixed PPA
+    at {{ "%.0f"|format(ppa_price) }} £/MWh with CPI escalation. Generation degradation follows a linear 0.5% p.a. schedule.
+    OPEX is escalated at CPI. Corporation tax at 25% is applied to EBITDA less capital allowances. IRR is calculated
+    using Newton-Raphson iteration on the NPV function. Debt sizing uses sculpted repayment targeting {{ "%.1f"|format(debt.target_dscr if debt else 1.3) }}x DSCR.
+    Sensitivity analysis varies four key parameters independently around the base case.
+  </p>
+</div>
+
+<div class="section-subtitle">C. Disclaimers</div>
+<div class="card">
+  <p class="text-xs text-muted" style="line-height: 1.8;">
+    This report is generated by the Princeps platform for indicative purposes only and does not constitute financial advice,
+    an investment recommendation, or a commitment to lend. All projections are based on assumptions that may not reflect
+    actual outcomes. Key risks include but are not limited to: planning permission delays, grid connection availability,
+    wholesale electricity price volatility, construction cost overruns, technology performance degradation, regulatory
+    changes, and force majeure events. Users should engage qualified financial advisors, legal counsel, and technical
+    consultants before making investment decisions. The model uses UK-specific parameters from CCC Carbon Budget 7,
+    DESNZ, and NESO FES 2024 publications. Princeps accepts no liability for decisions made on the basis of this report.
+  </p>
+</div>
+
+<div class="page-footer">
+  Princeps Financial Viability Assessment — {{ site_name }} — Generated {{ generated_at }}<br>
+  Confidential. Not for redistribution without written consent.
+</div>
+
+</body>
+</html>

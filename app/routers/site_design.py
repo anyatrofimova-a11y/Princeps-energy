@@ -337,28 +337,32 @@ async def validate_placement(
         if constraint_count == 0:
             checks.append({"check": "constraints", "status": "pass", "message": "No environmental constraints within 1km"})
 
-        # 3. Terrain slope check (from parcels if available)
-        parcel = await conn.fetchrow(
-            """SELECT slope_avg_deg
-               FROM parcels
-               WHERE ST_DWithin(
-                   centroid,
-                   ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700),
-                   500
-               )
-               ORDER BY centroid <-> ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700)
-               LIMIT 1""",
-            lon, lat,
-        )
-        if parcel and parcel.get("slope_avg_deg"):
-            slope = float(parcel["slope_avg_deg"])
-            if asset_type == "solar_array":
-                status = "pass" if slope < 5 else "warning" if slope < 15 else "fail"
-                checks.append({"check": "terrain_slope", "status": status, "message": f"Terrain slope: {slope:.1f}°"})
-            elif asset_type == "wind_turbine":
-                checks.append({"check": "terrain_slope", "status": "pass", "message": f"Terrain slope: {slope:.1f}° (acceptable for wind)"})
-        else:
-            checks.append({"check": "terrain_slope", "status": "info", "message": "Terrain data not available — run GeeFlow analysis"})
+        # 3. Terrain slope check
+        try:
+            parcel = await conn.fetchrow(
+                """SELECT slope_avg_deg
+                   FROM parcels
+                   WHERE centroid IS NOT NULL
+                   AND ST_DWithin(
+                       centroid,
+                       ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700),
+                       500
+                   )
+                   ORDER BY centroid <-> ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700)
+                   LIMIT 1""",
+                lon, lat,
+            )
+            if parcel and parcel.get("slope_avg_deg"):
+                slope = float(parcel["slope_avg_deg"])
+                if asset_type == "solar_array":
+                    status = "pass" if slope < 5 else "warning" if slope < 15 else "fail"
+                    checks.append({"check": "terrain_slope", "status": status, "message": f"Terrain slope: {slope:.1f}°"})
+                elif asset_type == "wind_turbine":
+                    checks.append({"check": "terrain_slope", "status": "pass", "message": f"Terrain slope: {slope:.1f}° (acceptable for wind)"})
+            else:
+                checks.append({"check": "terrain_slope", "status": "info", "message": "Terrain data not available — run GeeFlow analysis"})
+        except Exception:
+            checks.append({"check": "terrain_slope", "status": "info", "message": "Terrain data not available"})
 
         # 4. Land use check (from geeflow_extractions)
         geeflow = await conn.fetchrow(
@@ -490,7 +494,7 @@ async def match_bom_items(
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(
-            """SELECT item_id, name, category, specs, unit_cost_gbp, lead_time_weeks, supplier
+            """SELECT component_id, name, category, unit_cost_gbp
                FROM solar_inventory
                WHERE category = $1
                ORDER BY unit_cost_gbp ASC NULLS LAST
@@ -500,20 +504,17 @@ async def match_bom_items(
 
     items = []
     for r in rows:
-        specs = json.loads(r["specs"]) if r["specs"] else {}
-        # Calculate quantity needed for capacity
-        item_capacity = specs.get("watts", specs.get("kwh", specs.get("kva", 0))) / 1000  # to kW
-        qty_needed = int(math.ceil(capacity_mw * 1000 / item_capacity)) if item_capacity > 0 else 1
-        total_cost = (r["unit_cost_gbp"] or 0) * qty_needed
+        unit_cost = float(r["unit_cost_gbp"]) if r["unit_cost_gbp"] else 0
+        # Rough capacity estimate per unit based on category
+        unit_kw = {"panel": 0.6, "battery": 50, "inverter": 100, "transformer": 500, "cable": 0, "monitoring": 0}.get(category, 1)
+        qty_needed = int(math.ceil(capacity_mw * 1000 / unit_kw)) if unit_kw > 0 else 1
+        total_cost = unit_cost * qty_needed
 
         items.append({
-            "item_id": r["item_id"],
+            "item_id": r["component_id"],
             "name": r["name"],
             "category": r["category"],
-            "specs": specs,
-            "unit_cost_gbp": float(r["unit_cost_gbp"]) if r["unit_cost_gbp"] else None,
-            "lead_time_weeks": r["lead_time_weeks"],
-            "supplier": r["supplier"],
+            "unit_cost_gbp": unit_cost if unit_cost else None,
             "qty_needed": qty_needed,
             "total_cost_gbp": round(total_cost, 2),
         })
@@ -534,18 +535,16 @@ async def link_bom_to_asset(
     async with pool.acquire() as conn:
         # Fetch BOM item specs
         bom = await conn.fetchrow(
-            "SELECT item_id, name, specs, unit_cost_gbp, supplier FROM solar_inventory WHERE item_id = $1",
+            "SELECT component_id, name, unit_cost_gbp FROM solar_inventory WHERE component_id = $1",
             bom_item_id,
         )
         if not bom:
             raise HTTPException(404, f"BOM item {bom_item_id} not found")
 
         bom_spec = {
-            "item_id": bom["item_id"],
+            "item_id": bom["component_id"],
             "name": bom["name"],
-            "specs": json.loads(bom["specs"]) if bom["specs"] else {},
             "unit_cost_gbp": float(bom["unit_cost_gbp"]) if bom["unit_cost_gbp"] else None,
-            "supplier": bom["supplier"],
             "qty": qty,
             "total_cost_gbp": round(float(bom["unit_cost_gbp"] or 0) * qty, 2),
         }

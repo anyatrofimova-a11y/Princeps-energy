@@ -535,6 +535,118 @@ async def import_from_tec(
 
 
 # ---------------------------------------------------------------------------
+# Bulk REPD Import
+# ---------------------------------------------------------------------------
+
+@router.post("/import-repd-bulk")
+async def bulk_import_repd(
+    technology: str = Query(None, description="Filter: solar, wind, bess"),
+    min_capacity_mw: float = Query(10, ge=0),
+    max_capacity_mw: float = Query(500),
+    status: str = Query(None, description="Filter: Operational, Approved, Submitted, etc."),
+    region: str = Query(None),
+    limit: int = Query(500, le=5000),
+    pool: asyncpg.Pool = Depends(get_pool),
+    user=Depends(get_optional_user),
+):
+    """Bulk import REPD projects into the pipeline. Skips already-imported projects."""
+    user_id = user["user_id"] if user else None
+
+    status_map = {
+        "Operational": "energised",
+        "Under Construction": "construction",
+        "Awaiting Construction": "fid",
+        "Approved": "planning",
+        "Submitted": "grid_applied",
+        "Appeal": "planning",
+        "Refused": "prospect",
+        "Withdrawn": "prospect",
+        "Decommissioned": "energised",
+    }
+    tech_map = {"solar": "solar", "wind": "wind", "bess": "bess", "biomass": "solar", "hydro": "solar"}
+
+    async with pool.acquire() as conn:
+        # Build query
+        conditions = ["r.capacity_mw >= $1", "r.capacity_mw <= $2", "r.lat IS NOT NULL"]
+        params = [min_capacity_mw, max_capacity_mw]
+        idx = 3
+
+        if technology:
+            conditions.append(f"r.tech_category ILIKE ${idx}")
+            params.append(f"%{technology}%")
+            idx += 1
+        if status:
+            conditions.append(f"r.status = ${idx}")
+            params.append(status)
+            idx += 1
+        if region:
+            conditions.append(f"r.region ILIKE ${idx}")
+            params.append(f"%{region}%")
+            idx += 1
+
+        where = " AND ".join(conditions)
+        rows = await conn.fetch(
+            f"""SELECT r.* FROM repd_projects r
+                LEFT JOIN projects p ON p.repd_id = r.repd_id
+                WHERE {where} AND p.project_id IS NULL
+                ORDER BY r.capacity_mw DESC
+                LIMIT ${idx}""",
+            *params, limit,
+        )
+
+        imported = 0
+        skipped = 0
+        for r in rows:
+            stage = status_map.get(r["status"], "prospect")
+            tech = tech_map.get(r.get("tech_category"), None)
+            try:
+                row = await conn.fetchrow(
+                    """INSERT INTO projects
+                           (user_id, name, description, technology, capacity_mw,
+                            stage, lat, lon, stage_entered_at, repd_id, metadata)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10)
+                       ON CONFLICT (repd_id) DO NOTHING
+                       RETURNING project_id""",
+                    user_id,
+                    r["site_name"],
+                    f"Bulk imported from REPD — {r['status']}",
+                    tech,
+                    float(r["capacity_mw"]) if r["capacity_mw"] else None,
+                    stage,
+                    float(r["lat"]) if r.get("lat") else None,
+                    float(r["lon"]) if r.get("lon") else None,
+                    r["repd_id"],
+                    json.dumps({
+                        "repd_status": r["status"],
+                        "developer": r.get("developer"),
+                        "planning_authority": r.get("planning_authority"),
+                        "county": r.get("county"),
+                        "region": r.get("region"),
+                        "source": "bulk_import",
+                    }),
+                )
+                if row:
+                    imported += 1
+                    await conn.execute(
+                        """INSERT INTO project_stage_history (project_id, to_stage, changed_by, notes)
+                           VALUES ($1, $2, $3, $4)""",
+                        row["project_id"], stage, user_id,
+                        f"Bulk imported from REPD ({r['status']})",
+                    )
+                else:
+                    skipped += 1
+            except Exception:
+                skipped += 1
+
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "total_available": len(rows),
+        "filters": {"technology": technology, "min_mw": min_capacity_mw, "max_mw": max_capacity_mw, "status": status, "region": region},
+    }
+
+
+# ---------------------------------------------------------------------------
 # Phase 2 — Document storage
 # ---------------------------------------------------------------------------
 

@@ -18,7 +18,8 @@ from pydantic import BaseModel
 from app.deps import get_pool, get_claude
 from app.helpers import (
     CLAUDE_MODEL, MAPBOX_TOKEN,
-    run_geoai_subprocess,
+    run_geoai_subprocess, run_torchgeo_subprocess, run_geeflow_subprocess,
+    run_clay_subprocess,
     _aggregate_deep_findings, _compute_sun_paths, _compute_satellite_tile,
 )
 import jobs
@@ -528,6 +529,42 @@ async def vision_twin_data(
     }
 
 
+# ---------------------------------------------------------------------------
+# Google Open Buildings
+# ---------------------------------------------------------------------------
+
+@router.get("/api/vision/buildings")
+async def get_buildings(
+    lat: float = Query(52.5),
+    lon: float = Query(-1.5),
+    radius_m: float = Query(500, ge=50, le=5000),
+):
+    """
+    Google Open Buildings footprints near a location.
+
+    Returns GeoJSON FeatureCollection of building polygons with
+    area_m2, confidence, and estimated height. Uses GEE subprocess.
+    """
+    from utils.open_buildings import get_building_footprints
+    return await get_building_footprints(lat, lon, radius_m)
+
+
+@router.get("/api/vision/buildings/summary")
+async def get_buildings_summary(
+    lat: float = Query(52.5),
+    lon: float = Query(-1.5),
+    radius_m: float = Query(1000, ge=100, le=10000),
+):
+    """
+    Building density summary for planning constraint assessment.
+
+    Returns classification (urban/suburban/rural), density,
+    planning risk level, and rooftop solar potential estimate.
+    """
+    from utils.open_buildings import get_building_summary
+    return await get_building_summary(lat, lon, radius_m)
+
+
 @router.get("/vision/layers/{parcel_id}")
 async def vision_layers(
     parcel_id: str,
@@ -595,3 +632,374 @@ async def vision_layers(
                 })
 
     return {"layers": layers}
+
+
+# ---------------------------------------------------------------------------
+# TorchGeo — pretrained satellite classification endpoints
+# ---------------------------------------------------------------------------
+
+class TorchGeoClassifyRequest(BaseModel):
+    lat: float
+    lon: float
+    radius_m: float = 500
+    model: str = "resnet50"
+    year: int = 2024
+
+
+@router.post("/api/vision/torchgeo-classify")
+async def torchgeo_classify(body: TorchGeoClassifyRequest):
+    """Run torchgeo land cover classification on Sentinel-2 imagery.
+
+    1. Downloads a Sentinel-2 composite via GEE (reuses geeflow subprocess).
+    2. Runs torchgeo pretrained model classification.
+    3. Returns land cover percentages, ALC hint, and development suitability.
+    """
+    import tempfile
+    import os
+
+    radius_km = body.radius_m / 1000.0
+
+    # Step 1: Download Sentinel-2 GeoTIFF via GEE
+    try:
+        gee_result = await run_geeflow_subprocess(
+            mode="vegetation",  # gets Sentinel-2 NDVI which includes the raw bands
+            lat=body.lat,
+            lon=body.lon,
+            radius_km=radius_km,
+            year=body.year,
+            timeout=120,
+        )
+    except Exception as exc:
+        log.warning("GEE fetch for torchgeo failed: %s", exc)
+        gee_result = None
+
+    # Step 2: If GEE returned a GeoTIFF path, use it; otherwise check for cached file
+    image_path = None
+    if gee_result and isinstance(gee_result, dict):
+        image_path = gee_result.get("geotiff_path") or gee_result.get("image_path")
+
+    # Step 3: Run torchgeo classification
+    if image_path and os.path.exists(image_path):
+        result = await run_torchgeo_subprocess({
+            "command": "classify_landcover",
+            "image_path": image_path,
+            "model": body.model,
+        })
+    else:
+        # No GeoTIFF available — run list_models to confirm torchgeo status
+        # and return GEE-derived land cover if available
+        tg_status = await run_torchgeo_subprocess({"command": "list_models"})
+
+        # Fall back to GEE DynamicWorld land cover (already available)
+        try:
+            dw_result = await run_geeflow_subprocess(
+                mode="land_use",
+                lat=body.lat,
+                lon=body.lon,
+                radius_km=radius_km,
+                year=body.year,
+                timeout=120,
+            )
+        except Exception:
+            dw_result = None
+
+        result = {
+            "status": "fallback_gee",
+            "note": "No local GeoTIFF available — using GEE DynamicWorld classification",
+            "torchgeo_available": tg_status.get("torchgeo_available", False),
+            "gee_land_cover": dw_result,
+            "lat": body.lat,
+            "lon": body.lon,
+            "radius_m": body.radius_m,
+        }
+
+    result["lat"] = body.lat
+    result["lon"] = body.lon
+    result["radius_m"] = body.radius_m
+    return result
+
+
+class TorchGeoChangeRequest(BaseModel):
+    lat: float
+    lon: float
+    radius_m: float = 500
+    year_before: int = 2020
+    year_after: int = 2024
+
+
+@router.post("/api/vision/torchgeo-change")
+async def torchgeo_change_detection(body: TorchGeoChangeRequest):
+    """Run change detection comparing two time periods on Sentinel-2 imagery."""
+    radius_km = body.radius_m / 1000.0
+
+    # Download before/after imagery via GEE
+    before_result = None
+    after_result = None
+    try:
+        before_result = await run_geeflow_subprocess(
+            mode="vegetation", lat=body.lat, lon=body.lon,
+            radius_km=radius_km, year=body.year_before, timeout=120,
+        )
+        after_result = await run_geeflow_subprocess(
+            mode="vegetation", lat=body.lat, lon=body.lon,
+            radius_km=radius_km, year=body.year_after, timeout=120,
+        )
+    except Exception as exc:
+        log.warning("GEE fetch for change detection failed: %s", exc)
+
+    import os
+    before_path = before_result.get("geotiff_path") if before_result else None
+    after_path = after_result.get("geotiff_path") if after_result else None
+
+    if before_path and after_path and os.path.exists(before_path) and os.path.exists(after_path):
+        result = await run_torchgeo_subprocess({
+            "command": "change_detection",
+            "before_path": before_path,
+            "after_path": after_path,
+        })
+    else:
+        # Fall back to GEE DynamicWorld comparison
+        try:
+            dw_before = await run_geeflow_subprocess(
+                mode="land_use", lat=body.lat, lon=body.lon,
+                radius_km=radius_km, year=body.year_before, timeout=120,
+            )
+            dw_after = await run_geeflow_subprocess(
+                mode="land_use", lat=body.lat, lon=body.lon,
+                radius_km=radius_km, year=body.year_after, timeout=120,
+            )
+        except Exception:
+            dw_before, dw_after = None, None
+
+        # Compute changes from GEE DynamicWorld results
+        changes = {}
+        if dw_before and dw_after:
+            before_pcts = dw_before.get("class_percentages", {})
+            after_pcts = dw_after.get("class_percentages", {})
+            all_cls = set(before_pcts.keys()) | set(after_pcts.keys())
+            for cls in sorted(all_cls):
+                bp = before_pcts.get(cls, 0)
+                ap = after_pcts.get(cls, 0)
+                delta = round(ap - bp, 1)
+                if abs(delta) > 0.5:
+                    changes[cls] = {"before_pct": bp, "after_pct": ap, "delta_pct": delta}
+
+        result = {
+            "status": "fallback_gee",
+            "note": "No local GeoTIFFs — using GEE DynamicWorld comparison",
+            "year_before": body.year_before,
+            "year_after": body.year_after,
+            "before_land_cover": dw_before,
+            "after_land_cover": dw_after,
+            "changes": changes,
+        }
+
+    result["lat"] = body.lat
+    result["lon"] = body.lon
+    result["radius_m"] = body.radius_m
+    return result
+
+
+class TorchGeoCropRequest(BaseModel):
+    lat: float
+    lon: float
+    radius_m: float = 500
+    model: str = "resnet50"
+    year: int = 2024
+
+
+@router.post("/api/vision/torchgeo-crop")
+async def torchgeo_crop_classification(body: TorchGeoCropRequest):
+    """Classify crops/vegetation for Agricultural Land Classification (ALC) assessment."""
+    import os
+
+    radius_km = body.radius_m / 1000.0
+
+    # Fetch imagery
+    try:
+        gee_result = await run_geeflow_subprocess(
+            mode="vegetation", lat=body.lat, lon=body.lon,
+            radius_km=radius_km, year=body.year, timeout=120,
+        )
+    except Exception as exc:
+        log.warning("GEE fetch for crop classification failed: %s", exc)
+        gee_result = None
+
+    image_path = gee_result.get("geotiff_path") if gee_result else None
+
+    if image_path and os.path.exists(image_path):
+        result = await run_torchgeo_subprocess({
+            "command": "crop_classification",
+            "image_path": image_path,
+            "model": body.model,
+        })
+    else:
+        # Fall back: use GEE vegetation data for ALC estimation
+        try:
+            veg = await run_geeflow_subprocess(
+                mode="vegetation", lat=body.lat, lon=body.lon,
+                radius_km=radius_km, year=body.year, timeout=120,
+            )
+            lc = await run_geeflow_subprocess(
+                mode="land_use", lat=body.lat, lon=body.lon,
+                radius_km=radius_km, year=body.year, timeout=120,
+            )
+        except Exception:
+            veg, lc = None, None
+
+        ndvi_mean = 0.0
+        if veg and "ndvi_stats" in veg:
+            ndvi_mean = veg["ndvi_stats"].get("mean", 0)
+
+        cropland_pct = 0.0
+        if lc and "class_percentages" in lc:
+            cp = lc["class_percentages"]
+            cropland_pct = cp.get("crops", 0) + cp.get("grass", 0)
+
+        # Simple ALC estimation
+        if cropland_pct > 50 and ndvi_mean > 0.5:
+            alc_grade = "Grade 1-2"
+            alc_note = "High-quality agricultural land (BMV)"
+        elif cropland_pct > 30 and ndvi_mean > 0.3:
+            alc_grade = "Grade 2-3a"
+            alc_note = "Good quality agricultural land"
+        elif cropland_pct > 15:
+            alc_grade = "Grade 3b-4"
+            alc_note = "Moderate quality — generally acceptable for development"
+        else:
+            alc_grade = "Grade 4-5"
+            alc_note = "Poor / non-agricultural — no ALC constraint"
+
+        result = {
+            "status": "fallback_gee",
+            "note": "No local GeoTIFF — using GEE-derived ALC estimation",
+            "estimated_alc_grade": alc_grade,
+            "alc_note": alc_note,
+            "is_bmv": alc_grade in ("Grade 1-2", "Grade 2-3a"),
+            "cropland_pct": round(cropland_pct, 1),
+            "ndvi_mean": round(ndvi_mean, 3),
+            "gee_vegetation": veg,
+            "gee_land_cover": lc,
+        }
+
+    result["lat"] = body.lat
+    result["lon"] = body.lon
+    result["radius_m"] = body.radius_m
+    return result
+
+
+@router.get("/api/vision/torchgeo-models")
+async def torchgeo_list_models():
+    """List available torchgeo models and check installation status."""
+    return await run_torchgeo_subprocess({"command": "list_models"})
+
+
+# ---------------------------------------------------------------------------
+# Clay Foundation Model — spectral analysis & embeddings
+# ---------------------------------------------------------------------------
+
+class ClayAnalyseRequest(BaseModel):
+    lat: float
+    lon: float
+    radius_m: float = 500
+
+
+@router.post("/api/vision/clay-analyse")
+async def clay_analyse(
+    body: ClayAnalyseRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Clay Foundation Model analysis — embeddings, suitability, similarity.
+
+    Runs spectral analysis on Sentinel-2 imagery via GEE to produce:
+    - Land suitability score (0-100) with component breakdown
+    - Spectral feature embedding for similarity search
+    - Development recommendations
+    """
+    lat, lon, radius_m = body.lat, body.lon, body.radius_m
+
+    # Run suitability scoring via subprocess
+    try:
+        suitability = await run_clay_subprocess("suitability", lat, lon, radius_m)
+    except Exception as exc:
+        log.warning("Clay suitability subprocess failed: %s", exc)
+        suitability = {"error": str(exc)}
+
+    # Run embedding extraction via subprocess
+    try:
+        embedding_result = await run_clay_subprocess("embedding", lat, lon, radius_m)
+    except Exception as exc:
+        log.warning("Clay embedding subprocess failed: %s", exc)
+        embedding_result = {"error": str(exc)}
+
+    embedding = embedding_result.get("embedding")
+
+    # Similarity search: find sites with stored embeddings
+    similar_sites = []
+    if embedding and not embedding_result.get("error"):
+        try:
+            async with pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT lat, lon, clay_embedding, suitability_score, verdict
+                    FROM clay_site_analyses
+                    WHERE clay_embedding IS NOT NULL
+                    ORDER BY created_at DESC
+                    LIMIT 200
+                """)
+                pool_data = []
+                for r in rows:
+                    emb = r["clay_embedding"]
+                    if emb:
+                        try:
+                            stored_emb = json.loads(emb) if isinstance(emb, str) else emb
+                            pool_data.append({
+                                "lat": float(r["lat"]),
+                                "lon": float(r["lon"]),
+                                "embedding": stored_emb,
+                                "suitability_score": r["suitability_score"],
+                                "verdict": r["verdict"],
+                            })
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+
+                if pool_data:
+                    from utils.clay_model import find_similar_sites_by_embedding
+                    similar_sites = find_similar_sites_by_embedding(
+                        embedding, pool_data, limit=10
+                    )
+        except Exception as exc:
+            log.debug("Clay similarity search skipped (table may not exist): %s", exc)
+
+    # Persist analysis result
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO clay_site_analyses
+                    (lat, lon, radius_m, suitability_score, verdict,
+                     components, spectral_indices, clay_embedding, source, geometry)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                        ST_SetSRID(ST_MakePoint($2, $1), 4326))
+            """,
+                lat, lon, radius_m,
+                suitability.get("suitability_score"),
+                suitability.get("verdict"),
+                json.dumps(suitability.get("components", {})),
+                json.dumps(suitability.get("spectral_indices", {})),
+                json.dumps(embedding) if embedding else None,
+                suitability.get("source", "clay_spectral_fallback_v1"),
+            )
+    except Exception as exc:
+        log.warning("Failed to persist Clay analysis: %s", exc)
+
+    return {
+        "lat": lat,
+        "lon": lon,
+        "radius_m": radius_m,
+        "suitability": suitability,
+        "embedding": {
+            "vector": embedding,
+            "dim": len(embedding) if embedding else 0,
+            "model": embedding_result.get("model", "clay_fallback_v1"),
+        } if not embedding_result.get("error") else {"error": embedding_result["error"]},
+        "similar_sites": similar_sites,
+    }

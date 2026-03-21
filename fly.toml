@@ -1,0 +1,52 @@
+# Fly.io deployment config for Princeps API (backend)
+# Deploy: flyctl deploy --config fly.toml
+
+app = "princeps-api"
+primary_region = "lhr"
+kill_signal = "SIGINT"
+kill_timeout = 5
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  LOG_FORMAT = "json"
+  CORS_ORIGINS = "https://princeps-app.fly.dev,https://princeps.energy"
+  PYTHONUNBUFFERED = "1"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 250
+    soft_limit = 200
+
+[[http_service.checks]]
+  grace_period = "30s"
+  interval = "15s"
+  method = "GET"
+  path = "/health"
+  timeout = "5s"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# Secrets (set via: flyctl secrets set KEY=VALUE)
+# Required:
+#   DATABASE_URL        - PostgreSQL connection string
+#   CLAUDE_API_KEY      - Anthropic API key
+#   MAPBOX_TOKEN        - Mapbox access token
+#   JWT_SECRET          - JWT signing secret
+#   NEO4J_URI           - Neo4j Bolt URI
+#   NEO4J_USER          - Neo4j username
+#   NEO4J_PASSWORD      - Neo4j password
+# Optional:
+#   SAM_PYTHON          - Path to PySAM venv python (default: .venv-sam/bin/python)
+#   ANTHROPIC_API_KEY   - Alias for CLAUDE_API_KEY if needed

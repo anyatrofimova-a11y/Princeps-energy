@@ -52,16 +52,33 @@ BOUNDARY_ZONES = {
 BOUNDARY_ZONES["B8"] = [[0.0, 51.5], [1.5, 51.5], [1.5, 52.2], [0.0, 52.2], [0.0, 51.5]]
 
 
-def constraints_to_geojson(hours_ahead: int = 48, date: str = None) -> dict:
-    """Return constraint forecast as GeoJSON FeatureCollection with polygon zones."""
+def constraints_to_geojson(hours_ahead: int = 48, date: str = None,
+                           hour_offset: int = None) -> dict:
+    """Return constraint forecast as GeoJSON FeatureCollection with polygon zones.
+
+    If hour_offset is given, returns data for that specific hour.
+    Otherwise returns peak values across the full window.
+    Also includes per-hour timeseries for each boundary (for the time slider).
+    """
     full = forecast_constraints(hours_ahead, date)
     features = []
     for b_id, bf in full["boundaries"].items():
         coords = BOUNDARY_ZONES.get(b_id)
         if not coords:
             continue
-        # Current hour stats (first entry)
-        current = bf["hourly"][0] if bf["hourly"] else {}
+
+        if hour_offset is not None and 0 <= hour_offset < len(bf["hourly"]):
+            h = bf["hourly"][hour_offset]
+            loading = h["loading_pct"]
+            prob = h["constraint_probability"]
+            flow = h["flow_gw"]
+            dt = h["datetime"]
+        else:
+            loading = bf["peak_loading_pct"]
+            prob = bf["peak_constraint_prob"]
+            flow = max((h["flow_gw"] for h in bf["hourly"]), default=0)
+            dt = bf["hourly"][0]["datetime"] if bf["hourly"] else None
+
         features.append({
             "type": "Feature",
             "geometry": {"type": "Polygon", "coordinates": [coords]},
@@ -72,20 +89,34 @@ def constraints_to_geojson(hours_ahead: int = 48, date: str = None) -> dict:
                 "peak_loading_pct": bf["peak_loading_pct"],
                 "peak_constraint_prob": bf["peak_constraint_prob"],
                 "constrained_hours": bf["constrained_hours"],
-                "current_loading_pct": current.get("loading_pct", 0),
-                "current_flow_gw": current.get("flow_gw", 0),
-                "current_prob": current.get("constraint_probability", 0),
-                "risk_level": "HIGH" if bf["peak_constraint_prob"] > 0.6
-                              else "MEDIUM" if bf["peak_constraint_prob"] > 0.3
+                "loading_pct": round(loading, 1),
+                "flow_gw": round(flow, 2),
+                "constraint_prob": round(prob, 3),
+                "datetime": dt,
+                "risk_level": "HIGH" if prob > 0.6
+                              else "MEDIUM" if prob > 0.3
                               else "LOW",
                 "constraint_cost_gbp_mwh": BOUNDARIES[b_id]["constraint_cost_mwh"],
             },
         })
+
+    # Include condensed timeseries for the time-slider UI
+    timeseries = {}
+    for b_id, bf in full["boundaries"].items():
+        timeseries[b_id] = [
+            {"h": h["hour_offset"], "dt": h["datetime"],
+             "load": h["loading_pct"], "prob": h["constraint_probability"],
+             "risk": h["risk_level"]}
+            for h in bf["hourly"]
+        ]
+
     return {
         "type": "FeatureCollection",
         "features": features,
         "summary": full["summary"],
         "constraint_windows": full["constraint_windows"][:10],
+        "timeseries": timeseries,
+        "hours_ahead": hours_ahead,
     }
 
 # Typical UK weather patterns for forecast

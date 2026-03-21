@@ -636,6 +636,10 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       // Demand GSP source
       map.addSource("demand-gsps", { type: "geojson", data: EMPTY_FC });
 
+      // GridFinder unmapped grid + Open Buildings sources
+      map.addSource("unmapped-grid", { type: "geojson", data: EMPTY_FC });
+      map.addSource("open-buildings", { type: "geojson", data: EMPTY_FC });
+
       // Constraint overlay + queue depth sources
       map.addSource("grid-constraints", { type: "geojson", data: EMPTY_FC });
       map.addSource("queue-depth", { type: "geojson", data: EMPTY_FC });
@@ -1419,7 +1423,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
             "#888",
           ],
           "fill-opacity": [
-            "interpolate", ["linear"], ["get", "peak_constraint_prob"],
+            "interpolate", ["linear"],
+            ["coalesce", ["get", "constraint_prob"], ["get", "peak_constraint_prob"], 0],
             0, 0.08, 0.3, 0.18, 0.6, 0.35, 1.0, 0.55,
           ],
         },
@@ -1457,7 +1462,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           "text-field": [
             "concat",
             ["get", "boundary_id"], " ", ["get", "name"],
-            "\n", ["to-string", ["round", ["get", "peak_loading_pct"]]], "% loaded",
+            "\n", ["to-string", ["round", ["coalesce", ["get", "loading_pct"], ["get", "peak_loading_pct"], 0]]], "% loaded",
             "\n£", ["to-string", ["get", "constraint_cost_gbp_mwh"]], "/MWh",
           ],
           "text-size": 12,
@@ -2019,6 +2024,88 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           "text-optional": true,
         },
         minzoom: 9,
+      });
+
+      // ── GridFinder Unmapped Grid (dashed orange lines) ──
+      map.addLayer({
+        id: "unmapped-grid-glow",
+        type: "line",
+        source: "unmapped-grid",
+        paint: {
+          "line-color": "#ff9800",
+          "line-width": ["interpolate", ["linear"], ["zoom"], 5, 4, 12, 10],
+          "line-blur": 4,
+          "line-opacity": 0.35,
+        },
+        layout: { visibility: "none", "line-cap": "round" },
+      });
+      map.addLayer({
+        id: "unmapped-grid-line",
+        type: "line",
+        source: "unmapped-grid",
+        paint: {
+          "line-color": ["interpolate", ["linear"], ["get", "confidence"],
+            0.2, "#ffcc80", 0.5, "#ff9800", 0.8, "#e65100"],
+          "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1.5, 12, 4],
+          "line-dasharray": [4, 3],
+          "line-opacity": 0.85,
+        },
+        layout: { visibility: "none", "line-cap": "round" },
+      });
+      map.addLayer({
+        id: "unmapped-grid-labels",
+        type: "symbol",
+        source: "unmapped-grid",
+        paint: {
+          "text-color": "#ff9800",
+          "text-halo-color": "rgba(0,0,0,0.7)",
+          "text-halo-width": 1.2,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": ["concat",
+            ["case", ["==", ["get", "type"], "predicted_substation_link"],
+              ["concat", ["get", "from_substation"], " → ", ["get", "to_substation"]],
+              ["concat", ["to-string", ["get", "tower_count"]], " towers"]],
+            " (", ["to-string", ["get", "estimated_voltage_kv"]], "kV)"],
+          "text-size": 10,
+          "text-offset": [0, 1],
+          "text-anchor": "top",
+          "symbol-placement": "line-center",
+          "text-optional": true,
+        },
+        minzoom: 10,
+      });
+
+      // ── Google Open Buildings (3D fill-extrusion) ──
+      map.addLayer({
+        id: "open-buildings-3d",
+        type: "fill-extrusion",
+        source: "open-buildings",
+        paint: {
+          "fill-extrusion-color": [
+            "interpolate", ["linear"], ["coalesce", ["get", "area_m2"], 100],
+            0, "#90a4ae",     // small = blue-grey
+            100, "#78909c",   // residential
+            500, "#546e7a",   // commercial
+            2000, "#455a64",  // industrial
+          ],
+          "fill-extrusion-height": ["coalesce", ["get", "height_est"], 6],
+          "fill-extrusion-base": 0,
+          "fill-extrusion-opacity": 0.7,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "open-buildings-outline",
+        type: "line",
+        source: "open-buildings",
+        paint: {
+          "line-color": "#b0bec5",
+          "line-width": 0.5,
+          "line-opacity": 0.6,
+        },
+        layout: { visibility: "none" },
       });
 
       // ── Electricity Zones (Carbon Intensity) ──

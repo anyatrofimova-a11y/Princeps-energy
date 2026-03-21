@@ -43,6 +43,14 @@ _geoai_default = os.path.join(os.path.dirname(__file__), "..", ".venv-geeflow", 
 GEOAI_PYTHON = str(Path(os.environ.get("GEOAI_PYTHON", _geoai_default)).absolute())
 GEOAI_RUNNER = str(Path(os.path.join(os.path.dirname(__file__), "..", "utils", "geoai_runner.py")).resolve())
 
+# TorchGeo — shares .venv-geeflow/ (Python 3.12 with PyTorch)
+TORCHGEO_PYTHON = GEEFLOW_PYTHON  # same venv
+TORCHGEO_RUNNER = str(Path(os.path.join(os.path.dirname(__file__), "..", "utils", "torchgeo_runner.py")).resolve())
+
+# Clay Foundation Model — shares .venv-geeflow/ (Python 3.12 with earthengine-api)
+CLAY_PYTHON = GEEFLOW_PYTHON  # same venv
+CLAY_RUNNER = str(Path(os.path.join(os.path.dirname(__file__), "..", "utils", "clay_model.py")).resolve())
+
 FORECAST_PYTHON = str(Path(os.path.dirname(__file__)).resolve().parent / ".venv-forecast" / "bin" / "python")
 DEMAND_INGESTER_SCRIPT = str(Path(os.path.dirname(__file__)).resolve().parent / "utils" / "demand_data_ingester.py")
 DEMAND_FORECAST_SCRIPT = str(Path(os.path.dirname(__file__)).resolve().parent / "utils" / "demand_forecaster.py")
@@ -390,6 +398,38 @@ async def run_geoai_subprocess(
     return json.loads(stdout.decode())
 
 
+async def run_clay_subprocess(
+    mode: str, lat: float, lon: float,
+    radius_m: float = 500, timeout: int = 180,
+) -> dict[str, Any]:
+    """Run Clay Foundation Model analysis as a subprocess via .venv-geeflow/."""
+    if not GEE_PROJECT:
+        raise HTTPException(
+            status_code=500,
+            detail="GEE_PROJECT not configured — set in .env",
+        )
+    cmd = [
+        CLAY_PYTHON, CLAY_RUNNER,
+        "--mode", mode,
+        "--lat", str(lat),
+        "--lon", str(lon),
+        "--radius_m", str(radius_m),
+        "--gee_project", GEE_PROJECT,
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    if proc.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Clay analysis failed: {stderr.decode()[:500]}",
+        )
+    return json.loads(stdout.decode())
+
+
 async def _run_forecast_subprocess(payload: dict, script: str = None) -> dict:
     proc = await asyncio.create_subprocess_exec(
         FORECAST_PYTHON, script or DEMAND_FORECAST_SCRIPT,
@@ -410,6 +450,24 @@ async def _run_generic_subprocess(script: str, payload: dict, timeout: int = 60)
     )
     raw_in = json.dumps(payload).encode()
     stdout, stderr = await asyncio.wait_for(proc.communicate(raw_in), timeout=timeout)
+    return json.loads(stdout)
+
+
+async def run_torchgeo_subprocess(payload: dict, timeout: int = 120) -> dict:
+    """Run torchgeo_runner.py via .venv-geeflow subprocess (JSON stdin/stdout)."""
+    proc = await asyncio.create_subprocess_exec(
+        TORCHGEO_PYTHON, TORCHGEO_RUNNER,
+        stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    raw_in = json.dumps(payload).encode()
+    stdout, stderr = await asyncio.wait_for(proc.communicate(raw_in), timeout=timeout)
+    if proc.returncode != 0:
+        err = stderr.decode(errors="replace").strip()
+        raise HTTPException(
+            status_code=502,
+            detail=f"TorchGeo subprocess failed (rc={proc.returncode}): {err[:500]}",
+        )
     return json.loads(stdout)
 
 

@@ -81,6 +81,8 @@ const api = {
     queueDepth:   (substationId) => get(`/api/grid/queue-depth/${substationId}`),
     queueSummary: (bbox) => bbox ? get(`/api/grid/queue-summary?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`) : get("/api/grid/queue-summary"),
     liveStatus:   () => get("/api/grid/live-status"),
+    // GridFinder — unmapped grid detection
+    unmappedGrid: (lat, lon, km = 10) => get(`/api/grid/unmapped?lat=${lat}&lon=${lon}&radius_km=${km}`),
     // Grid connection capacity endpoints
     capacityMap: (bbox) => get(`/grid/capacity-map?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
     gridLines: (bbox) => get(`/grid/lines?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
@@ -371,6 +373,18 @@ const api = {
     listAnalyses: (parcelId) =>
       get(`/vision/site/${enc(parcelId)}/analyses`),
     jobStatus: (jobId) => get(`/job/${enc(jobId)}`),
+    // Google Open Buildings
+    buildings: (lat, lon, r = 500) => get(`/api/vision/buildings?lat=${lat}&lon=${lon}&radius_m=${r}`),
+    buildingsSummary: (lat, lon, r = 1000) => get(`/api/vision/buildings/summary?lat=${lat}&lon=${lon}&radius_m=${r}`),
+    torchgeoClassify: (lat, lon, radiusM = 500, model = "resnet50", year = 2024) =>
+      post("/api/vision/torchgeo-classify", { lat, lon, radius_m: radiusM, model, year }),
+    torchgeoChange: (lat, lon, radiusM = 500, yearBefore = 2020, yearAfter = 2024) =>
+      post("/api/vision/torchgeo-change", { lat, lon, radius_m: radiusM, year_before: yearBefore, year_after: yearAfter }),
+    torchgeoCrop: (lat, lon, radiusM = 500, model = "resnet50", year = 2024) =>
+      post("/api/vision/torchgeo-crop", { lat, lon, radius_m: radiusM, model, year }),
+    torchgeoModels: () => get("/api/vision/torchgeo-models"),
+    clayAnalyse: (lat, lon, radiusM = 500) =>
+      post("/api/vision/clay-analyse", { lat, lon, radius_m: radiusM }),
   },
 
   homeRetrofit: {
@@ -579,6 +593,16 @@ const api = {
       fetch(`/api/v1/projects/${enc(id)}`, { method: "DELETE" }).then(json),
     timeline: (id) => get(`/api/v1/projects/${enc(id)}/timeline`),
     importRepd: (repdId) => post(`/api/v1/projects/import-repd/${enc(repdId)}`),
+    importRepdBulk: (opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.technology) q.set("technology", opts.technology);
+      if (opts.min_mw != null) q.set("min_capacity_mw", opts.min_mw);
+      if (opts.max_mw != null) q.set("max_capacity_mw", opts.max_mw);
+      if (opts.status) q.set("status", opts.status);
+      if (opts.region) q.set("region", opts.region);
+      if (opts.limit) q.set("limit", opts.limit);
+      return post(`/api/v1/projects/import-repd-bulk?${q}`);
+    },
     importTec: (tecId) => post(`/api/v1/projects/import-tec/${enc(tecId)}`),
     // Documents
     listDocuments: (id) => get(`/api/v1/projects/${enc(id)}/documents`),
@@ -609,6 +633,12 @@ const api = {
   reports: {
     siteAssessment: (lat, lon, siteName, capacityMw = 50) =>
       fetch(`/api/reports/site-assessment?lat=${lat}&lon=${lon}&site_name=${enc(siteName)}&capacity_mw=${capacityMw}`, { method: "POST" })
+        .then(r => { if (!r.ok) throw new Error(`Report failed: ${r.status}`); return r.blob(); }),
+    gridConnection: (lat, lon, siteName, capacityMw = 50) =>
+      fetch(`/api/reports/grid-connection?lat=${lat}&lon=${lon}&site_name=${enc(siteName)}&capacity_mw=${capacityMw}`, { method: "POST" })
+        .then(r => { if (!r.ok) throw new Error(`Report failed: ${r.status}`); return r.blob(); }),
+    financial: (lat, lon, siteName, capacityMw = 50, technology = "solar", ppaPrice = 55) =>
+      fetch(`/api/reports/financial?lat=${lat}&lon=${lon}&site_name=${enc(siteName)}&capacity_mw=${capacityMw}&technology=${enc(technology)}&ppa_price=${ppaPrice}`, { method: "POST" })
         .then(r => { if (!r.ok) throw new Error(`Report failed: ${r.status}`); return r.blob(); }),
   },
 

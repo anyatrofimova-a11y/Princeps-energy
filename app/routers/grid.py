@@ -506,13 +506,17 @@ async def grid_osm_summary(pool: asyncpg.Pool = Depends(get_pool)):
 @router.get("/api/grid/constraints")
 async def api_grid_constraints(
     hours_ahead: int = Query(48, ge=1, le=168),
+    hour_offset: int = Query(None, ge=0, le=167),
 ):
     """
     Grid constraint forecast as GeoJSON — colored boundary zones showing
     congestion risk, loading, and constraint cost per MWh.
+
+    Includes per-boundary timeseries for time-slider scrubbing.
+    Pass hour_offset to get data for a specific forecast hour.
     """
     from utils.constraint_forecaster import constraints_to_geojson
-    return constraints_to_geojson(hours_ahead=hours_ahead)
+    return constraints_to_geojson(hours_ahead=hours_ahead, hour_offset=hour_offset)
 
 
 @router.get("/api/grid/queue-depth")
@@ -1233,7 +1237,59 @@ _dc_twin_clients: set[WebSocket] = set()
 
 
 def _generate_dc_twin_state(it_load_kw: float = 10000, rack_count: int = 100, cooling_type: str = "hybrid"):
-    """Generate simulated DC telemetry for WebSocket streaming."""
+    """Generate DC telemetry using HPE SustainDC physics model, fallback to synthetic."""
+    import subprocess, json as _json, os, random, math, time
+    grid_python = os.environ.get("GRID_PYTHON", os.path.join(os.path.dirname(__file__), "..", ".venv-grid", "bin", "python"))
+    runner = os.path.join(os.path.dirname(__file__), "..", "utils", "dc_rl_runner.py")
+
+    hour = time.localtime().tm_hour
+    load_variation = 1.0 + 0.05 * math.sin(hour * math.pi / 12)
+    ambient_temp = 10 + 8 * math.sin((hour - 6) * math.pi / 12)
+    it_pct = min(100, max(10, (it_load_kw * load_variation) / (rack_count * 10) * 100))
+
+    try:
+        result = subprocess.run(
+            [grid_python, runner, "simulate", _json.dumps({
+                "it_load_pct": round(it_pct, 1),
+                "ambient_temp_c": round(ambient_temp, 1),
+                "capacity_mw": it_load_kw / 1000,
+                "crac_setpoint_c": 18,
+            })],
+            capture_output=True, text=True, timeout=5,
+            cwd=os.path.join(os.path.dirname(__file__), ".."),
+        )
+        if result.returncode == 0:
+            physics = _json.loads(result.stdout)
+            racks = []
+            for i in range(rack_count):
+                racks.append({
+                    "id": f"R{i+1:03d}", "row": i // max(rack_count // 4, 1),
+                    "load_kw": round(physics["it_power_kw"] / rack_count + random.gauss(0, 0.5), 1),
+                    "inlet_temp_c": round(physics["avg_inlet_temp_c"] + random.gauss(0, 0.3), 1),
+                    "outlet_temp_c": round(physics["avg_outlet_temp_c"] + random.gauss(0, 0.5), 1),
+                    "humidity_pct": round(45 + random.gauss(0, 3), 1),
+                    "status": "ok",
+                })
+            return {
+                "metrics": {
+                    "it_load_kw": round(physics["it_power_kw"], 1),
+                    "cooling_kw": round(physics["hvac"]["total_hvac_kw"], 1),
+                    "pue": physics["pue"],
+                    "avg_inlet_temp_c": physics["avg_inlet_temp_c"],
+                    "utilisation_pct": round(it_pct, 1),
+                    "wue": round(physics["water_usage_l_per_15min"] * 4 / max(physics["total_power_kw"], 1), 4),
+                    "ambient_temp_c": round(ambient_temp, 1),
+                    "chiller_kw": round(physics["hvac"]["chiller_kw"], 1),
+                    "crac_fan_kw": round(physics["hvac"]["crac_fan_kw"], 1),
+                },
+                "racks": racks,
+                "anomalies": [],
+                "model": "sustaindc_physics",
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            }
+    except Exception:
+        pass
+    # Fallback to synthetic telemetry
     from utils.dc_planner import simulate_telemetry
     return simulate_telemetry(it_load_kw, rack_count, cooling_type)
 
@@ -1265,6 +1321,32 @@ async def ws_dc_twin(ws: WebSocket):
         pass
     finally:
         _dc_twin_clients.discard(ws)
+
+
+# ══════════════════════════════════════════════════════════
+# GridFinder — Unmapped Grid Detection
+# ══════════════════════════════════════════════════════════
+
+
+@router.get("/api/grid/unmapped")
+async def detect_unmapped(
+    lat: float = Query(52.5),
+    lon: float = Query(-1.5),
+    radius_km: float = Query(10, ge=1, le=50),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Detect potentially unmapped grid infrastructure near a location.
+
+    Uses OSM tower/line gap analysis + optional VIIRS night-time lights
+    to identify likely grid routes not in DNO open data.
+    Returns GeoJSON of predicted routes.
+    """
+    from utils.gridfinder_runner import detect_unmapped_grid
+    result = await detect_unmapped_grid(pool, lat, lon, radius_km)
+    record_metric("gridfinder_detection", 1,
+                  labels={"lat": lat, "lon": lon, "radius_km": radius_km})
+    return result
 
 
 # ══════════════════════════════════════════════════════════

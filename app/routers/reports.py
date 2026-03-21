@@ -13,6 +13,9 @@ from pydantic import BaseModel
 from app.deps import get_pool
 from utils.report_renderer import generate_report
 from utils.xlsx_export import generate_xlsx
+from utils.g99_pack_generator import generate_g99_pack
+from utils.report_grid_connection import generate_grid_connection_report
+from utils.report_financial import generate_financial_report
 
 log = logging.getLogger("princeps.reports")
 router = APIRouter(tags=["reports"])
@@ -82,5 +85,170 @@ async def api_financial_xlsx(req: XlsxExportRequest):
     return StreamingResponse(
         iter([xlsx_bytes]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/api/reports/grid-connection")
+async def grid_connection_report(
+    lat: float = Query(..., description="Latitude (WGS84)"),
+    lon: float = Query(..., description="Longitude (WGS84)"),
+    site_name: str = Query("Site", description="Site name for report title"),
+    capacity_mw: float = Query(50.0, description="Proposed generation capacity in MW"),
+    technology: str = Query("solar", description="Technology type: solar, wind, bess"),
+    run_power_flow: bool = Query(False, description="Run Tier 2 pandapower analysis"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Generate a branded PDF grid connection assessment report.
+
+    Performs a full Tier 1 data-driven grid connection assessment including:
+    - Nearest substation identification with headroom analysis
+    - P10/P50/P90 connection cost estimates for multiple voltage options
+    - Queue depth and wait time analysis
+    - Actionable recommendations (connection voltage, flexible connection, BESS)
+    - Optional Tier 2 pandapower power flow validation
+
+    Returns a downloadable PDF with professional Princeps branding.
+    """
+    try:
+        async with pool.acquire() as conn:
+            pdf_bytes = await generate_grid_connection_report(
+                conn,
+                lat=lat,
+                lon=lon,
+                capacity_mw=capacity_mw,
+                site_name=site_name,
+                technology=technology,
+                run_power_flow=run_power_flow,
+            )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        log.exception("Grid connection report generation failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Grid connection report generation failed: {e}",
+        )
+
+    filename = f"princeps-grid-connection-{_safe_filename(site_name)}.pdf"
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+class G99PackRequest(BaseModel):
+    """Data payload for G99 application pack generation."""
+    site: dict = {}
+    capacity: dict = {}
+    grid: dict = {}
+    technology: dict = {}
+    agent_result: dict = {}
+
+
+@router.post("/api/reports/g99-pack")
+async def api_g99_pack(req: G99PackRequest):
+    """Generate a pre-filled G99 application pack with all form fields,
+    compliance checks, and connection parameters from Princeps assessment.
+    Returns JSON with form_data + HTML for PDF rendering."""
+    try:
+        result = generate_g99_pack(req.model_dump())
+    except Exception as e:
+        log.exception("G99 pack generation failed")
+        raise HTTPException(status_code=500, detail=f"G99 pack generation failed: {e}")
+    return result
+
+
+@router.post("/api/reports/g99-pdf")
+async def api_g99_pdf(req: G99PackRequest):
+    """Generate a G99 application pack as downloadable PDF.
+    Uses Playwright for HTML-to-PDF conversion."""
+    try:
+        result = generate_g99_pack(req.model_dump())
+        html = result["html"]
+        filename = result["filename"]
+
+        # Try Playwright PDF, fallback to HTML download
+        try:
+            from playwright.async_api import async_playwright
+            async with async_playwright() as p:
+                browser = await p.chromium.launch()
+                page = await browser.new_page()
+                await page.set_content(html, wait_until="networkidle")
+                pdf_bytes = await page.pdf(format="A4", print_background=True, margin={"top": "15mm", "bottom": "15mm", "left": "12mm", "right": "12mm"})
+                await browser.close()
+            return StreamingResponse(
+                iter([pdf_bytes]),
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+        except ImportError:
+            # Playwright not installed — return HTML instead
+            return StreamingResponse(
+                iter([html.encode()]),
+                media_type="text/html",
+                headers={"Content-Disposition": f'attachment; filename="{filename.replace(".pdf", ".html")}"'},
+            )
+    except Exception as e:
+        log.exception("G99 PDF generation failed")
+        raise HTTPException(status_code=500, detail=f"G99 PDF generation failed: {e}")
+
+
+@router.post("/api/reports/financial")
+async def financial_report(
+    lat: float = Query(..., description="Latitude (WGS84)"),
+    lon: float = Query(..., description="Longitude (WGS84)"),
+    site_name: str = Query("Site", description="Site name for report title"),
+    capacity_mw: float = Query(50.0, ge=0.1, le=5000, description="Proposed capacity in MW"),
+    technology: str = Query("solar", description="Technology: solar, wind, offshore_wind, bess"),
+    ppa_price: float = Query(55.0, ge=1, le=500, description="PPA price in £/MWh"),
+):
+    """Generate a comprehensive Financial Viability Assessment PDF.
+
+    Runs a full 25-year DCF model with:
+    - CAPEX/OPEX breakdown by component
+    - Revenue projection with degradation and CPI escalation
+    - Annual cashflow table with cumulative tracking
+    - IRR sensitivity analysis (PPA price, CAPEX, capacity factor, discount rate)
+    - Senior debt sizing with sculpted repayment and DSCR profile
+    - Equity returns (pre/post-tax IRR, cash-on-cash yield, equity multiple)
+    - Risk register with likelihood/impact/mitigation
+    - CB7 reference parameters appendix
+
+    Uses investment_appraisal.py subprocess bridge for DCF calculations.
+    Returns a branded Princeps PDF via Playwright Chromium.
+    """
+    valid_technologies = {"solar", "wind", "offshore_wind", "bess"}
+    if technology not in valid_technologies:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid technology '{technology}'. Must be one of: {', '.join(sorted(valid_technologies))}",
+        )
+
+    try:
+        pdf_bytes = await generate_financial_report(
+            lat=lat,
+            lon=lon,
+            site_name=site_name,
+            capacity_mw=capacity_mw,
+            technology=technology,
+            ppa_price=ppa_price,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        log.exception("Financial report generation failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Financial report generation failed: {e}",
+        )
+
+    filename = f"princeps-financial-viability-{_safe_filename(site_name)}.pdf"
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

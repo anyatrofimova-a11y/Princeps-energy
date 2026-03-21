@@ -69,6 +69,7 @@ export default function ExportHub() {
   const {
     explain, pickedLocation, parcelId, agentResult,
     samCapacity, solarYield, gridContext, geeflowData,
+    placedAssets,
   } = useSite();
 
   const [activeCategory, setActiveCategory] = useState("reports");
@@ -94,8 +95,15 @@ export default function ExportHub() {
           break;
         }
         case "xlsx_financial": {
-          const data = buildFinancialPack();
-          downloadJson(data, `princeps-financial-${slug(name)}.json`);
+          const payload = buildFinancialPack();
+          const resp = await fetch("/api/reports/financial-xlsx", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          if (!resp.ok) throw new Error(`XLSX export failed: ${resp.status}`);
+          const xlsxBlob = await resp.blob();
+          downloadBlob(xlsxBlob, `princeps-financial-${slug(name)}.xlsx`);
           break;
         }
         case "csv_yield": {
@@ -146,29 +154,44 @@ export default function ExportHub() {
 
   function buildFinancialPack() {
     return {
-      site: { name, lat, lon, parcel_id: parcelId, area_ha: explain?.area_ha },
-      verdict: { verdict: agentResult?.verdict, confidence: agentResult?.confidence },
-      yield: {
+      site: { name, lat, lon, parcel_id: parcelId, area_ha: explain?.area_ha, capacity_kw: samCapacity },
+      verdict: { verdict: agentResult?.verdict, confidence: agentResult?.confidence, summary: agentResult?.summary, risks: agentResult?.risks },
+      yield_data: {
         annual_energy_kwh: solarYield?.annual_energy_kwh,
         capacity_factor_pct: solarYield?.capacity_factor_pct,
-        monthly_kwh: solarYield?.monthly_energy_kwh,
+        monthly_energy_kwh: solarYield?.monthly_energy_kwh,
+        peak_sun_hours: solarYield?.peak_sun_hours,
+        system_losses_pct: solarYield?.system_losses_pct,
       },
       grid: {
         nearest_substation: gridContext?.nearest_substation?.name,
         distance_km: gridContext?.nearest_substation?.distance_km,
         voltage_kv: gridContext?.nearest_substation?.voltage_kv,
         headroom_mw: gridContext?.nearest_substation?.headroom_mw,
+        dno: explain?.dno,
+        connection_cost: gridContext?.connection_cost,
       },
-      geeflow: {
-        land_use: geeflowData?.extractions?.land_use?.dominant_class,
-        developable_pct: geeflowData?.extractions?.land_use?.developable_pct,
-        slope_mean_deg: geeflowData?.extractions?.terrain?.slope?.mean_deg,
-        elevation_m: geeflowData?.extractions?.terrain?.elevation?.mean_m,
-        ghi_kwh_m2: geeflowData?.extractions?.solar_resource?.annual_ghi_kwh_m2,
+      constraints: { domains: agentResult?.domains || {} },
+      satellite: {
+        terrain: {
+          elevation_mean_m: geeflowData?.extractions?.terrain?.elevation?.mean_m,
+          slope_mean_deg: geeflowData?.extractions?.terrain?.slope?.mean_deg,
+          south_facing_pct: geeflowData?.extractions?.terrain?.aspect?.south_facing_pct,
+          roughness_mean: geeflowData?.extractions?.terrain?.roughness?.mean,
+        },
+        land_use: {
+          dominant_class: geeflowData?.extractions?.land_use?.dominant_class,
+          developable_pct: geeflowData?.extractions?.land_use?.developable_pct,
+          class_percentages: geeflowData?.extractions?.land_use?.class_percentages,
+        },
+        solar_resource: {
+          annual_ghi_kwh_m2: geeflowData?.extractions?.solar_resource?.annual_ghi_kwh_m2,
+        },
+        flood_risk: geeflowData?.extractions?.flood_risk,
       },
-      capacity_kw: samCapacity,
-      exported_at: new Date().toISOString(),
-      platform: "Princeps",
+      placed_assets: (placedAssets || []).map(a => ({
+        assetType: a.assetType, label: a.label, mw: a.mw, lat: a.lat, lon: a.lon,
+      })),
     };
   }
 
