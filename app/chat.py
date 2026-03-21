@@ -650,6 +650,30 @@ TOOLS: list[dict] = [
             "required": ["lat", "lon"],
         },
     },
+    {
+        "name": "forecast_grid_connection",
+        "description": (
+            "Predict when a developer will receive a grid connection offer and at what cost, "
+            "BEFORE they apply. Uses real TEC gate data, ECR queue depth, substation headroom, "
+            "and REPD historical outcomes. Returns time-to-offer (months), likely voltage, "
+            "reinforcement cost, queue position, P10/P50/P90 connection cost, risk factors, "
+            "recommended substations, and historical comparisons from nearby projects."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "capacity_mw": {"type": "number", "description": "Proposed capacity in MW", "default": 50},
+                "technology": {
+                    "type": "string",
+                    "description": "Technology type: solar, wind, battery",
+                    "default": "solar",
+                },
+            },
+            "required": ["lat", "lon"],
+        },
+    },
 ]
 
 
@@ -1263,6 +1287,45 @@ async def execute_tool(
                 "spectral_indices": suitability.get("spectral_indices"),
                 "terrain": suitability.get("terrain"),
                 "source": suitability.get("source"),
+            }
+
+        elif name == "forecast_grid_connection":
+            from utils.connection_offer_forecaster import forecast_connection_offer
+            lat, lon = args["lat"], args["lon"]
+            capacity_mw = args.get("capacity_mw", 50)
+            technology = args.get("technology", "solar")
+            result = await forecast_connection_offer(
+                pool, lat, lon, capacity_mw, technology
+            )
+            # Compact for chat context — keep headline numbers and risks
+            fc = result.get("forecast", {})
+            return {
+                "time_to_offer_months": fc.get("time_to_offer_months"),
+                "likely_voltage_kv": fc.get("likely_voltage_kv"),
+                "recommended_substation": fc.get("recommended_substation"),
+                "dno": fc.get("dno"),
+                "distance_km": fc.get("distance_km"),
+                "queue_position": fc.get("queue_position"),
+                "headroom_mw": fc.get("headroom_mw"),
+                "net_headroom_mw": fc.get("net_headroom_mw"),
+                "reinforcement_cost_gbp": fc.get("reinforcement_cost_gbp"),
+                "connection_cost_range": fc.get("connection_cost_range"),
+                "total_cost_estimate_gbp": fc.get("total_cost_estimate_gbp"),
+                "risk_level": result.get("risk_level"),
+                "risk_factors": result.get("risk_factors", []),
+                "recommended_substations": [
+                    {
+                        "name": s["name"],
+                        "distance_km": s["distance_km"],
+                        "headroom_mw": s["headroom_mw"],
+                        "queue_count": s["queue_count"],
+                        "time_to_offer_months": s["time_to_offer_months"],
+                    }
+                    for s in result.get("recommended_substations", [])
+                ],
+                "historical_count": len(result.get("historical_comparisons", [])),
+                "avg_historical_months": result.get("avg_historical_planning_to_operational_months"),
+                "tec_projects_count": len(result.get("tec_projects_nearby", [])),
             }
 
         else:

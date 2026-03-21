@@ -30,6 +30,10 @@ from utils.grid_connection_analyser import (
     estimate_connection_cost as gc_cost_estimate,
     tier2_power_flow as gc_power_flow,
 )
+from utils.connection_offer_forecaster import (
+    forecast_connection_offer,
+    batch_forecast as batch_connection_forecast_fn,
+)
 from utils.national_grid_live import fetch_all_live, live_data_to_geojson
 from utils.uk_grid_topology import topology_to_geojson
 from utils.grid_stability_predictor import predict_grid_stability
@@ -146,6 +150,52 @@ async def api_grid_power_flow(
         )
     record_metric("grid_power_flow", capacity_mw,
                   labels={"technology": technology, "lat": lat, "lon": lon})
+    return result
+
+
+@router.post("/api/grid/connection-forecast")
+async def api_connection_forecast(
+    lat: float = Query(51.5),
+    lon: float = Query(-1.0),
+    capacity_mw: float = Query(50, ge=0.001),
+    technology: str = Query("solar"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Predict connection offer timeline, cost, and risk for a proposed
+    grid connection BEFORE the developer applies.
+
+    Uses real TEC gate data, ECR queue depth, substation capacity,
+    and REPD historical outcomes.
+    """
+    result = await forecast_connection_offer(
+        pool, lat=lat, lon=lon, capacity_mw=capacity_mw, technology=technology,
+    )
+    record_metric("connection_forecast", capacity_mw,
+                  labels={"technology": technology, "lat": lat, "lon": lon})
+    return result
+
+
+@router.post("/api/grid/batch-connection-forecast")
+async def api_batch_connection_forecast(
+    body: list[dict],
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Batch forecast for multiple candidate sites.
+
+    Accepts a JSON array of site objects, each with lat, lon,
+    capacity_mw (optional, default 50), technology (optional, default solar),
+    and name (optional).
+
+    Returns sites ranked by composite connection feasibility score.
+    """
+    if not body:
+        raise HTTPException(400, "Empty site list")
+    if len(body) > 50:
+        raise HTTPException(400, "Maximum 50 sites per batch")
+    result = await batch_connection_forecast_fn(pool, body)
+    record_metric("batch_connection_forecast", len(body))
     return result
 
 

@@ -81,6 +81,11 @@ const api = {
     queueDepth:   (substationId) => get(`/api/grid/queue-depth/${substationId}`),
     queueSummary: (bbox) => bbox ? get(`/api/grid/queue-summary?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`) : get("/api/grid/queue-summary"),
     liveStatus:   () => get("/api/grid/live-status"),
+    // Connection offer forecasting
+    connectionForecast: (lat, lon, mw = 50, tech = "solar") =>
+      post(`/api/grid/connection-forecast?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(tech)}`),
+    batchConnectionForecast: (sites) =>
+      post("/api/grid/batch-connection-forecast", sites),
     // GridFinder — unmapped grid detection
     unmappedGrid: (lat, lon, km = 10) => get(`/api/grid/unmapped?lat=${lat}&lon=${lon}&radius_km=${km}`),
     // Grid connection capacity endpoints

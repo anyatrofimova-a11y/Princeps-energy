@@ -73,17 +73,8 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
     # ── DC infrastructure — fibre POPs, IXPs, water bodies, DCs ─────
     asyncio.create_task(_safe_bg("dc_infra_ingest", ingest_dc_infrastructure, pool))
 
-    # ── Daily alert loop ──────────────────────────────────────────────
-    async def _daily_alert_loop():
-        while True:
-            await asyncio.sleep(24 * 3600)
-            try:
-                async with pool.acquire() as conn:
-                    await run_daily_alert_check(conn)
-            except Exception as e:
-                log.error("Daily alert check failed: %s", e)
-
-    asyncio.create_task(_daily_alert_loop())
+    # ── Nightly data refresh scheduler ──────────────────────────────────
+    asyncio.create_task(_nightly_refresh_loop(pool))
 
     # ── Seed system workflow templates ──────────────────────────────
     asyncio.create_task(_safe_bg("workflow_templates_seed", _seed_workflow_templates, pool))
@@ -116,3 +107,79 @@ async def _seed_workflow_templates(pool: asyncpg.Pool) -> None:
                     json.dumps(steps),
                 )
         log.info("Seeded %d system workflow templates", len(WORKFLOW_PRESETS))
+
+
+async def _nightly_refresh_loop(pool: asyncpg.Pool) -> None:
+    """
+    Nightly data refresh — runs at 02:00 UTC every day.
+
+    Refreshes:
+      1. REPD projects (BEIS renewable energy planning database)
+      2. ESO TEC register (transmission entry capacity queue)
+      3. Grid DNO substations + ECR (all 6 UK DNOs)
+      4. NGED CIM equipment profiles
+      5. Grid upgrade tracker (NGED investment plans)
+      6. Daily alert check (threshold breaches, queue changes)
+
+    Why: Data goes stale after startup. Beta users need to see fresh
+    DNO data when they log in Monday morning, not data from last restart.
+    """
+    from datetime import datetime, timezone
+
+    REFRESH_INTERVAL_HOURS = 24
+    TARGET_HOUR_UTC = 2  # Run at 02:00 UTC
+
+    # Wait until first 02:00 UTC
+    now = datetime.now(timezone.utc)
+    next_run = now.replace(hour=TARGET_HOUR_UTC, minute=0, second=0, microsecond=0)
+    if next_run <= now:
+        from datetime import timedelta
+        next_run += timedelta(days=1)
+    initial_wait = (next_run - now).total_seconds()
+    log.info("Nightly refresh scheduled — first run in %.1f hours at %s", initial_wait / 3600, next_run.isoformat())
+    await asyncio.sleep(initial_wait)
+
+    while True:
+        run_start = _time_now()
+        log.info("Nightly data refresh starting...")
+
+        # Run all refresh tasks concurrently
+        results = await asyncio.gather(
+            _safe_bg("nightly_repd", ingest_repd, pool),
+            _safe_bg("nightly_tec", ingest_tec_register, pool),
+            _safe_bg("nightly_dno", ingest_all_dnos, pool),
+            _safe_bg("nightly_nged_upgrades", ingest_nged_upgrades, pool),
+            _safe_bg("nightly_alerts", _run_alerts, pool),
+            return_exceptions=True,
+        )
+
+        elapsed = _time_now() - run_start
+        errors = sum(1 for r in results if isinstance(r, Exception))
+        log.info(
+            "Nightly refresh complete in %.1fs — %d/%d tasks succeeded",
+            elapsed, len(results) - errors, len(results),
+        )
+
+        # Record refresh timestamp in DB for monitoring
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute(
+                    """INSERT INTO system_events (event_type, payload)
+                       VALUES ('nightly_refresh', $1::jsonb)
+                       ON CONFLICT DO NOTHING""",
+                    '{"elapsed_s": ' + str(round(elapsed, 1)) + ', "errors": ' + str(errors) + '}',
+                )
+        except Exception:
+            pass  # Non-critical
+
+        await asyncio.sleep(REFRESH_INTERVAL_HOURS * 3600)
+
+
+def _time_now():
+    import time
+    return time.time()
+
+
+async def _run_alerts(pool):
+    async with pool.acquire() as conn:
+        await run_daily_alert_check(conn)
