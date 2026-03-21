@@ -51,6 +51,10 @@ TORCHGEO_RUNNER = str(Path(os.path.join(os.path.dirname(__file__), "..", "utils"
 CLAY_PYTHON = GEEFLOW_PYTHON  # same venv
 CLAY_RUNNER = str(Path(os.path.join(os.path.dirname(__file__), "..", "utils", "clay_model.py")).resolve())
 
+# LiDAR Terrain — shares .venv-geeflow/ (Python 3.12 with earthengine-api)
+LIDAR_PYTHON = GEEFLOW_PYTHON  # same venv
+LIDAR_RUNNER = str(Path(os.path.join(os.path.dirname(__file__), "..", "utils", "lidar_runner.py")).resolve())
+
 FORECAST_PYTHON = str(Path(os.path.dirname(__file__)).resolve().parent / ".venv-forecast" / "bin" / "python")
 DEMAND_INGESTER_SCRIPT = str(Path(os.path.dirname(__file__)).resolve().parent / "utils" / "demand_data_ingester.py")
 DEMAND_FORECAST_SCRIPT = str(Path(os.path.dirname(__file__)).resolve().parent / "utils" / "demand_forecaster.py")

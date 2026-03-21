@@ -746,6 +746,17 @@ const api = {
     profile: (parcelId, date, area, moduleType, surfaceType) => get(`/site/${enc(parcelId)}/bipv/profile?date=${enc(date)}&area_m2=${area}&module_type=${enc(moduleType)}&surface_type=${enc(surfaceType)}`),
   },
 
+  terrain: {
+    lidar: (lat, lon, radiusM = 500, resolutionM = 2) =>
+      post("/api/terrain/lidar", { lat, lon, radius_m: radiusM, resolution_m: resolutionM }),
+    analyse: (lat, lon, radiusM = 500) =>
+      post("/api/terrain/analyse", { lat, lon, radius_m: radiusM }),
+    viewshed: (lat, lon, heightM = 3, radiusM = 2000, observerM = 1.6) =>
+      post("/api/terrain/viewshed", { lat, lon, target_height_m: heightM, radius_m: radiusM, observer_height_m: observerM }),
+    hydrology: (lat, lon, radiusM = 500) =>
+      post("/api/terrain/hydrology", { lat, lon, radius_m: radiusM }),
+  },
+
   notifications: {
     list: (unreadOnly = false, limit = 50) =>
       get(`/notifications?unread_only=${unreadOnly}&limit=${limit}`),

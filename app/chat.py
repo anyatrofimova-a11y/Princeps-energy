@@ -849,6 +849,92 @@ TOOLS: list[dict] = [
             "required": ["lat", "lon"],
         },
     },
+    {
+        "name": "calculate_noise_contours",
+        "description": "Calculate ISO 9613-2 noise propagation contours for energy infrastructure (wind turbines, BESS inverters, transformers). Returns GeoJSON noise contour polygons at 35/40/45/50/55 dB(A) and compliance assessment against UK planning limits.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sources": {
+                    "type": "array",
+                    "description": "Noise sources: [{type: 'wind_turbine'|'bess_inverter'|'transformer', lat, lon, power_level_dba?, hub_height_m?/height_m?}]",
+                    "items": {"type": "object"},
+                },
+                "compliance_limit_dba": {"type": "number", "description": "Compliance limit in dB(A)", "default": 40},
+                "study_radius_m": {"type": "number", "description": "Study area radius in metres", "default": 2000},
+                "tonal_penalty": {"type": "boolean", "description": "Apply +5dB tonal penalty", "default": False},
+            },
+            "required": ["sources"],
+        },
+    },
+    {
+        "name": "generate_construction_schedule",
+        "description": "Generate a parametric construction schedule for a solar, wind, or BESS energy project. Returns phases with durations, workforce, HGV counts, and cost breakdown.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "capacity_mw": {"type": "number", "description": "Project capacity in MW"},
+                "technology": {"type": "string", "description": "Technology: solar, wind, bess", "default": "solar"},
+                "site_area_ha": {"type": "number", "description": "Site area in hectares"},
+                "grid_distance_km": {"type": "number", "description": "Grid connection distance in km"},
+            },
+            "required": ["capacity_mw"],
+        },
+    },
+    {
+        "name": "estimate_construction_traffic",
+        "description": "Estimate construction traffic impacts for a CTMP (Construction Traffic Management Plan). Returns total HGV movements, peak daily movements, abnormal loads, access road specifications, and mitigation measures.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "capacity_mw": {"type": "number", "description": "Project capacity in MW"},
+                "technology": {"type": "string", "description": "Technology: solar, wind, bess", "default": "solar"},
+                "site_area_ha": {"type": "number", "description": "Site area in hectares"},
+                "grid_distance_km": {"type": "number", "description": "Grid connection distance in km"},
+            },
+            "required": ["capacity_mw"],
+        },
+    },
+    {
+        "name": "fetch_lidar_terrain",
+        "description": "Fetch high-resolution EA LiDAR 1m terrain data for a UK site. Returns survey-grade heightmap, elevation stats, slope/aspect analysis. Falls back to NASADEM 30m outside England LiDAR coverage. Use for 3D digital twin terrain, solar panel orientation, cut/fill estimation, and wind surface roughness.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "radius_m": {"type": "number", "description": "Study area radius in metres", "default": 500},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "calculate_viewshed",
+        "description": "Calculate Zone of Theoretical Visibility (ZTV) for a proposed energy development. Standard UK planning methodology. Shows which areas can see the development from ground level. Returns visible area percentage, GeoJSON polygon for map overlay, visual impact classification, and receptor count estimate.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "target_height_m": {"type": "number", "description": "Height of proposed structure in metres (3m solar, 80-150m wind)", "default": 3.0},
+                "radius_m": {"type": "number", "description": "Study area radius in metres (2000 solar, 5000-10000 wind)", "default": 2000},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "calculate_hydrology",
+        "description": "Hydrological analysis for a site — Topographic Wetness Index, flow accumulation, drainage paths, depression/waterlogging risk. Essential for site drainage design and flood risk assessment in planning applications.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "radius_m": {"type": "number", "description": "Study area radius in metres", "default": 500},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
 ]
 
 
@@ -1622,6 +1708,55 @@ async def execute_tool(
             return await _nsip(
                 args["lat"], args["lon"],
                 radius_km=args.get("radius_km", 20),
+            )
+
+        elif name == "calculate_noise_contours":
+            from utils.noise_propagation import calculate_noise_contours
+            return calculate_noise_contours(
+                sources=args["sources"],
+                study_radius_m=args.get("study_radius_m", 2000),
+                compliance_limit_dba=args.get("compliance_limit_dba", 40),
+                tonal_penalty=args.get("tonal_penalty", False),
+            )
+
+        elif name == "generate_construction_schedule":
+            from utils.construction_planner import generate_construction_schedule
+            return generate_construction_schedule(
+                capacity_mw=args["capacity_mw"],
+                technology=args.get("technology", "solar"),
+                site_area_ha=args.get("site_area_ha"),
+                grid_distance_km=args.get("grid_distance_km"),
+            )
+
+        elif name == "estimate_construction_traffic":
+            from utils.construction_planner import estimate_construction_traffic
+            return estimate_construction_traffic(
+                capacity_mw=args["capacity_mw"],
+                technology=args.get("technology", "solar"),
+                site_area_ha=args.get("site_area_ha"),
+                grid_distance_km=args.get("grid_distance_km"),
+            )
+
+        elif name == "fetch_lidar_terrain":
+            from utils.lidar_terrain import analyse_terrain
+            return await analyse_terrain(
+                args["lat"], args["lon"],
+                radius_m=args.get("radius_m", 500),
+            )
+
+        elif name == "calculate_viewshed":
+            from utils.viewshed_analyser import calculate_viewshed as _calc_viewshed
+            return await _calc_viewshed(
+                args["lat"], args["lon"],
+                target_height_m=args.get("target_height_m", 3.0),
+                radius_m=args.get("radius_m", 2000),
+            )
+
+        elif name == "calculate_hydrology":
+            from utils.viewshed_analyser import calculate_hydrology as _calc_hydro
+            return await _calc_hydro(
+                args["lat"], args["lon"],
+                radius_m=args.get("radius_m", 500),
             )
 
         else:
