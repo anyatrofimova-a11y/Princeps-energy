@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Princeps Grid Connection Assessment &mdash; {{ r.site_name }}</title>
+<style>
+  /* === Reset & Base === */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 13px; }
+  body {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #262626;
+    background: #fff;
+    line-height: 1.55;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page-break { page-break-after: always; break-after: page; }
+  .section { page-break-inside: avoid; }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 28px;
+    background: {{ brand.dark }};
+    color: #fff;
+    margin-bottom: 20px;
+    border-bottom: 3px solid {{ brand.gold }};
+  }
+  .page-header .logo {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 3px;
+    color: {{ brand.gold }};
+  }
+  .page-header .meta {
+    font-size: 10px;
+    color: #a0a0a0;
+    letter-spacing: 0.5px;
+  }
+
+  .section-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: {{ brand.dark }};
+    border-bottom: 3px solid {{ brand.gold }};
+    padding-bottom: 5px;
+    margin-bottom: 14px;
+    letter-spacing: 0.3px;
+  }
+  .section-subtitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: {{ brand.dark }};
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e0e0e0;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .card-header {
+    font-size: 13px;
+    font-weight: 700;
+    color: {{ brand.dark }};
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .card-accent { border-left: 4px solid {{ brand.gold }}; }
+  .card-accent-green { border-left: 4px solid {{ brand.green }}; }
+  .card-accent-amber { border-left: 4px solid {{ brand.amber }}; }
+  .card-accent-red { border-left: 4px solid {{ brand.red }}; }
+
+  .kpi-strip {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .kpi-box {
+    flex: 1;
+    min-width: 100px;
+    background: {{ brand.light }};
+    border-radius: 8px;
+    padding: 10px 8px;
+    text-align: center;
+    border: 1px solid #e8e8e8;
+  }
+  .kpi-box-highlight {
+    background: linear-gradient(135deg, {{ brand.dark }} 0%, #16213e 100%);
+    border: none;
+  }
+  .kpi-box-highlight .kpi-value { color: {{ brand.gold }}; }
+  .kpi-box-highlight .kpi-label { color: #a0a0a0; }
+  .kpi-value {
+    font-size: 20px;
+    font-weight: 800;
+    color: {{ brand.dark }};
+  }
+  .kpi-label {
+    font-size: 9px;
+    color: {{ brand.grey }};
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+  }
+
+  .verdict-badge {
+    display: inline-block;
+    padding: 8px 24px;
+    border-radius: 6px;
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: #fff;
+  }
+  .verdict-GO { background: {{ brand.green }}; }
+  .verdict-CAUTION { background: {{ brand.amber }}; color: {{ brand.dark }}; }
+  .verdict-NO-GO { background: {{ brand.red }}; }
+
+  .rag-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+  .rag-green { background: {{ brand.green }}; }
+  .rag-amber { background: {{ brand.amber }}; }
+  .rag-red { background: {{ brand.red }}; }
+  .rag-grey { background: {{ brand.grey_light }}; }
+
+  .score-pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .score-go { background: {{ brand.green }}; }
+  .score-caution { background: {{ brand.amber }}; color: {{ brand.dark }}; }
+  .score-nogo { background: {{ brand.red }}; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-bottom: 8px;
+  }
+  th {
+    background: {{ brand.dark }};
+    color: #fff;
+    padding: 7px 10px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #e8e8e8;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td { background: #fafafa; }
+  .td-right { text-align: right; }
+
+  .chart-img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 6px auto;
+  }
+
+  .two-col {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .two-col > div { flex: 1; }
+
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .stat-label { color: {{ brand.grey }}; font-size: 11px; }
+  .stat-value { font-weight: 700; font-size: 11px; color: {{ brand.dark }}; }
+
+  .risk-item {
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    border-left: 3px solid {{ brand.red }};
+    background: #fff5f5;
+    border-radius: 0 4px 4px 0;
+    font-size: 11px;
+  }
+  .note-item {
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    border-left: 3px solid {{ brand.gold }};
+    background: #fffcf0;
+    border-radius: 0 4px 4px 0;
+    font-size: 11px;
+  }
+
+  .rec-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border-left: 4px solid {{ brand.gold }};
+  }
+  .rec-title {
+    font-weight: 700;
+    font-size: 12px;
+    color: {{ brand.dark }};
+    margin-bottom: 4px;
+  }
+  .rec-detail {
+    font-size: 11px;
+    color: #444;
+    line-height: 1.5;
+  }
+  .rec-priority {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    margin-left: 8px;
+  }
+  .rec-priority-HIGH { background: {{ brand.red }}20; color: {{ brand.red }}; }
+  .rec-priority-MEDIUM { background: {{ brand.amber }}20; color: {{ brand.gold_dark }}; }
+  .rec-priority-LOW { background: {{ brand.green }}20; color: {{ brand.green }}; }
+
+  .pressure-badge {
+    display: inline-block;
+    padding: 3px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .pressure-LOW { background: {{ brand.green }}; }
+  .pressure-MEDIUM { background: {{ brand.amber }}; color: {{ brand.dark }}; }
+  .pressure-HIGH { background: #e65100; }
+  .pressure-CRITICAL { background: {{ brand.red }}; }
+
+  .page-footer {
+    text-align: center;
+    font-size: 9px;
+    color: #a0a0a0;
+    padding: 10px 0;
+    border-top: 1px solid #e8e8e8;
+    margin-top: 20px;
+  }
+
+  .text-muted { color: {{ brand.grey }}; }
+  .text-sm { font-size: 11px; }
+  .text-xs { font-size: 9px; }
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mb-4 { margin-bottom: 4px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-16 { margin-bottom: 16px; }
+  .bold { font-weight: 700; }
+  .center { text-align: center; }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+  }
+
+  @page {
+    size: A4;
+    margin: 10mm 10mm 15mm 10mm;
+  }
+  @media print {
+    .page-break { page-break-after: always; break-after: page; height: 0; }
+  }
+</style>
+</head>
+<body>
+
+{# ================================================================ #}
+{# SECTION 1: COVER PAGE                                            #}
+{# ================================================================ #}
+<div style="height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; background: linear-gradient(135deg, {{ brand.dark }} 0%, #16213e 50%, #0d1b3e 100%); color: #fff; padding: 60px; position: relative;">
+  <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, {{ brand.gold }}, {{ brand.gold_light }}, {{ brand.gold }});"></div>
+
+  <div style="font-size: 42px; font-weight: 800; letter-spacing: 6px; color: {{ brand.gold }}; margin-bottom: 4px;">
+    PRINCEPS
+  </div>
+  <div style="font-size: 12px; letter-spacing: 3px; color: #a0a0a0; margin-bottom: 60px; text-transform: uppercase;">
+    Energy Infrastructure Intelligence
+  </div>
+
+  <div style="width: 80px; height: 2px; background: {{ brand.gold }}; margin-bottom: 40px;"></div>
+
+  <div style="font-size: 26px; font-weight: 700; margin-bottom: 8px; text-align: center; letter-spacing: 0.5px;">
+    Grid Connection Assessment
+  </div>
+  <div style="font-size: 20px; color: #c0c0c0; margin-bottom: 40px; text-align: center; font-weight: 300;">
+    {{ r.site_name }}
+  </div>
+
+  <div class="verdict-badge verdict-{{ r.verdict }}" style="margin-bottom: 12px; font-size: 22px; padding: 10px 32px;">
+    {{ r.verdict }}
+  </div>
+  <div style="font-size: 13px; color: #a0a0a0; margin-bottom: 50px;">
+    Confidence: {{ "%.0f"|format(r.confidence * 100) }}%
+  </div>
+
+  <div style="display: flex; gap: 50px; margin-bottom: 40px;">
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Coordinates</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ "%.4f"|format(r.lat) }}N, {{ "%.4f"|format(r.lon|abs) }}{% if r.lon < 0 %}W{% else %}E{% endif %}</div>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Capacity</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ r.capacity_mw }} MW</div>
+    </div>
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Technology</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ r.technology|title }}</div>
+    </div>
+    {% if r.best_candidate %}
+    <div style="text-align: center;">
+      <div style="font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px;">Nearest Grid</div>
+      <div style="font-size: 15px; font-weight: 600; margin-top: 4px;">{{ "%.1f"|format(r.best_candidate.distance_km) }} km</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div style="position: absolute; bottom: 30px; text-align: center;">
+    <div style="font-size: 10px; color: #555;">Confidential &mdash; {{ r.generated_at }}</div>
+    <div style="font-size: 9px; color: #444; margin-top: 4px;">Prepared by Princeps Platform &mdash; For informational purposes only</div>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================ #}
+{# SECTION 2: EXECUTIVE SUMMARY                                     #}
+{# ================================================================ #}
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ r.site_name }} &mdash; Grid Connection Assessment</div>
+  </div>
+
+  <h2 class="section-title">Executive Summary</h2>
+
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ r.verdict }}</div>
+      <div class="kpi-label">Verdict</div>
+    </div>
+    {% if r.best_candidate %}
+    <div class="kpi-box">
+      <div class="kpi-value">{{ r.best_candidate.name[:20] }}</div>
+      <div class="kpi-label">Nearest Substation</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(r.best_candidate.distance_km) }} km</div>
+      <div class="kpi-label">Distance</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{% if r.best_candidate.gen_headroom_mw is not none %}{{ "%.1f"|format(r.best_candidate.gen_headroom_mw) }} MW{% else %}N/A{% endif %}</div>
+      <div class="kpi-label">Headroom</div>
+    </div>
+    {% endif %}
+    {% if r.cost_estimate %}
+    <div class="kpi-box">
+      <div class="kpi-value">&pound;{{ "{:,.0f}".format(r.cost_estimate.cost_gbp.p50 / 1000) }}k</div>
+      <div class="kpi-label">Est. Cost (P50)</div>
+    </div>
+    {% endif %}
+    <div class="kpi-box">
+      <div class="kpi-value">{{ r.queue_summary.pressure }}</div>
+      <div class="kpi-label">Queue Pressure</div>
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <div class="card-header">Assessment Summary</div>
+    <p class="text-sm" style="line-height: 1.6;">{{ r.summary }}</p>
+  </div>
+
+  {% if r.risks %}
+  <div class="card card-accent-red">
+    <div class="card-header">Key Risks</div>
+    {% for risk in r.risks %}
+    <div class="risk-item">{{ risk }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if r.dno_area %}
+  <div class="card">
+    <div class="card-header">Distribution Network Operator</div>
+    <div class="stat-row">
+      <span class="stat-label">DNO</span>
+      <span class="stat-value">{{ r.dno_area.name }}{% if r.dno_area.long_name %} ({{ r.dno_area.long_name }}){% endif %}</span>
+    </div>
+    <div class="stat-row">
+      <span class="stat-label">Licence Code</span>
+      <span class="stat-value">{{ r.dno_area.code }}</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="page-footer">
+    Princeps Grid Connection Assessment &mdash; Executive Summary &mdash; {{ now }}
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================ #}
+{# SECTION 3: SITE LOCATION                                         #}
+{# ================================================================ #}
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ r.site_name }} &mdash; Site Location</div>
+  </div>
+
+  <h2 class="section-title">Site Location</h2>
+
+  <div class="two-col">
+    <div>
+      <div class="card card-accent">
+        <div class="card-header">Location Details</div>
+        <div class="stat-row">
+          <span class="stat-label">Latitude</span>
+          <span class="stat-value">{{ "%.6f"|format(r.lat) }}&deg;N</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Longitude</span>
+          <span class="stat-value">{{ "%.6f"|format(r.lon|abs) }}&deg;{% if r.lon < 0 %}W{% else %}E{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Proposed Capacity</span>
+          <span class="stat-value">{{ r.capacity_mw }} MW</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Technology</span>
+          <span class="stat-value">{{ r.technology|title }}</span>
+        </div>
+        {% if r.dno_area %}
+        <div class="stat-row">
+          <span class="stat-label">DNO Area</span>
+          <span class="stat-value">{{ r.dno_area.name }}</span>
+        </div>
+        {% endif %}
+        <div class="stat-row">
+          <span class="stat-label">Assessment Tier</span>
+          <span class="stat-value">{{ r.tier|title }}{% if r.power_flow and r.power_flow.success %} + Power Flow{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Analysis Time</span>
+          <span class="stat-value">{{ "%.2f"|format(r.elapsed_s) }}s</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      {% if r.candidates %}
+      <div class="card">
+        <div class="card-header">Connection Points Overview</div>
+        <div class="text-xs text-muted mb-8">{{ r.candidates|length }} candidate substations analysed within 20 km search radius</div>
+        {% if charts.candidate_ranking %}
+        <img src="data:image/png;base64,{{ charts.candidate_ranking }}" alt="Candidate ranking" class="chart-img">
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="page-footer">
+    Princeps Grid Connection Assessment &mdash; Site Location &mdash; {{ now }}
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================ #}
+{# SECTION 4: GRID INFRASTRUCTURE                                   #}
+{# ================================================================ #}
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ r.site_name }} &mdash; Grid Infrastructure</div>
+  </div>
+
+  <h2 class="section-title">Grid Infrastructure</h2>
+
+  {% if r.candidates %}
+  <div class="card">
+    <div class="card-header">Candidate Substations</div>
+    <div class="text-xs text-muted mb-8">Ranked by suitability score. Headroom, distance, voltage, and queue status considered.</div>
+    <table>
+      <tr>
+        <th>Rank</th>
+        <th>Name</th>
+        <th>Voltage</th>
+        <th>Distance</th>
+        <th>Headroom (MW)</th>
+        <th>RAG</th>
+        <th>Score</th>
+      </tr>
+      {% for c in r.candidates[:5] %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td class="bold">{{ c.name or 'Unknown' }}</td>
+        <td>{% if c.voltage_kv %}{{ c.voltage_kv|int }} kV{% else %}&mdash;{% endif %}</td>
+        <td>{{ "%.2f"|format(c.distance_km) }} km</td>
+        <td>
+          {% if c.gen_headroom_mw is not none %}
+            {{ "%.1f"|format(c.gen_headroom_mw) }}
+            {% if c.gen_headroom_mw >= r.capacity_mw %}
+              <span class="tag" style="background: {{ brand.green }}20; color: {{ brand.green }};">Sufficient</span>
+            {% elif c.gen_headroom_mw >= r.capacity_mw * 0.5 %}
+              <span class="tag" style="background: {{ brand.amber }}20; color: {{ brand.gold_dark }};">Partial</span>
+            {% else %}
+              <span class="tag" style="background: {{ brand.red }}20; color: {{ brand.red }};">Insufficient</span>
+            {% endif %}
+          {% else %}
+            <span class="text-muted">N/A</span>
+          {% endif %}
+        </td>
+        <td>
+          {% set rag = c.rag_generation or 'unknown' %}
+          <span class="rag-dot rag-{{ rag_class(rag) }}"></span>
+          {{ rag|title }}
+        </td>
+        <td>
+          <span class="score-pill {% if c.suitability_score >= 70 %}score-go{% elif c.suitability_score >= 40 %}score-caution{% else %}score-nogo{% endif %}">
+            {{ c.suitability_score }}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  {% if r.best_candidate %}
+  <div class="card card-accent-green">
+    <div class="card-header">Best Candidate: {{ r.best_candidate.name }}</div>
+    <div class="two-col">
+      <div>
+        <div class="stat-row">
+          <span class="stat-label">DNO</span>
+          <span class="stat-value">{{ r.best_candidate.dno|upper }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Voltage</span>
+          <span class="stat-value">{% if r.best_candidate.voltage_kv %}{{ r.best_candidate.voltage_kv|int }} kV{% else %}Unknown{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Distance</span>
+          <span class="stat-value">{{ "%.2f"|format(r.best_candidate.distance_km) }} km</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Generation Headroom</span>
+          <span class="stat-value">{% if r.best_candidate.gen_headroom_mw is not none %}{{ "%.1f"|format(r.best_candidate.gen_headroom_mw) }} MW{% else %}N/A{% endif %}</span>
+        </div>
+      </div>
+      <div>
+        <div class="stat-row">
+          <span class="stat-label">Demand</span>
+          <span class="stat-value">{% if r.best_candidate.demand_mw is not none %}{{ "%.1f"|format(r.best_candidate.demand_mw) }} MW{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Transformer Rating</span>
+          <span class="stat-value">{% if r.best_candidate.transformer_rating_mva is not none %}{{ "%.0f"|format(r.best_candidate.transformer_rating_mva) }} MVA{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Fault Level</span>
+          <span class="stat-value">{% if r.best_candidate.fault_level_ka is not none %}{{ "%.1f"|format(r.best_candidate.fault_level_ka) }} kA{% else %}N/A{% endif %}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Suitability Score</span>
+          <span class="stat-value">{{ r.best_candidate.suitability_score }} / 100</span>
+        </div>
+      </div>
+    </div>
+
+    {% if r.best_candidate.notes %}
+    <div class="mt-8">
+      <div class="section-subtitle">Assessment Notes</div>
+      {% for note in r.best_candidate.notes %}
+      <div class="note-item">{{ note }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% endif %}
+
+  <div class="page-footer">
+    Princeps Grid Connection Assessment &mdash; Grid Infrastructure &mdash; {{ now }}
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================ #}
+{# SECTION 5: CONNECTION COST ESTIMATE                               #}
+{# ================================================================ #}
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ r.site_name }} &mdash; Connection Cost Estimate</div>
+  </div>
+
+  <h2 class="section-title">Connection Cost Estimate</h2>
+
+  {% if r.cost_estimate %}
+  <div class="kpi-strip">
+    <div class="kpi-box" style="border-top: 3px solid {{ brand.green }};">
+      <div class="kpi-value" style="color: {{ brand.green }};">&pound;{{ "{:,.0f}".format(r.cost_estimate.cost_gbp.p10 / 1000) }}k</div>
+      <div class="kpi-label">P10 (Optimistic)</div>
+    </div>
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">&pound;{{ "{:,.0f}".format(r.cost_estimate.cost_gbp.p50 / 1000) }}k</div>
+      <div class="kpi-label">P50 (Central)</div>
+    </div>
+    <div class="kpi-box" style="border-top: 3px solid {{ brand.red }};">
+      <div class="kpi-value" style="color: {{ brand.red }};">&pound;{{ "{:,.0f}".format(r.cost_estimate.cost_gbp.p90 / 1000) }}k</div>
+      <div class="kpi-label">P90 (Conservative)</div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div>
+      <div class="card card-accent">
+        <div class="card-header">Cost Breakdown (P50 Basis)</div>
+        <table>
+          <tr><th>Component</th><th class="td-right">Cost</th></tr>
+          <tr>
+            <td>Cable ({{ r.cost_estimate.cable_distance_km }} km @ {{ r.cost_estimate.connection_voltage_kv }} kV)</td>
+            <td class="td-right bold">&pound;{{ "{:,.0f}".format(r.cost_estimate.breakdown.cable) }}</td>
+          </tr>
+          <tr>
+            <td>Switchgear</td>
+            <td class="td-right bold">&pound;{{ "{:,.0f}".format(r.cost_estimate.breakdown.switchgear) }}</td>
+          </tr>
+          {% if r.cost_estimate.breakdown.transformer > 0 %}
+          <tr>
+            <td>Transformer</td>
+            <td class="td-right bold">&pound;{{ "{:,.0f}".format(r.cost_estimate.breakdown.transformer) }}</td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td>DNO Application &amp; Design Fees</td>
+            <td class="td-right bold">&pound;{{ "{:,.0f}".format(r.cost_estimate.breakdown.dno_fees) }}</td>
+          </tr>
+          <tr>
+            <td>Protection &amp; Metering</td>
+            <td class="td-right bold">&pound;{{ "{:,.0f}".format(r.cost_estimate.breakdown.protection_metering) }}</td>
+          </tr>
+          <tr>
+            <td>Civils &amp; Wayleaves</td>
+            <td class="td-right bold">&pound;{{ "{:,.0f}".format(r.cost_estimate.breakdown.civils_wayleaves) }}</td>
+          </tr>
+          {% if r.cost_estimate.breakdown.reinforcement_estimate > 0 %}
+          <tr>
+            <td>Reinforcement (estimate)</td>
+            <td class="td-right bold">&pound;{{ "{:,.0f}".format(r.cost_estimate.breakdown.reinforcement_estimate) }}</td>
+          </tr>
+          {% endif %}
+        </table>
+        {% if r.cost_estimate.g99_required %}
+        <div class="text-xs text-muted mt-4">G99 connection agreement required (capacity &gt; 16.68 kW/phase)</div>
+        {% endif %}
+      </div>
+
+      {% if r.cost_estimate.notes %}
+      <div class="card">
+        <div class="card-header">Advisory Notes</div>
+        {% for note in r.cost_estimate.notes %}
+        <div class="note-item">{{ note }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <div>
+      {% if charts.cost_breakdown %}
+      <div class="card center">
+        <div class="text-xs text-muted mb-4">COST BREAKDOWN</div>
+        <img src="data:image/png;base64,{{ charts.cost_breakdown }}" alt="Cost breakdown" class="chart-img">
+      </div>
+      {% endif %}
+
+      {% if r.cost_estimate.timeline_weeks %}
+      <div class="card">
+        <div class="card-header">Estimated Timeline</div>
+        <table>
+          <tr><th>Scenario</th><th class="td-right">Weeks</th><th class="td-right">Months</th></tr>
+          <tr>
+            <td><span class="tag" style="background: {{ brand.green }}20; color: {{ brand.green }};">P10</span> Best case</td>
+            <td class="td-right bold">{{ r.cost_estimate.timeline_weeks.p10 }}</td>
+            <td class="td-right">{{ "%.0f"|format(r.cost_estimate.timeline_weeks.p10 / 4.3) }}</td>
+          </tr>
+          <tr>
+            <td><span class="tag" style="background: {{ brand.amber }}20; color: {{ brand.gold_dark }};">P50</span> Central</td>
+            <td class="td-right bold">{{ r.cost_estimate.timeline_weeks.p50 }}</td>
+            <td class="td-right">{{ "%.0f"|format(r.cost_estimate.timeline_weeks.p50 / 4.3) }}</td>
+          </tr>
+          <tr>
+            <td><span class="tag" style="background: {{ brand.red }}20; color: {{ brand.red }};">P90</span> Worst case</td>
+            <td class="td-right bold">{{ r.cost_estimate.timeline_weeks.p90 }}</td>
+            <td class="td-right">{{ "%.0f"|format(r.cost_estimate.timeline_weeks.p90 / 4.3) }}</td>
+          </tr>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  {# Voltage Option Comparison #}
+  {% if r.voltage_options %}
+  <div class="section mt-8">
+    <h3 class="section-subtitle">Connection Voltage Options</h3>
+    <div class="two-col">
+      <div>
+        <table>
+          <tr>
+            <th>Voltage</th>
+            <th class="td-right">P10</th>
+            <th class="td-right">P50</th>
+            <th class="td-right">P90</th>
+            <th class="td-right">Cable/km</th>
+          </tr>
+          {% for opt in r.voltage_options %}
+          <tr>
+            <td class="bold">{{ opt.voltage_kv }} kV</td>
+            <td class="td-right">&pound;{{ "{:,.0f}".format(opt.cost_gbp.p10 / 1000) }}k</td>
+            <td class="td-right bold">&pound;{{ "{:,.0f}".format(opt.cost_gbp.p50 / 1000) }}k</td>
+            <td class="td-right">&pound;{{ "{:,.0f}".format(opt.cost_gbp.p90 / 1000) }}k</td>
+            <td class="td-right text-muted">&pound;{{ "{:,.0f}".format(opt.breakdown.cable / opt.cable_distance_km if opt.cable_distance_km > 0 else 0) }}/km</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+      <div>
+        {% if charts.voltage_options %}
+        <img src="data:image/png;base64,{{ charts.voltage_options }}" alt="Voltage options comparison" class="chart-img">
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="page-footer">
+    Princeps Grid Connection Assessment &mdash; Connection Cost &mdash; {{ now }}
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================ #}
+{# SECTION 6: QUEUE ANALYSIS                                        #}
+{# ================================================================ #}
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ r.site_name }} &mdash; Queue Analysis</div>
+  </div>
+
+  <h2 class="section-title">Queue Analysis</h2>
+
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">
+        <span class="pressure-badge pressure-{{ r.queue_summary.pressure }}">{{ r.queue_summary.pressure }}</span>
+      </div>
+      <div class="kpi-label">Queue Pressure</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ r.queue_summary.total_queued_count }}</div>
+      <div class="kpi-label">Projects in Queue</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.0f"|format(r.queue_summary.total_queued_mw) }} MW</div>
+      <div class="kpi-label">Queued Capacity</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">~{{ r.queue_summary.estimated_wait_months }} mo</div>
+      <div class="kpi-label">Est. Wait Time</div>
+    </div>
+  </div>
+
+  {% if r.best_candidate and r.best_candidate.queue %}
+  {% set q = r.best_candidate.queue %}
+  <div class="card card-accent">
+    <div class="card-header">Queue at {{ r.best_candidate.name }}</div>
+    <div class="two-col">
+      <div>
+        <div class="section-subtitle">Embedded Capacity Register (ECR)</div>
+        <div class="stat-row">
+          <span class="stat-label">Total Entries</span>
+          <span class="stat-value">{{ q.ecr_total }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Queued/Accepted</span>
+          <span class="stat-value">{{ q.ecr_queued }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Queued Capacity</span>
+          <span class="stat-value">{{ "%.1f"|format(q.ecr_queued_mw) }} MW</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Total Registered</span>
+          <span class="stat-value">{{ "%.1f"|format(q.ecr_total_mw) }} MW</span>
+        </div>
+      </div>
+      <div>
+        <div class="section-subtitle">Transmission (TEC Register)</div>
+        <div class="stat-row">
+          <span class="stat-label">TEC Entries</span>
+          <span class="stat-value">{{ q.tec_count }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">TEC Capacity</span>
+          <span class="stat-value">{{ "%.1f"|format(q.tec_mw) }} MW</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if r.candidates|length > 1 %}
+  <div class="card">
+    <div class="card-header">Queue Summary by Substation</div>
+    <table>
+      <tr>
+        <th>Substation</th>
+        <th class="td-right">ECR Queued</th>
+        <th class="td-right">ECR MW</th>
+        <th class="td-right">TEC Count</th>
+        <th class="td-right">TEC MW</th>
+      </tr>
+      {% for c in r.candidates[:5] %}
+      {% if c.queue %}
+      <tr>
+        <td class="bold">{{ c.name[:25] }}</td>
+        <td class="td-right">{{ c.queue.ecr_queued }}</td>
+        <td class="td-right">{{ "%.1f"|format(c.queue.ecr_queued_mw) }}</td>
+        <td class="td-right">{{ c.queue.tec_count }}</td>
+        <td class="td-right">{{ "%.1f"|format(c.queue.tec_mw) }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="page-footer">
+    Princeps Grid Connection Assessment &mdash; Queue Analysis &mdash; {{ now }}
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================ #}
+{# SECTION 7: POWER FLOW RESULTS (conditional)                      #}
+{# ================================================================ #}
+{% if r.power_flow %}
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ r.site_name }} &mdash; Power Flow Results</div>
+  </div>
+
+  <h2 class="section-title">Power Flow Results (Tier 2)</h2>
+
+  {% if r.power_flow.success %}
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ r.power_flow.get('verdict', 'N/A') }}</div>
+      <div class="kpi-label">Power Flow Verdict</div>
+    </div>
+    {% if r.power_flow.get('max_voltage_deviation_pct') is not none %}
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.2f"|format(r.power_flow.max_voltage_deviation_pct) }}%</div>
+      <div class="kpi-label">Max Voltage Dev.</div>
+    </div>
+    {% endif %}
+    {% if r.power_flow.get('max_loading_pct') is not none %}
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(r.power_flow.max_loading_pct) }}%</div>
+      <div class="kpi-label">Max Thermal Loading</div>
+    </div>
+    {% endif %}
+    {% if r.power_flow.network_size %}
+    <div class="kpi-box">
+      <div class="kpi-value">{{ r.power_flow.network_size.substations }}</div>
+      <div class="kpi-label">Network Buses</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if charts.power_flow %}
+  <div class="card center">
+    <div class="text-xs text-muted mb-4">VOLTAGE &amp; THERMAL ANALYSIS</div>
+    <img src="data:image/png;base64,{{ charts.power_flow }}" alt="Power flow results" class="chart-img">
+  </div>
+  {% endif %}
+
+  {# Contingency results #}
+  {% if r.power_flow.get('contingency_results') %}
+  <div class="card card-accent-red">
+    <div class="card-header">N-1 Contingency Results</div>
+    <table>
+      <tr>
+        <th>Outage</th>
+        <th>Max Voltage Dev.</th>
+        <th>Max Loading</th>
+        <th>Status</th>
+      </tr>
+      {% for ct in r.power_flow.contingency_results[:8] %}
+      <tr>
+        <td class="bold">{{ ct.get('outage', 'N/A') }}</td>
+        <td>{{ "%.2f"|format(ct.get('max_voltage_deviation_pct', 0)) }}%</td>
+        <td>{{ "%.1f"|format(ct.get('max_loading_pct', 0)) }}%</td>
+        <td>
+          {% if ct.get('converged', False) %}
+            {% if ct.get('max_loading_pct', 0) <= 100 and ct.get('max_voltage_deviation_pct', 0) <= 6 %}
+              <span class="tag" style="background: {{ brand.green }}20; color: {{ brand.green }};">PASS</span>
+            {% else %}
+              <span class="tag" style="background: {{ brand.red }}20; color: {{ brand.red }};">FAIL</span>
+            {% endif %}
+          {% else %}
+            <span class="tag" style="background: {{ brand.grey_light }}20; color: {{ brand.grey }};">NO CONVERGE</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="card card-accent-amber">
+    <div class="card-header">Power Flow Not Available</div>
+    <p class="text-sm">
+      {% if r.power_flow.error %}
+        {{ r.power_flow.error }}
+      {% else %}
+        Tier 2 power flow analysis was requested but did not complete successfully.
+        This may be due to insufficient network data or subprocess configuration.
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="page-footer">
+    Princeps Grid Connection Assessment &mdash; Power Flow &mdash; {{ now }}
+  </div>
+</div>
+
+<div class="page-break"></div>
+{% endif %}
+
+{# ================================================================ #}
+{# SECTION 8: RECOMMENDATIONS                                       #}
+{# ================================================================ #}
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ r.site_name }} &mdash; Recommendations</div>
+  </div>
+
+  <h2 class="section-title">Recommendations</h2>
+
+  {% if r.recommendations %}
+  {% for rec in r.recommendations %}
+  <div class="rec-card">
+    <div class="rec-title">
+      {{ rec.title }}
+      <span class="rec-priority rec-priority-{{ rec.priority }}">{{ rec.priority }}</span>
+    </div>
+    <div class="rec-detail">{{ rec.detail }}</div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="card">
+    <p class="text-sm text-muted">No specific recommendations generated. Contact the Princeps team for bespoke advisory.</p>
+  </div>
+  {% endif %}
+
+  {% if r.risks %}
+  <div class="card card-accent-red mt-8">
+    <div class="card-header">Risk Summary</div>
+    {% for risk in r.risks %}
+    <div class="risk-item">{{ risk }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="page-footer">
+    Princeps Grid Connection Assessment &mdash; Recommendations &mdash; {{ now }}
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+{# ================================================================ #}
+{# SECTION 9: APPENDIX                                              #}
+{# ================================================================ #}
+<div style="padding: 20px 28px;">
+  <div class="page-header">
+    <div class="logo">PRINCEPS</div>
+    <div class="meta">{{ r.site_name }} &mdash; Appendix</div>
+  </div>
+
+  <h2 class="section-title">Appendix</h2>
+
+  <div class="card">
+    <div class="card-header">Data Sources</div>
+    <table>
+      <tr><th>Source</th><th>Description</th><th>Coverage</th></tr>
+      <tr>
+        <td class="bold">DNO Substation Data</td>
+        <td>Published headroom, RAG status, and transformer ratings from all 6 UK Distribution Network Operators</td>
+        <td>England, Wales, Scotland</td>
+      </tr>
+      <tr>
+        <td class="bold">Embedded Capacity Register (ECR)</td>
+        <td>Queued and connected DER at each Grid Supply Point and primary substation</td>
+        <td>All UK DNO areas</td>
+      </tr>
+      <tr>
+        <td class="bold">NESO TEC Register</td>
+        <td>Transmission Entry Capacity — large-scale generation connected at 132kV+</td>
+        <td>GB transmission system</td>
+      </tr>
+      <tr>
+        <td class="bold">OpenStreetMap (Overpass API)</td>
+        <td>Substation locations, voltage tags, and power line routing</td>
+        <td>Global (UK subset)</td>
+      </tr>
+      <tr>
+        <td class="bold">DNO Boundary Data</td>
+        <td>Licence area polygons for DNO identification</td>
+        <td>All UK DNO areas</td>
+      </tr>
+      {% if r.power_flow and r.power_flow.success %}
+      <tr>
+        <td class="bold">pandapower (Tier 2)</td>
+        <td>Newton-Raphson power flow and N-1 contingency analysis via pandapower + lightsim2grid</td>
+        <td>Local network model</td>
+      </tr>
+      {% endif %}
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Methodology Notes</div>
+    <div class="text-sm" style="line-height: 1.6;">
+      <p class="mb-8"><strong>Tier 1 (Data-driven):</strong> Substations within a 20 km search radius are identified, ranked by a composite suitability score incorporating headroom availability, distance, voltage level match, RAG status, and queue depth. Cost estimates use published UK DNO benchmark rates for cable, switchgear, transformer, and civils.</p>
+      <p class="mb-8"><strong>Cost Estimation:</strong> P10/P50/P90 range reflects uncertainty in reinforcement requirements, wayleave costs, and civils complexity. Cable costs are based on GRID_CONNECTION_COSTS_GBP_KM from CCC Carbon Budget 7 and validated against published DNO connection cost benchmarks.</p>
+      <p class="mb-8"><strong>Queue Analysis:</strong> Queue pressure is derived from the Embedded Capacity Register (ECR) and NESO TEC Register. Wait time estimates are heuristic and should be validated with DNO pre-application discussions.</p>
+      {% if r.power_flow and r.power_flow.success %}
+      <p class="mb-8"><strong>Tier 2 (Power Flow):</strong> A local network model is constructed from PostGIS substation and line data, solved using pandapower (Newton-Raphson solver, lightsim2grid backend). Voltage limits: &plusmn;6% at 11/33kV, &plusmn;5% at 66kV+ per Engineering Recommendations P28/P29. Thermal limits: 100% of continuous rating.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Disclaimers</div>
+    <div class="text-xs" style="line-height: 1.6; color: {{ brand.grey }};">
+      <p class="mb-4">This report is generated automatically by the Princeps platform for informational and screening purposes only. It does not constitute a formal grid connection offer, engineering design, or professional advice.</p>
+      <p class="mb-4">Cost estimates are indicative and based on published benchmark data. Actual connection costs will be determined by the Distribution Network Operator (DNO) or Transmission Owner following a formal connection application and detailed design study.</p>
+      <p class="mb-4">Headroom and queue data are sourced from publicly available registers which may not reflect the most current network conditions. Users should verify all data with the relevant DNO before making investment decisions.</p>
+      <p class="mb-4">Power flow results (where included) are based on simplified network models and should not be relied upon as a substitute for a formal DNO network study.</p>
+      <p>&copy; {{ now[:4] }} Princeps. All rights reserved.</p>
+    </div>
+  </div>
+
+  <div class="page-footer">
+    Princeps Grid Connection Assessment &mdash; Appendix &mdash; {{ now }} &mdash; Page 9
+  </div>
+</div>
+
+</body>
+</html>

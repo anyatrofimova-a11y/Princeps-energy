@@ -264,8 +264,7 @@ export function SiteProvider({ children }) {
       const lon = explain?.lon ?? pickedLocation?.lon;
       if (lat && lon && parcelId) {
         try {
-          const { default: apiMod } = await import("./services/api");
-          await apiMod.projects.create({
+          await api.projects.create({
             name: siteName,
             capacity_mw: (samCapacity || 5000) / 1000,
             technology: "solar",

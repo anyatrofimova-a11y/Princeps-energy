@@ -567,6 +567,18 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
           <button className="pp-btn-primary" onClick={() => setShowCreate(true)}>
             + New Project
           </button>
+
+          {/* Bulk REPD import */}
+          <button className="pp-btn-secondary" onClick={async () => {
+            if (!confirm("Import up to 500 solar/wind/BESS projects (>10MW) from REPD?")) return;
+            const result = await api.projects.importRepdBulk({ min_mw: 10, limit: 500 });
+            if (result) {
+              alert(`Imported ${result.imported} projects (${result.skipped} skipped)`);
+              loadProjects();
+            }
+          }}>
+            Import REPD
+          </button>
         </div>
 
         <button className="pp-close" onClick={onClose}>&times;</button>

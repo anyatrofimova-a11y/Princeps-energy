@@ -219,6 +219,28 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
         <button className="btn-topbar-action" onClick={onBessFacility} title="BESS Facility Twin">BESS</button>
         <MoreMenu
           items={[
+            { label: "Grid Connection Report", action: async () => {
+              const lat = explain?.lat ?? pickedLocation?.lat;
+              const lon = explain?.lon ?? pickedLocation?.lon;
+              if (!lat || !lon) { alert("Select a site first"); return; }
+              const name = explain?.name || parcelId || "Site";
+              try {
+                const blob = await api.reports.gridConnection(lat, lon, name, samCapacity / 1000 || 50);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a"); a.href = url; a.download = `princeps-grid-${name.replace(/[^\w-]/g, "-")}.pdf`; a.click(); URL.revokeObjectURL(url);
+              } catch (e) { alert("Grid report generation failed"); }
+            }},
+            { label: "Financial Report", action: async () => {
+              const lat = explain?.lat ?? pickedLocation?.lat;
+              const lon = explain?.lon ?? pickedLocation?.lon;
+              if (!lat || !lon) { alert("Select a site first"); return; }
+              const name = explain?.name || parcelId || "Site";
+              try {
+                const blob = await api.reports.financial(lat, lon, name, samCapacity / 1000 || 50);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a"); a.href = url; a.download = `princeps-financial-${name.replace(/[^\w-]/g, "-")}.pdf`; a.click(); URL.revokeObjectURL(url);
+              } catch (e) { alert("Financial report generation failed"); }
+            }},
             { label: "BEMS Twin", action: onBems },
             { label: "Asset Inspector", action: onAssetInspect },
             { label: "Grid Graph", action: onGridGraph },

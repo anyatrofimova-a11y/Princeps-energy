@@ -637,6 +637,19 @@ TOOLS: list[dict] = [
             "required": ["query"],
         },
     },
+    {
+        "name": "analyse_land_suitability",
+        "description": "Analyse land suitability for energy development using satellite imagery and spectral analysis. Returns suitability score, spectral indices, and development recommendations.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude"},
+                "lon": {"type": "number", "description": "Longitude"},
+                "radius_m": {"type": "number", "description": "Analysis radius in metres", "default": 500},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
 ]
 
 
@@ -1234,6 +1247,22 @@ async def execute_tool(
                      "lat": s.get("lat"), "lon": s.get("lon")}
                     for s in sites[:10]
                 ],
+            }
+
+        elif name == "analyse_land_suitability":
+            from app.helpers import run_clay_subprocess
+            lat = args["lat"]
+            lon = args["lon"]
+            radius_m = args.get("radius_m", 500)
+            suitability = await run_clay_subprocess("suitability", lat, lon, radius_m)
+            return {
+                "suitability_score": suitability.get("suitability_score"),
+                "verdict": suitability.get("verdict"),
+                "components": suitability.get("components"),
+                "recommendations": suitability.get("recommendations"),
+                "spectral_indices": suitability.get("spectral_indices"),
+                "terrain": suitability.get("terrain"),
+                "source": suitability.get("source"),
             }
 
         else:
