@@ -347,11 +347,11 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
           {pdfLoading ? "..." : "PDF"}
         </button>
         <button className="btn-topbar-action" onClick={onPipeline} title="Project Pipeline" style={{ fontWeight: 900, letterSpacing: "0.04em" }}>Pipeline</button>
-        <button className="btn-topbar-action" onClick={onGridTwin} title="Grid Digital Twin">Twin</button>
-        <button className="btn-topbar-action" onClick={onDcTwin} title="Data Centre Twin">DC</button>
-        <button className="btn-topbar-action" onClick={onBessFacility} title="BESS Facility Twin">BESS</button>
         <MoreMenu
           items={[
+            { label: "Grid Digital Twin", action: onGridTwin },
+            { label: "Data Centre Twin", action: onDcTwin },
+            { label: "BESS Facility Twin", action: onBessFacility },
             { label: "Grid Connection Report", action: async () => {
               const lat = explain?.lat ?? pickedLocation?.lat;
               const lon = explain?.lon ?? pickedLocation?.lon;

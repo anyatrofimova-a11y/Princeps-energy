@@ -12348,8 +12348,20 @@ input[type="range"] { accent-color: var(--accent); }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(ellipse at center, rgba(242, 243, 245, 0.98) 0%, rgba(235, 237, 240, 0.99) 100%);
-  backdrop-filter: blur(20px);
+  background: #F2F3F5;
+  overflow: hidden;
+}
+.startup-mesh-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.startup-mesh-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 15%, rgba(242,243,245,0.55) 70%, rgba(242,243,245,0.85) 100%);
 }
 
 .startup-card {

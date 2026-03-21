@@ -1110,3 +1110,71 @@ async def glint_glare(
         body.receptors,
         pool=pool,
     )
+
+
+# ---------------------------------------------------------------------------
+# Photomontage Camera & Visual Impact
+# ---------------------------------------------------------------------------
+
+class PhotomontageCameraRequest(BaseModel):
+    site_lat: float
+    site_lon: float
+    viewpoint_lat: float
+    viewpoint_lon: float
+    target_height_m: float = 80.0
+    viewpoint_elevation_m: float = 0.0
+    site_elevation_m: float = 0.0
+    focal_length_mm: float = 50.0
+
+
+@router.post("/api/vision/photomontage-camera")
+async def photomontage_camera(body: PhotomontageCameraRequest):
+    """
+    Generate Three.js / deck.gl camera parameters for photomontage rendering.
+
+    Computes camera position, look-at target, field of view, and visual impact
+    magnitude from a specific viewpoint towards a development site. Used for
+    LVIA (Landscape & Visual Impact Assessment) photomontage preparation.
+    """
+    from utils.viewshed_analyser import generate_photomontage_camera
+
+    return generate_photomontage_camera(
+        site_lat=body.site_lat,
+        site_lon=body.site_lon,
+        viewpoint_lat=body.viewpoint_lat,
+        viewpoint_lon=body.viewpoint_lon,
+        target_height_m=body.target_height_m,
+        viewpoint_elevation_m=body.viewpoint_elevation_m,
+        site_elevation_m=body.site_elevation_m,
+        focal_length_mm=body.focal_length_mm,
+    )
+
+
+class VisualImpactRequest(BaseModel):
+    site_lat: float
+    site_lon: float
+    target_height_m: float = 80.0
+    site_elevation_m: float = 0.0
+    viewpoints: list[dict] = []
+
+
+@router.post("/api/vision/visual-impact")
+async def visual_impact(body: VisualImpactRequest):
+    """
+    Assess visual impact from multiple viewpoints using GLVIA3 methodology.
+
+    Computes magnitude, sensitivity, and significance for each viewpoint.
+    Returns overall visual impact rating and Zone of Theoretical Visibility radius.
+    """
+    from utils.viewshed_analyser import assess_visual_impact
+
+    if not body.viewpoints:
+        raise HTTPException(status_code=400, detail="At least one viewpoint is required")
+
+    return assess_visual_impact(
+        site_lat=body.site_lat,
+        site_lon=body.site_lon,
+        target_height_m=body.target_height_m,
+        viewpoints=body.viewpoints,
+        site_elevation_m=body.site_elevation_m,
+    )

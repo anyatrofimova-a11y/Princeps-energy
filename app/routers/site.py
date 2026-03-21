@@ -2189,3 +2189,51 @@ async def real_site_context(
     """Real data context for 3D twin enrichment — REPD, OSM, grid, TEC."""
     from utils.real_site_context import get_real_site_context
     return await get_real_site_context(pool, lat, lon, radius_km)
+
+
+# ---------------------------------------------------------------------------
+# Construction planning
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/site/construction-plan")
+async def construction_plan(body: dict):
+    """
+    Generate a parametric construction schedule with cost and traffic estimates.
+
+    Request body:
+        capacity_mw: float (required)
+        technology: str (solar/wind/bess, default: solar)
+        site_area_ha: float (optional)
+        grid_distance_km: float (optional)
+    """
+    from utils.construction_planner import (
+        generate_construction_schedule,
+        estimate_construction_traffic,
+    )
+
+    capacity_mw = body.get("capacity_mw")
+    if not capacity_mw or capacity_mw <= 0:
+        raise HTTPException(status_code=400, detail="capacity_mw is required and must be > 0")
+
+    technology = body.get("technology", "solar")
+    site_area_ha = body.get("site_area_ha")
+    grid_distance_km = body.get("grid_distance_km")
+
+    schedule = generate_construction_schedule(
+        capacity_mw=capacity_mw,
+        technology=technology,
+        site_area_ha=site_area_ha,
+        grid_distance_km=grid_distance_km,
+    )
+    traffic = estimate_construction_traffic(
+        capacity_mw=capacity_mw,
+        technology=technology,
+        site_area_ha=site_area_ha,
+        grid_distance_km=grid_distance_km,
+    )
+
+    return {
+        "schedule": schedule,
+        "traffic": traffic,
+    }

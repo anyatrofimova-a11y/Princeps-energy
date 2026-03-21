@@ -287,6 +287,7 @@ export default function StartupOverlay({ onReady, onIntent }) {
 
   return (
     <div className="startup-overlay">
+      <NetworkMeshBg />
       <div className="startup-card">
         {/* Logo */}
         <div className="startup-logo-row">

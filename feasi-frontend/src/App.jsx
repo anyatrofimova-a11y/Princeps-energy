@@ -472,13 +472,10 @@ export default function App() {
         }}
       />
 
-      {/* Persistent financial strip */}
-      <FinancialStrip />
-
+      {/* Layer controls — only show when map has active overlays */}
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
-      <MapLegend chatLayers={chatLayers} />
-      <LiveStrip />
-      <ConstraintTimeline map={mapInstance} visible={!!layers.gridConstraints} />
+      {chatLayers.length > 0 && <MapLegend chatLayers={chatLayers} />}
+      {layers.gridConstraints && <ConstraintTimeline map={mapInstance} visible />}
 
       <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
 

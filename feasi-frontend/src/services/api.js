@@ -69,6 +69,8 @@ const api = {
       post(`/site/${enc(id)}/agent`, { intent, capacity_kw: kw, day_of_year: day }),
     realContext: (lat, lon, radiusKm = 5) =>
       get(`/api/site/real-context?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
+    constructionPlan: (mw, tech = "solar", area, gridDist) =>
+      post("/api/site/construction-plan", { capacity_mw: mw, technology: tech, site_area_ha: area, grid_distance_km: gridDist }),
   },
 
   grid: {
@@ -164,6 +166,8 @@ const api = {
       get(`/api/environment/assess?lat=${lat}&lon=${lon}&capacity_mw=${capacityMw}&radius_m=${radiusM}`),
     constraints: (lat, lon, radiusM = 2000) =>
       get(`/api/environment/constraints?lat=${lat}&lon=${lon}&radius_m=${radiusM}`),
+    noise: (sources, opts = {}) =>
+      post("/api/environment/noise", { sources, ...opts }),
   },
 
   carbon: {
@@ -446,6 +450,10 @@ const api = {
       post("/api/vision/shadow-flicker", { lat, lon, turbine_specs: turbineSpecs, receptors }),
     glintGlare: (lat, lon, panelSpecs, receptors = []) =>
       post("/api/vision/glint-glare", { lat, lon, panel_specs: panelSpecs, receptors }),
+    photomontageCamera: (siteLat, siteLon, vpLat, vpLon, targetHeight = 80, opts = {}) =>
+      post("/api/vision/photomontage-camera", { site_lat: siteLat, site_lon: siteLon, viewpoint_lat: vpLat, viewpoint_lon: vpLon, target_height_m: targetHeight, ...opts }),
+    visualImpact: (siteLat, siteLon, targetHeight, viewpoints, siteElevation = 0) =>
+      post("/api/vision/visual-impact", { site_lat: siteLat, site_lon: siteLon, target_height_m: targetHeight, viewpoints, site_elevation_m: siteElevation }),
   },
 
   homeRetrofit: {

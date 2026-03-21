@@ -5,17 +5,35 @@ Provides:
 - Photomontage camera parameter generation for 3D rendering
 - Zone of Theoretical Visibility (ZTV) estimation
 - Visual impact magnitude scoring per Landscape Institute GLVIA3
+- DEM-based viewshed calculation (WhiteboxTools or numpy fallback)
+- Hydrological analysis: TWI, flow accumulation, drainage risk
+
+Standard UK planning methodology:
+- Observer height: 1.6m (eye level)
+- Target height: panel tip (3m solar), hub height (80-150m wind)
+- Study area: 2km radius (solar), 5km (wind), 10km (wind >50m hub)
+- Output: ZTV polygon GeoJSON for map overlay
 
 Used for UK planning applications (LVIA — Landscape & Visual Impact Assessment).
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
+import os
+import tempfile
+from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 log = logging.getLogger("princeps.viewshed")
+
+# Temp directory for raster I/O
+TEMP_DIR = Path("/tmp/princeps-terrain")
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 # Earth radius for curvature correction (metres)
 EARTH_RADIUS_M = 6_371_000.0
@@ -371,3 +389,594 @@ def assess_visual_impact(
         "overall_visual_impact": overall,
         "methodology": "GLVIA3 (Landscape Institute, 2013)",
     }
+
+
+# ---------------------------------------------------------------------------
+# WhiteboxTools availability check
+# ---------------------------------------------------------------------------
+
+def _whitebox_available() -> bool:
+    """Check if WhiteboxTools Python package is installed."""
+    try:
+        import whitebox
+        return True
+    except ImportError:
+        return False
+
+
+def _write_geotiff(data: np.ndarray, filepath: str, lat: float, lon: float, resolution_m: float) -> bool:
+    """Write a 2D numpy array as a single-band GeoTIFF using rasterio if available."""
+    try:
+        import rasterio
+        from rasterio.transform import from_bounds
+
+        h, w = data.shape
+        half_extent_deg = (resolution_m * max(h, w) / 2) / 111320
+
+        west = lon - half_extent_deg
+        east = lon + half_extent_deg
+        south = lat - half_extent_deg
+        north = lat + half_extent_deg
+
+        transform = from_bounds(west, south, east, north, w, h)
+
+        with rasterio.open(
+            filepath, "w",
+            driver="GTiff",
+            height=h, width=w,
+            count=1,
+            dtype=data.dtype,
+            crs="EPSG:4326",
+            transform=transform,
+        ) as dst:
+            dst.write(data, 1)
+        return True
+    except ImportError:
+        np.save(filepath.replace(".tif", ".npy"), data)
+        return False
+
+
+def _read_raster(filepath: str) -> np.ndarray | None:
+    """Read a raster file to numpy array."""
+    try:
+        import rasterio
+        with rasterio.open(filepath) as src:
+            return src.read(1)
+    except ImportError:
+        npy_path = filepath.replace(".tif", ".npy")
+        if os.path.exists(npy_path):
+            return np.load(npy_path)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Viewshed — WhiteboxTools implementation
+# ---------------------------------------------------------------------------
+
+async def _viewshed_whitebox(
+    dem_array: np.ndarray, lat: float, lon: float,
+    target_height_m: float, observer_height_m: float, resolution_m: float,
+) -> dict:
+    """Calculate viewshed using WhiteboxTools."""
+    import whitebox
+
+    wbt = whitebox.WhiteboxTools()
+    wbt.set_verbose_mode(False)
+    wbt.set_working_dir(str(TEMP_DIR))
+
+    dem_path = str(TEMP_DIR / "dem_viewshed.tif")
+    output_path = str(TEMP_DIR / "viewshed_out.tif")
+
+    if not _write_geotiff(dem_array, dem_path, lat, lon, resolution_m):
+        return {"error": "Could not write GeoTIFF (rasterio not installed)"}
+
+    h, w = dem_array.shape
+    centre_row = h // 2
+    centre_col = w // 2
+
+    loop = asyncio.get_event_loop()
+    try:
+        await loop.run_in_executor(None, lambda: wbt.viewshed(
+            dem_path, output_path,
+            [centre_col], [centre_row],
+            height=target_height_m,
+        ))
+    except Exception as e:
+        log.warning("WhiteboxTools viewshed failed: %s — using fallback", e)
+        return await _viewshed_fallback(dem_array, target_height_m, observer_height_m, resolution_m)
+
+    result_array = _read_raster(output_path)
+    if result_array is None:
+        return {"error": "Failed to read viewshed output"}
+
+    visible_pixels = int(np.count_nonzero(result_array > 0))
+    total_pixels = int(result_array.size)
+    visible_pct = round(visible_pixels / total_pixels * 100, 1) if total_pixels > 0 else 0
+
+    pixel_area_m2 = resolution_m * resolution_m
+    visible_area_ha = round(visible_pixels * pixel_area_m2 / 10000, 2)
+    total_area_ha = round(total_pixels * pixel_area_m2 / 10000, 2)
+
+    ztv_geojson = _viewshed_to_geojson(result_array, lat, lon, resolution_m)
+    receptor_estimate = int(visible_area_ha * 5)
+
+    for f in [dem_path, output_path]:
+        try:
+            os.remove(f)
+        except OSError:
+            pass
+
+    return {
+        "visible_area_pct": visible_pct,
+        "visible_area_ha": visible_area_ha,
+        "total_area_ha": total_area_ha,
+        "ztv_geojson": ztv_geojson,
+        "receptor_count_estimate": receptor_estimate,
+        "method": "WhiteboxTools",
+        "target_height_m": target_height_m,
+        "observer_height_m": observer_height_m,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Viewshed — numpy ray-casting fallback
+# ---------------------------------------------------------------------------
+
+async def _viewshed_fallback(
+    dem_array: np.ndarray, target_height_m: float, observer_height_m: float,
+    resolution_m: float,
+) -> dict:
+    """Simplified viewshed using numpy ray-casting."""
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, _compute_viewshed_numpy, dem_array, target_height_m, observer_height_m, resolution_m,
+    )
+    return result
+
+
+def _compute_viewshed_numpy(
+    dem: np.ndarray, target_height_m: float, observer_height_m: float,
+    resolution_m: float,
+) -> dict:
+    """Pure numpy viewshed via ray-casting from centre pixel.
+
+    From the development location (centre), cast rays to all edge pixels.
+    Along each ray, track the maximum elevation angle seen so far.
+    A pixel is visible if its elevation angle exceeds all previous angles.
+    """
+    h, w = dem.shape
+    cy, cx = h // 2, w // 2
+    target_elev = dem[cy, cx] + target_height_m
+
+    visibility = np.zeros((h, w), dtype=np.uint8)
+    visibility[cy, cx] = 1
+
+    edge_pixels = set()
+    for x in range(w):
+        edge_pixels.add((0, x))
+        edge_pixels.add((h - 1, x))
+    for y in range(h):
+        edge_pixels.add((y, 0))
+        edge_pixels.add((y, w - 1))
+
+    for ey, ex in edge_pixels:
+        _trace_ray_vis(dem, visibility, cy, cx, ey, ex, target_elev, observer_height_m, resolution_m)
+
+    visible_pixels = int(np.count_nonzero(visibility))
+    total_pixels = int(visibility.size)
+    visible_pct = round(visible_pixels / total_pixels * 100, 1) if total_pixels > 0 else 0
+
+    pixel_area_m2 = resolution_m * resolution_m
+    visible_area_ha = round(visible_pixels * pixel_area_m2 / 10000, 2)
+    total_area_ha = round(total_pixels * pixel_area_m2 / 10000, 2)
+    receptor_estimate = int(visible_area_ha * 5)
+
+    return {
+        "visible_area_pct": visible_pct,
+        "visible_area_ha": visible_area_ha,
+        "total_area_ha": total_area_ha,
+        "ztv_geojson": None,
+        "receptor_count_estimate": receptor_estimate,
+        "method": "numpy_raycasting",
+        "target_height_m": target_height_m,
+        "observer_height_m": observer_height_m,
+    }
+
+
+def _trace_ray_vis(
+    dem: np.ndarray, visibility: np.ndarray,
+    cy: int, cx: int, ey: int, ex: int,
+    target_elev: float, observer_height: float, resolution_m: float,
+):
+    """Trace a single ray from centre to edge using Bresenham-like stepping."""
+    dy = ey - cy
+    dx = ex - cx
+    steps = max(abs(dy), abs(dx))
+    if steps == 0:
+        return
+
+    y_step = dy / steps
+    x_step = dx / steps
+    max_angle = -math.inf
+
+    for i in range(1, steps + 1):
+        py = int(round(cy + y_step * i))
+        px = int(round(cx + x_step * i))
+
+        if py < 0 or py >= dem.shape[0] or px < 0 or px >= dem.shape[1]:
+            break
+
+        dist_m = math.sqrt((py - cy) ** 2 + (px - cx) ** 2) * resolution_m
+        if dist_m < 0.01:
+            continue
+
+        observer_elev = dem[py, px] + observer_height
+        angle = math.atan2(observer_elev - target_elev, dist_m)
+
+        if angle > max_angle:
+            max_angle = angle
+            visibility[py, px] = 1
+
+
+def _viewshed_to_geojson(
+    visibility: np.ndarray, lat: float, lon: float, resolution_m: float,
+) -> dict:
+    """Convert visibility raster to simplified GeoJSON polygon."""
+    h, w = visibility.shape
+    half_extent_deg = (resolution_m * max(h, w) / 2) / 111320
+
+    west = lon - half_extent_deg
+    east = lon + half_extent_deg
+    south = lat - half_extent_deg
+    north = lat + half_extent_deg
+
+    visible_rows, visible_cols = np.where(visibility > 0)
+    if len(visible_rows) == 0:
+        return {"type": "FeatureCollection", "features": []}
+
+    angles = np.linspace(0, 2 * math.pi, 36, endpoint=False)
+    boundary_points = []
+    cy, cx = h // 2, w // 2
+
+    for angle in angles:
+        max_dist = 0
+        for d in range(1, max(h, w)):
+            py = int(round(cy + d * math.sin(angle)))
+            px = int(round(cx + d * math.cos(angle)))
+            if 0 <= py < h and 0 <= px < w and visibility[py, px] > 0:
+                max_dist = d
+            elif max_dist > 0:
+                break
+
+        if max_dist > 0:
+            py_f = cy + max_dist * math.sin(angle)
+            px_f = cx + max_dist * math.cos(angle)
+            frac_x = px_f / w
+            frac_y = 1.0 - (py_f / h)
+            pt_lon = west + frac_x * (east - west)
+            pt_lat = south + frac_y * (north - south)
+            boundary_points.append([round(pt_lon, 6), round(pt_lat, 6)])
+
+    if len(boundary_points) < 3:
+        return {"type": "FeatureCollection", "features": []}
+
+    boundary_points.append(boundary_points[0])
+
+    return {
+        "type": "FeatureCollection",
+        "features": [{
+            "type": "Feature",
+            "properties": {
+                "zone": "visible",
+                "visible_pct": round(np.count_nonzero(visibility) / visibility.size * 100, 1),
+            },
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [boundary_points],
+            },
+        }],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Public API: DEM-based viewshed
+# ---------------------------------------------------------------------------
+
+async def calculate_viewshed(
+    lat: float, lon: float, *,
+    target_height_m: float = 3.0,
+    radius_m: float = 2000,
+    observer_height_m: float = 1.6,
+    dem_data: dict | None = None,
+) -> dict:
+    """Calculate Zone of Theoretical Visibility (ZTV) for a proposed development.
+
+    Parameters:
+        lat, lon: Site location
+        target_height_m: Height of proposed structure (3m solar panels, 80-150m wind)
+        radius_m: Study area radius (2km solar, 5-10km wind)
+        observer_height_m: Eye-level height (1.6m standard)
+        dem_data: Pre-fetched DEM data dict with 'heightmap.values'. If None, fetches LiDAR.
+
+    Returns:
+        ZTV analysis with visible area percentage, area in hectares,
+        GeoJSON polygon for map overlay, and receptor count estimate.
+    """
+    if dem_data is None:
+        from utils.lidar_terrain import fetch_lidar_terrain
+        dem_data = await fetch_lidar_terrain(lat, lon, radius_m=radius_m, resolution_m=5)
+
+    if "error" in dem_data:
+        return {"error": f"Could not fetch terrain data: {dem_data['error']}"}
+
+    heightmap = dem_data.get("heightmap", {})
+    values = heightmap.get("values", [])
+    resolution_m = heightmap.get("resolution_m", 5)
+
+    if not values:
+        return {"error": "No heightmap data available"}
+
+    dem_array = np.array(values, dtype=np.float64)
+
+    if _whitebox_available():
+        result = await _viewshed_whitebox(
+            dem_array, lat, lon, target_height_m, observer_height_m, resolution_m,
+        )
+    else:
+        result = await _viewshed_fallback(
+            dem_array, target_height_m, observer_height_m, resolution_m,
+        )
+        if result.get("ztv_geojson") is None:
+            vis = np.zeros_like(dem_array, dtype=np.uint8)
+            h, w = dem_array.shape
+            cy, cx = h // 2, w // 2
+            target_elev = dem_array[cy, cx] + target_height_m
+            edge_pixels = set()
+            for x in range(w):
+                edge_pixels.add((0, x))
+                edge_pixels.add((h - 1, x))
+            for y in range(h):
+                edge_pixels.add((y, 0))
+                edge_pixels.add((y, w - 1))
+            for ey, ex in edge_pixels:
+                _trace_ray_vis(dem_array, vis, cy, cx, ey, ex, target_elev, observer_height_m, resolution_m)
+            result["ztv_geojson"] = _viewshed_to_geojson(vis, lat, lon, resolution_m)
+
+    result["lat"] = lat
+    result["lon"] = lon
+    result["radius_m"] = radius_m
+
+    visible_pct = result.get("visible_area_pct", 0)
+    if visible_pct < 10:
+        result["visual_impact"] = "LOW"
+        result["visual_note"] = "Minimal visibility. Limited visual impact expected."
+    elif visible_pct < 30:
+        result["visual_impact"] = "MODERATE"
+        result["visual_note"] = "Moderate visibility. Landscape screening may be beneficial."
+    elif visible_pct < 60:
+        result["visual_impact"] = "HIGH"
+        result["visual_note"] = "Significant visibility. Mitigation measures recommended."
+    else:
+        result["visual_impact"] = "VERY HIGH"
+        result["visual_note"] = "Extensively visible. Full LVIA required."
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Hydrology analysis
+# ---------------------------------------------------------------------------
+
+async def calculate_hydrology(
+    lat: float, lon: float, radius_m: float = 500,
+    dem_data: dict | None = None,
+) -> dict:
+    """Hydrological analysis from DEM data.
+
+    Computes:
+    - Topographic Wetness Index (TWI = ln(contributing_area / tan(slope)))
+    - Flow accumulation (identifies drainage paths)
+    - Depression / waterlogging risk areas
+    - Flood/drainage risk classification
+
+    Parameters:
+        lat, lon: Site location
+        radius_m: Study area radius
+        dem_data: Pre-fetched DEM dict with heightmap. If None, fetches LiDAR.
+    """
+    if dem_data is None:
+        from utils.lidar_terrain import fetch_lidar_terrain
+        dem_data = await fetch_lidar_terrain(lat, lon, radius_m=radius_m, resolution_m=2)
+
+    if "error" in dem_data:
+        return {"error": f"Could not fetch terrain data: {dem_data['error']}"}
+
+    heightmap = dem_data.get("heightmap", {})
+    values = heightmap.get("values", [])
+    resolution_m_actual = heightmap.get("resolution_m", 2)
+
+    if not values:
+        return {"error": "No heightmap data available"}
+
+    dem = np.array(values, dtype=np.float64)
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, _compute_hydrology, dem, lat, lon, resolution_m_actual, radius_m,
+    )
+    return result
+
+
+def _compute_hydrology(
+    dem: np.ndarray, lat: float, lon: float, resolution_m: float, radius_m: float,
+) -> dict:
+    """Pure numpy hydrological analysis: slope, D8 flow direction, flow accumulation, TWI."""
+    h, w = dem.shape
+    if h < 3 or w < 3:
+        return {"error": "DEM too small for hydrological analysis"}
+
+    pixel_area = resolution_m * resolution_m
+
+    # Slope
+    dy, dx = np.gradient(dem, resolution_m)
+    slope_rad = np.arctan(np.sqrt(dx ** 2 + dy ** 2))
+    slope_deg = np.degrees(slope_rad)
+
+    tan_slope = np.tan(slope_rad)
+    tan_slope = np.where(tan_slope < 0.001, 0.001, tan_slope)
+
+    # D8 flow direction and accumulation
+    d8_offsets = [
+        (-1, -1), (-1, 0), (-1, 1),
+        (0, -1),           (0, 1),
+        (1, -1),  (1, 0),  (1, 1),
+    ]
+    d8_dists = [
+        math.sqrt(2), 1.0, math.sqrt(2),
+        1.0,                1.0,
+        math.sqrt(2), 1.0, math.sqrt(2),
+    ]
+
+    flow_dir = np.full((h, w), -1, dtype=np.int8)
+    flow_accum = np.ones((h, w), dtype=np.float64)
+
+    for y in range(1, h - 1):
+        for x in range(1, w - 1):
+            max_slope = 0
+            max_dir = -1
+            for i, (dy_off, dx_off) in enumerate(d8_offsets):
+                ny, nx = y + dy_off, x + dx_off
+                drop = dem[y, x] - dem[ny, nx]
+                s = drop / (d8_dists[i] * resolution_m)
+                if s > max_slope:
+                    max_slope = s
+                    max_dir = i
+            flow_dir[y, x] = max_dir
+
+    # Flow accumulation — sort highest first, route downhill
+    flat_indices = np.argsort(-dem.ravel())
+    for idx in flat_indices:
+        y, x = divmod(int(idx), w)
+        if y < 1 or y >= h - 1 or x < 1 or x >= w - 1:
+            continue
+        d = flow_dir[y, x]
+        if d >= 0:
+            dy_off, dx_off = d8_offsets[d]
+            ny, nx = y + dy_off, x + dx_off
+            if 0 <= ny < h and 0 <= nx < w:
+                flow_accum[ny, nx] += flow_accum[y, x]
+
+    # Topographic Wetness Index
+    specific_area = flow_accum * pixel_area / resolution_m
+    twi = np.log(specific_area / tan_slope)
+    twi = np.clip(twi, 0, 30)
+
+    twi_mean = float(np.mean(twi))
+    twi_std = float(np.std(twi))
+    twi_max = float(np.max(twi))
+
+    # Depression detection
+    depressions = np.zeros((h, w), dtype=np.uint8)
+    for y in range(1, h - 1):
+        for x in range(1, w - 1):
+            is_depression = True
+            for dy_off, dx_off in d8_offsets:
+                ny, nx = y + dy_off, x + dx_off
+                if dem[ny, nx] <= dem[y, x]:
+                    is_depression = False
+                    break
+            if is_depression:
+                depressions[y, x] = 1
+
+    depression_count = int(np.sum(depressions))
+    depression_pct = round(depression_count / (h * w) * 100, 2)
+
+    # Waterlogging risk: high TWI + flat
+    waterlogged_mask = (twi > 12) & (slope_deg < 2)
+    waterlogged_pct = round(float(np.mean(waterlogged_mask)) * 100, 1)
+
+    # Drainage paths
+    threshold = np.percentile(flow_accum, 95)
+    drainage_mask = flow_accum > threshold
+
+    flow_paths_geojson = _flow_paths_to_geojson(drainage_mask, lat, lon, resolution_m)
+
+    # Risk classification
+    if waterlogged_pct > 25 or twi_mean > 14:
+        drainage_risk = "high"
+        drainage_note = "Significant waterlogging risk. Comprehensive drainage design required."
+    elif waterlogged_pct > 10 or twi_mean > 10:
+        drainage_risk = "medium"
+        drainage_note = "Moderate drainage concern. Standard SUDS design should suffice."
+    else:
+        drainage_risk = "low"
+        drainage_note = "Well-drained terrain. Minimal drainage intervention needed."
+
+    return {
+        "twi": {
+            "mean": round(twi_mean, 2),
+            "std": round(twi_std, 2),
+            "max": round(twi_max, 2),
+        },
+        "waterlogged_pct": waterlogged_pct,
+        "depression_count": depression_count,
+        "depression_pct": depression_pct,
+        "drainage_risk": drainage_risk,
+        "drainage_note": drainage_note,
+        "slope_stats": {
+            "mean_deg": round(float(np.mean(slope_deg)), 2),
+            "max_deg": round(float(np.max(slope_deg)), 2),
+        },
+        "flow_paths_geojson": flow_paths_geojson,
+        "method": "D8_numpy",
+        "lat": lat,
+        "lon": lon,
+        "radius_m": radius_m,
+    }
+
+
+def _flow_paths_to_geojson(
+    drainage_mask: np.ndarray, lat: float, lon: float, resolution_m: float,
+) -> dict:
+    """Convert high-flow-accumulation cells to simplified GeoJSON lines."""
+    h, w = drainage_mask.shape
+    half_extent_deg = (resolution_m * max(h, w) / 2) / 111320
+
+    west = lon - half_extent_deg
+    east = lon + half_extent_deg
+    south = lat - half_extent_deg
+    north = lat + half_extent_deg
+
+    drainage_points = np.argwhere(drainage_mask)
+    if len(drainage_points) == 0:
+        return {"type": "FeatureCollection", "features": []}
+
+    step = max(1, len(drainage_points) // 200)
+    sampled = drainage_points[::step]
+    sampled = sampled[sampled[:, 0].argsort()]
+
+    features = []
+    segment_size = max(5, len(sampled) // 10)
+    for i in range(0, len(sampled), segment_size):
+        segment = sampled[i:i + segment_size]
+        if len(segment) < 2:
+            continue
+
+        coords = []
+        for py, px in segment:
+            frac_x = px / w
+            frac_y = 1.0 - (py / h)
+            pt_lon = west + frac_x * (east - west)
+            pt_lat = south + frac_y * (north - south)
+            coords.append([round(pt_lon, 6), round(pt_lat, 6)])
+
+        features.append({
+            "type": "Feature",
+            "properties": {"type": "drainage_path"},
+            "geometry": {
+                "type": "LineString",
+                "coordinates": coords,
+            },
+        })
+
+    return {"type": "FeatureCollection", "features": features}

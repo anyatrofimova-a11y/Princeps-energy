@@ -479,3 +479,37 @@ async def environmental_constraints(
             "heritage": {"listed_buildings": [], "risk_level": "unknown"},
             "error": "timeout",
         }
+
+
+# ─── Noise propagation (ISO 9613-2) ─────────────────────────────────────────
+
+@router.post("/noise")
+async def noise_assessment(body: dict):
+    """
+    ISO 9613-2 noise propagation assessment for energy infrastructure.
+
+    Accepts a list of noise sources (wind turbines, BESS inverters, transformers)
+    and computes noise contour GeoJSON polygons at 35/40/45/50/55 dB(A).
+
+    Request body:
+        sources: list of {type, lat, lon, power_level_dba?, hub_height_m?/height_m?}
+        receptors: optional list of {lat, lon, name}
+        compliance_limit_dba: float (default 40)
+        study_radius_m: float (default 2000)
+        tonal_penalty: bool (default false)
+    """
+    from utils.noise_propagation import calculate_noise_contours
+
+    sources = body.get("sources", [])
+    if not sources:
+        raise HTTPException(status_code=400, detail="At least one noise source is required")
+
+    result = calculate_noise_contours(
+        sources=sources,
+        receptor_grid_size_m=body.get("grid_size_m", 10),
+        study_radius_m=body.get("study_radius_m", 2000),
+        compliance_limit_dba=body.get("compliance_limit_dba", 40),
+        receptors=body.get("receptors"),
+        tonal_penalty=body.get("tonal_penalty", False),
+    )
+    return result
