@@ -219,6 +219,12 @@ from app.routers import (  # noqa: E402
     prospector_v2 as prospector_v2_router,
     ppa_origination as ppa_origination_router,
     dispatch_model as dispatch_model_router,
+    bess_revenue as bess_revenue_router,
+    cable_routing as cable_routing_router,
+    yield_assessment as yield_assessment_router,
+    portfolio as portfolio_router,
+    grid_queue as grid_queue_router,
+    documents as documents_router,
 )
 
 _routers = [
@@ -250,6 +256,12 @@ _routers = [
     prospector_v2_router.router,
     ppa_origination_router.router,
     dispatch_model_router.router,
+    bess_revenue_router.router,
+    cable_routing_router.router,
+    yield_assessment_router.router,
+    portfolio_router.router,
+    grid_queue_router.router,
+    documents_router.router,
 ]
 
 app.include_router(graph_router)

@@ -3,7 +3,7 @@ import { useWorkspace, WORKSPACES, WORKSPACE_VIEWS } from "../../contexts/Worksp
 import NavRail from "./NavRail";
 import TopStatusBar from "./TopStatusBar";
 
-export default function AppShell({ children, onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline }) {
+export default function AppShell({ children, onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence }) {
   const { toggleBrowser, toggleDetail, setActiveWorkspace, activeWorkspace, setActiveViewMode } = useWorkspace();
 
   // Keyboard shortcuts
@@ -70,6 +70,7 @@ export default function AppShell({ children, onGridTwin, onBems, onAssetInspect,
           onCommandPalette={onCommandPalette}
           onDcTwin={onDcTwin}
           onPipeline={onPipeline}
+          onIntelligence={onIntelligence}
         />
         {children}
       </div>

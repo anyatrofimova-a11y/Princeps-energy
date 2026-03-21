@@ -16,6 +16,7 @@ import MapAssetLayer from "./components/MapAssetLayer";
 import DCMapOverlay from "./components/DCMapOverlay";
 import PortfolioMapOverlay from "./components/PortfolioMapOverlay";
 import FinancialStrip from "./components/FinancialStrip";
+import IntelligencePanel from "./components/IntelligencePanel";
 import Asset3DOverlay from "./components/Asset3DOverlay";
 import Google3DTilesOverlay from "./components/Google3DTilesOverlay";
 import CameraToolbar from "./components/CameraToolbar";
@@ -221,6 +222,7 @@ export default function App() {
   const [settingsMode, setSettingsMode] = useState(false);
   const [pitchMode, setPitchMode] = useState(false);
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+  const [intelligenceOpen, setIntelligenceOpen] = useState(false);
 
   // Cmd+K / Ctrl+K to open command palette
   useEffect(() => {
@@ -583,6 +585,7 @@ export default function App() {
       case "compare": setScenarioCompareOpen(true); break;
       case "demo": setDemoOpen(true); break;
       case "settings": setSettingsMode(true); break;
+      case "intelligence": setIntelligenceOpen(true); break;
       default: break;
     }
   }, []);
@@ -605,6 +608,7 @@ export default function App() {
       onNomExplorer={() => setNomMode(true)}
       onSettings={() => setSettingsMode(true)}
       onCommandPalette={() => setCmdPaletteOpen(true)}
+      onIntelligence={() => setIntelligenceOpen(true)}
     >
       <div className="app-shell-content">
         <WorkspaceRouter mapContent={mapContent} />
@@ -770,6 +774,11 @@ export default function App() {
         />
       )}
       </Suspense>
+
+      {/* Intelligence Panel — regulatory alerts & market data */}
+      {intelligenceOpen && (
+        <IntelligencePanel onClose={() => setIntelligenceOpen(false)} />
+      )}
 
       {/* Startup overlay — shown until backend health check passes */}
       {!backendReady && <StartupOverlay onReady={handleBackendReady} onIntent={handleStartupIntent} />}

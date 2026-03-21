@@ -3,6 +3,8 @@ import { useSite } from "../../SiteContext";
 import { useWorkspace, WORKSPACES } from "../../contexts/WorkspaceContext";
 import api from "../../services/api";
 import LiveStatusStrip from "../LiveStatusStrip";
+import ThemeToggle from "../ThemeToggle";
+import NotificationCentre from "../NotificationCentre";
 
 const STEPS = [
   { id: "site",    label: "Discover", sub: "Find site",        num: "1" },
@@ -286,7 +288,7 @@ function MoreMenu({ items }) {
   );
 }
 
-export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline }) {
+export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence }) {
   const {
     solarYield, gridContext, explain,
     agentResult, workflowSummary,
@@ -350,6 +352,12 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
         >
           {pdfLoading ? "..." : "PDF"}
         </button>
+        <button className="btn-topbar-intel" onClick={onIntelligence} title="Regulatory Intelligence Feed">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+          </svg>
+          Intel
+        </button>
         <button className="btn-topbar-action" onClick={onPipeline} title="Project Pipeline" style={{ fontWeight: 900, letterSpacing: "0.04em" }}>Pipeline</button>
         <MoreMenu
           items={[
@@ -387,6 +395,8 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
             { label: "NOM Explorer", action: onNomExplorer },
           ]}
         />
+        <NotificationCentre />
+        <ThemeToggle compact />
         <button className="btn-topbar-icon" onClick={onSettings} title="Settings">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />
