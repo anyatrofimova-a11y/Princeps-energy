@@ -17,10 +17,13 @@ import DCMapOverlay from "./components/DCMapOverlay";
 import PortfolioMapOverlay from "./components/PortfolioMapOverlay";
 import FinancialStrip from "./components/FinancialStrip";
 import Asset3DOverlay from "./components/Asset3DOverlay";
+import Google3DTilesOverlay from "./components/Google3DTilesOverlay";
 import CameraToolbar from "./components/CameraToolbar";
 import SitePicker from "./components/SitePicker";
 import LiveStrip from "./components/LiveStrip";
 import ConstraintTimeline from "./components/ConstraintTimeline";
+import ThemeToggle from "./components/ThemeToggle";
+import NotificationCentre from "./components/NotificationCentre";
 import StartupOverlay, { saveRecentSite } from "./components/StartupOverlay";
 import { useWorkspace } from "./contexts/WorkspaceContext";
 
@@ -46,6 +49,8 @@ const ProjectPipeline = lazy(() => import("./components/ProjectPipeline"));
 const SiteDashboard = lazy(() => import("./components/SiteDashboard"));
 const CommandPalette = lazy(() => import("./components/shell/CommandPalette"));
 const DrawingToolbar = lazy(() => import("./components/DrawingToolbar"));
+const DashboardBuilder = lazy(() => import("./components/DashboardBuilder"));
+const AssessmentWizard = lazy(() => import("./components/AssessmentWizard"));
 const ComponentPalette = lazy(() => import("./components/ComponentPalette"));
 const AssetDock = lazy(() => import("./components/AssetDock"));
 const EnergyFlowPanel = lazy(() => import("./components/EnergyFlowPanel"));
@@ -102,6 +107,8 @@ export default function App() {
   const [mapInstance, setMapInstance] = useState(null);
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [scenarioCompareOpen, setScenarioCompareOpen] = useState(false);
+  const [dashboardBuilderOpen, setDashboardBuilderOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(() => !localStorage.getItem("princeps_onboarded"));
   const [backendReady, setBackendReady] = useState(false);
   const handleBackendReady = useCallback(() => setBackendReady(true), []);
@@ -465,6 +472,7 @@ export default function App() {
       <MapAssetLayer map={mapInstance} />
       <DCMapOverlay mapInstance={mapInstance} dcAssets={placedAssets.filter(a => a.assetType === "data_centre")} />
       <Asset3DOverlay mapInstance={mapInstance} assets={placedAssets} validations={assetValidations} />
+      <Google3DTilesOverlay mapInstance={mapInstance} enabled={!!layers.google3d} />
 
       {/* Portfolio pins — all pipeline projects on map */}
       <PortfolioMapOverlay
@@ -565,6 +573,8 @@ export default function App() {
       case "bess-facility": setBessFacilityOpen(true); break;
       case "hardware": setHwConfigOpen(true); break;
       case "asset-3d": setAsset3dOpen(true); break;
+      case "wizard": setWizardOpen(true); break;
+      case "dashboard": setDashboardBuilderOpen(true); break;
       case "thermal": setThermalModelOpen(true); break;
       case "dc-twin": setDcTwinOpen(true); break;
       case "dc-landing": setDcLandingOpen(true); break;
@@ -711,6 +721,19 @@ export default function App() {
               });
             }
           }}
+        />
+      )}
+
+      {/* Live Dashboard Builder */}
+      {dashboardBuilderOpen && (
+        <DashboardBuilder onClose={() => setDashboardBuilderOpen(false)} />
+      )}
+
+      {/* Assessment Wizard */}
+      {wizardOpen && (
+        <AssessmentWizard
+          onClose={() => setWizardOpen(false)}
+          pickedLocation={pickedLocation}
         />
       )}
 

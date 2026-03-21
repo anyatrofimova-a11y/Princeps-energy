@@ -128,6 +128,67 @@ async def model_status():
 
 
 # ═══════════════════════════════════════════════════════════════
+#  REPD ML Predictor — GradientBoosting on 13,995 real projects
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/api/planning/predict")
+async def predict_approval_ml(
+    lat: float = Query(..., ge=49, le=61, description="Latitude (WGS84)"),
+    lon: float = Query(..., ge=-8, le=2, description="Longitude (WGS84)"),
+    technology: str = Query("solar"),
+    capacity_mw: float = Query(50, ge=0.1, le=5000),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Predict planning approval probability using GradientBoosting trained on REPD.
+
+    Returns approval_probability, predicted_months_to_decision, confidence,
+    risk_factors, and top model features.
+    """
+    from utils.planning_predictor import get_predictor
+    predictor = await get_predictor(pool)
+    return await predictor.predict(pool, lat, lon, technology, capacity_mw)
+
+
+@router.get("/api/planning/comparable")
+async def comparable_projects_ml(
+    lat: float = Query(..., ge=49, le=61),
+    lon: float = Query(..., ge=-8, le=2),
+    technology: str = Query("solar"),
+    capacity_mw: float = Query(50, ge=0.1, le=5000),
+    radius_km: float = Query(20, ge=1, le=100),
+    limit: int = Query(15, ge=1, le=50),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Find comparable REPD projects nearby with their planning outcomes."""
+    from utils.planning_predictor import get_predictor
+    predictor = await get_predictor(pool)
+    return await predictor.find_comparable(
+        pool, lat, lon, technology, capacity_mw, radius_km, limit,
+    )
+
+
+@router.get("/api/planning/authority-stats")
+async def authority_stats_ml(
+    planning_authority: str = Query(..., description="Local planning authority name"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Detailed approval stats for a planning authority — rates, timelines, tech breakdown, yearly trend."""
+    from utils.planning_predictor import get_predictor
+    predictor = await get_predictor(pool)
+    return await predictor.authority_stats(pool, planning_authority)
+
+
+@router.post("/api/planning/retrain")
+async def retrain_repd_model(
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Force retrain the REPD GradientBoosting model on latest data."""
+    from utils.planning_predictor import retrain
+    result = await retrain(pool)
+    return {"status": "retrained", **result}
+
+
+# ═══════════════════════════════════════════════════════════════
 #  BMRS Datasets — live grid intelligence
 # ═══════════════════════════════════════════════════════════════
 

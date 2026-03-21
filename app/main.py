@@ -216,6 +216,9 @@ from app.routers import (  # noqa: E402
     planning_ml as planning_ml_router,
     live_grid as live_grid_router,
     construction as construction_router,
+    prospector_v2 as prospector_v2_router,
+    ppa_origination as ppa_origination_router,
+    dispatch_model as dispatch_model_router,
 )
 
 _routers = [
@@ -244,6 +247,9 @@ _routers = [
     planning_ml_router.router,
     live_grid_router.router,
     construction_router.router,
+    prospector_v2_router.router,
+    ppa_origination_router.router,
+    dispatch_model_router.router,
 ]
 
 app.include_router(graph_router)

@@ -824,6 +824,51 @@ const api = {
     checkNow: () => post("/alerts/check-now"),
   },
 
+  ppa: {
+    match: (lat, lon, technology = "solar", capacityMw = 50, structure, termYears, additionality) => {
+      const q = new URLSearchParams({ lat, lon, technology, capacity_mw: capacityMw });
+      if (structure) q.set("structure", structure);
+      if (termYears != null) q.set("term_years", termYears);
+      if (additionality != null) q.set("additionality", additionality);
+      return get(`/api/ppa/match?${q}`);
+    },
+    buyers: () => get("/api/ppa/buyers"),
+    priceEstimate: (technology = "solar", capacityMw = 50, region = "Midlands", termYears = 15, structure = "fixed") =>
+      get(`/api/ppa/price-estimate?technology=${enc(technology)}&capacity_mw=${capacityMw}&region=${enc(region)}&term_years=${termYears}&structure=${enc(structure)}`),
+    structures: () => get("/api/ppa/structures"),
+  },
+
+  dispatchModel: {
+    snapshot: (params = {}) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, v);
+      return get(`/api/dispatch-model/snapshot?${q}`);
+    },
+    forecast: (hours = 48, params = {}) => {
+      const q = new URLSearchParams({ hours });
+      for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, v);
+      return get(`/api/dispatch-model/forecast?${q}`);
+    },
+    zonalPrices: (hours = 48, zones, params = {}) => {
+      const q = new URLSearchParams({ hours });
+      if (zones) q.set("zones", zones);
+      for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, v);
+      return get(`/api/dispatch-model/zonal-prices?${q}`);
+    },
+    curtailment: (capacityMw = 50, technology = "solar", region = "Midlands", hours = 48, connType = "firm") =>
+      get(`/api/dispatch-model/curtailment?capacity_mw=${capacityMw}&technology=${enc(technology)}&region=${enc(region)}&hours=${hours}&connection_type=${enc(connType)}`),
+    siteImpact: (lat, lon, capacityMw = 50, technology = "solar", region) => {
+      const q = new URLSearchParams({ lat, lon, capacity_mw: capacityMw, technology });
+      if (region) q.set("region", region);
+      return get(`/api/dispatch-model/site-impact?${q}`);
+    },
+    revenueForecast: (capacityMw = 50, technology = "solar", region = "Midlands", ppaPriceMwh, years = 25) => {
+      const q = new URLSearchParams({ capacity_mw: capacityMw, technology, region, years });
+      if (ppaPriceMwh != null) q.set("ppa_price_gbp_mwh", ppaPriceMwh);
+      return get(`/api/dispatch-model/revenue-forecast?${q}`);
+    },
+  },
+
   /**
    * Health check — GET /health (no retry, fast fail).
    * Returns { status, checks: { database, sam, claude, pool } } or null.

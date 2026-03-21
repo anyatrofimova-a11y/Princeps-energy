@@ -501,9 +501,15 @@ function DCScene({ rackLayout, telemetry, selectedRack, onSelectRack, colorBy, c
         );
       })}
 
+      {/* Building shell, external infrastructure */}
+      <BuildingShell rackLayout={rackLayout} />
+      <CoolingTowerCompound rackLayout={rackLayout} />
+      <GeneratorCompound rackLayout={rackLayout} />
+      <SubstationModel rackLayout={rackLayout} />
+
       {/* Floor plane */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-        <planeGeometry args={[80, 80]} />
+        <planeGeometry args={[120, 120]} />
         <meshStandardMaterial color="#0c1018" roughness={0.9} />
       </mesh>
 
@@ -779,6 +785,317 @@ function WaterStressBadge({ data }) {
         <div>Annual: <span style={{ fontWeight: 700 }}>{(data.annual_water_m3 || 0).toLocaleString()} m³</span></div>
       </div>
     </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Auto-Design Modal — "AI Load → Full Facility"
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const WORKLOAD_PRESETS = [
+  { id: "edge", label: "Edge DC", mw: 5, kwRack: 8, cooling: "mechanical", info: "Single-building edge facility. Air cooled, 625 racks." },
+  { id: "enterprise", label: "Enterprise", mw: 20, kwRack: 10, cooling: "hybrid", info: "Campus enterprise DC. Hybrid cooling, 2,000 racks." },
+  { id: "colo", label: "Colocation", mw: 50, kwRack: 12, cooling: "hybrid", info: "Multi-tenant colocation. Hybrid cooling, ~4,200 racks." },
+  { id: "hyperscale", label: "Hyperscale", mw: 200, kwRack: 15, cooling: "free_cooling", info: "Google/Meta scale. Free cooling where climate allows, ~13,000 racks." },
+  { id: "ai_factory", label: "AI Factory", mw: 500, kwRack: 60, cooling: "evaporative", info: "NVIDIA GB200 NVL72 config. Direct liquid cooling required, ~8,300 racks at 60kW each." },
+];
+
+const WORKLOAD_TYPES = [
+  { id: "general", label: "General Purpose", kwRack: 8, cooling: "mechanical", desc: "Standard 1U/2U servers, air cooled" },
+  { id: "ai_training", label: "AI Training", kwRack: 60, cooling: "evaporative", desc: "GPU clusters (H100/B200), DLC required" },
+  { id: "ai_inference", label: "AI Inference", kwRack: 30, cooling: "hybrid", desc: "Inference serving, hybrid cooling" },
+  { id: "hpc", label: "HPC", kwRack: 40, cooling: "evaporative", desc: "Scientific computing, liquid assisted" },
+  { id: "storage", label: "Storage", kwRack: 5, cooling: "mechanical", desc: "Object/block storage, low density" },
+];
+
+function AutoDesignModal({ onDesign, onClose, lat, lon }) {
+  const [itLoadMw, setItLoadMw] = useState(50);
+  const [workload, setWorkload] = useState("general");
+  const [kwRack, setKwRack] = useState(8);
+  const [cooling, setCooling] = useState("hybrid");
+  const [tier, setTier] = useState(3);
+  const [designing, setDesigning] = useState(false);
+
+  const selectPreset = (preset) => {
+    setItLoadMw(preset.mw);
+    setKwRack(preset.kwRack);
+    setCooling(preset.cooling);
+  };
+
+  const selectWorkload = (wl) => {
+    setWorkload(wl.id);
+    setKwRack(wl.kwRack);
+    setCooling(wl.cooling);
+  };
+
+  const handleDesign = async () => {
+    setDesigning(true);
+
+    // Run all 7 API calls in parallel
+    const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.ok ? r.json() : null).catch(() => null);
+    const get = (url) => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
+
+    const redundancy = tier >= 4 ? "2N" : tier >= 3 ? "N+1" : "N";
+    const useLat = lat || 51.5;
+    const useLon = lon || -0.1;
+
+    const [design, chain, timeline, financial, cfe, ashrae, tierCheck] = await Promise.all([
+      post("/api/dc/power-density-design", { it_load_mw: itLoadMw, kw_per_rack: kwRack, tier, redundancy, cooling_type: cooling }),
+      post("/api/dc/power-chain", { it_load_mw: itLoadMw, tier, voltage_kv: itLoadMw >= 100 ? 132 : 33 }),
+      post("/api/dc/construction-timeline", { it_load_mw: itLoadMw, tier, modular: itLoadMw <= 20 }),
+      post("/api/dc/financial-model", { it_load_mw: itLoadMw, tier, kw_per_rack: kwRack, pue: 1.3 }),
+      post("/api/dc/hourly-cfe", { lat: useLat, lon: useLon, capacity_mw: itLoadMw, solar_mw: itLoadMw * 0.5, wind_mw: itLoadMw * 0.2, bess_mwh: itLoadMw * 2 }),
+      get(`/api/dc/ashrae?lat=${useLat}&lon=${useLon}`),
+      post("/api/dc/tier-check", { redundancy, power_paths: tier >= 3 ? 2 : 1, cooling_paths: tier >= 3 ? 2 : 1, concurrently_maintainable: tier >= 3, fault_tolerant: tier >= 4 }),
+    ]);
+
+    onDesign({
+      itLoadMw, workload, kwRack, cooling, tier,
+      design, chain, timeline, financial, cfe, ashrae, tierCheck,
+    });
+    setDesigning(false);
+  };
+
+  const wlType = WORKLOAD_TYPES.find(w => w.id === workload);
+  const estRacks = Math.ceil(itLoadMw * 1000 / kwRack);
+  const estArea = Math.ceil(estRacks * 3.5); // ~3.5m² per rack
+
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 100, background: "rgba(15,14,10,0.92)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      backdropFilter: "blur(8px)",
+    }}>
+      <div style={{
+        background: T.panel, borderRadius: 16, width: "90%", maxWidth: 700,
+        maxHeight: "90vh", overflow: "auto", boxShadow: "0 24px 80px rgba(0,0,0,0.4)",
+      }}>
+        {/* Header */}
+        <div style={{ padding: "20px 24px 12px", borderBottom: `1px solid rgba(0,0,0,0.06)` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 900, color: T.accent, letterSpacing: "0.06em" }}>DESIGN YOUR FACILITY</div>
+              <div style={{ fontSize: 11, color: T.textSec, marginTop: 2 }}>Set your IT load. Princeps designs everything else.</div>
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, color: T.textSec, cursor: "pointer" }}>&times;</button>
+          </div>
+        </div>
+
+        <div style={{ padding: "16px 24px" }}>
+          {/* Quick Presets */}
+          <div style={{ fontSize: 9, fontWeight: 700, color: T.textSec, letterSpacing: "0.06em", marginBottom: 8 }}>SCALE PRESET</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+            {WORKLOAD_PRESETS.map(p => (
+              <button key={p.id} onClick={() => selectPreset(p)} style={{
+                flex: 1, minWidth: 100, padding: "8px 6px", borderRadius: 8,
+                border: itLoadMw === p.mw ? `2px solid ${T.accent}` : "1px solid rgba(0,0,0,0.08)",
+                background: itLoadMw === p.mw ? "rgba(212,160,24,0.06)" : "transparent",
+                cursor: "pointer", textAlign: "center",
+              }}>
+                <div style={{ fontSize: 16, fontWeight: 900, color: itLoadMw === p.mw ? T.accent : T.text }}>{p.mw}</div>
+                <div style={{ fontSize: 8, color: T.textSec }}>MW</div>
+                <div style={{ fontSize: 9, fontWeight: 600, color: T.text, marginTop: 2 }}>{p.label}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* IT Load Slider */}
+          <div style={{ fontSize: 9, fontWeight: 700, color: T.textSec, letterSpacing: "0.06em", marginBottom: 4 }}>IT LOAD</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+            <input type="range" min={1} max={500} value={itLoadMw} onChange={e => setItLoadMw(+e.target.value)}
+              style={{ flex: 1, accentColor: T.accent }} />
+            <div style={{ textAlign: "right", minWidth: 70 }}>
+              <span style={{ fontSize: 28, fontWeight: 900, color: T.text }}>{itLoadMw}</span>
+              <span style={{ fontSize: 11, color: T.textSec, marginLeft: 4 }}>MW</span>
+            </div>
+          </div>
+
+          {/* Workload Type */}
+          <div style={{ fontSize: 9, fontWeight: 700, color: T.textSec, letterSpacing: "0.06em", marginBottom: 8 }}>WORKLOAD TYPE</div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+            {WORKLOAD_TYPES.map(w => (
+              <button key={w.id} onClick={() => selectWorkload(w)} style={{
+                flex: 1, minWidth: 90, padding: "6px 8px", borderRadius: 6,
+                border: workload === w.id ? `2px solid ${T.accent}` : "1px solid rgba(0,0,0,0.08)",
+                background: workload === w.id ? "rgba(212,160,24,0.06)" : "transparent",
+                cursor: "pointer", textAlign: "left",
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: T.text }}>{w.label}</div>
+                <div style={{ fontSize: 8, color: T.textSec }}>{w.kwRack} kW/rack</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Configuration row */}
+          <div style={{ display: "flex", gap: 16, marginBottom: 16 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: T.textSec, letterSpacing: "0.06em", marginBottom: 4 }}>kW/RACK</div>
+              <input type="number" value={kwRack} min={2} max={250} onChange={e => setKwRack(+e.target.value)}
+                style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: "1px solid rgba(0,0,0,0.1)", fontSize: 14, fontWeight: 700 }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: T.textSec, letterSpacing: "0.06em", marginBottom: 4 }}>COOLING</div>
+              <select value={cooling} onChange={e => setCooling(e.target.value)}
+                style={{ width: "100%", padding: "6px 8px", borderRadius: 6, border: "1px solid rgba(0,0,0,0.1)", fontSize: 12 }}>
+                <option value="mechanical">Air (Mechanical)</option>
+                <option value="free_cooling">Free Cooling</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="evaporative">Evaporative / DLC</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 700, color: T.textSec, letterSpacing: "0.06em", marginBottom: 4 }}>TIER</div>
+              <div style={{ display: "flex", gap: 3 }}>
+                {[1, 2, 3, 4].map(t => (
+                  <button key={t} onClick={() => setTier(t)} style={{
+                    flex: 1, padding: "6px 0", borderRadius: 4, fontSize: 12, fontWeight: 700,
+                    border: tier === t ? `2px solid ${T.accent}` : "1px solid rgba(0,0,0,0.08)",
+                    background: tier === t ? "rgba(212,160,24,0.1)" : "transparent",
+                    color: tier === t ? T.accent : T.textSec, cursor: "pointer",
+                  }}>{t}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Preview strip */}
+          <div style={{
+            display: "flex", gap: 16, padding: "12px 16px", background: "rgba(0,0,0,0.02)",
+            borderRadius: 8, marginBottom: 16, justifyContent: "space-around",
+          }}>
+            {[
+              { label: "Racks", value: estRacks.toLocaleString(), color: T.accent },
+              { label: "Floor", value: `${(estArea / 1000).toFixed(1)}k m²`, color: T.text },
+              { label: "Total Power", value: `${Math.round(itLoadMw * 1.3)} MW`, color: T.blue },
+              { label: "Est. CAPEX", value: `£${(itLoadMw * (kwRack >= 30 ? 15 : 10)).toFixed(0)}M`, color: T.accent },
+            ].map(m => (
+              <div key={m.label} style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 900, color: m.color }}>{m.value}</div>
+                <div style={{ fontSize: 8, color: T.textSec, textTransform: "uppercase" }}>{m.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Design button */}
+          <button onClick={handleDesign} disabled={designing} style={{
+            width: "100%", padding: "14px", borderRadius: 10, border: "none",
+            background: T.accent, color: "#0F0E0A", fontSize: 14, fontWeight: 900,
+            cursor: designing ? "wait" : "pointer", opacity: designing ? 0.7 : 1,
+            letterSpacing: "0.04em",
+          }}>
+            {designing ? "Designing facility..." : `Design ${itLoadMw} MW ${wlType?.label || "Facility"}`}
+          </button>
+
+          {/* Workload info */}
+          {wlType && (
+            <div style={{ fontSize: 10, color: T.textSec, marginTop: 8, textAlign: "center" }}>
+              {wlType.desc}. Estimated {estRacks.toLocaleString()} racks at {kwRack} kW each.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Building Shell for 3D scene ── */
+function BuildingShell({ rackLayout }) {
+  if (!rackLayout?.length) return null;
+  const xs = rackLayout.map(r => r.x);
+  const zs = rackLayout.map(r => r.z);
+  const minX = Math.min(...xs) - 3, maxX = Math.max(...xs) + 3;
+  const minZ = Math.min(...zs) - 3, maxZ = Math.max(...zs) + 3;
+  const w = maxX - minX, d = maxZ - minZ;
+  const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+
+  return (
+    <group>
+      {/* Walls */}
+      <mesh position={[cx, 2.5, cz]}>
+        <boxGeometry args={[w + 2, 5, d + 2]} />
+        <meshStandardMaterial color="#1a1f2e" transparent opacity={0.08} roughness={0.9} side={2} />
+      </mesh>
+      {/* Roof */}
+      <mesh position={[cx, 5.1, cz]}>
+        <boxGeometry args={[w + 4, 0.15, d + 4]} />
+        <meshStandardMaterial color="#2a2f3e" transparent opacity={0.15} roughness={0.7} metalness={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
+/* ── Cooling Towers (outdoor) ── */
+function CoolingTowerCompound({ rackLayout }) {
+  if (!rackLayout?.length) return null;
+  const maxX = Math.max(...rackLayout.map(r => r.x)) + 8;
+  return (
+    <group position={[maxX, 0, 0]}>
+      {[0, 3, 6].map(i => (
+        <group key={i} position={[0, 0, i]}>
+          <mesh position={[0, 1, 0]}>
+            <cylinderGeometry args={[1.2, 1.5, 2, 16]} />
+            <meshStandardMaterial color="#4a5568" roughness={0.6} metalness={0.3} />
+          </mesh>
+          <mesh position={[0, 2.2, 0]}>
+            <cylinderGeometry args={[0.3, 1.0, 0.5, 16]} />
+            <meshStandardMaterial color="#718096" transparent opacity={0.3} />
+          </mesh>
+        </group>
+      ))}
+      {/* Label */}
+      <Html position={[0, 3.5, 3]} center distanceFactor={15} style={{ pointerEvents: "none" }}>
+        <div style={{ fontSize: 8, color: "#00bcd4", fontWeight: 700, fontFamily: "system-ui", background: "rgba(0,0,0,0.5)", padding: "2px 6px", borderRadius: 4 }}>
+          COOLING TOWERS
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+/* ── Generator Compound (outdoor) ── */
+function GeneratorCompound({ rackLayout }) {
+  if (!rackLayout?.length) return null;
+  const minZ = Math.min(...rackLayout.map(r => r.z)) - 6;
+  return (
+    <group position={[0, 0, minZ]}>
+      {[0, 4, 8].map(i => (
+        <mesh key={i} position={[i, 0.75, 0]}>
+          <boxGeometry args={[3, 1.5, 2]} />
+          <meshStandardMaterial color="#2d3748" emissive="#D4A018" emissiveIntensity={0.05} roughness={0.4} metalness={0.6} />
+        </mesh>
+      ))}
+      <Html position={[4, 2.5, 0]} center distanceFactor={15} style={{ pointerEvents: "none" }}>
+        <div style={{ fontSize: 8, color: T.orange, fontWeight: 700, fontFamily: "system-ui", background: "rgba(0,0,0,0.5)", padding: "2px 6px", borderRadius: 4 }}>
+          GENERATORS ({rackLayout.length > 100 ? "N+1" : "N"})
+        </div>
+      </Html>
+    </group>
+  );
+}
+
+/* ── Substation model ── */
+function SubstationModel({ rackLayout }) {
+  if (!rackLayout?.length) return null;
+  const minX = Math.min(...rackLayout.map(r => r.x)) - 10;
+  return (
+    <group position={[minX, 0, 0]}>
+      <mesh position={[0, 1.5, 0]}>
+        <boxGeometry args={[4, 3, 3]} />
+        <meshStandardMaterial color="#374151" roughness={0.5} metalness={0.4} />
+      </mesh>
+      {/* HV bushings */}
+      {[-1, 0, 1].map(i => (
+        <mesh key={i} position={[i * 1.2, 3.2, 0]}>
+          <cylinderGeometry args={[0.08, 0.08, 1, 8]} />
+          <meshStandardMaterial color="#dc2626" emissive="#ff0000" emissiveIntensity={0.3} />
+        </mesh>
+      ))}
+      <Html position={[0, 4.5, 0]} center distanceFactor={15} style={{ pointerEvents: "none" }}>
+        <div style={{ fontSize: 8, color: "#f44336", fontWeight: 700, fontFamily: "system-ui", background: "rgba(0,0,0,0.5)", padding: "2px 6px", borderRadius: 4 }}>
+          SUBSTATION 33/11kV
+        </div>
+      </Html>
+    </group>
   );
 }
 
@@ -1073,6 +1390,8 @@ export default function DataCentreTwin({ onClose }) {
   const [dcFinancials, setDcFinancials] = useState(null);
   const [waterStress, setWaterStress] = useState(null);
   const [designLoading, setDesignLoading] = useState(false);
+  const [showAutoDesign, setShowAutoDesign] = useState(true); // Show on open
+  const [autoDesignResult, setAutoDesignResult] = useState(null);
 
   const wsRef = useRef(null);
 
@@ -1137,6 +1456,35 @@ export default function DataCentreTwin({ onClose }) {
     setWaterStress(water);
     setDesignLoading(false);
   }, [itLoadKw, tier, redundancy, rackDensity, coolingType, explain, pickedLocation, plan]);
+
+  // Handle auto-design completion — populate all state from results
+  const handleAutoDesign = useCallback((result) => {
+    setAutoDesignResult(result);
+    setShowAutoDesign(false);
+
+    // Update configuration
+    setItLoadKw(result.itLoadMw * 1000);
+    setRackDensity(result.kwRack);
+    setCoolingType(result.cooling);
+    setTier(result.tier);
+    const redundancy = result.tier >= 4 ? "2N" : result.tier >= 3 ? "N+1" : "N";
+    setRedundancy(redundancy);
+
+    // Populate design results
+    if (result.design) setPowerDesign(result.design);
+    if (result.chain) setPowerChain(result.chain);
+    if (result.timeline) setTimeline(result.timeline);
+    if (result.financial) setDcFinancials(result.financial);
+    if (result.cfe) setCfeProfile(result.cfe);
+    if (result.ashrae) setAshraeResult(result.ashrae);
+    if (result.tierCheck) setTierResult(result.tierCheck);
+
+    // Also fetch the facility plan for 3D visualization
+    fetchPlan();
+
+    // Switch to design view to show results
+    setViewMode("design");
+  }, [fetchPlan]);
 
   // Auto-plan on mount
   useEffect(() => { fetchPlan(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1220,6 +1568,15 @@ export default function DataCentreTwin({ onClose }) {
         }}>←</button>
         <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Data Centre Digital Twin</span>
 
+        {/* Auto-design button */}
+        <button onClick={() => setShowAutoDesign(true)} style={{
+          marginLeft: 8, padding: "4px 12px", borderRadius: 6, border: `1px solid ${T.accent}`,
+          background: "rgba(212,160,24,0.08)", color: T.accent, fontSize: 10, fontWeight: 900,
+          cursor: "pointer", letterSpacing: "0.04em",
+        }}>
+          New Design
+        </button>
+
         {/* View mode tabs */}
         <div style={{ display: "flex", gap: 2, marginLeft: 16, background: "#EBEDF0", borderRadius: 6, padding: 2 }}>
           {VIEW_MODES.map(m => (
@@ -1277,14 +1634,33 @@ export default function DataCentreTwin({ onClose }) {
         )}
 
         {/* Tier badge */}
-        {plan?.tier && (
+        {(plan?.tier || tierResult) && (
           <div style={{
             marginLeft: "auto", padding: "2px 10px", borderRadius: 10,
             border: `1px solid ${T.accent}`, fontSize: 10, color: T.accent, fontWeight: 600,
           }}>
-            {plan.tier.label} — {plan.tier.availability}
+            {tierResult?.label || plan?.tier?.label} — {tierResult?.availability_pct || plan?.tier?.availability}%
           </div>
         )}
+
+        {/* Download Spec */}
+        <button onClick={async () => {
+          const lat = explain?.lat ?? pickedLocation?.lat ?? 51.5;
+          const lon = explain?.lon ?? pickedLocation?.lon ?? -0.1;
+          try {
+            const blob = await fetch(`/api/dc/report?lat=${lat}&lon=${lon}&site_name=DC%20Facility&capacity_mw=${itLoadKw / 1000}&profile=google_hyperscale`, { method: "POST" })
+              .then(r => r.blob());
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url; a.download = "princeps-dc-spec.pdf"; a.click();
+            URL.revokeObjectURL(url);
+          } catch { /* silent */ }
+        }} style={{
+          padding: "4px 12px", borderRadius: 6, border: "none",
+          background: T.accent, color: "#0F0E0A", fontSize: 10, fontWeight: 900,
+          cursor: "pointer", letterSpacing: "0.04em", marginLeft: 8,
+        }}>
+          Download Spec
+        </button>
       </div>
 
       {/* ── Main Content ── */}
@@ -1698,6 +2074,16 @@ export default function DataCentreTwin({ onClose }) {
           )}
         </div>
       </div>
+
+      {/* Auto-design modal */}
+      {showAutoDesign && (
+        <AutoDesignModal
+          onDesign={handleAutoDesign}
+          onClose={() => setShowAutoDesign(false)}
+          lat={explain?.lat ?? pickedLocation?.lat}
+          lon={explain?.lon ?? pickedLocation?.lon}
+        />
+      )}
 
       {/* CSS keyframes for pulse animation */}
       <style>{`

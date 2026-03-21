@@ -23,6 +23,13 @@ const COMMANDS = [
   { id: "act-settings", label: "Open Settings", section: "Actions", action: "settings" },
   { id: "act-browser", label: "Toggle Asset Browser", section: "Actions", action: "browser", shortcut: "Ctrl+B" },
   { id: "act-detail", label: "Toggle Detail Panel", section: "Actions", action: "detail", shortcut: "Ctrl+D" },
+  { id: "act-asset3d", label: "Gemini 3D Asset Modeller", section: "AI Tools", action: "asset-3d" },
+  { id: "act-wizard", label: "Site Assessment Wizard", section: "AI Tools", action: "wizard" },
+  { id: "act-dashboard", label: "Open Live Dashboard", section: "AI Tools", action: "dashboard" },
+  { id: "act-dc-score", label: "Score DC Site", section: "Data Centre", action: "dc-score" },
+  { id: "act-dc-compare", label: "Compare DC Sites", section: "Data Centre", action: "dc-compare" },
+  { id: "act-dc-report", label: "Generate DC Report", section: "Data Centre", action: "dc-report" },
+  { id: "act-dc-landing", label: "Open DC Landing Page", section: "Data Centre", action: "dc-landing" },
 ];
 
 export default function CommandPalette({ open, onClose, onAction }) {
