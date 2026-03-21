@@ -5,8 +5,17 @@
  */
 
 const json = async (res) => {
-  try { return res.ok ? await res.json() : null; }
-  catch { return null; }
+  if (!res) return null;
+  try {
+    if (!res.ok) {
+      console.warn(`[API] ${res.url} → ${res.status} ${res.statusText}`);
+      return null;
+    }
+    return await res.json();
+  } catch (e) {
+    console.warn(`[API] JSON parse failed for ${res?.url}:`, e.message);
+    return null;
+  }
 };
 
 const MAX_RETRIES = 3;

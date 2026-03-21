@@ -108,19 +108,25 @@ export default function FloatingCards() {
   const renderCard = (name) => {
     const Comp = CARD_COMPONENTS[name];
     if (!Comp) return null;
-    if (name === "StabilityCard") return <Comp key={name} onStabilityData={setStabilityData} />;
-    if (name === "GridDataPanel") return <Comp key={name} parcelId={parcelId} samCapacity={samCapacity} />;
-    if (name === "AgentPanel") {
-      return (
+    let inner;
+    if (name === "StabilityCard") inner = <Comp onStabilityData={setStabilityData} />;
+    else if (name === "GridDataPanel") inner = <Comp parcelId={parcelId} samCapacity={samCapacity} />;
+    else if (name === "AgentPanel") {
+      inner = (
         <Comp
-          key={name}
           parcelId={parcelId} samCapacity={samCapacity} samDay={samDay}
           agentResult={agentResult} setAgentResult={setAgentResult}
           agentLoading={agentLoading} setAgentLoading={() => {}}
         />
       );
+    } else {
+      inner = <Comp />;
     }
-    return <Comp key={name} />;
+    return (
+      <ErrorBoundary key={name} name={name}>
+        {inner}
+      </ErrorBoundary>
+    );
   };
 
   const hasWorkflow = Object.keys(workflowResults).length > 0;

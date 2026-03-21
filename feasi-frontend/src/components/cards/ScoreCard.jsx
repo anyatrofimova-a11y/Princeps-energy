@@ -19,25 +19,29 @@ export default function ScoreCard() {
   if (!explain) {
     return (
       <MetricCard title="Score" accentColor="#4caf50">
-        <span className="muted">Click Analyse</span>
+        <span className="muted">Select a site to see scores</span>
       </MetricCard>
     );
   }
+
+  const score = explain.score_total ?? explain.score?.total ?? 0;
+  const components = explain.context?.score_components || explain.score_components || {};
 
   return (
     <MetricCard
       title="Score"
       accentColor="#4caf50"
-      headerValue={`${explain.score_total}/120`}
+      headerValue={score ? `${score}/120` : "—"}
       aiInsight={insight}
     >
       <div className="score-row">
-        <span style={badgeStyle(explain.score_total)}>{explain.score_total}/120</span>
-        {explain.context?.score_components && Object.entries(explain.context.score_components).map(([k, v]) => (
+        {score > 0 && <span style={badgeStyle(score)}>{score}/120</span>}
+        {Object.entries(components).map(([k, v]) => (
           <span key={k} className="score-chip">{k}: {v}</span>
         ))}
       </div>
-      <pre className="overlay-pre">{explain.explanation}</pre>
+      {explain.explanation && <pre className="overlay-pre">{explain.explanation}</pre>}
+      {explain.location_name && <div className="stat-inline" style={{ marginTop: 4, fontSize: 11, color: "#888" }}>{explain.location_name}</div>}
     </MetricCard>
   );
 }

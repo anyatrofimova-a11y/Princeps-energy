@@ -344,19 +344,25 @@ export function SiteProvider({ children }) {
         api.site.bom(id, kw),
         api.site.bomAvail(id, kw),
       ]);
-      const val = (r) => r.status === "fulfilled" ? r.value : null;
-      setHeightmap(val(results[0]));
-      setExplain(val(results[1]));
-      setSlopeStats(val(results[2]));
-      setSolarYield(val(results[3]));
-      setSolarHourly(val(results[4]));
-      setMlSolar(val(results[5]));
-      setEnergyPrice(val(results[6]));
-      setGridContext(val(results[7]));
-      setPlanningApps(val(results[8]));
-      setEnergySystem(val(results[9]));
-      setSiteBom(val(results[10]));
-      setBomAvail(val(results[11]));
+      const API_NAMES = ["heightmap","explain","slopeStats","solarYield","solarHourly","mlSolar","energyPrice","gridContext","planning","energySystem","bom","bomAvail"];
+      const val = (r, i) => {
+        if (r.status === "fulfilled" && r.value != null) return r.value;
+        if (r.status === "rejected") console.warn(`[loadSite] ${API_NAMES[i]} FAILED:`, r.reason?.message || r.reason);
+        else if (!r.value) console.warn(`[loadSite] ${API_NAMES[i]} returned null`);
+        return null;
+      };
+      setHeightmap(val(results[0], 0));
+      setExplain(val(results[1], 1));
+      setSlopeStats(val(results[2], 2));
+      setSolarYield(val(results[3], 3));
+      setSolarHourly(val(results[4], 4));
+      setMlSolar(val(results[5], 5));
+      setEnergyPrice(val(results[6], 6));
+      setGridContext(val(results[7], 7));
+      setPlanningApps(val(results[8], 8));
+      setEnergySystem(val(results[9], 9));
+      setSiteBom(val(results[10], 10));
+      setBomAvail(val(results[11], 11));
       setActiveTab("score");
       setPanelOpen(true);
       setWorkflowStage("study");
