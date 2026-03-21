@@ -5,10 +5,12 @@ import api from "../../services/api";
 import LiveStatusStrip from "../LiveStatusStrip";
 
 const STEPS = [
-  { id: "site",  label: "Discover", sub: "Find & select sites",  icon: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z", num: "1" },
-  { id: "study", label: "Analyse",  sub: "AI feasibility study", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2", num: "2", gate: "pickedLocation" },
-  { id: "plan",  label: "Design",   sub: "3D layout & sizing",   icon: "M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z", num: "3", gate: "agentResult" },
-  { id: "act",   label: "Execute",  sub: "Export & procure",     icon: "M5 12h14M12 5l7 7-7 7", num: "4" },
+  { id: "site",    label: "Discover", sub: "Find site",        num: "1" },
+  { id: "study",   label: "Assess",   sub: "Feasibility",      num: "2", gate: "pickedLocation" },
+  { id: "connect", label: "Connect",  sub: "Grid connection",   num: "3", gate: "pickedLocation" },
+  { id: "plan",    label: "Design",   sub: "Layout & sizing",   num: "4", gate: "agentResult" },
+  { id: "impact",  label: "Plan",     sub: "Planning prep",     num: "5", gate: "agentResult" },
+  { id: "act",     label: "Build",    sub: "Export & procure",  num: "6", gate: "agentResult" },
 ];
 
 function WorkflowSteps() {
@@ -18,7 +20,9 @@ function WorkflowSteps() {
   const canNavigate = (step) => {
     if (step.id === "site") return true;
     if (step.id === "study") return !!pickedLocation;
+    if (step.id === "connect") return !!pickedLocation;
     if (step.id === "plan") return !!agentResult;
+    if (step.id === "impact") return !!agentResult;
     if (step.id === "act") return !!agentResult;
     return false;
   };

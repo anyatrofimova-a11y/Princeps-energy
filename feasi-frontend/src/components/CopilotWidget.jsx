@@ -565,10 +565,39 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
               <div className="copilot-chat-welcome">
                 <div className="copilot-chat-welcome-title">Princeps Copilot</div>
                 <div className="copilot-chat-welcome-sub">
-                  I see your current view and can help with any feature — analyse sites, modify the map, run simulations, explain results.
+                  {workflowStage === "site" && "Find a site to begin your assessment."}
+                  {workflowStage === "study" && "Site selected. Ready to run feasibility analysis."}
+                  {workflowStage === "connect" && "Assessing grid connection options."}
+                  {workflowStage === "plan" && "Design your layout — drag assets onto the map."}
+                  {workflowStage === "impact" && "Prepare planning application — check constraints."}
+                  {workflowStage === "act" && "Ready to export reports and begin procurement."}
                 </div>
                 <div className="copilot-chat-suggestions">
-                  {["What am I looking at?", "Find a solar site near Bristol", "Run grid connection study", "Show demand forecast"].map((q) => (
+                  {(workflowStage === "site" ? [
+                    "Find a 50MW solar site near Didcot",
+                    "Show me sites with grid headroom >20MW",
+                    "Search for available land in Somerset",
+                  ] : workflowStage === "study" ? [
+                    "Run full feasibility assessment",
+                    "What are the planning risks here?",
+                    "Check environmental constraints",
+                  ] : workflowStage === "connect" ? [
+                    "Forecast grid connection timeline",
+                    "Show nearby substations with headroom",
+                    "Estimate connection cost",
+                  ] : workflowStage === "plan" ? [
+                    "Calculate energy flow for this layout",
+                    "Run revenue stacking analysis",
+                    "Open 3D digital twin",
+                  ] : workflowStage === "impact" ? [
+                    "Run shadow flicker assessment",
+                    "Calculate noise contours",
+                    "Check viewshed from nearest houses",
+                  ] : [
+                    "Generate PDF site report",
+                    "Create construction schedule",
+                    "Estimate construction traffic",
+                  ]).map((q) => (
                     <button key={q} className="copilot-chat-chip" onClick={() => { setInput(q); setTimeout(() => { pendingRef.current = q; }, 0); }}>{q}</button>
                   ))}
                 </div>

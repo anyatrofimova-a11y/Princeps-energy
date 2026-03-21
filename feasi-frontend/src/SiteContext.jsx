@@ -241,7 +241,7 @@ export function SiteProvider({ children }) {
   const [analyticsCollapsed, setAnalyticsCollapsed] = useState(false);
 
   // ── Workflow ──
-  const [workflowStage, setWorkflowStage] = useState("site"); // site | study | plan | act
+  const [workflowStage, setWorkflowStage] = useState("site"); // site | study | connect | plan | impact | act
   const [studySubStep, setStudySubStep] = useState("feasibility");
   const [workflowHistory, setWorkflowHistory] = useState(["site"]);
   const [dashboardOpen, setDashboardOpen] = useState(false);
@@ -257,8 +257,10 @@ export function SiteProvider({ children }) {
     setWorkflowStage(stage);
     setWorkflowHistory(prev => prev.includes(stage) ? prev : [...prev, stage]);
     if (stage === "site") { setPickMode(true); setLayoutMode(false); }
-    if (stage === "plan") { setLayoutMode(true); }
     if (stage === "study") { setLayoutMode(false); setStudySubStep("feasibility"); setActiveIntent("feasibility"); }
+    if (stage === "connect") { setLayoutMode(false); setActiveIntent("grid_connection"); }
+    if (stage === "plan") { setLayoutMode(true); }
+    if (stage === "impact") { setLayoutMode(false); setActiveIntent("planning"); }
     if (stage === "act") {
       setLayoutMode(false);
       // Auto-create pipeline project when entering ACT stage

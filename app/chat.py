@@ -157,7 +157,7 @@ TOOLS: list[dict] = [
                 "capacity_mw": {"type": "number", "description": "Proposed generation capacity in MW", "default": 50},
                 "technology": {"type": "string", "description": "Technology type: solar, wind, bess", "default": "solar"},
                 "substation_id": {"type": "string", "description": "Optional: specific substation ID to connect to"},
-                "contingency": {"type": "boolean", "description": "Run N-1 contingency analysis", "default": false},
+                "contingency": {"type": "boolean", "description": "Run N-1 contingency analysis", "default": False},
             },
             "required": ["lat", "lon"],
         },
