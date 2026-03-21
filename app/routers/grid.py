@@ -1451,3 +1451,81 @@ async def live_grid_status():
     """Real-time UK grid demand, carbon intensity, and generation mix."""
     from utils.live_grid_status import get_live_status
     return await get_live_status()
+
+
+# ══════════════════════════════════════════════════════════
+# Revenue Stacking Model
+# ══════════════════════════════════════════════════════════
+
+@router.post("/api/grid/revenue-stack")
+async def api_revenue_stack(
+    capacity_mw: float = Query(50, ge=0.1),
+    technology: str = Query("solar+bess"),
+    bess_mwh: float = Query(None),
+    lat: float = Query(None),
+    lon: float = Query(None),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Multi-market revenue optimisation for BESS + solar + wind.
+
+    Calculates stacked revenue across wholesale (real Agile prices),
+    Balancing Mechanism, FFR, Dynamic Containment, Capacity Market,
+    and embedded benefits. Includes Monte Carlo P10/P50/P90, LCOE, IRR.
+    """
+    from utils.revenue_stacker import stack_revenue
+    result = await stack_revenue(
+        capacity_mw=capacity_mw,
+        technology=technology,
+        bess_mwh=bess_mwh,
+        lat=lat,
+        lon=lon,
+        pool=pool,
+    )
+    record_metric("revenue_stack", capacity_mw,
+                  labels={"technology": technology, "lat": lat or 0, "lon": lon or 0})
+    return result
+
+
+# ══════════════════════════════════════════════════════════
+# DNO Pre-Application Intelligence
+# ══════════════════════════════════════════════════════════
+
+@router.get("/api/grid/dno-intelligence")
+async def api_dno_intelligence_query(
+    dno: str = Query(None),
+    lat: float = Query(None),
+    lon: float = Query(None),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    DNO pre-application intelligence — per-DNO analytics.
+
+    Provide either dno code (UKPN, NGED, ENWL, NPG, SPEN, SSEN)
+    or lat/lon to auto-detect. Returns acceptance rates, queue depth,
+    technology bias, congestion hotspots, and recommended timing.
+    """
+    if dno is None and lat is None:
+        # Return all-DNO summary
+        from utils.dno_intelligence import all_dno_summary
+        return await all_dno_summary(pool)
+
+    from utils.dno_intelligence import analyse_dno
+    return await analyse_dno(pool, dno=dno, lat=lat, lon=lon)
+
+
+@router.get("/api/grid/dno-intelligence/{dno}")
+async def api_dno_intelligence_by_code(
+    dno: str,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    DNO pre-application intelligence for a specific DNO.
+
+    Returns acceptance rates, queue depth, technology bias,
+    congestion hotspots, risk factors, similar projects, and timing advice.
+    """
+    from utils.dno_intelligence import analyse_dno
+    result = await analyse_dno(pool, dno=dno)
+    record_metric("dno_intelligence", 1, labels={"dno": dno})
+    return result

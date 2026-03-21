@@ -364,16 +364,18 @@ export default function App() {
 
       <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
 
-      <DrawingToolbar
-        drawMode={drawState.mode}
-        onModeChange={handleDrawModeChange}
-        featureCount={drawState.features.features.length}
-        selectedIndex={drawState.selectedIndex}
-        onDeleteFeature={handleDeleteDrawFeature}
-        onClearAll={handleClearDrawFeatures}
-        onExportGeoJSON={handleExportGeoJSON}
-        measurement={measurement}
-      />
+      <Suspense fallback={null}>
+        <DrawingToolbar
+          drawMode={drawState.mode}
+          onModeChange={handleDrawModeChange}
+          featureCount={drawState.features.features.length}
+          selectedIndex={drawState.selectedIndex}
+          onDeleteFeature={handleDeleteDrawFeature}
+          onClearAll={handleClearDrawFeatures}
+          onExportGeoJSON={handleExportGeoJSON}
+          measurement={measurement}
+        />
+      </Suspense>
 
       {/* Site picker — SITE stage floating search */}
       {workflowStage === "site" && (
@@ -384,31 +386,33 @@ export default function App() {
         <div className="pick-banner">Click anywhere on the map to select a site</div>
       )}
 
-      {layoutMode && solarCatalogue && (
-        <ComponentPalette catalogue={solarCatalogue} />
-      )}
+      <Suspense fallback={null}>
+        {layoutMode && solarCatalogue && (
+          <ComponentPalette catalogue={solarCatalogue} />
+        )}
 
-      {/* Asset Dock — drag components onto map */}
-      <AssetDock
-        placedAssets={placedAssets}
-        mapInstance={mapInstance}
-        onAssetPlaced={addPlacedAsset}
-      />
-
-      {/* Energy Flow Panel — right side Sankey */}
-      {energyFlowOpen && (
-        <EnergyFlowPanel
+        {/* Asset Dock — drag components onto map */}
+        <AssetDock
           placedAssets={placedAssets}
-          solarYield={solarYield}
-          gridContext={gridContext}
-          onClose={() => setEnergyFlowOpen(false)}
+          mapInstance={mapInstance}
+          onAssetPlaced={addPlacedAsset}
         />
-      )}
 
-      {/* Site dashboard overlay */}
-      {dashboardOpen && (
-        <SiteDashboard onClose={() => setDashboardOpen(false)} />
-      )}
+        {/* Energy Flow Panel — right side Sankey */}
+        {energyFlowOpen && (
+          <EnergyFlowPanel
+            placedAssets={placedAssets}
+            solarYield={solarYield}
+            gridContext={gridContext}
+            onClose={() => setEnergyFlowOpen(false)}
+          />
+        )}
+
+        {/* Site dashboard overlay */}
+        {dashboardOpen && (
+          <SiteDashboard onClose={() => setDashboardOpen(false)} />
+        )}
+      </Suspense>
 
     </div>
   );
@@ -459,6 +463,7 @@ export default function App() {
       <CopilotWidget onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} onAction={handleCmdAction} />
 
       {/* Command Palette */}
+      <Suspense fallback={null}>
       <CommandPalette
         open={cmdPaletteOpen}
         onClose={() => setCmdPaletteOpen(false)}
@@ -565,6 +570,7 @@ export default function App() {
       {thermalModelOpen && (
         <ThermalModelPanel onClose={() => setThermalModelOpen(false)} />
       )}
+      </Suspense>
     </AppShell>
   );
 }

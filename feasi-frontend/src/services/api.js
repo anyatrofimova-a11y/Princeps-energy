@@ -81,6 +81,18 @@ const api = {
     queueDepth:   (substationId) => get(`/api/grid/queue-depth/${substationId}`),
     queueSummary: (bbox) => bbox ? get(`/api/grid/queue-summary?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`) : get("/api/grid/queue-summary"),
     liveStatus:   () => get("/api/grid/live-status"),
+    // Revenue Stacking
+    revenueStack: (mw, tech, bessMwh, lat, lon) => {
+      const q = new URLSearchParams({ capacity_mw: mw, technology: tech });
+      if (bessMwh != null) q.set("bess_mwh", bessMwh);
+      if (lat != null) q.set("lat", lat);
+      if (lon != null) q.set("lon", lon);
+      return post(`/api/grid/revenue-stack?${q}`);
+    },
+    // DNO Pre-Application Intelligence
+    dnoIntelligence: (dno) => get(`/api/grid/dno-intelligence/${enc(dno)}`),
+    dnoIntelligenceNear: (lat, lon) => get(`/api/grid/dno-intelligence?lat=${lat}&lon=${lon}`),
+    dnoIntelligenceAll: () => get("/api/grid/dno-intelligence"),
     // Connection offer forecasting
     connectionForecast: (lat, lon, mw = 50, tech = "solar") =>
       post(`/api/grid/connection-forecast?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(tech)}`),
@@ -645,6 +657,13 @@ const api = {
     financial: (lat, lon, siteName, capacityMw = 50, technology = "solar", ppaPrice = 55) =>
       fetch(`/api/reports/financial?lat=${lat}&lon=${lon}&site_name=${enc(siteName)}&capacity_mw=${capacityMw}&technology=${enc(technology)}&ppa_price=${ppaPrice}`, { method: "POST" })
         .then(r => { if (!r.ok) throw new Error(`Report failed: ${r.status}`); return r.blob(); }),
+  },
+
+  prospector: {
+    planningRisk: (lat, lon, mw, tech) =>
+      post("/api/prospector/planning-risk", { lat, lon, capacity_mw: mw, technology: tech }),
+    batchScreen: (candidates, topN = 20) =>
+      post("/api/prospector/batch-screen", { candidates, top_n: topN }),
   },
 
   bipv: {

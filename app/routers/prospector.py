@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from typing import Any
 
+import asyncpg
+from fastapi import APIRouter, Body, Depends, Query
+from pydantic import BaseModel
+
+from app.deps import get_pool
 from utils.site_prospector import (
     score_candidate_site,
     regional_scan,
@@ -50,3 +55,54 @@ async def api_find_similar(
 async def api_regions():
     """List UK regions with resource data."""
     return UK_REGIONAL_RESOURCE
+
+
+# ---------------------------------------------------------------------------
+# Planning Risk Scoring
+# ---------------------------------------------------------------------------
+
+class PlanningRiskRequest(BaseModel):
+    lat: float
+    lon: float
+    capacity_mw: float = 10.0
+    technology: str = "solar"
+
+
+@router.post("/api/prospector/planning-risk")
+async def planning_risk(
+    body: PlanningRiskRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Score planning risk for a proposed energy development site."""
+    from utils.planning_risk_scorer import score_planning_risk
+    return await score_planning_risk(
+        pool, body.lat, body.lon, body.capacity_mw, body.technology,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Batch Site Screening
+# ---------------------------------------------------------------------------
+
+class BatchCandidate(BaseModel):
+    lat: float
+    lon: float
+    capacity_mw: float = 10.0
+    technology: str = "solar"
+    name: str | None = None
+
+
+class BatchScreenRequest(BaseModel):
+    candidates: list[BatchCandidate]
+    top_n: int = 20
+
+
+@router.post("/api/prospector/batch-screen")
+async def batch_screen(
+    body: BatchScreenRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Batch screen multiple candidate sites and return ranked shortlist."""
+    from utils.batch_screener import screen_sites
+    candidates = [c.model_dump() for c in body.candidates]
+    return await screen_sites(pool, candidates, top_n=body.top_n)

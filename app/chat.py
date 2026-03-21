@@ -674,6 +674,46 @@ TOOLS: list[dict] = [
             "required": ["lat", "lon"],
         },
     },
+    {
+        "name": "score_planning_risk",
+        "description": "Score planning risk for a proposed energy site. Checks REPD outcomes, residential proximity, agricultural land classification, grid queue congestion, environmental designations, and technology-specific risk. Returns 0-100 risk score with GO/CAUTION/NO-GO verdict.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "capacity_mw": {"type": "number", "description": "Proposed capacity in MW", "default": 10},
+                "technology": {"type": "string", "description": "Technology type: solar, wind, battery, bess, hydrogen", "default": "solar"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "batch_screen_sites",
+        "description": "Batch screen multiple candidate sites for energy development. Scores each site on grid headroom, planning risk, solar resource, land suitability, and constraint cost. Returns ranked shortlist with composite scores.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "candidates": {
+                    "type": "array",
+                    "description": "List of candidate sites to screen",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "lat": {"type": "number"},
+                            "lon": {"type": "number"},
+                            "capacity_mw": {"type": "number", "default": 10},
+                            "technology": {"type": "string", "default": "solar"},
+                            "name": {"type": "string"},
+                        },
+                        "required": ["lat", "lon"],
+                    },
+                },
+                "top_n": {"type": "integer", "description": "Return top N sites", "default": 20},
+            },
+            "required": ["candidates"],
+        },
+    },
 ]
 
 
@@ -1326,6 +1366,49 @@ async def execute_tool(
                 "historical_count": len(result.get("historical_comparisons", [])),
                 "avg_historical_months": result.get("avg_historical_planning_to_operational_months"),
                 "tec_projects_count": len(result.get("tec_projects_nearby", [])),
+            }
+
+        elif name == "score_planning_risk":
+            from utils.planning_risk_scorer import score_planning_risk as _score_risk
+            result = await _score_risk(
+                pool,
+                args["lat"], args["lon"],
+                args.get("capacity_mw", 10),
+                args.get("technology", "solar"),
+            )
+            return {
+                "risk_score": result.get("risk_score"),
+                "risk_level": result.get("risk_level"),
+                "verdict": result.get("verdict"),
+                "factors": result.get("factors"),
+                "local_outcomes": result.get("local_outcomes"),
+                "recommendations": result.get("recommendations"),
+            }
+
+        elif name == "batch_screen_sites":
+            from utils.batch_screener import screen_sites as _screen
+            result = await _screen(
+                pool,
+                args["candidates"],
+                top_n=args.get("top_n", 20),
+            )
+            # Compact: return summary + ranked sites
+            ranked = result.get("ranked", [])
+            return {
+                "summary": result.get("summary"),
+                "total_screened": result.get("total_screened"),
+                "sites": [
+                    {
+                        "rank": i + 1,
+                        "lat": s.get("lat"),
+                        "lon": s.get("lon"),
+                        "label": s.get("label"),
+                        "composite_score": s.get("composite_score"),
+                        "verdict": s.get("verdict"),
+                        "scores": s.get("scores"),
+                    }
+                    for i, s in enumerate(ranked[:20])
+                ],
             }
 
         else:

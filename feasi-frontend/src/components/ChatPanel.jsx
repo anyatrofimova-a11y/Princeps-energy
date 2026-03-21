@@ -32,6 +32,8 @@ const TOOL_LABELS = {
   score_candidate_site_prospector: "Site Scoring",
   scan_region_for_sites: "Regional Scan",
   find_similar_sites: "Similar Sites",
+  score_planning_risk: "Planning Risk",
+  batch_screen_sites: "Batch Screening",
 };
 
 /**
