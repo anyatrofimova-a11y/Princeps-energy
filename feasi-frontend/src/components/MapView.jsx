@@ -2572,7 +2572,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
       // Location picker click handler (global — fires for any map click)
       map.on("click", (e) => {
-        console.log("[MapView] click event — pickMode:", map._pickMode, "onPick:", !!map._onPick);
+        // Draw mode takes priority — don't pick a site while drawing
+        if (map._drawMode && map._drawMode !== "view") return;
         if (!map._pickMode || !map._onPick) return;
         const { lng, lat } = e.lngLat;
         console.log("[MapView] pick fired:", { lat, lon: lng });
@@ -2672,10 +2673,11 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         },
       });
 
-      // Drawing click handler
+      // Drawing click handler — draw mode takes priority over pick mode
       map.on("click", (e) => {
-        if (map._pickMode) return;
+        console.log("[MapView] draw-click check — drawMode:", map._drawMode, "pickMode:", map._pickMode);
         if (!map._drawMode || map._drawMode === "view") return;
+        console.log("[MapView] draw-click ACTIVE — mode:", map._drawMode);
 
         const { lng, lat } = e.lngLat;
 

@@ -282,7 +282,7 @@ def liquid_cooling_comparison(
         "recommendation_reason": (
             f"{best['name']} achieves PUE {best['pue']:.3f}, "
             f"supports {best['max_rack_kw']} kW/rack, "
-            f"{'zero water' if best['water_free'] else f'{best[\"annual_water_m3\"]:,} m³/yr water'}, "
+            f"{'zero water' if best['water_free'] else str(best['annual_water_m3']) + ' m³/yr water'}, "
             f"{best['heat_reuse_grade']} heat reuse potential"
         ),
     }

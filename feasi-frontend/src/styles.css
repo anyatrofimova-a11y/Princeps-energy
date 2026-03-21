@@ -3486,8 +3486,8 @@ input[type="range"] { accent-color: var(--accent); }
 .draw-toolbar {
   position: absolute;
   top: 54px;
-  left: 12px;
-  z-index: 15;
+  left: 52px;
+  z-index: 16;
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   border-radius: 10px;
@@ -5710,6 +5710,71 @@ input[type="range"] { accent-color: var(--accent); }
 }
 
 /* Digital Twin Overlay */
+/* ── Unified Twin wrapper ── */
+.unified-twin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--cds-background);
+  display: flex;
+  flex-direction: column;
+}
+.unified-twin-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #0F0E0A;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  z-index: 10;
+  flex-shrink: 0;
+}
+.unified-twin-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  background: transparent;
+  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.unified-twin-mode-btn:hover { color: #ccc; border-color: rgba(255,255,255,0.2); }
+.unified-twin-mode-btn.active {
+  color: #fff;
+  background: rgba(212,160,24,0.15);
+  border-color: #D4A018;
+}
+.unified-twin-mode-spacer { flex: 1; }
+.unified-twin-close {
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px;
+  background: transparent; color: #888; cursor: pointer;
+}
+.unified-twin-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.unified-twin-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+.unified-twin-loading {
+  display: flex; align-items: center; justify-content: center;
+  height: 100%; color: #888; font-size: 13px;
+}
+
+/* When inside UnifiedTwin, inner twins should fill parent, not be fixed */
+.unified-twin-content .digital-twin-overlay,
+.unified-twin-content .terrain-twin-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
 .digital-twin-overlay {
   position: fixed;
   inset: 0;

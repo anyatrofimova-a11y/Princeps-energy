@@ -27,6 +27,7 @@ import { useWorkspace } from "./contexts/WorkspaceContext";
 // ── Lazy-loaded overlays (split into separate chunks) ──
 const DigitalTwin = lazy(() => import("./components/DigitalTwin"));
 const TerrainTwin = lazy(() => import("./components/TerrainTwin"));
+const UnifiedTwin = lazy(() => import("./components/UnifiedTwin"));
 const GridTwin = lazy(() => import("./components/GridTwin"));
 const BEMSDigitalTwin = lazy(() => import("./components/BEMSDigitalTwin"));
 const BESSFacilityTwin = lazy(() => import("./components/BESSFacilityTwin"));
@@ -604,22 +605,17 @@ export default function App() {
 
       {/* Pipeline is now a workspace tab — no floating overlay */}
 
-      {/* 3D Site Digital Twin — satellite-textured terrain with real infrastructure */}
-      {digitalTwinOpen && (
+      {/* Unified Digital Twin — Site view + Terrain analysis in one overlay */}
+      {(digitalTwinOpen || terrainTwinOpen) && (
         <Suspense fallback={<LazyFallback />}>
-          <DigitalTwin data={twinData} realContext={realSiteContext} onClose={() => setDigitalTwinOpen(false)} />
-        </Suspense>
-      )}
-
-      {/* Terrain Analysis Twin — LiDAR elevation/slope/aspect/viewshed/hydrology */}
-      {terrainTwinOpen && (
-        <Suspense fallback={<LazyFallback />}>
-          <TerrainTwin
+          <UnifiedTwin
+            initialMode={terrainTwinOpen ? "terrain" : "site"}
+            data={twinData}
+            realContext={realSiteContext}
             lat={pickedLocation?.lat || 52.5}
             lon={pickedLocation?.lon || -1.5}
-            zoom={14}
             placedAssets={placedAssets}
-            onClose={() => setTerrainTwinOpen(false)}
+            onClose={() => { setDigitalTwinOpen(false); setTerrainTwinOpen(false); }}
           />
         </Suspense>
       )}
