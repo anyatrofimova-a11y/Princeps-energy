@@ -580,11 +580,15 @@ export default function TerrainTwin({
     async function fetchData() {
       try {
         setLoadingMsg("Fetching LiDAR terrain data...");
+        const lidarController = new AbortController();
+        const lidarTimeout = setTimeout(() => lidarController.abort(), 90000); // 90s timeout
         const lidarRes = await fetch("/api/terrain/lidar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lat, lon, radius_m: 500, resolution_m: 2 }),
+          body: JSON.stringify({ lat, lon, radius_m: 300, resolution_m: 2 }),
+          signal: lidarController.signal,
         });
+        clearTimeout(lidarTimeout);
         const lidar = await lidarRes.json();
         if (cancelled) return;
 
@@ -601,17 +605,20 @@ export default function TerrainTwin({
           fetch("/api/terrain/analyse", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ lat, lon, radius_m: 500 }),
+            body: JSON.stringify({ lat, lon, radius_m: 300 }),
+            signal: AbortSignal.timeout(90000),
           }).then(r => r.json()),
           fetch("/api/terrain/viewshed", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ lat, lon, target_height_m: 3, radius_m: 500 }),
+            body: JSON.stringify({ lat, lon, target_height_m: 3, radius_m: 300 }),
+            signal: AbortSignal.timeout(90000),
           }).then(r => r.json()),
           fetch("/api/terrain/hydrology", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ lat, lon, radius_m: 500 }),
+            body: JSON.stringify({ lat, lon, radius_m: 300 }),
+            signal: AbortSignal.timeout(90000),
           }).then(r => r.json()),
         ]);
 
