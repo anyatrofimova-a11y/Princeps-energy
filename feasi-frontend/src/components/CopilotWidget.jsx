@@ -33,15 +33,9 @@ const TOOL_LABELS = {
   batch_screen_sites: "Batch Screening",
 };
 
-/** Copilot tab definitions — mirrors ViewTabs style */
+/** Copilot tab definitions — simplified to just chat */
 const COPILOT_TABS = [
   { id: "chat",    label: "AI Copilot",  icon: "M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10 10 10 0 0 1-7.07-2.93M2 12h4l2-3 3 6 2-3h3" },
-  { id: "grid",    label: "Grid",        icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" },
-  { id: "node",    label: "Node",        icon: "M16 16v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 3" },
-  { id: "connect", label: "Connection",  icon: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" },
-  { id: "detail",  label: "Detail",      icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
-  { id: "design",  label: "Design",      icon: "M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" },
-  { id: "land",    label: "Land",        icon: "M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" },
 ];
 
 function MessageText({ text }) {

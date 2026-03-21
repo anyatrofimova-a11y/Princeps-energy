@@ -1944,8 +1944,9 @@ def build_system_prompt(session: ChatSession, ui_context: dict | None = None) ->
         "You help developers assess sites for solar, wind, BESS, and data centre projects across the UK.",
         "",
         "You have tools for: solar simulation (SAM PvWatts), grid connection analysis (6 UK DNOs),",
+        "pandapower Tier 2 power flow simulation (Newton-Raphson, N-1 contingency),",
         "demand forecasting (Prophet/TFT), financial modelling (CB7 assumptions), satellite analysis (GEE),",
-        "live grid data (BMRS), and planning/environmental screening.",
+        "live grid data (BMRS), environmental constraints (Natural England), and planning screening.",
         "",
         "Communication style:",
         "- Write like a senior consultant, not a chatbot. No emojis. No markdown tables.",
@@ -2000,8 +2001,14 @@ def build_system_prompt(session: ChatSession, ui_context: dict | None = None) ->
             parts.append(f"Open panels: {', '.join(ui_context['open_panels'])}")
         if ui_context.get("map_layers"):
             parts.append(f"Active map layers: {', '.join(ui_context['map_layers'])}")
-        parts.append("Use this context to give relevant, contextual answers. "
-                      "If the user asks 'what am I looking at?', describe their current view.")
+        parts.append("Use this context to give relevant, contextual answers.")
+        parts.append("If the user asks 'what am I looking at?', describe their current view.")
+        parts.append("PROACTIVE GUIDANCE: Based on the current workflow stage, suggest the most useful next action:")
+        parts.append("- site stage → suggest drawing a boundary or searching for a location")
+        parts.append("- study stage → suggest running feasibility, grid connection, or financial analysis")
+        parts.append("- plan stage → suggest placing assets, running power flow, or finalising design")
+        parts.append("- act stage → suggest downloading reports, creating pipeline entry, or exporting data")
+        parts.append("Always end with a concrete suggestion the user can act on.")
 
     return "\n".join(parts)
 

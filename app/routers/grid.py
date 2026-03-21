@@ -1682,7 +1682,7 @@ async def api_train_asset_classifier(n_per_type: int = Query(120, ge=50, le=500)
 # Environmental Constraint Assessment
 # ══════════════════════════════════════════════════════════
 
-@router.get("/api/grid/constraints")
+@router.get("/api/grid/environmental-constraints")
 async def api_environmental_constraints(
     lat: float = Query(..., description="Latitude"),
     lon: float = Query(..., description="Longitude"),

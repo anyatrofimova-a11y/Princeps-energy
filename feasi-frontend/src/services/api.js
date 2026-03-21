@@ -103,7 +103,8 @@ const api = {
     circuitDownstream: (subId) => get(`/grid/cim/downstream/${enc(subId)}`),
     circuitHealth: () => get("/grid/cim/health"),
     // National Grid overlays
-    constraints:  (bbox) => bbox ? get(`/api/grid/constraints?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`) : get("/api/grid/constraints"),
+    constraints:  (hoursAhead = 48) => get(`/api/grid/constraints?hours_ahead=${hoursAhead}`),
+    environmentalConstraints: (lat, lon, radiusM = 2000) => get(`/api/grid/environmental-constraints?lat=${lat}&lon=${lon}&radius_m=${radiusM}`),
     queueDepth:   (substationId) => get(`/api/grid/queue-depth/${substationId}`),
     queueSummary: (bbox) => bbox ? get(`/api/grid/queue-summary?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`) : get("/api/grid/queue-summary"),
     liveStatus:   () => get("/api/grid/live-status"),
