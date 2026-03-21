@@ -1569,3 +1569,133 @@ async def api_energisation_timeline(
     record_metric("energisation_timeline", req.capacity_mw,
                   labels={"technology": req.technology, "lat": req.lat, "lon": req.lon})
     return result
+
+
+# ══════════════════════════════════════════════════════════
+# ML Grid Asset Classifier
+# ══════════════════════════════════════════════════════════
+
+@router.post("/api/grid/classify-asset")
+async def api_classify_asset(
+    voltage_kv: float = Query(33),
+    capacity_mw: float = Query(0),
+    demand_mw: float = Query(0),
+    generation_mw: float = Query(0),
+    area_m2: float = Query(5000),
+    building_count: int = Query(2),
+    panel_area_m2: float = Query(0),
+    turbine_count: int = Query(0),
+    height_m: float = Query(10),
+    transformer_count: int = Query(1),
+    container_count: int = Query(0),
+    year_commissioned: int = Query(2020),
+    latitude: float = Query(52.0),
+    longitude: float = Query(-1.0),
+    has_chimney: int = Query(0),
+):
+    """Classify an energy asset from observable features using XGBoost.
+    Returns: asset type, confidence, estimated capacity, condition, upgrade priority, SHAP factors."""
+    from utils.ml_grid_asset_classifier import classify_asset
+    features = {
+        "voltage_kv": voltage_kv, "capacity_mw": capacity_mw,
+        "demand_mw": demand_mw, "generation_mw": generation_mw,
+        "area_m2": area_m2, "building_count": building_count,
+        "panel_area_m2": panel_area_m2, "turbine_count": turbine_count,
+        "height_m": height_m, "transformer_count": transformer_count,
+        "container_count": container_count, "year_commissioned": year_commissioned,
+        "latitude": latitude, "longitude": longitude,
+        "has_chimney": has_chimney,
+    }
+    return classify_asset(features)
+
+
+@router.post("/api/grid/classify-assets-batch")
+async def api_classify_assets_batch(assets: list[dict]):
+    """Classify multiple grid assets in batch. Returns ranked by upgrade priority."""
+    from utils.ml_grid_asset_classifier import classify_batch
+    if not assets:
+        raise HTTPException(400, "Empty asset list")
+    if len(assets) > 200:
+        raise HTTPException(400, "Maximum 200 assets per batch")
+    return {"assets": classify_batch(assets), "count": len(assets)}
+
+
+@router.post("/api/grid/identify-area-assets")
+async def api_identify_area_assets(
+    lat: float = Query(51.5),
+    lon: float = Query(-0.1),
+    radius_km: float = Query(10),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Identify and classify all grid assets in an area from database.
+    Queries substations + REPD generators within radius, classifies each
+    with ML, and returns ranked by upgrade priority."""
+    from utils.ml_grid_asset_classifier import identify_grid_assets_in_area
+
+    # Fetch substations from DB
+    substations = []
+    try:
+        rows = await pool.fetch("""
+            SELECT name, voltage_kv, demand_headroom_mw as headroom_mw,
+                   ST_Y(geom::geometry) as lat, ST_X(geom::geometry) as lon
+            FROM grid_substations
+            WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+            LIMIT 50
+        """, lon, lat, radius_km * 1000)
+        substations = [dict(r) for r in rows]
+    except Exception as e:
+        log.warning("Substation query failed: %s", e)
+
+    # Fetch REPD generators
+    generators = []
+    try:
+        rows = await pool.fetch("""
+            SELECT site_name as name, installed_capacity_mw as capacity_mw,
+                   technology, status, ST_Y(geom::geometry) as lat, ST_X(geom::geometry) as lon
+            FROM repd_projects
+            WHERE ST_DWithin(geom, ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)
+            AND status IN ('Operational', 'Under Construction', 'Awaiting Construction')
+            LIMIT 100
+        """, lon, lat, radius_km * 1000)
+        generators = [dict(r) for r in rows]
+    except Exception as e:
+        log.warning("REPD query failed: %s", e)
+
+    assets = identify_grid_assets_in_area(substations, generators)
+    return {
+        "assets": assets,
+        "count": len(assets),
+        "substations_found": len(substations),
+        "generators_found": len(generators),
+        "search_radius_km": radius_km,
+    }
+
+
+@router.post("/api/grid/train-asset-classifier")
+async def api_train_asset_classifier(n_per_type: int = Query(120, ge=50, le=500)):
+    """Retrain the grid asset classifier on synthetic data."""
+    from utils.ml_grid_asset_classifier import train_all_models
+    return train_all_models(n_per_type)
+
+
+# ══════════════════════════════════════════════════════════
+# Environmental Constraint Assessment
+# ══════════════════════════════════════════════════════════
+
+@router.get("/api/grid/constraints")
+async def api_environmental_constraints(
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude"),
+    radius_m: float = Query(2000, description="Search radius in metres"),
+    include_species: bool = Query(True, description="Include NBN Atlas species check"),
+    include_carbon: bool = Query(True, description="Include carbon intensity baseline"),
+):
+    """Comprehensive environmental constraint assessment using real UK government APIs.
+
+    Queries: Natural England (SSSI, SAC, SPA, AONB, NNR, Ramsar, Ancient Woodland),
+    planning.data.gov.uk (Green Belt, conservation areas, listed buildings),
+    EA Flood Monitoring, Carbon Intensity API, NBN Atlas species records.
+
+    Returns: CLEAR/CONSTRAINED/BLOCKED verdict with required consultations and legislation."""
+    from utils.environmental_constraints import check_all_constraints
+    return await check_all_constraints(lat, lon, radius_m=radius_m)

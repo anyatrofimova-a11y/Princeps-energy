@@ -26,6 +26,7 @@ import { useWorkspace } from "./contexts/WorkspaceContext";
 
 // ── Lazy-loaded overlays (split into separate chunks) ──
 const DigitalTwin = lazy(() => import("./components/DigitalTwin"));
+const TerrainTwin = lazy(() => import("./components/TerrainTwin"));
 const GridTwin = lazy(() => import("./components/GridTwin"));
 const BEMSDigitalTwin = lazy(() => import("./components/BEMSDigitalTwin"));
 const BESSFacilityTwin = lazy(() => import("./components/BESSFacilityTwin"));
@@ -549,7 +550,7 @@ export default function App() {
       case "dc-twin": setDcTwinOpen(true); break;
       case "dc-landing": setDcLandingOpen(true); break;
       case "dc-compare": setDcComparisonOpen(true); break;
-      case "pipeline": setPipelineOpen(true); break;
+      case "pipeline": setActiveWorkspace("pipeline"); break;
       case "compare": setScenarioCompareOpen(true); break;
       case "demo": setDemoOpen(true); break;
       case "settings": setSettingsMode(true); break;
@@ -570,7 +571,7 @@ export default function App() {
       onDcTwin={() => setDcTwinOpen(true)}
       onDcLanding={() => setDcLandingOpen(true)}
       onDcCompare={() => setDcComparisonOpen(true)}
-      onPipeline={() => setPipelineOpen(true)}
+      onPipeline={() => setActiveWorkspace("pipeline")}
       onPitch={() => setPitchMode(true)}
       onNomExplorer={() => setNomMode(true)}
       onSettings={() => setSettingsMode(true)}
@@ -595,32 +596,17 @@ export default function App() {
         <OnboardingDemo onClose={() => { setDemoOpen(false); localStorage.setItem("princeps_onboarded", "1"); }} />
       )}
 
-      {/* Project Pipeline — Kanban board */}
-      {pipelineOpen && (
-        <ProjectPipeline
-          onClose={() => setPipelineOpen(false)}
-          onSelectProject={async (p) => {
-            if (p.lat && p.lon) {
-              setPickedLocation({ lat: p.lat, lon: p.lon });
-              if (mapInstance) {
-                mapInstance.flyTo({ center: [p.lon, p.lat], zoom: 14, pitch: 60, duration: 2000 });
-              }
-              // Load site data for the selected project
-              try {
-                const data = await api.site.fromLocation(p.lat, p.lon);
-                if (data?.parcel_id) {
-                  setParcelId(data.parcel_id);
-                  await loadSite(data.parcel_id, samCapacity, samDay);
-                }
-              } catch (e) { console.warn("Pipeline site load:", e); }
-            }
-          }}
-        />
-      )}
+      {/* Pipeline is now a workspace tab — no floating overlay */}
 
-      {/* 3D Site Digital Twin overlay — works with or without data */}
+      {/* 3D Site Digital Twin — satellite-textured terrain with deck.gl */}
       {digitalTwinOpen && (
-        <DigitalTwin data={twinData} realContext={realSiteContext} onClose={() => setDigitalTwinOpen(false)} />
+        <TerrainTwin
+          lat={pickedLocation?.lat || 52.5}
+          lon={pickedLocation?.lon || -1.5}
+          zoom={14}
+          placedAssets={placedAssets}
+          onClose={() => setDigitalTwinOpen(false)}
+        />
       )}
 
       {/* 3D Grid Digital Twin overlay */}

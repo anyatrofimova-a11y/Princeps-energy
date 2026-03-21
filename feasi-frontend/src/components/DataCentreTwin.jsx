@@ -59,7 +59,7 @@ const LERP_SPEED = 5;
 const REDUNDANCY_OPTIONS = ["N", "N+1", "2N", "2N+1"];
 const COOLING_OPTIONS = ["mechanical", "free_cooling", "hybrid", "evaporative"];
 const TIER_OPTIONS = [1, 2, 3, 4];
-const VIEW_MODES = ["plan", "monitor", "simulate", "feasibility"];
+const VIEW_MODES = ["plan", "design", "monitor", "simulate", "feasibility"];
 
 /* ═══════════════════════════════════════════════════════════════════════════
    3D Scene Components — Rack-level DC visualization
@@ -531,6 +531,257 @@ function DCScene({ rackLayout, telemetry, selectedRack, onSelectRack, colorBy, c
   );
 }
 
+/* ── Hourly CFE Chart ── */
+function CFEChart({ data, height = 160 }) {
+  if (!data?.hours) return null;
+  const hours = data.hours;
+  const w = 280, h = height, pad = 24;
+  const chartW = w - pad * 2, chartH = h - pad * 1.5;
+  const barW = chartW / 24 - 1;
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 9, color: T.textSec, fontWeight: 700, letterSpacing: "0.06em", marginBottom: 4 }}>24/7 CARBON-FREE ENERGY</div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", maxHeight: h }}>
+        {hours.map((hr, i) => {
+          const x = pad + i * (barW + 1);
+          const cfePct = hr.cfe_pct || 0;
+          const barH = (cfePct / 100) * chartH;
+          const color = cfePct >= 90 ? "#16a34a" : cfePct >= 60 ? "#D4A018" : "#8B3A3A";
+          return (
+            <g key={i}>
+              <rect x={x} y={pad + chartH - barH} width={barW} height={barH} fill={color} opacity={0.7} rx={1} />
+              {/* Grid carbon dot */}
+              <circle cx={x + barW / 2} cy={pad + chartH + 8} r={2.5}
+                fill={`hsl(${120 - Math.min(1, (hr.carbon_gco2 || 0) / 400) * 120}, 70%, 45%)`} />
+            </g>
+          );
+        })}
+        {/* 90% target line */}
+        <line x1={pad} y1={pad + chartH * 0.1} x2={pad + chartW} y2={pad + chartH * 0.1}
+          stroke="#16a34a" strokeWidth={0.5} strokeDasharray="3,2" />
+        <text x={pad - 2} y={pad + chartH * 0.1 + 3} textAnchor="end" fontSize={7} fill="#16a34a">90%</text>
+        {/* Axis labels */}
+        {[0, 6, 12, 18].map(hr => (
+          <text key={hr} x={pad + hr * (barW + 1) + barW / 2} y={h - 2}
+            textAnchor="middle" fontSize={7} fill="#888">{hr}h</text>
+        ))}
+        {/* Legend */}
+        <rect x={pad} y={1} width={6} height={6} fill="#16a34a" rx={1} />
+        <text x={pad + 9} y={7} fontSize={6} fill="#888">CFE%</text>
+        <circle cx={pad + 45} cy={4} r={2.5} fill="#f59e0b" />
+        <text x={pad + 50} y={7} fontSize={6} fill="#888">Grid CO₂</text>
+      </svg>
+      {data.summary && (
+        <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: data.summary.avg_cfe >= 90 ? "#16a34a" : "#D4A018" }}>
+              {data.summary.avg_cfe?.toFixed(0)}%
+            </div>
+            <div style={{ fontSize: 7, color: T.textSec }}>AVG CFE</div>
+          </div>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{data.summary.hours_above_90 || 0}/24</div>
+            <div style={{ fontSize: 7, color: T.textSec }}>HRS &gt;90%</div>
+          </div>
+          <div style={{ flex: 1, textAlign: "center" }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#00bcd4" }}>{data.summary.avg_carbon?.toFixed(0) || "—"}</div>
+            <div style={{ fontSize: 7, color: T.textSec }}>gCO₂/kWh</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── ASHRAE Compliance Badge ── */
+function ASHRAEBadge({ data }) {
+  if (!data) return null;
+  const classColors = { Recommended: "#16a34a", A1: "#22c55e", A2: "#D4A018", A3: "#f59e0b", A4: "#8B3A3A" };
+  return (
+    <div style={{ marginTop: 8, padding: 8, background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <span style={{ fontSize: 9, color: T.textSec, fontWeight: 700, letterSpacing: "0.06em" }}>ASHRAE TC 9.9</span>
+        <span style={{
+          padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 900,
+          background: classColors[data.class] || "#888", color: "#fff",
+        }}>{data.class}</span>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 10 }}>
+        <div><span style={{ color: T.textSec }}>Max Temp</span> <span style={{ color: T.text, fontWeight: 600 }}>{data.max_temp_c?.toFixed(1)}°C</span></div>
+        <div><span style={{ color: T.textSec }}>Min Temp</span> <span style={{ color: T.text, fontWeight: 600 }}>{data.min_temp_c?.toFixed(1)}°C</span></div>
+        <div><span style={{ color: T.textSec }}>Free Cool</span> <span style={{ color: "#00bcd4", fontWeight: 600 }}>{data.free_cooling_hours || 0}h</span></div>
+        <div><span style={{ color: T.textSec }}>Outside Rec.</span> <span style={{ color: data.hours_outside_recommended > 500 ? T.orange : T.green, fontWeight: 600 }}>{data.hours_outside_recommended || 0}h</span></div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Tier Compliance Badge ── */
+function TierBadge({ data }) {
+  if (!data) return null;
+  const tierColors = { 1: "#8B3A3A", 2: "#D4A018", 3: "#16a34a", 4: "#3b82f6" };
+  return (
+    <div style={{ marginTop: 8, padding: 8, background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <span style={{ fontSize: 9, color: T.textSec, fontWeight: 700, letterSpacing: "0.06em" }}>UPTIME TIER</span>
+        <span style={{
+          padding: "2px 10px", borderRadius: 4, fontSize: 11, fontWeight: 900,
+          background: tierColors[data.tier] || "#888", color: "#fff",
+        }}>{data.label || `Tier ${data.tier}`}</span>
+      </div>
+      <div style={{ fontSize: 10, color: T.text }}>
+        <div>Availability: <span style={{ fontWeight: 700 }}>{data.availability_pct}%</span></div>
+        <div>Max downtime: <span style={{ fontWeight: 700 }}>{data.annual_downtime_hours}h/yr</span></div>
+      </div>
+      {data.gaps?.length > 0 && (
+        <div style={{ marginTop: 4, fontSize: 9, color: T.orange }}>
+          {data.gaps.map((g, i) => <div key={i}>⚠ {g}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Power Chain Diagram ── */
+function PowerChainSVG({ data }) {
+  if (!data?.stages) return null;
+  const stages = data.stages;
+  const w = 260, stageH = 28, gap = 4;
+  const h = stages.length * (stageH + gap) + 20;
+  const colors = ["#f44336", "#ff9800", "#D4A018", "#4caf50", "#00bcd4", "#3b82f6", "#9c27b0", "#78909c"];
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 9, color: T.textSec, fontWeight: 700, letterSpacing: "0.06em", marginBottom: 4 }}>POWER CHAIN</div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", maxHeight: h }}>
+        {stages.map((s, i) => {
+          const y = 4 + i * (stageH + gap);
+          const col = colors[i % colors.length];
+          return (
+            <g key={i}>
+              <rect x={4} y={y} width={w - 8} height={stageH} rx={4}
+                fill={`${col}15`} stroke={`${col}44`} strokeWidth={1} />
+              <circle cx={16} cy={y + stageH / 2} r={4} fill={col} opacity={0.6} />
+              <text x={26} y={y + stageH / 2 + 3} fontSize={9} fontWeight={600} fill={T.text}>
+                {s.name}
+              </text>
+              <text x={w - 10} y={y + stageH / 2 + 3} textAnchor="end" fontSize={8} fill={T.textSec}>
+                {s.units}× {s.capacity_each} · {s.redundancy}
+              </text>
+              {/* Connector */}
+              {i < stages.length - 1 && (
+                <line x1={w / 2} y1={y + stageH} x2={w / 2} y2={y + stageH + gap}
+                  stroke={T.textSec} strokeWidth={1} strokeDasharray="2,1" />
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+/* ── Construction Timeline (Gantt) ── */
+function TimelineGantt({ data }) {
+  if (!data?.phases) return null;
+  const phases = data.phases;
+  const total = data.total_months || 24;
+  const w = 260, barH = 14, rowH = 20;
+  const h = phases.length * rowH + 20;
+  const pad = 80;
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 9, color: T.textSec, fontWeight: 700, letterSpacing: "0.06em", marginBottom: 4 }}>
+        CONSTRUCTION TIMELINE — {total} months
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: "100%", maxHeight: Math.max(h, 120) }}>
+        {phases.map((p, i) => {
+          const y = 4 + i * rowH;
+          const x = pad + (p.start_month / total) * (w - pad - 8);
+          const barW = Math.max(4, (p.duration_months / total) * (w - pad - 8));
+          const isCritical = data.critical_path?.includes(p.name);
+          return (
+            <g key={i}>
+              <text x={pad - 4} y={y + barH / 2 + 3} textAnchor="end" fontSize={7} fill={T.textSec}>
+                {p.name.length > 12 ? p.name.slice(0, 12) + "…" : p.name}
+              </text>
+              <rect x={x} y={y} width={barW} height={barH} rx={3}
+                fill={isCritical ? T.accent : "#3b82f6"} opacity={0.7} />
+              <text x={x + barW / 2} y={y + barH / 2 + 3} textAnchor="middle" fontSize={6} fill="#fff" fontWeight={600}>
+                {p.duration_months}m
+              </text>
+            </g>
+          );
+        })}
+        {/* Month markers */}
+        {[0, 6, 12, 18, 24].filter(m => m <= total).map(m => (
+          <text key={m} x={pad + (m / total) * (w - pad - 8)} y={h - 2}
+            textAnchor="middle" fontSize={6} fill="#888">{m}m</text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+/* ── DC Financial Summary ── */
+function DCFinancials({ data }) {
+  if (!data) return null;
+  const fmtM = (v) => v >= 1e6 ? `£${(v / 1e6).toFixed(1)}M` : `£${(v / 1e3).toFixed(0)}k`;
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontSize: 9, color: T.textSec, fontWeight: 700, letterSpacing: "0.06em", marginBottom: 6 }}>DC FINANCIAL MODEL</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        <div style={{ textAlign: "center", padding: 6, background: "rgba(255,255,255,0.04)", borderRadius: 6 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: T.accent }}>{fmtM(data.capex?.total || 0)}</div>
+          <div style={{ fontSize: 7, color: T.textSec }}>TOTAL CAPEX</div>
+        </div>
+        <div style={{ textAlign: "center", padding: 6, background: "rgba(255,255,255,0.04)", borderRadius: 6 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: T.orange }}>{fmtM(data.opex?.total_annual || 0)}</div>
+          <div style={{ fontSize: 7, color: T.textSec }}>ANNUAL OPEX</div>
+        </div>
+        <div style={{ textAlign: "center", padding: 6, background: "rgba(255,255,255,0.04)", borderRadius: 6 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: data.irr >= 10 ? T.green : T.orange }}>{data.irr?.toFixed(1) || "—"}%</div>
+          <div style={{ fontSize: 7, color: T.textSec }}>PROJECT IRR</div>
+        </div>
+        <div style={{ textAlign: "center", padding: 6, background: "rgba(255,255,255,0.04)", borderRadius: 6 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, color: T.text }}>{data.payback_years?.toFixed(1) || "—"}yr</div>
+          <div style={{ fontSize: 7, color: T.textSec }}>PAYBACK</div>
+        </div>
+      </div>
+      {data.capex?.per_mw && (
+        <div style={{ fontSize: 10, color: T.textSec, marginTop: 6, textAlign: "center" }}>
+          {fmtM(data.capex.per_mw)}/MW · Revenue {fmtM(data.revenue?.annual || 0)}/yr
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Water Stress Badge ── */
+function WaterStressBadge({ data }) {
+  if (!data) return null;
+  const stressColors = { low: T.green, moderate: T.orange, high: T.red, "very high": T.red };
+  return (
+    <div style={{ marginTop: 8, padding: 8, background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 9, color: T.textSec, fontWeight: 700, letterSpacing: "0.06em" }}>WATER</span>
+        <span style={{
+          padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 700,
+          color: stressColors[data.water_stress_level] || T.textSec,
+          background: `${stressColors[data.water_stress_level] || "#888"}15`,
+        }}>{data.water_stress_level?.toUpperCase()}</span>
+      </div>
+      <div style={{ fontSize: 10, color: T.text, marginTop: 4 }}>
+        <div>WUE: <span style={{ fontWeight: 700, color: "#00bcd4" }}>{data.wue_l_kwh?.toFixed(2)} L/kWh</span></div>
+        <div>Annual: <span style={{ fontWeight: 700 }}>{(data.annual_water_m3 || 0).toLocaleString()} m³</span></div>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    Sidebar Sub-components
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -812,6 +1063,17 @@ export default function DataCentreTwin({ onClose }) {
   const [lifecycle, setLifecycle] = useState(null);
   const [simLoading, setSimLoading] = useState(false);
 
+  // Phase 1+2: Advanced DC design state
+  const [cfeProfile, setCfeProfile] = useState(null);
+  const [ashraeResult, setAshraeResult] = useState(null);
+  const [tierResult, setTierResult] = useState(null);
+  const [powerDesign, setPowerDesign] = useState(null);
+  const [powerChain, setPowerChain] = useState(null);
+  const [timeline, setTimeline] = useState(null);
+  const [dcFinancials, setDcFinancials] = useState(null);
+  const [waterStress, setWaterStress] = useState(null);
+  const [designLoading, setDesignLoading] = useState(false);
+
   const wsRef = useRef(null);
 
   // Init capacity from SAM
@@ -844,6 +1106,37 @@ export default function DataCentreTwin({ onClose }) {
       if (res.ok) setFeasibility(await res.json());
     } catch (e) { console.error("DC feasibility failed:", e); }
   }, [itLoadKw, explain, pickedLocation]);
+
+  // Run full advanced design analysis
+  const runAdvancedDesign = useCallback(async () => {
+    setDesignLoading(true);
+    const lat = explain?.lat ?? pickedLocation?.lat ?? 51.5;
+    const lon = explain?.lon ?? pickedLocation?.lon ?? -0.1;
+    const loadMw = itLoadKw / 1000;
+    const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.ok ? r.json() : null).catch(() => null);
+    const get = (url) => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
+
+    const [cfe, ashrae, tierCheck, pDesign, pChain, tl, fin, water] = await Promise.all([
+      post("/api/dc/hourly-cfe", { lat, lon, capacity_mw: loadMw, solar_mw: loadMw * 0.5, wind_mw: loadMw * 0.2, bess_mwh: loadMw * 2 }),
+      get(`/api/dc/ashrae?lat=${lat}&lon=${lon}`),
+      post("/api/dc/tier-check", { redundancy, power_paths: tier >= 3 ? 2 : 1, cooling_paths: tier >= 3 ? 2 : 1, concurrently_maintainable: tier >= 3, fault_tolerant: tier >= 4 }),
+      post("/api/dc/power-density-design", { it_load_mw: loadMw, kw_per_rack: rackDensity, tier, redundancy, cooling_type: coolingType }),
+      post("/api/dc/power-chain", { it_load_mw: loadMw, tier, voltage_kv: 33 }),
+      post("/api/dc/construction-timeline", { it_load_mw: loadMw, tier, modular: loadMw <= 20 }),
+      post("/api/dc/financial-model", { it_load_mw: loadMw, tier, kw_per_rack: rackDensity, pue: plan?.pue?.pue || 1.3 }),
+      get(`/api/dc/water-stress?lat=${lat}&lon=${lon}&capacity_mw=${loadMw}`),
+    ]);
+
+    setCfeProfile(cfe);
+    setAshraeResult(ashrae);
+    setTierResult(tierCheck);
+    setPowerDesign(pDesign);
+    setPowerChain(pChain);
+    setTimeline(tl);
+    setDcFinancials(fin);
+    setWaterStress(water);
+    setDesignLoading(false);
+  }, [itLoadKw, tier, redundancy, rackDensity, coolingType, explain, pickedLocation, plan]);
 
   // Auto-plan on mount
   useEffect(() => { fetchPlan(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1228,6 +1521,45 @@ export default function DataCentreTwin({ onClose }) {
                           Annual waste: {(plan.pue.annual_waste_kwh / 1_000_000).toFixed(1)} GWh
                         </div>
                       </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Design mode — advanced DC design analysis */}
+              {viewMode === "design" && (
+                <>
+                  <div style={{ fontSize: 11, color: T.accent, fontWeight: 700, marginBottom: 8 }}>ADVANCED DESIGN</div>
+
+                  <button onClick={runAdvancedDesign} disabled={designLoading} style={{
+                    width: "100%", padding: "8px", borderRadius: 6, border: "none",
+                    background: T.accent, color: "#0F0E0A", fontWeight: 700, fontSize: 11,
+                    cursor: designLoading ? "wait" : "pointer", opacity: designLoading ? 0.6 : 1,
+                    marginBottom: 12, letterSpacing: "0.04em",
+                  }}>{designLoading ? "Analysing..." : "Run Full Design Analysis"}</button>
+
+                  {/* Hourly CFE */}
+                  <CFEChart data={cfeProfile} />
+
+                  {/* ASHRAE + Tier side by side */}
+                  <ASHRAEBadge data={ashraeResult} />
+                  <TierBadge data={tierResult} />
+
+                  {/* Power Chain */}
+                  <PowerChainSVG data={powerChain} />
+
+                  {/* Construction Timeline */}
+                  <TimelineGantt data={timeline} />
+
+                  {/* DC Financials */}
+                  <DCFinancials data={dcFinancials} />
+
+                  {/* Water Stress */}
+                  <WaterStressBadge data={waterStress} />
+
+                  {!cfeProfile && !designLoading && (
+                    <div style={{ textAlign: "center", padding: "20px 0", color: T.textSec, fontSize: 11 }}>
+                      Click "Run Full Design Analysis" to calculate CFE profile, ASHRAE compliance, tier validation, power chain, timeline, financials, and water stress.
                     </div>
                   )}
                 </>

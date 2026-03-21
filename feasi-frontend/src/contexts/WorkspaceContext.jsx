@@ -4,10 +4,10 @@ import { useSite } from "../SiteContext";
 const WorkspaceContext = createContext(null);
 
 export const WORKSPACES = [
-  { id: "home",    label: "Home",    icon: "home" },
-  { id: "analyse", label: "Analyse", icon: "bolt" },
-  { id: "design",  label: "Design",  icon: "sun" },
-  { id: "comply",  label: "Comply",  icon: "briefcase" },
+  { id: "home",     label: "Home",     icon: "home" },
+  { id: "analyse",  label: "Analyse",  icon: "bolt" },
+  { id: "design",   label: "Design",   icon: "sun" },
+  { id: "pipeline", label: "Pipeline", icon: "briefcase" },
 ];
 
 // Legacy workspace aliases — map old IDs to new ones

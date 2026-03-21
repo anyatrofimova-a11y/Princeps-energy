@@ -7,6 +7,7 @@ import CenterCanvas from "./CenterCanvas";
 import DetailPanel from "./DetailPanel";
 
 const ExportHub = lazy(() => import("../ExportHub"));
+const ProjectPipeline = lazy(() => import("../ProjectPipeline"));
 
 function WorkspaceContent({ mapContent, dashboardContent }) {
   const { workflowStage } = useSite();
@@ -18,7 +19,6 @@ function WorkspaceContent({ mapContent, dashboardContent }) {
       <CenterCanvas dashboardView={dashboardContent}>
         {mapContent}
       </CenterCanvas>
-      {/* Detail panel: only shows when explicitly opened (Ctrl+D) — not by default */}
       {detailOpen && (
         <Suspense fallback={null}>
           {workflowStage === "act" ? (
@@ -36,8 +36,22 @@ function WorkspaceContent({ mapContent, dashboardContent }) {
 
 export default function WorkspaceRouter({ mapContent, dashboardContent }) {
   const { activeWorkspace } = useWorkspace();
+  const { setPickedLocation } = useSite();
 
-  // Wrap grid workspace in GridModelProvider for shared state across all grid views
+  // Pipeline is a dedicated full-content workspace (no map, no panels)
+  if (activeWorkspace === "pipeline") {
+    return (
+      <Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--cds-text-helper)" }}>Loading pipeline...</div>}>
+        <ProjectPipeline
+          onSelectProject={(p) => {
+            if (p.lat && p.lon) setPickedLocation({ lat: p.lat, lon: p.lon });
+          }}
+        />
+      </Suspense>
+    );
+  }
+
+  // Wrap analyse workspace in GridModelProvider
   if (activeWorkspace === "analyse") {
     return (
       <GridModelProvider>

@@ -614,6 +614,15 @@ const api = {
       get(`/api/dc/google-sites?capacity_mw=${mw}&profile=${enc(profile)}`),
     prospect: (query, mw = 100, profile = "google_hyperscale", minHr = 50, limit = 20) =>
       post("/api/dc/prospect", { query, capacity_mw: mw, profile, min_headroom_mw: minHr, limit }),
+    // Advanced DC design endpoints
+    hourlyCfe: (lat, lon, mw, solarMw, windMw, bessMwh) =>
+      post("/api/dc/hourly-cfe", { lat, lon, capacity_mw: mw, solar_mw: solarMw, wind_mw: windMw, bess_mwh: bessMwh }),
+    ashrae: (lat, lon) => get(`/api/dc/ashrae?lat=${lat}&lon=${lon}`),
+    tierCheck: (params) => post("/api/dc/tier-check", params),
+    powerDensityDesign: (params) => post("/api/dc/power-density-design", params),
+    powerChain: (params) => post("/api/dc/power-chain", params),
+    constructionTimeline: (params) => post("/api/dc/construction-timeline", params),
+    financialModel: (params) => post("/api/dc/financial-model", params),
   },
 
   landMgmt: {

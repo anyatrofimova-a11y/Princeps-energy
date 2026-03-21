@@ -436,3 +436,205 @@ async def api_dc_lifecycle_carbon(req: DCLifecycleCarbonRequest):
     """Calculate full lifecycle carbon (operational + embodied hardware manufacturing).
     Embodied carbon data from OpenDC (TU Delft) research, MIT licensed."""
     return await _run_dc_rl("lifecycle_carbon", req.model_dump())
+
+
+# ---------------------------------------------------------------------------
+# DC Design Engine endpoints (comprehensive DC planning utilities)
+# ---------------------------------------------------------------------------
+
+from pydantic import Field
+
+
+class HourlyCFERequest(BaseModel):
+    """Request body for hourly CFE profile calculation."""
+    lat: float = Field(51.5, description="Latitude (WGS84)")
+    lon: float = Field(-0.1, description="Longitude (WGS84)")
+    capacity_mw: float = Field(10, description="IT load in MW", gt=0)
+    solar_mw: float = Field(0, description="Co-located/PPA solar capacity in MW", ge=0)
+    wind_mw: float = Field(0, description="Co-located/PPA wind capacity in MW", ge=0)
+    bess_mwh: float = Field(0, description="Battery storage capacity in MWh", ge=0)
+
+
+@router.post("/api/dc/hourly-cfe")
+async def api_dc_hourly_cfe(req: HourlyCFERequest):
+    """24-hour Carbon-Free Energy profile with regional grid intensity and renewable generation.
+
+    Combines Carbon Intensity API regional data with solar/wind capacity factor
+    curves and optional BESS to calculate hourly CFE% for a DC site.
+    """
+    from utils.dc_design_engine import hourly_cfe_profile
+    return await hourly_cfe_profile(
+        lat=req.lat, lon=req.lon, capacity_mw=req.capacity_mw,
+        solar_mw=req.solar_mw, wind_mw=req.wind_mw, bess_mwh=req.bess_mwh,
+    )
+
+
+@router.get("/api/dc/ashrae")
+async def api_dc_ashrae(
+    lat: float = Query(51.5, description="Latitude (WGS84)"),
+    lon: float = Query(-0.1, description="Longitude (WGS84)"),
+):
+    """ASHRAE TC 9.9 compliance check against A1-A4 and Recommended envelopes.
+
+    Uses simulated hourly climate data based on latitude to determine
+    free-cooling hours, best-fit ASHRAE class, and cooling recommendations.
+    """
+    from utils.dc_design_engine import ashrae_compliance
+    return ashrae_compliance(lat=lat, lon=lon)
+
+
+class TierCheckRequest(BaseModel):
+    """Request body for Uptime Institute Tier classification."""
+    redundancy: str = Field("N+1", description="Redundancy scheme: N, N+1, 2N, 2N+1")
+    power_paths: int = Field(1, description="Number of independent power distribution paths", ge=1, le=4)
+    cooling_paths: int = Field(1, description="Number of independent cooling distribution paths", ge=1, le=4)
+    concurrently_maintainable: bool = Field(False, description="Can any component be maintained without IT shutdown?")
+    fault_tolerant: bool = Field(False, description="Does the design tolerate any single fault?")
+
+
+@router.post("/api/dc/tier-check")
+async def api_dc_tier_check(req: TierCheckRequest):
+    """Determine Uptime Institute Tier level from design parameters.
+
+    Evaluates redundancy, power/cooling paths, concurrent maintainability,
+    and fault tolerance against Tier I-IV requirements. Returns achieved tier
+    and gaps to the next level.
+    """
+    from utils.dc_design_engine import tier_compliance
+    return tier_compliance(
+        redundancy=req.redundancy,
+        power_paths=req.power_paths,
+        cooling_paths=req.cooling_paths,
+        concurrently_maintainable=req.concurrently_maintainable,
+        fault_tolerant=req.fault_tolerant,
+    )
+
+
+class PowerDensityDesignRequest(BaseModel):
+    """Request body for full DC power density design."""
+    it_load_mw: float = Field(10, description="IT load in MW", gt=0)
+    kw_per_rack: float = Field(10, description="Average kW per rack", gt=0)
+    tier: int = Field(3, description="Target Uptime Institute Tier (1-4)", ge=1, le=4)
+    redundancy: str = Field("N+1", description="Redundancy scheme: N, N+1, 2N, 2N+1")
+    cooling_type: str = Field(
+        "hybrid",
+        description="Cooling strategy: air, hybrid, evaporative, free_cooling, dlc, immersion",
+    )
+
+
+@router.post("/api/dc/power-density-design")
+async def api_dc_power_density_design(req: PowerDensityDesignRequest):
+    """Full DC design from power density specification.
+
+    Calculates rack count, floor area, cooling tonnage, UPS/generator/transformer
+    sizing, PDU count, heat loads (using ASHRAE engineering formulas), and
+    power chain topology. Returns comprehensive design with benchmarks.
+    """
+    from utils.dc_design_engine import power_density_design
+    return power_density_design(
+        it_load_mw=req.it_load_mw,
+        kw_per_rack=req.kw_per_rack,
+        tier=req.tier,
+        redundancy=req.redundancy,
+        cooling_type=req.cooling_type,
+    )
+
+
+class PowerChainRequest(BaseModel):
+    """Request body for power chain topology generation."""
+    it_load_mw: float = Field(10, description="IT load in MW", gt=0)
+    tier: int = Field(3, description="Target Uptime Institute Tier (1-4)", ge=1, le=4)
+    voltage_kv: float = Field(33, description="Incoming grid voltage in kV (11, 33, or 132)")
+
+
+@router.post("/api/dc/power-chain")
+async def api_dc_power_chain(req: PowerChainRequest):
+    """Generate full power distribution chain topology.
+
+    Models the path from Grid (HV) through Substation, Transformer, Switchgear,
+    UPS, STS, PDU, Rack PDU to IT Equipment — with redundancy based on tier.
+    Includes generator backup specifications and single-line diagram data.
+    """
+    from utils.dc_design_engine import power_chain_topology
+    return power_chain_topology(
+        it_load_mw=req.it_load_mw,
+        tier=req.tier,
+        voltage_kv=req.voltage_kv,
+    )
+
+
+class ConstructionTimelineRequest(BaseModel):
+    """Request body for construction timeline generation."""
+    it_load_mw: float = Field(10, description="IT load in MW", gt=0)
+    tier: int = Field(3, description="Target Uptime Institute Tier (1-4)", ge=1, le=4)
+    modular: bool = Field(False, description="Use modular/prefab construction (faster)")
+    has_planning: bool = Field(False, description="Planning permission already secured")
+    has_grid: bool = Field(False, description="Grid connection already secured")
+
+
+@router.post("/api/dc/construction-timeline")
+async def api_dc_construction_timeline(req: ConstructionTimelineRequest):
+    """Generate construction Gantt timeline for a DC facility.
+
+    Phases: Land acquisition, Planning permission, Grid connection,
+    Enabling works, Shell & core, M&E installation, Commissioning, Handover.
+    Accounts for NSIP pathway, modular construction, and parallel activities.
+    """
+    from utils.dc_design_engine import construction_timeline
+    return construction_timeline(
+        it_load_mw=req.it_load_mw,
+        tier=req.tier,
+        modular=req.modular,
+        has_planning=req.has_planning,
+        has_grid=req.has_grid,
+    )
+
+
+class DCFinancialModelRequest(BaseModel):
+    """Request body for DC financial model."""
+    it_load_mw: float = Field(10, description="IT load in MW", gt=0)
+    tier: int = Field(3, description="Target Uptime Institute Tier (1-4)", ge=1, le=4)
+    kw_per_rack: float = Field(10, description="Average kW per rack", gt=0)
+    pue: float = Field(1.3, description="Power Usage Effectiveness", gt=1.0, le=3.0)
+    electricity_price_gbp_kwh: float = Field(0.12, description="Electricity price in £/kWh", gt=0)
+    land_cost_gbp: float = Field(0, description="Land acquisition cost in £", ge=0)
+    grid_connection_cost_gbp: float = Field(0, description="Grid connection cost in £", ge=0)
+
+
+@router.post("/api/dc/financial-model")
+async def api_dc_financial_model(req: DCFinancialModelRequest):
+    """DC-specific CAPEX/OPEX/revenue/IRR/NPV financial model.
+
+    Uses industry benchmarks (£7-16M/MW depending on density), tier premiums,
+    and UK colocation rates. Returns full financial breakdown with payback
+    period, IRR, NPV, and sensitivity assumptions.
+    """
+    from utils.dc_design_engine import dc_financial_model
+    return dc_financial_model(
+        it_load_mw=req.it_load_mw,
+        tier=req.tier,
+        kw_per_rack=req.kw_per_rack,
+        pue=req.pue,
+        electricity_price_gbp_kwh=req.electricity_price_gbp_kwh,
+        land_cost_gbp=req.land_cost_gbp,
+        grid_connection_cost_gbp=req.grid_connection_cost_gbp,
+    )
+
+
+@router.get("/api/dc/water-stress-enhanced")
+async def api_dc_water_stress_enhanced(
+    lat: float = Query(51.5, description="Latitude (WGS84)"),
+    lon: float = Query(-0.1, description="Longitude (WGS84)"),
+    capacity_mw: float = Query(10, description="IT load in MW"),
+    cooling_type: str = Query("hybrid", description="Cooling type: air, hybrid, evaporative, free_cooling, dlc, immersion"),
+):
+    """Enhanced water stress assessment with WUE calculation and cooling comparison.
+
+    Assesses regional water stress (EA classification), calculates annual water
+    consumption based on cooling type, and compares all cooling strategies.
+    Includes UK regulatory guidance for abstraction licensing.
+    """
+    from utils.dc_design_engine import water_stress_assessment
+    return await water_stress_assessment(
+        lat=lat, lon=lon, cooling_type=cooling_type, it_load_mw=capacity_mw,
+    )
