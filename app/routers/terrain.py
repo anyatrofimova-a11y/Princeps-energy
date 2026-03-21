@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import logging
 
+from typing import Optional
+
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
@@ -34,6 +36,18 @@ class HydrologyRequest(BaseModel):
     lat: float
     lon: float
     radius_m: float = 500
+
+
+class BuildableAreaRequest(BaseModel):
+    lat: float
+    lon: float
+    radius_m: float = 500
+    ndvi_grid: Optional[list[list[float]]] = None
+    flood_mask: Optional[list[list[bool]]] = None
+    building_mask: Optional[list[list[bool]]] = None
+    building_buffer_m: float = 50.0
+    grid_connection_row: Optional[int] = None
+    grid_connection_col: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -106,5 +120,35 @@ async def hydrology(req: HydrologyRequest):
     result = await calculate_hydrology(
         req.lat, req.lon,
         radius_m=req.radius_m,
+    )
+    return result
+
+
+@router.post("/buildable-area")
+async def buildable_area(req: BuildableAreaRequest):
+    """Calculate buildable area for energy development.
+
+    Fetches LiDAR/NASADEM terrain, then determines what portion of the
+    site is actually developable — excluding steep slopes (>15 deg),
+    dense vegetation (NDVI >0.7), flood zones, and building buffers.
+
+    Returns panel-suitable area (south-facing <10 deg), BESS-suitable area
+    (flat <5 deg near grid connection), access road feasibility, slope/aspect
+    breakdown, and maximum solar capacity estimate (2 ha/MW).
+    """
+    from utils.buildable_area import compute_buildable_area
+
+    gc_point = None
+    if req.grid_connection_row is not None and req.grid_connection_col is not None:
+        gc_point = (req.grid_connection_row, req.grid_connection_col)
+
+    result = await compute_buildable_area(
+        req.lat, req.lon,
+        radius_m=req.radius_m,
+        ndvi_grid=req.ndvi_grid,
+        flood_mask=req.flood_mask,
+        building_mask=req.building_mask,
+        building_buffer_m=req.building_buffer_m,
+        grid_connection_point=gc_point,
     )
     return result

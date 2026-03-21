@@ -258,6 +258,29 @@ async def validate_lease(
     return validate_lease_rate(proposed_gbp_ha, technology, alc_grade, region)
 
 
+# ---------------------------------------------------------------------------
+# Per-Parcel Planning History
+# ---------------------------------------------------------------------------
+
+@router.get("/api/planning/history")
+async def planning_history(
+    lat: float = Query(..., description="Latitude (WGS84)"),
+    lon: float = Query(..., description="Longitude (WGS84)"),
+    radius_km: float = Query(10, description="Search radius in km"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Per-parcel planning history lookup combining real UK data sources.
+
+    Queries planning.data.gov.uk + REPD (PostGIS) to return:
+    - Nearby planning applications and permissions
+    - REPD renewable energy projects with timelines
+    - Approval rates, determination times, capacity stats
+    - Planning risk assessment (HIGH / MEDIUM / LOW)
+    """
+    from utils.planning_history import get_planning_history
+    return await get_planning_history(pool, lat, lon, radius_km=radius_km)
+
+
 class LandownerMatchRequest(BaseModel):
     landowner_name: str
     lat: float = 52.0

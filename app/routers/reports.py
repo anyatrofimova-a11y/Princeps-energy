@@ -17,6 +17,8 @@ from utils.xlsx_export import generate_xlsx
 from utils.g99_pack_generator import generate_g99_pack
 from utils.report_grid_connection import generate_grid_connection_report
 from utils.report_financial import generate_financial_report
+from utils.sld_generator import generate_sld
+from utils.loss_budget import calculate_loss_budget, calculate_lifetime_profile
 
 log = logging.getLogger("princeps.reports")
 router = APIRouter(tags=["reports"])
@@ -464,3 +466,142 @@ async def ml_enhanced_report(req: MLEnhancedReportRequest):
             iter([html.encode()]), media_type="text/html",
             headers={"Content-Disposition": f'attachment; filename="{filename}.html"'},
         )
+
+
+# ---------------------------------------------------------------------------
+# Single Line Diagram (SLD) Generator
+# ---------------------------------------------------------------------------
+
+
+class SLDRequest(BaseModel):
+    """Assets and parameters for Single Line Diagram generation."""
+    assets: list[dict] = []
+    capacity_kw: float = 5000.0
+    voltage_kv: float = 33.0
+
+
+@router.post("/api/design/sld")
+async def api_generate_sld(req: SLDRequest):
+    """Generate an SVG Single Line Diagram from placed assets.
+
+    Takes solar arrays, BESS, inverters, transformers and produces:
+    - Professional IEC-standard SVG single line diagram (800x400)
+    - Structured component list with voltages and stages
+    - Auto-calculated cable schedule with sizing
+
+    Flow: Generation -> Combiner -> Inverter -> Transformer -> Protection -> Grid
+    """
+    if req.capacity_kw <= 0:
+        raise HTTPException(status_code=422, detail="capacity_kw must be positive")
+    if req.voltage_kv <= 0:
+        raise HTTPException(status_code=422, detail="voltage_kv must be positive")
+
+    try:
+        result = generate_sld(
+            assets=req.assets,
+            capacity_kw=req.capacity_kw,
+            voltage_kv=req.voltage_kv,
+        )
+    except Exception as e:
+        log.exception("SLD generation failed")
+        raise HTTPException(status_code=500, detail=f"SLD generation failed: {e}")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Solar Loss Budget Calculator (DNV GL bankable standard)
+# ---------------------------------------------------------------------------
+
+
+class LossBudgetRequest(BaseModel):
+    """Input parameters for DNV GL-standard solar loss budget."""
+    capacity_kw: float = 1000.0
+    lat: float = 52.0
+    lon: float = -1.0
+    tilt_deg: float = 25.0
+    azimuth_deg: float = 180.0
+    row_spacing_m: float | None = None
+    panel_height_m: float = 2.384
+    dc_ac_ratio: float = 1.20
+    inverter_efficiency: float = 0.98
+    year: int = 1
+    region: str | None = None
+    terrain_shading_pct: float | None = None
+    monthly_temps_c: list[float] | None = None
+    annual_ghi_kwh_m2: float | None = None
+    temp_coeff: float = -0.40
+    noct_offset: float = 25.0
+    iam_b0: float = 0.05
+    module_quality_pct: float = 1.5
+    module_mismatch_pct: float = 0.4
+    lid_pct: float = 1.5
+    annual_degradation_pct: float = 0.50
+    dc_wiring_pct: float = 1.0
+    ac_wiring_pct: float = 0.4
+    auxiliary_pct: float = 0.5
+    planned_downtime_pct: float = 0.5
+    unplanned_downtime_pct: float = 1.0
+    curtailment_pct: float | None = None
+    anm_scheme: bool = False
+    export_limit_pct: float | None = None
+    # Lifetime profile
+    include_lifetime: bool = False
+    project_life_years: int = 25
+
+
+@router.post("/api/design/loss-budget")
+async def api_loss_budget(req: LossBudgetRequest):
+    """Calculate a comprehensive DNV GL-standard solar energy loss budget.
+
+    Computes 16 individual loss categories applied as a multiplicative
+    waterfall from gross POA energy down to net export energy:
+
+    1. Far shading (horizon/terrain)
+    2. Near shading (inter-row)
+    3. Soiling (UK regional rainfall model)
+    4. IAM / Reflection (ASHRAE incidence angle modifier)
+    5. Temperature (cell temp from NOCT + ambient)
+    6. Module quality / nameplate tolerance
+    7. Module mismatch
+    8. LID + annual degradation (cumulative)
+    9. DC wiring I²R losses
+    10. Inverter efficiency (partial-load derating)
+    11. Inverter clipping (DC/AC ratio dependent)
+    12. Transformer iron + copper losses
+    13. AC wiring losses
+    14. Auxiliary consumption (tracking, monitoring, HVAC)
+    15. Availability (planned + unplanned downtime)
+    16. Grid curtailment (ANM / export limitation)
+
+    Returns performance ratio, specific yield, capacity factor, per-category
+    breakdown, and waterfall chart data for Sankey/cascade visualisation.
+
+    Optionally includes a 25-year lifetime degradation profile with
+    P50/P90 annual energy estimates.
+    """
+    if req.capacity_kw <= 0:
+        raise HTTPException(status_code=422, detail="capacity_kw must be positive")
+    if not (-90 <= req.lat <= 90):
+        raise HTTPException(status_code=422, detail="lat must be between -90 and 90")
+    if not (-180 <= req.lon <= 180):
+        raise HTTPException(status_code=422, detail="lon must be between -180 and 180")
+    if req.dc_ac_ratio < 0.5 or req.dc_ac_ratio > 2.5:
+        raise HTTPException(status_code=422, detail="dc_ac_ratio must be between 0.5 and 2.5")
+
+    try:
+        params = req.model_dump(exclude={"include_lifetime", "project_life_years"})
+        result = calculate_loss_budget(params)
+
+        if req.include_lifetime:
+            lifetime = calculate_lifetime_profile(params, req.project_life_years)
+            result["lifetime"] = lifetime
+
+    except Exception as e:
+        log.exception("Loss budget calculation failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Loss budget calculation failed: {e}",
+        )
+
+    return result
