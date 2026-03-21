@@ -284,10 +284,12 @@ async def fetch_parcel_context(parcel_id: UUID, conn: asyncpg.Connection) -> dic
                p.nearest_substation_id,
                p.distance_to_sub_km,
                p.nearest_sub_capacity_kw,
-               s.name AS sub_name,
+               COALESCE(d.name, o.name, n.name, p.nearest_substation_id) AS sub_name,
                ST_AsGeoJSON(p.geometry) AS geometry_geojson
         FROM parcels p
-        LEFT JOIN dno_substations s ON s.sub_id = p.nearest_substation_id
+        LEFT JOIN dno_substations d ON d.sub_id = p.nearest_substation_id
+        LEFT JOIN osm_power_substation o ON o.osm_id::text = p.nearest_substation_id
+        LEFT JOIN nged_substation n ON n.id::text = p.nearest_substation_id
         WHERE p.parcel_id = $1
         """,
         parcel_id,
@@ -587,19 +589,42 @@ async def create_from_location(
             body.area_m2,
         )
 
-        # Compute nearest substation for the new parcel
+        # Compute nearest substation — prioritise NGED (2k named, with voltage)
+        # then fall back to OSM (37k) and DNO seed data (8)
         await conn.execute(
             """
-            UPDATE parcels
-            SET nearest_substation_id   = sub.sub_id,
-                distance_to_sub_km      = ST_Distance(parcels.centroid, sub.geometry) / 1000.0,
-                nearest_sub_capacity_kw = sub.capacity_kw
-            FROM (
-                SELECT sub_id, capacity_kw, geometry
-                FROM dno_substations
-                ORDER BY geometry <-> (SELECT centroid FROM parcels WHERE parcel_id = $1::uuid)
+            WITH parcel_pt AS (
+                SELECT ST_Transform(centroid, 4326) AS geom4326, centroid
+                FROM parcels WHERE parcel_id = $1::uuid
+            ),
+            nged_nearest AS (
+                SELECT id::text AS sub_id, name, NULL::numeric AS capacity_kw,
+                       ST_Distance(n.geometry::geography, p.geom4326::geography) / 1000.0 AS dist_km
+                FROM nged_substation n, parcel_pt p
+                ORDER BY n.geometry <-> p.geom4326
                 LIMIT 1
-            ) sub
+            ),
+            osm_nearest AS (
+                SELECT osm_id::text AS sub_id, COALESCE(name, 'OSM Substation') AS name,
+                       NULL::numeric AS capacity_kw,
+                       ST_Distance(o.geometry::geography, p.geom4326::geography) / 1000.0 AS dist_km
+                FROM osm_power_substation o, parcel_pt p
+                WHERE o.name IS NOT NULL AND o.name != ''
+                ORDER BY o.geometry <-> p.geom4326
+                LIMIT 1
+            ),
+            best AS (
+                SELECT * FROM nged_nearest
+                UNION ALL
+                SELECT * FROM osm_nearest
+                ORDER BY dist_km
+                LIMIT 1
+            )
+            UPDATE parcels
+            SET nearest_substation_id   = best.sub_id,
+                distance_to_sub_km      = best.dist_km,
+                nearest_sub_capacity_kw = best.capacity_kw
+            FROM best
             WHERE parcels.parcel_id = $1::uuid
             """,
             row["parcel_id"],

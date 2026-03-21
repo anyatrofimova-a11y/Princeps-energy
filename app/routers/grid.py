@@ -1829,3 +1829,62 @@ async def api_optimize_connection(
     """Recommend optimal connection strategy — substation, voltage, timing, approach."""
     from utils.connection_optimizer import optimize_connection_strategy
     return await optimize_connection_strategy(pool, lat, lon, capacity_mw, technology)
+
+
+# ══════════════════════════════════════════════════════════
+# UK Government Data Ingestion
+# ══════════════════════════════════════════════════════════
+
+@router.post("/api/admin/ingest-uk-data")
+async def ingest_uk_govt_data(
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Trigger ingestion of all free UK government datasets.
+
+    Pulls: Green Belt, Brownfield Register, National Parks, AONB, SSSI,
+    Ancient Woodland, Flood Zones, Conservation Areas, Energy Planning Apps.
+    All OGL-licensed, no auth required."""
+    from utils.uk_govt_data_ingester import ingest_all
+    return await ingest_all(pool)
+
+
+@router.get("/api/constraints/nearby")
+async def constraints_nearby(
+    lat: float = Query(...), lon: float = Query(...),
+    radius_km: float = Query(5),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Query locally-cached environmental constraints near a point."""
+    try:
+        rows = await pool.fetch("""
+            SELECT constraint_type, name, designation, reference_id,
+                   ST_Distance(geometry::geography,
+                       ST_SetSRID(ST_Point($1, $2), 4326)::geography) AS distance_m
+            FROM environmental_constraints
+            WHERE ST_DWithin(geometry::geography,
+                ST_SetSRID(ST_Point($1, $2), 4326)::geography, $3)
+            ORDER BY distance_m
+            LIMIT 50
+        """, lon, lat, radius_km * 1000)
+
+        constraints = []
+        for r in rows:
+            constraints.append({
+                "type": r["constraint_type"],
+                "name": r["name"],
+                "designation": r["designation"],
+                "reference": r["reference_id"],
+                "distance_m": round(float(r["distance_m"]), 1),
+                "inside": float(r["distance_m"]) < 10,
+            })
+
+        return {
+            "total": len(constraints),
+            "constraints": constraints,
+            "risk_level": "very_high" if any(c["inside"] and c["type"] in ("sssi", "national_park", "flood_zone_3") for c in constraints)
+                else "high" if any(c["inside"] for c in constraints)
+                else "medium" if constraints
+                else "low",
+        }
+    except Exception as e:
+        return {"total": 0, "constraints": [], "error": str(e)}

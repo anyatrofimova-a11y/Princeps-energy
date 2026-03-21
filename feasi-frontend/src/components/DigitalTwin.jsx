@@ -143,10 +143,13 @@ function buildTerrainMesh(heightmap, satelliteTexture) {
   geom.rotateX(-Math.PI / 2);
   const pos = geom.attributes.position;
   const colors = new Float32Array(pos.count * 3);
+  // Scale vertical exaggeration based on actual terrain range
+  // UK terrain: typically 5-50m range → gentle undulation, not mountains
+  const vertScale = range > 100 ? 15 : range > 30 ? 8 : 4;
   for (let i = 0; i < pos.count; i++) {
     const val = vals[i] ?? vMin;
     const norm = (val - vMin) / range;
-    pos.setY(i, norm * 40);
+    pos.setY(i, norm * vertScale);
     colors[i * 3] = 0.25 + 0.55 * norm;
     colors[i * 3 + 1] = 0.6 - 0.25 * norm;
     colors[i * 3 + 2] = 0.1 + 0.05 * norm;
@@ -169,13 +172,14 @@ function buildTerrainMesh(heightmap, satelliteTexture) {
 }
 
 function buildDefaultTerrain() {
-  // Procedural terrain when no data available
+  // Gentle rolling English countryside — NOT mountains
   const size = 64;
   const vals = [];
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
       const nx = c / size - 0.5, ny = r / size - 0.5;
-      const e = 50 + 15 * Math.sin(nx * 4) * Math.cos(ny * 3) + 8 * Math.sin(nx * 8 + ny * 6) + Math.random() * 2;
+      // Gentle undulation: 2-3m variation, smooth curves
+      const e = 50 + 2 * Math.sin(nx * 3) * Math.cos(ny * 2.5) + 1 * Math.sin(nx * 6 + ny * 4) + Math.random() * 0.3;
       vals.push(Math.round(e * 10) / 10);
     }
   }
