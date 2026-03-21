@@ -38,6 +38,7 @@ const SECTIONS = [
       { id: "tecPipeline", label: "TEC Pipeline", color: "#0277bd" },
       { id: "repdProjects", label: "REPD Projects", color: "#ff6f00" },
       { id: "gridConstraints", label: "Constraints", color: "#f44336" },
+      { id: "envConstraints", label: "Env. Constraints", color: "#e53935" },
       { id: "queueDepth", label: "Queue Depth", color: "#e040fb" },
       { id: "electricityZones", label: "Elec. Zones", color: "#24a148" },
     ],

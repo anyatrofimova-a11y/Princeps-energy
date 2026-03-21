@@ -33,6 +33,7 @@ const DataCentreTwin = lazy(() => import("./components/DataCentreTwin"));
 const AssetInspector = lazy(() => import("./components/AssetInspector"));
 const GridGraphView = lazy(() => import("./components/GridGraphView"));
 const HardwareConfigurator = lazy(() => import("./components/HardwareConfigurator"));
+const Asset3DModeller = lazy(() => import("./components/Asset3DModeller"));
 const ThermalModelPanel = lazy(() => import("./components/ThermalModelPanel"));
 const DCLandingPage = lazy(() => import("./components/DCLandingPage"));
 const DCComparisonDashboard = lazy(() => import("./components/DCComparisonDashboard"));
@@ -81,6 +82,7 @@ export default function App() {
     gridGraphOpen, setGridGraphOpen,
     bessFacilityOpen, setBessFacilityOpen,
     hwConfigOpen, setHwConfigOpen,
+    asset3dOpen, setAsset3dOpen,
     thermalModelOpen, setThermalModelOpen,
     dcTwinOpen, setDcTwinOpen,
     dcLandingOpen, setDcLandingOpen,
@@ -331,28 +333,53 @@ export default function App() {
       const lastFeature = state.features.features[state.features.features.length - 1];
       if (lastFeature?.geometry?.type === "Polygon" && lastFeature.geometry.coordinates[0]?.length >= 4) {
         const coords = lastFeature.geometry.coordinates[0];
-        // Calculate centroid
         let sumLat = 0, sumLon = 0;
         for (const [lon, lat] of coords) { sumLat += lat; sumLon += lon; }
         const centLat = sumLat / coords.length;
         const centLon = sumLon / coords.length;
 
-        // Calculate approximate area (hectares) using Shoelace formula
         let area = 0;
         for (let i = 0; i < coords.length - 1; i++) {
           area += coords[i][0] * coords[i + 1][1] - coords[i + 1][0] * coords[i][1];
         }
         const areaM2 = Math.abs(area) * 0.5 * 111320 * 111320 * Math.cos(centLat * Math.PI / 180);
+        const areaHa = (areaM2 / 10000).toFixed(1);
 
-        // Auto-pick the centroid and create a site
+        // Auto-pick centroid as site
         setTimeout(() => {
           handleMapPick({ lat: centLat, lon: centLon });
         }, 300);
+
+        // Auto-persist boundary + create project (fire-and-forget)
+        setTimeout(async () => {
+          try {
+            const projectName = `Site ${centLat.toFixed(4)}N, ${Math.abs(centLon).toFixed(4)}W`;
+            const project = await api.projects.create({
+              name: projectName,
+              technology: "solar",
+              capacity_mw: Math.round(parseFloat(areaHa) * 0.5 * 10) / 10,
+              stage: "prospect",
+              lat: centLat, lon: centLon,
+              description: `${areaHa} ha site boundary drawn on map`,
+            });
+            if (project?.project_id) {
+              setDesignProjectId(project.project_id);
+              await api.landMgmt.createBoundary({
+                project_id: project.project_id,
+                name: `${projectName} — Site Boundary`,
+                boundary_type: "site",
+                geojson: lastFeature.geometry,
+              });
+            }
+          } catch (e) {
+            console.warn("Auto-save boundary:", e);
+          }
+        }, 500);
       }
 
       return state;
     });
-  }, [handleMapPick]);
+  }, [handleMapPick, setDesignProjectId]);
 
   const handleDrawMouseMove = useCallback((coord) => {
     setDrawState(s => ({ ...s, mouseCoord: coord }));

@@ -549,6 +549,34 @@ async def grid_osm_summary(pool: asyncpg.Pool = Depends(get_pool)):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  GEMINI 3D ASSET MODELLER
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/grid/asset-types")
+async def api_asset_types():
+    """List available 3D asset types for the Gemini modeller."""
+    from utils.gemini_asset_modeller import list_asset_types
+    return list_asset_types()
+
+
+@router.post("/api/grid/asset-model")
+async def api_asset_model(
+    asset_type: str = Query("data_centre"),
+    capacity_mw: float = Query(None),
+    prompt: str = Query(None),
+):
+    """
+    Generate a 3D asset model spec using Gemini AI.
+
+    Returns component dimensions, materials, positions, construction protocol,
+    and cost estimates. Can be rendered as Three.js geometry on the map.
+    """
+    from utils.gemini_asset_modeller import generate_asset_spec
+    return await generate_asset_spec(asset_type, capacity_mw, prompt)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  CONSTRAINT COST OVERLAY + QUEUE DEPTH (Phase 7)
 # ═══════════════════════════════════════════════════════════════════════════════
 

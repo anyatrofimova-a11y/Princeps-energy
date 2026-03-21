@@ -71,6 +71,9 @@ export default function GridTwin({ onClose }) {
     generators: true,
   });
   const [animPhase, setAnimPhase] = useState(0);
+  const [choreographyActive, setChoreographyActive] = useState(false);
+  const [particlesEnabled, setParticlesEnabled] = useState(true);
+  const [constraintHeatmap, setConstraintHeatmap] = useState(false);
 
   /* ── Animate flow arrows ── */
   useEffect(() => {
@@ -197,27 +200,32 @@ export default function GridTwin({ onClose }) {
         },
       }));
 
-      // Animated flow particles (dash effect via second arc layer)
-      layers.push(new ArcLayer({
-        id: "gt-flow-particles",
-        data: gridState.lines.filter(l => Math.abs(l.flow_mw) > 10),
-        getSourcePosition: d => d.flow_mw >= 0 ? d.from_coords : d.to_coords,
-        getTargetPosition: d => d.flow_mw >= 0 ? d.to_coords : d.from_coords,
-        getSourceColor: [255, 255, 255, 200],
-        getTargetColor: [255, 255, 255, 40],
-        getWidth: 1.5,
-        getHeight: 0.35,
-        greatCircle: false,
-        numSegments: 50,
-        getDashArray: [4, 12],
-        dashJustified: true,
-        dashGapPickable: false,
-        extensions: [],
-        updateTriggers: {
-          getSourcePosition: [animPhase],
-          getTargetPosition: [animPhase],
-        },
-      }));
+      // GPU particle flow system — thousands of particles along transmission arcs
+      if (particlesEnabled) {
+        layers.push(createParticleLayer(gridState.lines, animPhase));
+      } else {
+        // Fallback: original dash-animated arc layer
+        layers.push(new ArcLayer({
+          id: "gt-flow-particles",
+          data: gridState.lines.filter(l => Math.abs(l.flow_mw) > 10),
+          getSourcePosition: d => d.flow_mw >= 0 ? d.from_coords : d.to_coords,
+          getTargetPosition: d => d.flow_mw >= 0 ? d.to_coords : d.from_coords,
+          getSourceColor: [255, 255, 255, 200],
+          getTargetColor: [255, 255, 255, 40],
+          getWidth: 1.5,
+          getHeight: 0.35,
+          greatCircle: false,
+          numSegments: 50,
+          getDashArray: [4, 12],
+          dashJustified: true,
+          dashGapPickable: false,
+          extensions: [],
+          updateTriggers: {
+            getSourcePosition: [animPhase],
+            getTargetPosition: [animPhase],
+          },
+        }));
+      }
     }
 
     // ── Labels ──
@@ -241,7 +249,7 @@ export default function GridTwin({ onClose }) {
     }
 
     return layers;
-  }, [gridState, twinLayers, animPhase]);
+  }, [gridState, twinLayers, animPhase, particlesEnabled]);
 
   /* ── Init Mapbox + deck.gl overlay ── */
   useEffect(() => {
@@ -295,6 +303,41 @@ export default function GridTwin({ onClose }) {
         },
       }, labelLayer?.id);
 
+      // Constraint heatmap source + layers
+      map.addSource("gt-constraints", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: "gt-constraint-heat",
+        type: "fill",
+        source: "gt-constraints",
+        paint: {
+          "fill-color": [
+            "interpolate", ["linear"],
+            ["coalesce", ["get", "constraint_prob"], 0],
+            0, "rgba(76,175,80,0.05)",
+            0.3, "rgba(255,152,0,0.25)",
+            0.6, "rgba(244,67,54,0.4)",
+            1.0, "rgba(183,28,28,0.6)",
+          ],
+          "fill-opacity": 0.7,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "gt-constraint-pulse",
+        type: "line",
+        source: "gt-constraints",
+        paint: {
+          "line-color": [
+            "match", ["get", "risk_level"],
+            "HIGH", "#f44336", "MEDIUM", "#ff9800", "LOW", "#4caf50", "#888",
+          ],
+          "line-width": 3,
+          "line-dasharray": [2, 2],
+          "line-opacity": 0.8,
+        },
+        layout: { visibility: "none" },
+      });
+
       // deck.gl overlay
       const overlay = new MapboxOverlay({ layers: [] });
       map.addControl(overlay);
@@ -316,6 +359,26 @@ export default function GridTwin({ onClose }) {
       overlayRef.current.setProps({ layers: deckLayers });
     }
   }, [deckLayers]);
+
+  /* ── Constraint heatmap toggle ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    const vis = constraintHeatmap ? "visible" : "none";
+    if (map.getLayer("gt-constraint-heat")) map.setLayoutProperty("gt-constraint-heat", "visibility", vis);
+    if (map.getLayer("gt-constraint-pulse")) map.setLayoutProperty("gt-constraint-pulse", "visibility", vis);
+
+    if (constraintHeatmap) {
+      fetch("/api/grid/constraints?hours_ahead=48")
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data) return;
+          const src = map.getSource("gt-constraints");
+          if (src) src.setData({ type: "FeatureCollection", features: data.features || [] });
+        })
+        .catch(() => {});
+    }
+  }, [constraintHeatmap]);
 
   /* ── System metrics bar ── */
   const sys = gridState?.system;
@@ -383,6 +446,44 @@ export default function GridTwin({ onClose }) {
               {key[0].toUpperCase()}
             </button>
           ))}
+
+          {/* Particles toggle */}
+          <button
+            className={`gt-layer-btn ${particlesEnabled ? "active" : ""}`}
+            onClick={() => setParticlesEnabled(!particlesEnabled)}
+            title="GPU Particle Flow"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="4" cy="12" r="2"/><circle cx="12" cy="6" r="2"/><circle cx="20" cy="12" r="2"/><circle cx="12" cy="18" r="2"/>
+            </svg>
+          </button>
+
+          {/* Constraint heatmap */}
+          <button
+            className={`gt-layer-btn ${constraintHeatmap ? "active" : ""}`}
+            onClick={() => setConstraintHeatmap(!constraintHeatmap)}
+            title="Constraint Heatmap"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+              <path d="M8 12l4 4 4-4"/>
+            </svg>
+          </button>
+
+          {/* AI Tour */}
+          <button
+            className={`gt-layer-btn ${choreographyActive ? "active" : ""}`}
+            onClick={() => setChoreographyActive(!choreographyActive)}
+            title="AI Flythrough Tour"
+            style={choreographyActive ? { background: "#D4A018", color: "#000" } : {}}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </button>
+
+          <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.12)" }} />
 
           {/* View presets */}
           <button className="gt-view-btn" title="Top-down view"
@@ -492,6 +593,14 @@ export default function GridTwin({ onClose }) {
           })()}
         </div>
       )}
+
+      {/* ── AI Camera Choreography ── */}
+      <GridCameraChoreography
+        map={mapRef.current}
+        gridState={gridState}
+        active={choreographyActive}
+        onStop={() => setChoreographyActive(false)}
+      />
 
       {/* ── Legend ── */}
       <div className="gt-legend">

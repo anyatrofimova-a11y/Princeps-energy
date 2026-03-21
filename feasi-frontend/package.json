@@ -13,6 +13,8 @@
     "@deck.gl/geo-layers": "^9.2.10",
     "@deck.gl/layers": "^9.2.10",
     "@deck.gl/mapbox": "^9.2.10",
+    "@loaders.gl/3d-tiles": "^4.3.4",
+    "@loaders.gl/tiles": "^4.3.4",
     "@luma.gl/core": "^9.2.6",
     "@luma.gl/webgl": "^9.2.6",
     "@react-three/drei": "^9.122.0",

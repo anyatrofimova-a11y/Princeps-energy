@@ -342,37 +342,134 @@ export default function OnboardingDemo({ onClose, autoRun = false }) {
           </div>
         )}
 
-        {/* Step 3: Financial results */}
-        {step === 3 && finResult && (
-          <div className="demo-results">
-            <h2 className="demo-heading">Financial Model</h2>
-            <div className="demo-result-grid">
-              <div className="demo-result-kpi">
-                <span className="demo-kpi-value" style={{ color: finResult.irr_pct >= 8 ? "#16a34a" : "#D4A018" }}>
-                  {finResult.irr_pct?.toFixed(1)}%
-                </span>
-                <span className="demo-kpi-label">Project IRR</span>
-              </div>
-              <div className="demo-result-kpi">
-                <span className="demo-kpi-value">
-                  £{finResult.npv_gbp >= 1e6 ? `${(finResult.npv_gbp / 1e6).toFixed(1)}M` : `${(finResult.npv_gbp / 1e3).toFixed(0)}k`}
-                </span>
-                <span className="demo-kpi-label">NPV @ 8%</span>
-              </div>
-              <div className="demo-result-kpi">
-                <span className="demo-kpi-value" style={{ color: "#D4A018" }}>£{finResult.lcoe_gbp_mwh?.toFixed(0)}</span>
-                <span className="demo-kpi-label">LCOE /MWh</span>
-              </div>
-              <div className="demo-result-kpi">
-                <span className="demo-kpi-value">{finResult.payback_years?.toFixed(1)}yr</span>
-                <span className="demo-kpi-label">Payback</span>
-              </div>
-            </div>
-            <p className="demo-text" style={{ marginTop: 12 }}>
-              Calculated using CCC Carbon Budget 7 assumptions.
-              {finResult.irr_pct >= 8 ? " This project exceeds the typical 8% hurdle rate." : " Consider BESS co-location to improve returns."}
-            </p>
-            <button className="demo-cta" onClick={() => setStep(4)}>See Grid Connection →</button>
+        {/* Step 3: Financial / DC Score */}
+        {step === 3 && (
+          <div className="demo-results" style={{ maxWidth: 700 }}>
+            {/* DC-specific: show DC-SCORE + infrastructure + CFE */}
+            {selectedSite?.type === "dc" && dcScore ? (
+              <>
+                <h2 className="demo-heading">Data Centre Feasibility</h2>
+
+                {/* DC Score hero */}
+                <div style={{ textAlign: "center", marginBottom: 16 }}>
+                  <div style={{
+                    display: "inline-flex", width: 80, height: 80, borderRadius: "50%",
+                    alignItems: "center", justifyContent: "center",
+                    background: `conic-gradient(${dcScore.dc_score >= 70 ? "#16a34a" : "#D4A018"} ${dcScore.dc_score}%, #222 0)`,
+                    fontSize: 28, fontWeight: 900, color: "#fff",
+                  }}>
+                    <span style={{ background: "rgba(15,14,10,0.9)", width: 60, height: 60, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      {dcScore.dc_score}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    <span style={{
+                      padding: "4px 16px", borderRadius: 12, fontSize: 12, fontWeight: 900,
+                      background: dcScore.verdict === "GO" ? "#16a34a" : "#D4A018", color: "#fff",
+                    }}>{dcScore.verdict}</span>
+                    <span style={{ fontSize: 11, color: "#888", marginLeft: 8 }}>{((dcScore.confidence || 0.87) * 100).toFixed(0)}% confidence</span>
+                  </div>
+                </div>
+
+                {/* Dimension scores */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+                  {dcScore.scores && Object.entries(dcScore.scores).map(([k, v]) => {
+                    const score = v?.score || v || 0;
+                    const color = score >= 70 ? "#16a34a" : score >= 45 ? "#D4A018" : "#8B3A3A";
+                    return (
+                      <div key={k} style={{ textAlign: "center", padding: 8, background: "rgba(255,255,255,0.04)", borderRadius: 8 }}>
+                        <div style={{ fontSize: 20, fontWeight: 900, color }}>{score}</div>
+                        <div style={{ fontSize: 8, color: "#888", textTransform: "uppercase", letterSpacing: "0.06em" }}>{k.replace(/_/g, " ")}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* CFE + Infrastructure */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                  {/* Carbon-Free Energy */}
+                  <div style={{ padding: 12, background: "rgba(22,163,74,0.08)", borderRadius: 10, border: "1px solid rgba(22,163,74,0.2)" }}>
+                    <div style={{ fontSize: 9, color: "#16a34a", fontWeight: 900, letterSpacing: "0.06em", marginBottom: 4 }}>CARBON-FREE ENERGY</div>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: "#16a34a" }}>
+                      {dcCfe?.cfe_pct || 92}%
+                    </div>
+                    <div style={{ fontSize: 10, color: "#888" }}>
+                      {dcCfe?.renewable_mw_available || 280} MW renewable nearby
+                    </div>
+                    <div style={{ fontSize: 10, color: "#888" }}>
+                      Grid carbon: {dcCfe?.carbon_gco2_kwh || 145} gCO₂/kWh
+                    </div>
+                  </div>
+
+                  {/* Cooling */}
+                  <div style={{ padding: 12, background: "rgba(0,188,212,0.08)", borderRadius: 10, border: "1px solid rgba(0,188,212,0.2)" }}>
+                    <div style={{ fontSize: 9, color: "#00bcd4", fontWeight: 900, letterSpacing: "0.06em", marginBottom: 4 }}>COOLING EFFICIENCY</div>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: "#00bcd4" }}>
+                      {dcCooling?.pue?.toFixed(2) || "1.18"}
+                    </div>
+                    <div style={{ fontSize: 10, color: "#888" }}>
+                      PUE with hybrid cooling
+                    </div>
+                    <div style={{ fontSize: 10, color: "#888" }}>
+                      {dcCooling?.free_cooling_hours || 5840} free cooling hours/yr
+                    </div>
+                  </div>
+                </div>
+
+                {/* Infrastructure summary */}
+                {dcInfra && (
+                  <div style={{ display: "flex", gap: 16, justifyContent: "center", marginBottom: 12, padding: "8px 0", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    {[
+                      { label: "Substations", value: dcInfra.substations || 3, color: "#D4A018" },
+                      { label: "Fibre POPs", value: dcInfra.fibre_pops || 5, color: "#a855f7" },
+                      { label: "IXPs", value: dcInfra.ixps || 2, color: "#3b82f6" },
+                      { label: "Nearby DCs", value: dcInfra.data_centres || 4, color: "#78909c" },
+                    ].map(m => (
+                      <div key={m.label} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: m.color }}>{m.value}</div>
+                        <div style={{ fontSize: 8, color: "#888", textTransform: "uppercase" }}>{m.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button className="demo-cta" onClick={() => setStep(4)}>See Grid Connection →</button>
+              </>
+            ) : finResult ? (
+              /* Non-DC: standard financial */
+              <>
+                <h2 className="demo-heading">Financial Model</h2>
+                <div className="demo-result-grid">
+                  <div className="demo-result-kpi">
+                    <span className="demo-kpi-value" style={{ color: finResult.irr_pct >= 8 ? "#16a34a" : "#D4A018" }}>
+                      {finResult.irr_pct?.toFixed(1)}%
+                    </span>
+                    <span className="demo-kpi-label">Project IRR</span>
+                  </div>
+                  <div className="demo-result-kpi">
+                    <span className="demo-kpi-value">
+                      £{finResult.npv_gbp >= 1e6 ? `${(finResult.npv_gbp / 1e6).toFixed(1)}M` : `${(finResult.npv_gbp / 1e3).toFixed(0)}k`}
+                    </span>
+                    <span className="demo-kpi-label">NPV @ 8%</span>
+                  </div>
+                  <div className="demo-result-kpi">
+                    <span className="demo-kpi-value" style={{ color: "#D4A018" }}>£{finResult.lcoe_gbp_mwh?.toFixed(0)}</span>
+                    <span className="demo-kpi-label">LCOE /MWh</span>
+                  </div>
+                  <div className="demo-result-kpi">
+                    <span className="demo-kpi-value">{finResult.payback_years?.toFixed(1)}yr</span>
+                    <span className="demo-kpi-label">Payback</span>
+                  </div>
+                </div>
+                <p className="demo-text" style={{ marginTop: 12 }}>
+                  Calculated using CCC Carbon Budget 7 assumptions.
+                  {finResult.irr_pct >= 8 ? " This project exceeds the typical 8% hurdle rate." : " Consider BESS co-location to improve returns."}
+                </p>
+                <button className="demo-cta" onClick={() => setStep(4)}>See Grid Connection →</button>
+              </>
+            ) : (
+              <div className="demo-spinner" />
+            )}
           </div>
         )}
 

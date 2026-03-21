@@ -525,6 +525,19 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "check_environmental_constraints",
+        "description": "Check all environmental, flood, and heritage constraints at a UK location. Queries Natural England designations (SSSI, SAC, SPA, AONB, National Parks, Ramsar), Environment Agency flood zones, and Historic England listed buildings. Returns risk level, planning impact, and constraint map layers.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "radius_m": {"type": "number", "description": "Search radius in metres", "default": 2000},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
         "name": "get_procurement_pipeline",
         "description": "Get procurement pipeline analytics — tender counts by technology, total value, urgent deadlines, and cost benchmarks.",
         "input_schema": {
@@ -806,6 +819,32 @@ TOOLS: list[dict] = [
                 "lon": {"type": "number", "description": "Longitude (WGS84)"},
                 "capacity_mw": {"type": "number", "description": "Proposed capacity in MW", "default": 50},
                 "technology": {"type": "string", "description": "Technology: solar, wind, bess, solar+bess", "default": "solar"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "search_nearby_companies",
+        "description": "Search Companies House for land/property/agriculture/energy companies near a location. Useful for identifying potential landowners, site operators, or local energy companies for outreach. Filters by relevant SIC codes and returns relevance-scored results.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "radius_km": {"type": "number", "description": "Search radius in km", "default": 5},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "check_nsip_conflicts",
+        "description": "Check for Nationally Significant Infrastructure Projects (NSIP) near a location. NSIPs are large energy projects (>50MW solar, >100MW wind, nuclear, data centres) using the DCO process. Identifies competing grid connections, cumulative impact risks, and planning precedent.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "radius_km": {"type": "number", "description": "Search radius in km", "default": 20},
             },
             "required": ["lat", "lon"],
         },
@@ -1544,6 +1583,46 @@ async def execute_tool(
                 "risk_factors": result.get("risk_factors", []),
                 "benchmarks": result.get("benchmarks", {}),
             }
+
+        elif name == "check_environmental_constraints":
+            from utils.environmental_constraints import check_all_constraints
+            lat, lon = args["lat"], args["lon"]
+            radius_m = args.get("radius_m", 2000)
+            result = await check_all_constraints(lat, lon, radius_m)
+            # Compact for chat context — keep headline data
+            env = result.get("environmental", {})
+            flood = result.get("flood", {})
+            heritage = result.get("heritage", {})
+            return {
+                "overall_risk_level": result.get("overall_risk_level"),
+                "overall_planning_impact": result.get("overall_planning_impact"),
+                "constraint_summary": result.get("constraint_summary"),
+                "designations": env.get("designations", []),
+                "env_risk": env.get("risk_level"),
+                "flood_zone": flood.get("flood_zone"),
+                "flood_risk": flood.get("risk_level"),
+                "flood_planning_impact": flood.get("planning_impact"),
+                "active_flood_warnings": len(flood.get("active_warnings", [])),
+                "listed_buildings_count": heritage.get("total_count", 0),
+                "grade_i_buildings": heritage.get("grade_i_count", 0),
+                "heritage_risk": heritage.get("risk_level"),
+                "heritage_planning_impact": heritage.get("planning_impact"),
+                "has_map_layers": result.get("constraints_geojson") is not None,
+            }
+
+        elif name == "search_nearby_companies":
+            from utils.companies_house import search_landowner_companies
+            return await search_landowner_companies(
+                args["lat"], args["lon"],
+                radius_km=args.get("radius_km", 5),
+            )
+
+        elif name == "check_nsip_conflicts":
+            from utils.pins_nsip import check_nsip_conflicts as _nsip
+            return await _nsip(
+                args["lat"], args["lon"],
+                radius_km=args.get("radius_km", 20),
+            )
 
         else:
             return {"error": f"Unknown tool: {name}"}

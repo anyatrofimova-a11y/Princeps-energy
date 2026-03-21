@@ -643,6 +643,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       // Constraint overlay + queue depth sources
       map.addSource("grid-constraints", { type: "geojson", data: EMPTY_FC });
       map.addSource("queue-depth", { type: "geojson", data: EMPTY_FC });
+      // Environmental constraints sources (SSSI, AONB, flood, heritage)
+      map.addSource("env-constraints", { type: "geojson", data: EMPTY_FC });
       // Land registry parcels source
       map.addSource("land-parcels", { type: "geojson", data: EMPTY_FC });
       // Highlight pulse marker for selected land listing
@@ -1538,6 +1540,143 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       });
       map.on("mouseenter", "constraint-zone-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "constraint-zone-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── Environmental Constraints — SSSI (red), AONB (amber), Flood (blue), Heritage (purple) ──
+      map.addLayer({
+        id: "env-sssi-circles",
+        type: "circle",
+        source: "env-constraints",
+        filter: ["any",
+          ["==", ["get", "type"], "SSSI"],
+          ["==", ["get", "type"], "SAC"],
+          ["==", ["get", "type"], "SPA"],
+          ["==", ["get", "type"], "Ramsar"],
+        ],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 6, 12, 14, 16, 22],
+          "circle-color": "#e53935",
+          "circle-opacity": 0.7,
+          "circle-stroke-color": "#b71c1c",
+          "circle-stroke-width": 2,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "env-aonb-circles",
+        type: "circle",
+        source: "env-constraints",
+        filter: ["any",
+          ["==", ["get", "type"], "AONB"],
+          ["==", ["get", "type"], "National_Park"],
+        ],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 6, 12, 14, 16, 22],
+          "circle-color": "#ff8f00",
+          "circle-opacity": 0.7,
+          "circle-stroke-color": "#e65100",
+          "circle-stroke-width": 2,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "env-flood-circles",
+        type: "circle",
+        source: "env-constraints",
+        filter: ["==", ["get", "constraint_category"], "flood"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 8, 12, 16, 16, 24],
+          "circle-color": "#1565c0",
+          "circle-opacity": 0.6,
+          "circle-stroke-color": "#0d47a1",
+          "circle-stroke-width": 2,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "env-heritage-circles",
+        type: "circle",
+        source: "env-constraints",
+        filter: ["==", ["get", "constraint_category"], "heritage"],
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4, 12, 8, 16, 14],
+          "circle-color": "#9C27B0",
+          "circle-opacity": 0.7,
+          "circle-stroke-color": "#6A1B9A",
+          "circle-stroke-width": 1.5,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "env-constraint-labels",
+        type: "symbol",
+        source: "env-constraints",
+        paint: {
+          "text-color": "#fff",
+          "text-halo-color": "rgba(0,0,0,0.85)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": ["coalesce", ["get", "name"], ["get", "type"], ""],
+          "text-size": 11,
+          "text-font": ["Noto Sans Bold"],
+          "text-offset": [0, 1.5],
+          "text-allow-overlap": false,
+        },
+        minzoom: 10,
+      });
+      map.on("click", "env-sssi-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new mapboxgl.Popup({ maxWidth: "260px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px">
+            <strong style="color:#e53935">${p.type}</strong>: ${p.name || "Unknown"}
+            <br/>Inside: ${p.inside ? "Yes" : "No"}
+            <br/>Distance: ${p.distance_m || 0}m
+          </div>`)
+          .addTo(map);
+      });
+      map.on("click", "env-aonb-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new mapboxgl.Popup({ maxWidth: "260px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px">
+            <strong style="color:#ff8f00">${p.type?.replace("_", " ")}</strong>: ${p.name || "Unknown"}
+            <br/>Inside: ${p.inside ? "Yes" : "No"}
+            <br/>Distance: ${p.distance_m || 0}m
+          </div>`)
+          .addTo(map);
+      });
+      map.on("click", "env-heritage-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new mapboxgl.Popup({ maxWidth: "260px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px">
+            <strong style="color:#9C27B0">Listed Building (Grade ${p.grade || "II"})</strong>
+            <br/>${p.name || "Unknown"}
+            <br/>Distance: ${p.distance_m || 0}m
+            ${p.list_entry ? `<br/>List entry: ${p.list_entry}` : ""}
+          </div>`)
+          .addTo(map);
+      });
+      map.on("click", "env-flood-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new mapboxgl.Popup({ maxWidth: "260px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px">
+            <strong style="color:#1565c0">Flood Zone ${p.flood_zone || "?"}</strong>
+            <br/>Risk: ${p.risk_level || "unknown"}
+          </div>`)
+          .addTo(map);
+      });
+      ["env-sssi-circles", "env-aonb-circles", "env-flood-circles", "env-heritage-circles"].forEach(lid => {
+        map.on("mouseenter", lid, () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", lid, () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+      });
 
       // ── Land Registry Parcels ──
       map.addLayer({
@@ -2687,6 +2826,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       ngedSubs: ["nged-sub-circles", "nged-sub-labels"],
       gridCapacity: ["gc-capacity-circles", "gc-capacity-labels", "gc-verdict-badges", "gc-lines-glow", "gc-lines-core"],
       gridConstraints: ["constraint-zone-fill", "constraint-zone-outline", "constraint-zone-labels"],
+      envConstraints: ["env-sssi-circles", "env-aonb-circles", "env-flood-circles", "env-heritage-circles", "env-constraint-labels"],
       queueDepth: ["queue-depth-circles", "queue-depth-labels"],
       landParcels: ["land-parcels-fill", "land-parcels-outline", "land-parcels-labels", "land-available-markers"],
       planningDensity: ["planning-density-circles", "planning-density-labels"],
@@ -3160,6 +3300,50 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       if (src) src.setData(EMPTY_FC);
     };
   }, [mapReady, layers.gridConstraints]);
+
+  // Environmental constraints overlay — fetch on map move when toggled on
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !layers.envConstraints) return;
+    let cancelled = false;
+    let timer = null;
+
+    const loadConstraints = async () => {
+      const centre = map.getCenter();
+      const zoom = map.getZoom();
+      // Adjust radius based on zoom: wider at low zoom
+      const radiusM = zoom < 10 ? 5000 : zoom < 13 ? 2000 : 1000;
+      try {
+        const resp = await fetch(`/api/environment/constraints?lat=${centre.lat}&lon=${centre.lng}&radius_m=${radiusM}`);
+        if (!resp.ok || cancelled) return;
+        const data = await resp.json();
+        if (cancelled) return;
+        const geojson = data.constraints_geojson;
+        if (geojson) {
+          const src = map.getSource("env-constraints");
+          if (src) src.setData(geojson);
+        }
+      } catch (err) {
+        console.warn("Env constraints load error:", err);
+      }
+    };
+
+    const debouncedLoad = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loadConstraints, 500);
+    };
+
+    loadConstraints();
+    map.on("moveend", debouncedLoad);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      map.off("moveend", debouncedLoad);
+      const src = map.getSource("env-constraints");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [mapReady, layers.envConstraints]);
 
   // Queue depth per substation — fetch ECR queue metrics
   useEffect(() => {
@@ -3697,7 +3881,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     if (!pickMode) {
       map.getCanvas().style.cursor = getCursor(drawState.mode);
     }
-  }, [drawState, pickMode]);
+  }, [drawState, pickMode, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex]);
 
   return (
     <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />

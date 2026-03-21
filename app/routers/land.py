@@ -151,3 +151,56 @@ async def land_comprehensive(
     Returns comprehensive land assessment with overall verdict and score."""
     from utils.land_classification_ml import comprehensive_land_assessment
     return await comprehensive_land_assessment(lat, lon)
+
+
+# ---------------------------------------------------------------------------
+# Companies House — identify landowner companies near sites
+# ---------------------------------------------------------------------------
+
+@router.get("/api/land/companies")
+async def nearby_companies(
+    lat: float = Query(..., description="Latitude (WGS84)"),
+    lon: float = Query(..., description="Longitude (WGS84)"),
+    radius_km: float = Query(5, description="Search radius in km"),
+):
+    """Search Companies House for land/property/agriculture/energy companies
+    near a location. Requires COMPANIES_HOUSE_API_KEY env var (free to register).
+    Returns companies filtered by relevant SIC codes with relevance scoring."""
+    from utils.companies_house import search_landowner_companies
+    return await search_landowner_companies(lat, lon, radius_km=radius_km)
+
+
+@router.get("/api/land/company/{company_number}")
+async def company_detail(company_number: str):
+    """Get full Companies House company details including officers and filing history."""
+    from utils.companies_house import get_company_detail
+    return await get_company_detail(company_number)
+
+
+# ---------------------------------------------------------------------------
+# PINS / NSIP — Nationally Significant Infrastructure Projects
+# ---------------------------------------------------------------------------
+
+@router.get("/api/planning/nsip")
+async def nsip_projects(
+    technology: str = Query(None, description="Filter by technology (solar, wind, nuclear, etc.)"),
+    status: str = Query(None, description="Filter by stage (pre-application, examination, decision, etc.)"),
+):
+    """Fetch NSIP projects from the Planning Inspectorate register.
+    These are large energy projects (>50MW solar, >100MW wind, nuclear, data centres)
+    that use the DCO process. Returns project list with capacity, status, location."""
+    from utils.pins_nsip import fetch_nsip_projects
+    return await fetch_nsip_projects(technology=technology, status=status)
+
+
+@router.get("/api/planning/nsip-conflicts")
+async def nsip_conflicts(
+    lat: float = Query(..., description="Latitude (WGS84)"),
+    lon: float = Query(..., description="Longitude (WGS84)"),
+    radius_km: float = Query(20, description="Search radius in km"),
+):
+    """Check for NSIP projects near a location that could cause conflicts —
+    competing grid connections, cumulative landscape impact, or planning precedent.
+    Returns conflict assessment with distance and risk levels."""
+    from utils.pins_nsip import check_nsip_conflicts
+    return await check_nsip_conflicts(lat, lon, radius_km=radius_km)

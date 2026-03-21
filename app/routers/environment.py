@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import math
@@ -437,3 +438,44 @@ async def environmental_assessment(
             "bng_metric": "DEFRA Biodiversity Metric 4.2",
         },
     }
+
+
+# ─── Combined environmental & heritage constraints endpoint ──────────────────
+
+@router.get("/constraints")
+async def environmental_constraints(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_m: float = Query(2000, description="Search radius in metres"),
+):
+    """
+    Check all environmental, flood, and heritage constraints at a location.
+
+    Queries in parallel:
+    - Natural England designations (SSSI, SAC, SPA, AONB, National Parks, Ramsar)
+    - Environment Agency flood risk zones and warnings
+    - Historic England listed buildings
+
+    All data from free public UK government APIs (OGL licensed).
+    """
+    from utils.environmental_constraints import check_all_constraints
+
+    try:
+        result = await asyncio.wait_for(
+            check_all_constraints(lat, lon, radius_m),
+            timeout=25,
+        )
+        return result
+    except asyncio.TimeoutError:
+        log.warning("Environmental constraints check timed out for (%s, %s)", lat, lon)
+        return {
+            "lat": lat,
+            "lon": lon,
+            "radius_m": radius_m,
+            "overall_risk_level": "unknown",
+            "overall_planning_impact": "Constraint check timed out — retry or perform manual assessment.",
+            "environmental": {"constraints_found": False, "designations": [], "risk_level": "unknown"},
+            "flood": {"flood_zone": None, "risk_level": "unknown"},
+            "heritage": {"listed_buildings": [], "risk_level": "unknown"},
+            "error": "timeout",
+        }

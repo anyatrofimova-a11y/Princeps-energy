@@ -130,6 +130,9 @@ export function SiteProvider({ children }) {
   // ── Hardware Configurator ──
   const [hwConfigOpen, setHwConfigOpen] = useState(false);
 
+  // ── Gemini 3D Asset Modeller ──
+  const [asset3dOpen, setAsset3dOpen] = useState(false);
+
   // ── Thermal Model (TEASER) ──
   const [thermalModelOpen, setThermalModelOpen] = useState(false);
 
@@ -298,6 +301,7 @@ export function SiteProvider({ children }) {
     epcZones: false, epcDom: false, epcNondom: false, postcodes: false,
     dcCapacity: false, dcFibre: false, dcIxp: false,
     gridConstraints: false,
+    envConstraints: false,
     queueDepth: false,
     landParcels: false,
     planningDensity: false,
@@ -548,6 +552,8 @@ export function SiteProvider({ children }) {
     bessFacilityOpen, setBessFacilityOpen,
     // Hardware Configurator
     hwConfigOpen, setHwConfigOpen,
+    // Gemini 3D Asset Modeller
+    asset3dOpen, setAsset3dOpen,
     // Thermal Model (TEASER)
     thermalModelOpen, setThermalModelOpen,
     // GeeFlow

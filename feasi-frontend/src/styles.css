@@ -10035,6 +10035,145 @@ input[type="range"] { accent-color: var(--accent); }
   background: rgba(255,255,255,0.15);
 }
 
+/* ═══ Asset3DModeller — Gemini AI 3D asset panel ═══ */
+.a3d-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: #0a0f14;
+  display: flex; flex-direction: column;
+  font-family: "IBM Plex Sans", sans-serif;
+  color: #e0e0e0;
+}
+.a3d-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 16px;
+  background: rgba(22, 22, 30, 0.95);
+  border-bottom: 1px solid rgba(212, 160, 24, 0.15);
+}
+.a3d-header-left { display: flex; align-items: center; gap: 8px; }
+.a3d-title { font-weight: 700; font-size: 14px; }
+.a3d-badge {
+  font-size: 11px; background: rgba(212,160,24,0.15);
+  border: 1px solid rgba(212,160,24,0.3); border-radius: 12px;
+  padding: 2px 10px; color: #D4A018; font-weight: 600;
+}
+.a3d-close {
+  background: none; border: none; color: #888; font-size: 20px;
+  cursor: pointer; padding: 4px 8px;
+}
+.a3d-close:hover { color: #fff; }
+.a3d-body { display: flex; flex: 1; overflow: hidden; }
+.a3d-sidebar {
+  width: 260px; padding: 12px 14px;
+  background: rgba(18, 22, 28, 0.95);
+  border-right: 1px solid rgba(255,255,255,0.06);
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.a3d-section-title {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: rgba(255,255,255,0.4);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.a3d-type-grid { display: flex; flex-direction: column; gap: 4px; }
+.a3d-type-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #ccc; font-size: 12px; cursor: pointer;
+  transition: all 0.15s;
+}
+.a3d-type-btn:hover { background: rgba(255,255,255,0.08); }
+.a3d-type-btn.active {
+  background: rgba(212,160,24,0.12);
+  border-color: rgba(212,160,24,0.4);
+  color: #D4A018;
+}
+.a3d-type-icon { font-size: 16px; }
+.a3d-type-label { font-weight: 500; }
+.a3d-input {
+  width: 100%; padding: 6px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px; color: #e0e0e0;
+  font-size: 12px; font-family: inherit;
+}
+.a3d-generate-btn {
+  width: 100%; padding: 8px;
+  background: linear-gradient(135deg, rgba(212,160,24,0.2), rgba(212,160,24,0.1));
+  border: 1px solid rgba(212,160,24,0.3);
+  border-radius: 8px; color: #D4A018;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  transition: all 0.15s;
+}
+.a3d-generate-btn:hover { background: rgba(212,160,24,0.25); }
+.a3d-generate-btn:disabled { opacity: 0.5; cursor: wait; }
+.a3d-specs { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+.a3d-spec-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; padding: 3px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.a3d-spec-row span:first-child { color: rgba(255,255,255,0.4); }
+.a3d-spec-row span:last-child { font-weight: 600; }
+.a3d-comp-detail {
+  margin-top: 8px; padding: 8px;
+  background: rgba(212,160,24,0.06);
+  border: 1px solid rgba(212,160,24,0.15);
+  border-radius: 8px;
+}
+.a3d-place-btn {
+  width: 100%; padding: 10px; margin-top: 8px;
+  background: #D4A018; border: none; border-radius: 8px;
+  color: #000; font-size: 12px; font-weight: 700;
+  cursor: pointer; transition: all 0.15s;
+}
+.a3d-place-btn:hover { background: #e5b82a; }
+.a3d-viewport {
+  flex: 1; position: relative;
+  background: #0a0f0a;
+}
+.a3d-loading {
+  position: absolute; inset: 0; z-index: 10;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: rgba(10,15,10,0.8);
+  font-size: 13px; color: #D4A018;
+  gap: 12px;
+}
+.a3d-loading-spinner {
+  width: 32px; height: 32px;
+  border: 3px solid rgba(212,160,24,0.2);
+  border-top-color: #D4A018;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.a3d-protocol {
+  width: 240px; padding: 12px;
+  background: rgba(18,22,28,0.95);
+  border-left: 1px solid rgba(255,255,255,0.06);
+  overflow-y: auto;
+}
+.a3d-toggle-btn {
+  background: none; border: none; color: #888;
+  cursor: pointer; font-size: 10px;
+}
+.a3d-protocol-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.a3d-protocol-step {
+  display: flex; gap: 8px; font-size: 11px; align-items: flex-start;
+}
+.a3d-protocol-num {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: rgba(212,160,24,0.15);
+  border: 1px solid rgba(212,160,24,0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: #D4A018;
+  flex-shrink: 0;
+}
+.a3d-protocol-text { color: rgba(255,255,255,0.7); line-height: 1.4; }
+
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  ADVANCED GRID PANEL (Phase 7) — .ag-*                                    */
 /* ═══════════════════════════════════════════════════════════════════════════ */

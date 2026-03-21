@@ -155,11 +155,15 @@ const api = {
     listings: (lat, lon, radiusKm = 10) => get(`/api/land/listings?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
     pricePaid: (postcode) => get(`/api/land/price-paid?postcode=${enc(postcode)}`),
     planningDensity: (lat, lon, radiusKm = 10) => get(`/api/land/planning-density?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
+    companies: (lat, lon, km = 5) => get(`/api/land/companies?lat=${lat}&lon=${lon}&radius_km=${km}`),
+    companyDetail: (companyNumber) => get(`/api/land/company/${enc(companyNumber)}`),
   },
 
   environment: {
     assess: (lat, lon, capacityMw = 50, radiusM = 1000) =>
       get(`/api/environment/assess?lat=${lat}&lon=${lon}&capacity_mw=${capacityMw}&radius_m=${radiusM}`),
+    constraints: (lat, lon, radiusM = 2000) =>
+      get(`/api/environment/constraints?lat=${lat}&lon=${lon}&radius_m=${radiusM}`),
   },
 
   carbon: {
@@ -316,6 +320,8 @@ const api = {
 
   planning: {
     summary: () => get("/planning/energy/summary"),
+    nsip: (tech, status) => get(`/api/planning/nsip${tech || status ? '?' : ''}${tech ? `technology=${enc(tech)}` : ''}${tech && status ? '&' : ''}${status ? `status=${enc(status)}` : ''}`),
+    nsipConflicts: (lat, lon, km = 20) => get(`/api/planning/nsip-conflicts?lat=${lat}&lon=${lon}&radius_km=${km}`),
   },
 
   opt: {
