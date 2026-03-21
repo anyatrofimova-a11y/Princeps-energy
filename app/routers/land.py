@@ -204,3 +204,79 @@ async def nsip_conflicts(
     Returns conflict assessment with distance and risk levels."""
     from utils.pins_nsip import check_nsip_conflicts
     return await check_nsip_conflicts(lat, lon, radius_km=radius_km)
+
+
+# ---------------------------------------------------------------------------
+# Co-location Opportunity Search
+# ---------------------------------------------------------------------------
+
+@router.get("/api/land/colocation-search")
+async def colocation_search(
+    lat: float = Query(..., description="Search centre latitude"),
+    lon: float = Query(..., description="Search centre longitude"),
+    radius_km: float = Query(10, description="Search radius in km"),
+    technology: str = Query("solar", description="Technology: solar, wind, bess, data_centre"),
+    min_capacity_mw: float = Query(5, description="Minimum grid headroom MW"),
+    min_area_ha: float = Query(2, description="Minimum land parcel area"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Search for co-location opportunities by linking grid substations with
+    available land, REPD stalled projects, landowner companies, and ALC grades.
+
+    Returns ranked opportunities where grid headroom + land + ownership align."""
+    from utils.colocation_search import search_colocation_opportunities
+    return await search_colocation_opportunities(
+        pool, lat, lon, radius_km=radius_km, technology=technology,
+        min_capacity_mw=min_capacity_mw, min_area_ha=min_area_ha,
+    )
+
+
+@router.get("/api/land/lease-benchmark")
+async def lease_benchmark(
+    technology: str = Query("solar", description="Technology: solar, wind, bess, data_centre"),
+    alc_grade: str = Query("Grade 3b", description="ALC grade: Grade 1 through Grade 5, Non Agricultural"),
+    region: str = Query("default", description="UK region for multiplier"),
+    area_ha: float = Query(10, description="Site area in hectares"),
+):
+    """Benchmark land lease rate against UK market data.
+    Returns low/mid/high rates with regional adjustment, annual cost, and notes.
+    Source: Knight Frank / Savills / RICS (2024-25)."""
+    from utils.colocation_search import benchmark_lease
+    return benchmark_lease(technology, alc_grade, region, area_ha)
+
+
+@router.get("/api/land/validate-lease")
+async def validate_lease(
+    proposed_gbp_ha: float = Query(..., description="Proposed rent in £/ha/year"),
+    technology: str = Query("solar"),
+    alc_grade: str = Query("Grade 3b"),
+    region: str = Query("default"),
+):
+    """Validate a proposed lease rate against UK market benchmarks.
+    Returns: BELOW_MARKET / COMPETITIVE / FAIR / ABOVE_MARKET with percentile."""
+    from utils.colocation_search import validate_lease_rate
+    return validate_lease_rate(proposed_gbp_ha, technology, alc_grade, region)
+
+
+class LandownerMatchRequest(BaseModel):
+    landowner_name: str
+    lat: float = 52.0
+    lon: float = -1.0
+    radius_km: float = 5
+
+
+@router.post("/api/land/match-landowner")
+async def match_landowner(req: LandownerMatchRequest):
+    """Fuzzy-match a landowner name to Companies House entities.
+    Uses normalised Levenshtein distance + token overlap scoring.
+    Returns top 5 matches with confidence scores."""
+    from utils.colocation_search import match_landowner_to_companies
+    from utils.companies_house import search_landowner_companies
+    companies_result = await search_landowner_companies(req.lat, req.lon, radius_km=req.radius_km)
+    companies = companies_result.get("companies", [])
+    matches = match_landowner_to_companies(req.landowner_name, companies)
+    return {
+        "landowner_name": req.landowner_name,
+        "matches": matches,
+        "companies_searched": len(companies),
+    }

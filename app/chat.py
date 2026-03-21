@@ -653,6 +653,48 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "search_colocation_opportunities",
+        "description": "Search for co-location opportunities by linking grid substations with available land parcels, REPD stalled projects, landowner companies, and ALC grades. Returns ranked opportunities where grid headroom + land + ownership align. Use when asked about finding sites, land availability, co-location, behind-the-meter, or where to build.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Search centre latitude"},
+                "lon": {"type": "number", "description": "Search centre longitude"},
+                "radius_km": {"type": "number", "description": "Search radius in km", "default": 10},
+                "technology": {"type": "string", "enum": ["solar", "wind", "bess", "data_centre"], "default": "solar"},
+                "min_capacity_mw": {"type": "number", "description": "Minimum grid headroom MW", "default": 5},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
+        "name": "benchmark_lease_rate",
+        "description": "Benchmark a land lease rate against UK market data (Knight Frank / Savills / RICS 2024-25). Returns low/mid/high rates by technology, ALC grade, and UK region. Use when asked about land costs, rental rates, lease terms, or whether a deal is fair.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "technology": {"type": "string", "enum": ["solar", "wind", "bess", "data_centre"], "default": "solar"},
+                "alc_grade": {"type": "string", "description": "ALC grade e.g. Grade 3b", "default": "Grade 3b"},
+                "region": {"type": "string", "description": "UK region e.g. South East, Midlands", "default": "default"},
+                "area_ha": {"type": "number", "description": "Site area in hectares", "default": 10},
+            },
+        },
+    },
+    {
+        "name": "match_landowner",
+        "description": "Fuzzy-match a landowner name to Companies House entities near a location. Uses Levenshtein distance + token overlap. Use when asked about who owns land, finding the landowner company, or connecting a name to a registered entity.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "landowner_name": {"type": "string", "description": "Landowner name to search for"},
+                "lat": {"type": "number", "description": "Search centre latitude"},
+                "lon": {"type": "number", "description": "Search centre longitude"},
+                "radius_km": {"type": "number", "default": 5},
+            },
+            "required": ["landowner_name", "lat", "lon"],
+        },
+    },
+    {
         "name": "find_dc_sites",
         "description": "AI-driven site discovery for data centres. Scans substations with adequate headroom and scores them with the full 15-dimension engine. Use natural language queries like 'Find 200+ acre sites near London with >100MW'.",
         "input_schema": {
@@ -1572,6 +1614,57 @@ async def execute_tool(
                 "ranking": result.get("ranking"),
                 "dimension_winners": result.get("dimension_winners"),
                 "recommendation": result.get("recommendation"),
+            }
+
+        elif name == "search_colocation_opportunities":
+            from utils.colocation_search import search_colocation_opportunities
+            lat, lon = args["lat"], args["lon"]
+            result = await search_colocation_opportunities(
+                pool, lat, lon,
+                radius_km=args.get("radius_km", 10),
+                technology=args.get("technology", "solar"),
+                min_capacity_mw=args.get("min_capacity_mw", 5),
+            )
+            # Compact for chat context
+            return {
+                "count": result["count"],
+                "opportunities": [
+                    {
+                        "rank": o["rank"],
+                        "score": o["score"],
+                        "substation": o["substation"]["name"],
+                        "headroom_mw": o["substation"]["headroom_mw"],
+                        "distance_km": o["substation"]["distance_km"],
+                        "parcels_found": o["land"]["parcels_found"],
+                        "alc_grade": o["alc"]["grade"],
+                        "lease_mid_gbp_ha": o["lease_benchmark"]["mid"],
+                        "repd_stalled": len(o.get("repd_opportunities", [])),
+                    }
+                    for o in result["opportunities"][:8]
+                ],
+            }
+
+        elif name == "benchmark_lease_rate":
+            from utils.colocation_search import benchmark_lease
+            return benchmark_lease(
+                args.get("technology", "solar"),
+                args.get("alc_grade", "Grade 3b"),
+                args.get("region", "default"),
+                args.get("area_ha", 10),
+            )
+
+        elif name == "match_landowner":
+            from utils.colocation_search import match_landowner_to_companies
+            from utils.companies_house import search_landowner_companies
+            companies_result = await search_landowner_companies(
+                args["lat"], args["lon"], radius_km=args.get("radius_km", 5)
+            )
+            companies = companies_result.get("companies", [])
+            matches = match_landowner_to_companies(args["landowner_name"], companies)
+            return {
+                "landowner_name": args["landowner_name"],
+                "matches": matches[:3],
+                "companies_searched": len(companies),
             }
 
         elif name == "find_dc_sites":
