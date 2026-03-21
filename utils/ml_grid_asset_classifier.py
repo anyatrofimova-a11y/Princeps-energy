@@ -195,7 +195,7 @@ def _generate_asset_data(n_per_type=120):
             condition = max(10, min(100, 95 - age * 2.5 + rng.normal(0, 5)))
             y_cond.append(condition)
 
-    return np.array(X_all), np.array(y_type), np.array(y_cap), np.array(y_cond)
+    return np.array(X_all), np.array(y_type), np.array(y_cap), np.array(y_cond), type_to_idx, trained_types
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -208,14 +208,14 @@ def train_all_models(n_per_type: int = 120) -> dict:
     from xgboost import XGBClassifier, XGBRegressor
     from sklearn.metrics import accuracy_score, mean_absolute_error, r2_score
 
-    X, y_type, y_cap, y_cond = _generate_asset_data(n_per_type)
+    X, y_type, y_cap, y_cond, type_to_idx, trained_types = _generate_asset_data(n_per_type)
     split = int(0.8 * len(X))
     idx = np.random.default_rng(42).permutation(len(X))
     X, y_type, y_cap, y_cond = X[idx], y_type[idx], y_cap[idx], y_cond[idx]
 
     # 1. Asset type classifier
     clf = XGBClassifier(n_estimators=200, max_depth=6, learning_rate=0.1,
-                        use_label_encoder=False, eval_metric="mlogloss", random_state=42)
+                        eval_metric="mlogloss", random_state=42)
     clf.fit(X[:split], y_type[:split], eval_set=[(X[split:], y_type[split:])], verbose=False)
     acc = accuracy_score(y_type[split:], clf.predict(X[split:]))
     log.info("Asset classifier: %.1f%% accuracy", acc * 100)
