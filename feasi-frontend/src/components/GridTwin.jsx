@@ -3,6 +3,8 @@ import mapboxgl from "mapbox-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { ColumnLayer, ArcLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
 import api from "../services/api";
+import { createParticleLayer } from "./GridParticleFlow";
+import GridCameraChoreography from "./GridCameraChoreography";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 

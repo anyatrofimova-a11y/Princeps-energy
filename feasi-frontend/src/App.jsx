@@ -21,7 +21,8 @@ import CameraToolbar from "./components/CameraToolbar";
 import SitePicker from "./components/SitePicker";
 import LiveStrip from "./components/LiveStrip";
 import ConstraintTimeline from "./components/ConstraintTimeline";
-import StartupOverlay from "./components/StartupOverlay";
+import StartupOverlay, { saveRecentSite } from "./components/StartupOverlay";
+import { useWorkspace } from "./contexts/WorkspaceContext";
 
 // ── Lazy-loaded overlays (split into separate chunks) ──
 const DigitalTwin = lazy(() => import("./components/DigitalTwin"));
@@ -45,6 +46,7 @@ const DrawingToolbar = lazy(() => import("./components/DrawingToolbar"));
 const ComponentPalette = lazy(() => import("./components/ComponentPalette"));
 const AssetDock = lazy(() => import("./components/AssetDock"));
 const EnergyFlowPanel = lazy(() => import("./components/EnergyFlowPanel"));
+const ScenarioCompare = lazy(() => import("./components/ScenarioCompare"));
 
 const LazyFallback = () => <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", zIndex: 9999, color: "#fff", fontSize: 13 }}>Loading...</div>;
 import {
@@ -91,11 +93,48 @@ export default function App() {
     solarYield, gridContext,
   } = useSite();
 
+  const { setActiveWorkspace, navigateToIntent } = useWorkspace();
+
   const [mapInstance, setMapInstance] = useState(null);
   const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [scenarioCompareOpen, setScenarioCompareOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(() => !localStorage.getItem("princeps_onboarded"));
   const [backendReady, setBackendReady] = useState(false);
   const handleBackendReady = useCallback(() => setBackendReady(true), []);
+
+  // Handle intent selection from StartupOverlay
+  const handleStartupIntent = useCallback((intentId, siteData) => {
+    switch (intentId) {
+      case "find":
+        setActiveWorkspace("analyse");
+        setPickMode(true);
+        break;
+      case "assess":
+        setActiveWorkspace("analyse");
+        navigateToIntent("feasibility");
+        break;
+      case "grid":
+        setActiveWorkspace("analyse");
+        navigateToIntent("grid_connection");
+        break;
+      case "portfolio":
+        setActiveWorkspace("home");
+        setPipelineOpen(true);
+        break;
+      case "recent":
+        if (siteData?.lat && siteData?.lon) {
+          setPickedLocation({ lat: siteData.lat, lon: siteData.lon });
+          if (siteData.parcelId) {
+            setParcelId(siteData.parcelId);
+            loadSite(siteData.parcelId, samCapacity, samDay);
+          }
+          setActiveWorkspace("analyse");
+        }
+        break;
+      default:
+        break;
+    }
+  }, [setActiveWorkspace, navigateToIntent, setPickMode, setPickedLocation, setParcelId, loadSite, samCapacity, samDay]);
 
   // ── Map drop handler: place asset at lat/lon ──
   const handleMapDrop = useCallback((e) => {
@@ -246,6 +285,14 @@ export default function App() {
         setPickedLocation({ lat: data.lat, lon: data.lon });
         await loadSite(data.parcel_id, samCapacity, samDay);
         runDeferral(5, 4);
+        // Save to recent sites for StartupOverlay
+        saveRecentSite({
+          id: data.parcel_id,
+          name: data.location_name || data.parcel_id,
+          lat: data.lat, lon: data.lon,
+          parcelId: data.parcel_id,
+          lastModified: new Date().toLocaleDateString("en-GB"),
+        });
       }
     } catch (err) { console.error(err); }
   };
@@ -476,6 +523,7 @@ export default function App() {
       case "dc-landing": setDcLandingOpen(true); break;
       case "dc-compare": setDcComparisonOpen(true); break;
       case "pipeline": setPipelineOpen(true); break;
+      case "compare": setScenarioCompareOpen(true); break;
       case "demo": setDemoOpen(true); break;
       case "settings": setSettingsMode(true); break;
       default: break;
@@ -614,10 +662,38 @@ export default function App() {
       {thermalModelOpen && (
         <ThermalModelPanel onClose={() => setThermalModelOpen(false)} />
       )}
+
+      {/* Scenario Comparison overlay */}
+      {scenarioCompareOpen && (
+        <ScenarioCompare
+          scenarios={[]}
+          onClose={() => setScenarioCompareOpen(false)}
+          onRunAnalysis={async (scenario, callback) => {
+            try {
+              const data = await api.site.fromLocation(scenario.lat, scenario.lon);
+              if (data) {
+                const hw = data.grid_headroom_mw || data.headroom_mw || 0;
+                callback({
+                  solar_cf: data.capacity_factor || 0.105,
+                  grid_headroom_mw: hw,
+                  connection_cost_k: data.connection_cost_k || (hw > 50 ? 200 : 400),
+                  timeline_months: data.timeline_months || 24,
+                  revenue_yr: data.revenue_yr || (scenario.capacity_mw * 0.105 * 8760 * 50),
+                  irr: data.irr || 0.08,
+                  planning_risk: data.planning_risk || 0.3,
+                  verdict: hw >= 50 ? "GO" : hw >= 10 ? "CAUTION" : "NO-GO",
+                });
+              }
+            } catch (err) {
+              console.error("Scenario analysis error:", err);
+            }
+          }}
+        />
+      )}
       </Suspense>
 
       {/* Startup overlay — shown until backend health check passes */}
-      {!backendReady && <StartupOverlay onReady={handleBackendReady} />}
+      {!backendReady && <StartupOverlay onReady={handleBackendReady} onIntent={handleStartupIntent} />}
     </AppShell>
   );
 }

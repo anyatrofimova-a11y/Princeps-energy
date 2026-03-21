@@ -3,6 +3,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid, Html } from "@react-three/drei";
 import * as THREE from "three";
 import api from "../services/api";
+import PostprocessingEffects from "./PostprocessingEffects";
 
 /* ── Design Tokens ────────────────────────────────────────────────────── */
 const T = {
@@ -1175,6 +1176,7 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
               txLoadPct={txLoadPct}
               exportMw={exportMw}
             />
+            <PostprocessingEffects bloom={1.4} bloomThreshold={0.3} chromaticAberration={0.0015} vignette={0.5} />
           </Canvas>
           {/* State badge overlay */}
           <div style={{

@@ -314,11 +314,7 @@ async def ml_site_score(req: MLSiteScoreRequest):
 
 @router.post("/api/ml/train")
 async def ml_train(n_samples: int = Query(1000, ge=100, le=10000)):
-    """Retrain XGBoost site viability models on synthetic data.
-
-    Use this endpoint to regenerate models after code changes or
-    to increase training set size.
-    """
+    """Retrain XGBoost site viability models on synthetic data."""
     from utils.ml_site_classifier import _invalidate_cache
     try:
         meta = train_and_save(n_samples=n_samples)
@@ -327,3 +323,144 @@ async def ml_train(n_samples: int = Query(1000, ge=100, le=10000)):
     except Exception as e:
         log.exception("ML training failed")
         raise HTTPException(status_code=500, detail=f"Training failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Advanced ML Models — Planning Risk, Financial IRR, Site Ranking
+# ---------------------------------------------------------------------------
+
+@router.post("/api/ml/planning-risk")
+async def ml_planning_risk(
+    distance_to_residential_km: float = Query(1.5),
+    num_nearby_solar_farms: int = Query(2),
+    aonb_proximity_km: float = Query(10),
+    green_belt: bool = Query(False),
+    flood_zone: int = Query(1),
+    agricultural_grade: int = Query(3),
+    local_authority_approval_rate: float = Query(0.85),
+    capacity_mw: float = Query(5),
+    height_above_ground_m: float = Query(3),
+    landscape_sensitivity: int = Query(2),
+):
+    """Predict planning outcome using XGBoost classifier.
+    Returns APPROVED / CONDITIONAL / REFUSED with probability + SHAP explanation."""
+    from utils.ml_advanced_models import predict_planning_risk
+    features = {
+        "distance_to_residential_km": distance_to_residential_km,
+        "num_nearby_solar_farms": num_nearby_solar_farms,
+        "aonb_proximity_km": aonb_proximity_km,
+        "green_belt": int(green_belt),
+        "flood_zone": flood_zone,
+        "agricultural_grade": agricultural_grade,
+        "local_authority_approval_rate": local_authority_approval_rate,
+        "capacity_mw": capacity_mw,
+        "height_above_ground_m": height_above_ground_m,
+        "landscape_sensitivity": landscape_sensitivity,
+    }
+    return predict_planning_risk(features)
+
+
+@router.post("/api/ml/financial-irr")
+async def ml_financial_irr(
+    capacity_mw: float = Query(5),
+    annual_yield_mwh: float = Query(5475),
+    grid_distance_km: float = Query(2),
+    connection_cost_gbp: float = Query(300000),
+    ppa_price_gbp_mwh: float = Query(55),
+    capex_per_kw: float = Query(650),
+    opex_per_kw_yr: float = Query(10),
+    degradation_pct: float = Query(0.5),
+    project_life_years: int = Query(25),
+    wacc_pct: float = Query(6.0),
+    land_rent_per_ha: float = Query(1200),
+):
+    """Predict project IRR (%) using XGBoost regressor.
+    Returns predicted IRR, viability band (STRONG/VIABLE/MARGINAL/UNVIABLE), + SHAP factors."""
+    from utils.ml_advanced_models import predict_financial_irr
+    features = {
+        "capacity_mw": capacity_mw, "annual_yield_mwh": annual_yield_mwh,
+        "grid_distance_km": grid_distance_km, "connection_cost_gbp": connection_cost_gbp,
+        "ppa_price_gbp_mwh": ppa_price_gbp_mwh, "capex_per_kw": capex_per_kw,
+        "opex_per_kw_yr": opex_per_kw_yr, "degradation_pct": degradation_pct,
+        "project_life_years": project_life_years, "wacc_pct": wacc_pct,
+        "land_rent_per_ha": land_rent_per_ha,
+    }
+    return predict_financial_irr(features)
+
+
+class RankSitesRequest(BaseModel):
+    sites: list[dict]
+
+
+@router.post("/api/ml/rank-sites")
+async def ml_rank_sites(req: RankSitesRequest):
+    """Rank candidate sites by composite ML quality score.
+    Combines site viability + planning risk + financial IRR into a unified ranking.
+    Returns sites sorted by composite score with tier labels (A/B/C)."""
+    from utils.ml_advanced_models import rank_sites
+    if not req.sites:
+        raise HTTPException(400, "Empty site list")
+    if len(req.sites) > 100:
+        raise HTTPException(400, "Maximum 100 sites per ranking request")
+    return {"ranked_sites": rank_sites(req.sites), "count": len(req.sites)}
+
+
+class MLEnhancedReportRequest(BaseModel):
+    site: dict = {}
+    verdict: dict = {}
+    yield_data: dict = {}
+    grid: dict = {}
+    satellite: dict = {}
+    features: dict = {}
+    comparison_sites: list[dict] = []
+
+
+@router.post("/api/reports/ml-enhanced")
+async def ml_enhanced_report(req: MLEnhancedReportRequest):
+    """Generate an ML-enhanced site assessment report with SHAP explanations,
+    ensemble verdicts, and site comparison tables. Returns HTML (or PDF if Playwright available)."""
+    from utils.ml_report_section import render_ml_enhanced_report
+    from utils.ml_site_classifier import predict_site, ensemble_score
+
+    # Run ML prediction
+    ml_result = predict_site(req.features) if req.features else {"verdict": "—", "score": 0, "confidence": 0, "top_factors": []}
+    ensemble = None
+    if req.verdict.get("confidence"):
+        ensemble = ensemble_score(
+            rule_score=req.verdict.get("rule_score"),
+            ml_result=ml_result,
+            agent_confidence=req.verdict.get("confidence"),
+        )
+
+    # Render report
+    html = render_ml_enhanced_report(
+        site=req.site,
+        ml_result=ml_result,
+        ensemble=ensemble,
+        yield_data=req.yield_data,
+        grid=req.grid,
+        satellite=req.satellite,
+        comparison_sites=req.comparison_sites,
+    )
+
+    site_name = req.site.get("name", "site")
+    filename = f"princeps-ml-report-{_safe_filename(site_name)}"
+
+    # Try PDF, fallback to HTML
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            await page.set_content(html, wait_until="networkidle")
+            pdf_bytes = await page.pdf(format="A4", print_background=True)
+            await browser.close()
+        return StreamingResponse(
+            iter([pdf_bytes]), media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.pdf"'},
+        )
+    except ImportError:
+        return StreamingResponse(
+            iter([html.encode()]), media_type="text/html",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.html"'},
+        )

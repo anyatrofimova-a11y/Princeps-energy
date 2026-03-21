@@ -61,7 +61,7 @@ const SUGGESTED_PROMPTS = {
 };
 
 export default function AssetBrowser() {
-  const { activeWorkspace, browserOpen, toggleBrowser, navigateToIntent } = useWorkspace();
+  const { activeWorkspace, activeViewMode, browserOpen, toggleBrowser, navigateToIntent } = useWorkspace();
   const {
     activeIntent,
     parcelId, samCapacity, samDay, runAgent,
@@ -93,21 +93,16 @@ export default function AssetBrowser() {
     navigateToIntent(intent);
     if (!workflowResults[intent] && parcelId) {
       runAgent(parcelId, intent, samCapacity, samDay);
+    } else if (!parcelId) {
+      // No site selected — dispatch to chat instead
+      handlePrompt(`Run ${(INTENT_META[intent]?.label || intent).toLowerCase()} analysis`);
     }
   };
 
-  // Dispatch a suggested prompt to the chat input
+  // Dispatch a suggested prompt to the CopilotWidget chat
   const handlePrompt = (prompt) => {
-    // Find the chat input and set its value + trigger send
-    const cbInput = document.querySelector(".cb-input");
-    if (cbInput) {
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype, "value"
-      ).set;
-      nativeInputValueSetter.call(cbInput, prompt);
-      cbInput.dispatchEvent(new Event("input", { bubbles: true }));
-      cbInput.focus();
-    }
+    // Use custom event to communicate with CopilotWidget
+    window.dispatchEvent(new CustomEvent("princeps-chat", { detail: { text: prompt } }));
   };
 
   // Grid workspace: smart asset tree

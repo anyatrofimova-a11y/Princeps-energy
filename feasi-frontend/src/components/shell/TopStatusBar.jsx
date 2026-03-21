@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useSite } from "../../SiteContext";
 import { useWorkspace, WORKSPACES } from "../../contexts/WorkspaceContext";
 import api from "../../services/api";
@@ -64,6 +64,191 @@ function WorkflowSteps() {
   );
 }
 
+/* ── Site Context Breadcrumb ── */
+function SiteBreadcrumb() {
+  const { explain, pickedLocation, samCapacity, agentResult, workflowSummary } = useSite();
+
+  const siteName = explain?.location_name || explain?.name || null;
+  const lat = explain?.lat ?? pickedLocation?.lat;
+  const lon = explain?.lon ?? pickedLocation?.lon;
+  const verdict = workflowSummary?.overall_verdict || agentResult?.verdict;
+
+  if (!lat && !siteName) {
+    return (
+      <div className="tsb-breadcrumb-site tsb-breadcrumb-empty">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+        </svg>
+        <span>No site selected</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="tsb-breadcrumb-site">
+      {siteName && <span className="tsb-bc-name">{siteName}</span>}
+      {lat && lon && (
+        <>
+          {siteName && <span className="tsb-bc-sep">&middot;</span>}
+          <span className="tsb-bc-coords">{lat.toFixed(4)}, {lon.toFixed(4)}</span>
+        </>
+      )}
+      {samCapacity > 0 && (
+        <>
+          <span className="tsb-bc-sep">&middot;</span>
+          <span className="tsb-bc-capacity">{samCapacity} kW</span>
+        </>
+      )}
+      {verdict && (
+        <>
+          <span className="tsb-bc-sep">&middot;</span>
+          <span className={`tsb-bc-verdict tsb-bc-verdict-${verdict.toLowerCase().replace("-", "")}`}>
+            {verdict}
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── Hero Search Bar ── */
+function HeroSearch({ onCommandPalette }) {
+  const [focused, setFocused] = useState(false);
+  const [query, setQuery] = useState("");
+  const inputRef = useRef(null);
+  const dropdownRef = useRef(null);
+  const { setPickedLocation, loadSite, setParcelId, samCapacity, samDay } = useSite();
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!focused) return;
+    const handler = (e) => {
+      if (
+        inputRef.current && !inputRef.current.contains(e.target) &&
+        dropdownRef.current && !dropdownRef.current.contains(e.target)
+      ) {
+        setFocused(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [focused]);
+
+  const SUGGESTED = [
+    "Solar feasibility near Birmingham",
+    "Grid capacity in South Wales",
+    "52.4862, -1.8904",
+    "B15 2TT",
+  ];
+
+  const loadRecentSearches = () => {
+    try {
+      const raw = localStorage.getItem("princeps_recent_searches");
+      return raw ? JSON.parse(raw).slice(0, 4) : [];
+    } catch { return []; }
+  };
+
+  const saveSearch = (q) => {
+    try {
+      const existing = loadRecentSearches().filter(s => s !== q);
+      localStorage.setItem("princeps_recent_searches", JSON.stringify([q, ...existing].slice(0, 8)));
+    } catch { /* ignore */ }
+  };
+
+  const isCoordinate = (text) => {
+    const match = text.match(/^(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)$/);
+    if (match) {
+      const lat = parseFloat(match[1]);
+      const lon = parseFloat(match[2]);
+      if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+        return { lat, lon };
+      }
+    }
+    return null;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const q = query.trim();
+    if (!q) return;
+
+    saveSearch(q);
+    setFocused(false);
+
+    const coords = isCoordinate(q);
+    if (coords) {
+      setPickedLocation(coords);
+      // Attempt to load site at these coordinates
+      try {
+        const data = await api.site.fromLocation(coords.lat, coords.lon);
+        if (data?.parcel_id) {
+          setParcelId(data.parcel_id);
+          loadSite(data.parcel_id, samCapacity, samDay);
+        }
+      } catch { /* ignore */ }
+      setQuery("");
+      return;
+    }
+
+    // Text or postcode query — delegate to command palette / copilot
+    onCommandPalette?.(q);
+    setQuery("");
+  };
+
+  const handleSuggestionClick = (text) => {
+    setQuery(text);
+    setFocused(false);
+    inputRef.current?.focus();
+  };
+
+  const recentSearches = loadRecentSearches();
+
+  return (
+    <div className="tsb-hero-search-wrap">
+      <form className={`tsb-hero-search${focused ? " tsb-hero-search-focused" : ""}`} onSubmit={handleSubmit}>
+        <svg className="tsb-hero-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+        </svg>
+        <input
+          ref={inputRef}
+          type="text"
+          className="tsb-hero-search-input"
+          placeholder="Search by postcode, coordinates, or describe what you need..."
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onFocus={() => setFocused(true)}
+        />
+        <kbd className="tsb-hero-search-kbd">&#8984;K</kbd>
+      </form>
+
+      {focused && (
+        <div className="tsb-hero-dropdown" ref={dropdownRef}>
+          {recentSearches.length > 0 && (
+            <div className="tsb-hero-dropdown-section">
+              <div className="tsb-hero-dropdown-label">Recent</div>
+              {recentSearches.map((s, i) => (
+                <button key={i} className="tsb-hero-dropdown-item" onClick={() => handleSuggestionClick(s)}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="tsb-hero-dropdown-section">
+            <div className="tsb-hero-dropdown-label">Suggestions</div>
+            {SUGGESTED.map((s, i) => (
+              <button key={i} className="tsb-hero-dropdown-item" onClick={() => handleSuggestionClick(s)}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MoreMenu({ items }) {
   const [open, setOpen] = useState(false);
   return (
@@ -106,8 +291,6 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
   } = useSite();
   const { activeWorkspace } = useWorkspace();
 
-  const wsLabel = WORKSPACES.find(w => w.id === activeWorkspace)?.label || "Princeps";
-
   // PDF download
   const [pdfLoading, setPdfLoading] = useState(false);
   const downloadPdf = useCallback(async () => {
@@ -132,11 +315,6 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
       setPdfLoading(false);
     }
   }, [explain, pickedLocation, parcelId, samCapacity, pdfLoading]);
-  const cf = solarYield?.capacity_factor_pct;
-  const annualKwh = solarYield?.annual_energy_kwh;
-  const gridDist = gridContext?.nearest_substation?.distance_km;
-  const verdict = workflowSummary?.overall_verdict || agentResult?.verdict;
-  const confidence = workflowSummary?.average_confidence || agentResult?.confidence;
 
   return (
     <header className="top-status-bar">
@@ -145,56 +323,11 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
       </div>
 
       <div className="tsb-center">
-        <button className="tsb-search-trigger" onClick={onCommandPalette}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
-          </svg>
-          Search sites, commands...
-          <kbd>&#8984;K</kbd>
-        </button>
+        <SiteBreadcrumb />
+        <HeroSearch onCommandPalette={onCommandPalette} />
       </div>
 
       <div className="tsb-right">
-        <div className="kpi-strip">
-          {activeWorkspace !== "analyse" && (
-            <>
-              <div className="kpi-item">
-                <span className="kpi-label">CF</span>
-                <span className="kpi-value" style={{ color: "var(--cds-interactive)" }}>
-                  {cf ? `${cf.toFixed(1)}%` : "--"}
-                </span>
-              </div>
-              <div className="kpi-item">
-                <span className="kpi-label">MWh</span>
-                <span className="kpi-value" style={{ color: "var(--cds-support-warning)" }}>
-                  {annualKwh ? `${(annualKwh / 1000).toFixed(0)}` : "--"}
-                </span>
-              </div>
-            </>
-          )}
-          <div className="kpi-item">
-            <span className="kpi-label">Grid</span>
-            <span className="kpi-value" style={{ color: "var(--cyan)" }}>
-              {gridDist ? `${gridDist.toFixed(1)}km` : "--"}
-            </span>
-          </div>
-          {verdict && (
-            <div className="kpi-item kpi-verdict">
-              <span className={`kpi-verdict-pill kpi-verdict-${verdict.toLowerCase().replace("-", "")}`}>
-                {verdict}
-              </span>
-            </div>
-          )}
-          {confidence != null && confidence > 0 && (
-            <div className="kpi-item">
-              <span className="kpi-label">Conf</span>
-              <span className="kpi-value" style={{ color: "var(--purple-soft)" }}>
-                {Math.round(confidence * 100)}%
-              </span>
-            </div>
-          )}
-        </div>
-
         <span className="header-v2-param">
           <input
             type="number"

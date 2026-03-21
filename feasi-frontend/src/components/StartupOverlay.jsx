@@ -1,34 +1,89 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 
-const SUBSYSTEMS = [
-  { key: "database",          label: "Database",           icon: "\u25A0" },
-  { key: "core_api",          label: "Core API",           icon: "\u25B6" },
-  { key: "grid_data",         label: "Grid Data",          icon: "\u26A1" },
-  { key: "demand_data",       label: "Demand Data",        icon: "\u25CF" },
-  { key: "neo4j",             label: "Graph Topology",     icon: "\u2630" },
-  { key: "geeflow",           label: "GeeFlow",            icon: "\u25B2" },
-  { key: "dc_infrastructure", label: "DC Infrastructure",  icon: "\u25A0" },
+/* ── Recent sites from localStorage ── */
+function loadRecentSites() {
+  try {
+    const raw = localStorage.getItem("princeps_recent_sites");
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return [];
+}
+
+export function saveRecentSite(site) {
+  try {
+    const existing = loadRecentSites().filter(s => s.id !== site.id);
+    const updated = [site, ...existing].slice(0, 8);
+    localStorage.setItem("princeps_recent_sites", JSON.stringify(updated));
+  } catch { /* ignore */ }
+}
+
+const INTENT_CARDS = [
+  {
+    id: "find",
+    title: "Find a Site",
+    desc: "Search by postcode, coordinates, or browse the map",
+    color: "#D4A018",
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+      </svg>
+    ),
+  },
+  {
+    id: "assess",
+    title: "Assess a Site",
+    desc: "Run AI feasibility study with solar, grid, and planning analysis",
+    color: "#16a34a",
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        <path d="M9 14l2 2 4-4" />
+      </svg>
+    ),
+  },
+  {
+    id: "grid",
+    title: "Grid Connection Study",
+    desc: "Assess connection feasibility, capacity, and cost estimates",
+    color: "#0891b2",
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+      </svg>
+    ),
+  },
+  {
+    id: "portfolio",
+    title: "Review Portfolio",
+    desc: "View project pipeline, verdicts, and portfolio analytics",
+    color: "#7c3aed",
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />
+      </svg>
+    ),
+  },
 ];
 
-const STATUS_COLORS = {
-  ready:   "#4ade80",
-  loading: "#60a5fa",
-  pending: "#6b7280",
-  failed:  "#f87171",
+const VERDICT_COLORS = {
+  GO: "#16a34a",
+  CAUTION: "#d97706",
+  "NO-GO": "#dc2626",
 };
 
-const STATUS_LABELS = {
-  ready:   "Online",
-  loading: "Loading",
-  pending: "Pending",
-  failed:  "Failed",
-};
-
-export default function StartupOverlay({ onReady }) {
+export default function StartupOverlay({ onReady, onIntent }) {
   const [readiness, setReadiness] = useState(null);
+  const [coreReady, setCoreReady] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [recentSites, setRecentSites] = useState([]);
   const abortRef = useRef(null);
 
+  // Load recent sites
+  useEffect(() => {
+    setRecentSites(loadRecentSites());
+  }, []);
+
+  // Poll backend readiness in background
   useEffect(() => {
     const ac = new AbortController();
     abortRef.current = ac;
@@ -41,210 +96,131 @@ export default function StartupOverlay({ onReady }) {
           const data = await res.json();
           setReadiness(data);
           if (data.core_ready) {
-            // Core is ready — user can start interacting
-            setTimeout(() => {
-              setDismissed(true);
-              onReady?.(data);
-            }, 600);
+            setCoreReady(true);
             return; // stop polling
           }
-        } else {
-          setReadiness(null);
         }
       } catch (err) {
         if (err.name === "AbortError") return;
-        setReadiness(null);
       }
       setTimeout(poll, 1500);
     };
 
     poll();
     return () => ac.abort();
-  }, [onReady]);
+  }, []);
+
+  const handleIntentClick = useCallback((intentId) => {
+    if (!coreReady) return;
+    setDismissed(true);
+    onReady?.(readiness);
+    // Small delay to let overlay fade out
+    setTimeout(() => {
+      onIntent?.(intentId);
+    }, 100);
+  }, [coreReady, readiness, onReady, onIntent]);
+
+  const handleRecentSiteClick = useCallback((site) => {
+    if (!coreReady) return;
+    setDismissed(true);
+    onReady?.(readiness);
+    setTimeout(() => {
+      onIntent?.("recent", site);
+    }, 100);
+  }, [coreReady, readiness, onReady, onIntent]);
 
   if (dismissed) return null;
 
-  const isConnecting = readiness === null;
-  const overall = readiness?.overall ?? "starting";
-  const subsystems = readiness?.subsystems ?? {};
-  const allReady = overall === "ready";
-
   return (
-    <div style={styles.overlay}>
-      <div style={styles.card}>
+    <div className="startup-overlay">
+      <div className="startup-card">
         {/* Logo */}
-        <div style={styles.logo}>PRINCEPS</div>
-        <div style={styles.subtitle}>Energy Infrastructure Intelligence</div>
-
-        {/* Spinner */}
-        <div style={styles.spinnerWrap}>
-          {allReady ? (
-            <div style={styles.checkmark}>&#10003;</div>
-          ) : (
-            <div style={styles.spinner} />
-          )}
+        <div className="startup-logo-row">
+          <div className="startup-logo-mark">P</div>
+          <span className="startup-logo-text">PRINCEPS</span>
         </div>
 
-        {/* Status line */}
-        <div style={styles.statusLine}>
-          {isConnecting
-            ? "Connecting to backend..."
-            : allReady
-              ? "All systems operational"
-              : readiness?.core_ready
-                ? "Core online \u2014 loading background data..."
-                : "Starting subsystems..."}
-        </div>
+        {/* Heading */}
+        <h1 className="startup-heading">What would you like to do?</h1>
 
-        {/* Uptime */}
-        {readiness?.uptime_s != null && (
-          <div style={styles.uptime}>{readiness.uptime_s}s elapsed</div>
-        )}
-
-        {/* Subsystem checklist */}
-        {!isConnecting && (
-          <div style={styles.checklist}>
-            {SUBSYSTEMS.map(({ key, label }) => {
-              const info = subsystems[key] || { status: "pending" };
-              const color = STATUS_COLORS[info.status] || STATUS_COLORS.pending;
-              const statusText = info.progress
-                ? info.progress
-                : info.error
-                  ? `Failed: ${info.error.slice(0, 40)}`
-                  : STATUS_LABELS[info.status] || info.status;
-
-              return (
-                <div key={key} style={styles.checkItem}>
-                  <span style={{ ...styles.checkIcon, color }}>
-                    {info.status === "ready"
-                      ? "\u2713"
-                      : info.status === "failed"
-                        ? "\u2717"
-                        : info.status === "loading"
-                          ? "\u25CB"
-                          : "\u2022"}
-                  </span>
-                  <span style={styles.checkLabel}>{label}</span>
-                  <span style={{ ...styles.checkStatus, color }}>
-                    {statusText}
-                  </span>
-                </div>
-              );
-            })}
+        {/* Loading state indicator */}
+        {!coreReady && (
+          <div className="startup-loading-hint">
+            <div className="startup-spinner" />
+            <span>Connecting to backend...</span>
           </div>
         )}
+
+        {/* Intent cards 2x2 */}
+        <div className="startup-intent-grid">
+          {INTENT_CARDS.map(card => (
+            <button
+              key={card.id}
+              className={`startup-intent-card${!coreReady ? " startup-intent-disabled" : ""}`}
+              onClick={() => handleIntentClick(card.id)}
+              disabled={!coreReady}
+              style={{ "--intent-color": card.color }}
+            >
+              <div className="startup-intent-icon" style={{ color: card.color }}>
+                {card.icon}
+              </div>
+              <div className="startup-intent-body">
+                <div className="startup-intent-title">{card.title}</div>
+                <div className="startup-intent-desc">{card.desc}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Recent Sites */}
+        {recentSites.length > 0 && (
+          <div className="startup-recent">
+            <div className="startup-recent-label">Recent Sites</div>
+            <div className="startup-recent-row">
+              {recentSites.slice(0, 4).map((site, i) => (
+                <button
+                  key={site.id || i}
+                  className={`startup-recent-card${!coreReady ? " startup-intent-disabled" : ""}`}
+                  onClick={() => handleRecentSiteClick(site)}
+                  disabled={!coreReady}
+                >
+                  <div className="startup-recent-name">{site.name || "Unnamed Site"}</div>
+                  {site.verdict && (
+                    <span
+                      className="startup-verdict-badge"
+                      style={{ background: VERDICT_COLORS[site.verdict] || "#666" }}
+                    >
+                      {site.verdict}
+                    </span>
+                  )}
+                  <div className="startup-recent-meta">
+                    {site.lastModified || ""}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Keyboard hint */}
+        <div className="startup-hint">
+          Press <kbd>&#8984;K</kbd> anytime for search
+        </div>
       </div>
 
       <style>{`
-        @keyframes princeps-spin {
-          to { transform: rotate(360deg); }
-        }
-        @keyframes princeps-fadeIn {
-          from { opacity: 0; transform: translateY(12px); }
+        @keyframes startup-fadeIn {
+          from { opacity: 0; transform: translateY(16px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes princeps-pulse {
-          0%, 100% { opacity: 0.6; }
-          50%      { opacity: 1; }
+        @keyframes startup-spin {
+          to { transform: rotate(360deg); }
+        }
+        @keyframes startup-cardIn {
+          from { opacity: 0; transform: scale(0.96) translateY(8px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
         }
       `}</style>
     </div>
   );
 }
-
-const styles = {
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 99999,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "radial-gradient(ellipse at center, #1a1a2e 0%, #0d0d1a 100%)",
-  },
-  card: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: 12,
-    animation: "princeps-fadeIn 0.5s ease-out",
-  },
-  logo: {
-    fontSize: 32,
-    fontWeight: 700,
-    letterSpacing: 6,
-    color: "#e0e0ff",
-    fontFamily: "'Inter', system-ui, sans-serif",
-  },
-  subtitle: {
-    fontSize: 12,
-    color: "#8888aa",
-    letterSpacing: 2,
-    textTransform: "uppercase",
-    marginBottom: 16,
-  },
-  spinnerWrap: {
-    width: 48,
-    height: 48,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 8,
-  },
-  spinner: {
-    width: 36,
-    height: 36,
-    border: "3px solid #333355",
-    borderTopColor: "#6366f1",
-    borderRadius: "50%",
-    animation: "princeps-spin 0.8s linear infinite",
-  },
-  checkmark: {
-    fontSize: 32,
-    color: "#4ade80",
-    fontWeight: 700,
-  },
-  statusLine: {
-    fontSize: 13,
-    color: "#aaaabb",
-    animation: "princeps-pulse 2s ease-in-out infinite",
-  },
-  uptime: {
-    fontSize: 11,
-    color: "#666680",
-    marginTop: -4,
-  },
-  checklist: {
-    marginTop: 12,
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-    minWidth: 280,
-  },
-  checkItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    fontSize: 13,
-    fontFamily: "'Inter', system-ui, sans-serif",
-  },
-  checkIcon: {
-    fontSize: 14,
-    width: 16,
-    textAlign: "center",
-  },
-  checkLabel: {
-    color: "#ccccdd",
-    flex: 1,
-  },
-  checkStatus: {
-    fontSize: 11,
-    fontWeight: 600,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    maxWidth: 160,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-};

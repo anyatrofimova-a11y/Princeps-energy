@@ -358,7 +358,10 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
         setLayers((prev) => ({ ...prev, gridCapacity: true }));
       }
       if (tabId === "connect") {
-        setGridConnectionOpen?.(true);
+        if (parcelId) {
+          setGridConnectionOpen?.(true);
+        }
+        // Panel will show connection info even without parcelId
       }
       if (tabId === "land") {
         setLayers((prev) => ({ ...prev, landParcels: true }));
@@ -529,6 +532,13 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
     setExpandedTools({});
   }, []);
 
+  // Send a prompt from a non-chat tab → opens chat and sends
+  const handlePromptFromTab = useCallback((text) => {
+    setInput(text);
+    setActiveTab("chat");
+    pendingRef.current = text;
+  }, []);
+
   const chatOpen = activeTab === "chat";
   const nodeOpen = activeTab === "node";
   const gridOpen = activeTab === "grid";
@@ -664,32 +674,189 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
         </div>
       )}
 
-      {/* ── Grid layer info panel ── */}
+      {/* ── Grid panel — live grid status + layer controls ── */}
       {gridOpen && (
-        <div className="copilot-chat-panel" style={{ height: 100 }}>
+        <div className="copilot-chat-panel" style={{ height: "auto", maxHeight: "50vh" }}>
           <div className="copilot-chat-header">
             <div className="copilot-chat-header-left">
-              <span className="copilot-chat-title">Grid Overlay</span>
-              <span className="copilot-chat-ctx">Substations, lines &amp; capacity shown on map</span>
+              <span className="copilot-chat-title">Grid Intelligence</span>
+              <span className="copilot-chat-ctx">Live UK grid data + overlays</span>
             </div>
-            <button className="copilot-chat-hdr-btn" onClick={() => { setLayers((p) => ({ ...p, gridCapacity: false })); setActiveTab(null); }} title="Hide &amp; close">
+            <button className="copilot-chat-hdr-btn" onClick={() => setActiveTab(null)}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
             </button>
           </div>
-          <div style={{ padding: "10px 14px", fontSize: 11, color: "var(--cds-text-helper)" }}>
-            Colour = RAG headroom status. Size = generation headroom MW. Lines coloured by voltage.
+          <div style={{ padding: "10px 14px", fontSize: 11 }}>
+            {/* Layer toggles */}
+            <div style={{ fontSize: 9, fontWeight: 700, color: "var(--cds-text-helper)", letterSpacing: "0.06em", marginBottom: 6 }}>MAP LAYERS</div>
+            {[
+              { id: "gridCapacity", label: "Substations & Capacity", color: "#D4A018" },
+              { id: "gridConstraints", label: "Constraint Zones", color: "#f44336" },
+              { id: "queueDepth", label: "Queue Depth", color: "#e040fb" },
+              { id: "osmPower", label: "Power Lines (OSM)", color: "#B54EB2" },
+              { id: "tecPipeline", label: "TEC Pipeline", color: "#0277bd" },
+              { id: "repdProjects", label: "REPD Projects", color: "#ff6f00" },
+            ].map(layer => (
+              <button key={layer.id} onClick={() => setLayers(p => ({ ...p, [layer.id]: !p[layer.id] }))}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8, width: "100%",
+                  padding: "6px 8px", marginBottom: 2, border: "none", borderRadius: 6,
+                  background: layers[layer.id] ? "rgba(var(--accent-rgb), 0.08)" : "transparent",
+                  cursor: "pointer", textAlign: "left", fontSize: 11,
+                  color: layers[layer.id] ? "var(--cds-text-primary)" : "var(--cds-text-secondary)",
+                }}>
+                <span style={{
+                  width: 10, height: 10, borderRadius: 3, flexShrink: 0,
+                  background: layers[layer.id] ? layer.color : "transparent",
+                  border: `1.5px solid ${layers[layer.id] ? layer.color : "var(--cds-border-strong)"}`,
+                }} />
+                {layer.label}
+                {layers[layer.id] && <span style={{ marginLeft: "auto", fontSize: 9, color: "#16a34a" }}>ON</span>}
+              </button>
+            ))}
+
+            {/* Quick actions */}
+            <div style={{ fontSize: 9, fontWeight: 700, color: "var(--cds-text-helper)", letterSpacing: "0.06em", marginTop: 10, marginBottom: 6 }}>ACTIONS</div>
+            {[
+              { label: "Find nearest substation", action: () => handlePromptFromTab("Find the nearest substation with available capacity") },
+              { label: "Run grid connection study", action: () => handlePromptFromTab("Run a grid connection assessment for this site") },
+              { label: "Show queue analysis", action: () => handlePromptFromTab("Show the connection queue depth at nearby substations") },
+            ].map((a, i) => (
+              <button key={i} onClick={a.action} style={{
+                display: "block", width: "100%", padding: "6px 8px", marginBottom: 2,
+                border: "1px solid var(--cds-border-subtle)", borderRadius: 6,
+                background: "transparent", cursor: "pointer", textAlign: "left",
+                fontSize: 10, color: "var(--cds-text-secondary)",
+              }}>{a.label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Connection tab — grid connection quick actions ── */}
+      {activeTab === "connect" && (
+        <div className="copilot-chat-panel" style={{ height: "auto", maxHeight: "40vh" }}>
+          <div className="copilot-chat-header">
+            <div className="copilot-chat-header-left">
+              <span className="copilot-chat-title">Grid Connection</span>
+              <span className="copilot-chat-ctx">{parcelId ? "Site selected" : "Select a site first"}</span>
+            </div>
+            <button className="copilot-chat-hdr-btn" onClick={() => setActiveTab(null)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+          </div>
+          <div style={{ padding: "10px 14px" }}>
+            {gridContext?.nearest_substation ? (
+              <div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                  <div style={{ textAlign: "center", padding: 8, background: "var(--cds-layer-02)", borderRadius: 6 }}>
+                    <div style={{ fontSize: 7, color: "var(--cds-text-helper)", textTransform: "uppercase", fontWeight: 700 }}>Nearest</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--cds-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {gridContext.nearest_substation.name}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "center", padding: 8, background: "var(--cds-layer-02)", borderRadius: 6 }}>
+                    <div style={{ fontSize: 7, color: "var(--cds-text-helper)", textTransform: "uppercase", fontWeight: 700 }}>Headroom</div>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: "#16a34a" }}>
+                      {gridContext.nearest_substation.headroom_mw?.toFixed(0) || "—"} MW
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "center", padding: 8, background: "var(--cds-layer-02)", borderRadius: 6 }}>
+                    <div style={{ fontSize: 7, color: "var(--cds-text-helper)", textTransform: "uppercase", fontWeight: 700 }}>Distance</div>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: "var(--cds-text-primary)" }}>
+                      {gridContext.nearest_substation.distance_km?.toFixed(1) || "—"} km
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "center", padding: 8, background: "var(--cds-layer-02)", borderRadius: 6 }}>
+                    <div style={{ fontSize: 7, color: "var(--cds-text-helper)", textTransform: "uppercase", fontWeight: 700 }}>Est. Cost</div>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: "var(--cds-interactive)" }}>
+                      £{((gridContext.nearest_substation.distance_km || 2) * 150 / 1000).toFixed(1)}M
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: "var(--cds-text-helper)", marginBottom: 8 }}>
+                No grid data yet. Select a site or run an analysis.
+              </div>
+            )}
+            <div style={{ fontSize: 9, fontWeight: 700, color: "var(--cds-text-helper)", letterSpacing: "0.06em", marginBottom: 6 }}>ACTIONS</div>
+            {[
+              { label: "Run Tier 1 grid assessment", action: () => handlePromptFromTab("Run a grid connection assessment for this site") },
+              { label: "Run Tier 2 power flow", action: () => handlePromptFromTab("Run a pandapower Tier 2 power flow simulation") },
+              { label: "Estimate connection cost", action: () => handlePromptFromTab("Estimate grid connection cost with P10/P50/P90 ranges") },
+              { label: "Download Grid Connection PDF", action: () => handlePromptFromTab("Generate a grid connection report PDF") },
+            ].map((a, i) => (
+              <button key={i} onClick={a.action} style={{
+                display: "block", width: "100%", padding: "6px 8px", marginBottom: 2,
+                border: "1px solid var(--cds-border-subtle)", borderRadius: 6,
+                background: "transparent", cursor: "pointer", textAlign: "left",
+                fontSize: 10, color: "var(--cds-text-secondary)",
+              }}>{a.label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Detail tab — site summary ── */}
+      {activeTab === "detail" && (
+        <div className="copilot-chat-panel" style={{ height: "auto", maxHeight: "40vh" }}>
+          <div className="copilot-chat-header">
+            <div className="copilot-chat-header-left">
+              <span className="copilot-chat-title">Site Detail</span>
+              <span className="copilot-chat-ctx">{parcelId || "No site selected"}</span>
+            </div>
+            <button className="copilot-chat-hdr-btn" onClick={() => setActiveTab(null)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+          </div>
+          <div style={{ padding: "10px 14px" }}>
+            {solarYield ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                <div style={{ textAlign: "center", padding: 8, background: "var(--cds-layer-02)", borderRadius: 6 }}>
+                  <div style={{ fontSize: 7, color: "var(--cds-text-helper)", textTransform: "uppercase", fontWeight: 700 }}>Yield</div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: "var(--cds-interactive)" }}>
+                    {solarYield.annual_energy_kwh ? `${(solarYield.annual_energy_kwh / 1000).toFixed(0)} MWh` : "—"}
+                  </div>
+                </div>
+                <div style={{ textAlign: "center", padding: 8, background: "var(--cds-layer-02)", borderRadius: 6 }}>
+                  <div style={{ fontSize: 7, color: "var(--cds-text-helper)", textTransform: "uppercase", fontWeight: 700 }}>CF</div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: "var(--cds-text-primary)" }}>
+                    {solarYield.capacity_factor_pct?.toFixed(1) || "—"}%
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: "var(--cds-text-helper)", marginBottom: 8 }}>
+                Select a site to see detailed analysis.
+              </div>
+            )}
+            <div style={{ fontSize: 9, fontWeight: 700, color: "var(--cds-text-helper)", letterSpacing: "0.06em", marginBottom: 6 }}>ACTIONS</div>
+            {[
+              { label: "Run full feasibility study", action: () => handlePromptFromTab("Run a complete feasibility study for this site") },
+              { label: "Run financial analysis", action: () => handlePromptFromTab("Calculate IRR and NPV for this project") },
+              { label: "Check environmental constraints", action: () => handlePromptFromTab("Check environmental constraints and planning risks") },
+              { label: "Download Site Report PDF", action: () => handlePromptFromTab("Generate a site assessment report") },
+            ].map((a, i) => (
+              <button key={i} onClick={a.action} style={{
+                display: "block", width: "100%", padding: "6px 8px", marginBottom: 2,
+                border: "1px solid var(--cds-border-subtle)", borderRadius: 6,
+                background: "transparent", cursor: "pointer", textAlign: "left",
+                fontSize: 10, color: "var(--cds-text-secondary)",
+              }}>{a.label}</button>
+            ))}
           </div>
         </div>
       )}
 
       {/* ── Design tab — asset inspector ── */}
       {activeTab === "design" && (
-        <div className="copilot-chat-panel" style={{ height: selectedAsset ? "auto" : 100, maxHeight: "40vh" }}>
+        <div className="copilot-chat-panel" style={{ height: selectedAsset ? "auto" : 160, maxHeight: "40vh" }}>
           <div className="copilot-chat-header">
             <div className="copilot-chat-header-left">
               <span className="copilot-chat-title">Asset Design</span>
               <span className="copilot-chat-ctx">
-                {selectedAsset ? selectedAsset.name : "Click a 3D asset on the map to inspect"}
+                {selectedAsset ? selectedAsset.name : "Drag assets from the dock below"}
               </span>
             </div>
             <button className="copilot-chat-hdr-btn" onClick={() => setActiveTab(null)}>

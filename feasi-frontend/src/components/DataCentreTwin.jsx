@@ -3,6 +3,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, OrthographicCamera, Grid, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { useSite } from "../SiteContext";
+import PostprocessingEffects from "./PostprocessingEffects";
 
 /* ── Design Tokens ───────────────────────────────────────────────────────── */
 const T = {
@@ -1103,6 +1104,7 @@ export default function DataCentreTwin({ onClose }) {
               cameraMode={cameraMode}
               showHeatmap={showHeatmap}
             />
+            <PostprocessingEffects bloom={1.2} bloomThreshold={0.35} chromaticAberration={0.001} vignette={0.4} />
           </Canvas>
 
           {/* Metrics strip at bottom of canvas */}

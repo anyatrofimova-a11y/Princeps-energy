@@ -529,6 +529,45 @@ function PortfolioDashboard({ onWorkspaceClick, onCapabilityClick }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Workspace-specific Quick Actions
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const WORKSPACE_QUICK_ACTIONS = {
+  analyse: [
+    { id: "feasibility", title: "Run Feasibility", desc: "AI-powered site scoring and solar yield analysis",
+      color: "#f59e0b", icon: "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" },
+    { id: "grid_connection", title: "Check Grid Capacity", desc: "Connection feasibility, nearest substations, and cost estimates",
+      color: "#0891b2", icon: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" },
+    { id: "satellite_analysis", title: "View Satellite", desc: "Remote sensing, land classification, and NDVI analysis",
+      color: "#38bdf8", icon: "M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+    { id: "demand_forecast", title: "Demand Forecast", desc: "Prophet + TFT demand projections with scenario analysis",
+      color: "#f59e0b", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
+    { id: "environmental", title: "Environmental", desc: "Impact assessment, habitat analysis, and biodiversity net gain",
+      color: "#22c55e", icon: "M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+    { id: "financial", title: "Financial Analysis", desc: "Revenue, pricing, ROI, and investment modelling",
+      color: "#22c55e", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+    { id: "grid_study", title: "Grid Study", desc: "Full network analysis and capacity assessment",
+      color: "#D4A018", icon: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" },
+    { id: "advanced_grid", title: "Power Flow", desc: "N-1 contingency and pandapower analysis",
+      color: "#818cf8", icon: "M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" },
+  ],
+  design: [
+    { id: "connection_strategy", title: "Place Solar Array", desc: "Design optimal solar panel layout on site",
+      color: "#f59e0b", icon: "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" },
+    { id: "dispatch_optimisation", title: "Add BESS", desc: "Battery storage sizing, dispatch scheduling, and arbitrage",
+      color: "#a78bfa", icon: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" },
+    { id: "route_to_market", title: "View Energy Flow", desc: "Revenue streams, PPA analysis, and market routes",
+      color: "#22c55e", icon: "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" },
+    { id: "sustainability", title: "Open 3D Twin", desc: "ESG metrics, carbon accounting, and digital twin",
+      color: "#10b981", icon: "M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+  ],
+  comply: [
+    { id: "investment_readiness", title: "Investment Readiness", desc: "Due diligence scoring and investment case preparation",
+      color: "#a78bfa", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+  ],
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Main export
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -566,7 +605,10 @@ export default function WorkspaceHome() {
     );
   }
 
-  // Non-home workspace dashboard (unchanged)
+  // Get quick actions for this workspace
+  const quickActions = WORKSPACE_QUICK_ACTIONS[activeWorkspace] || [];
+
+  // Non-home workspace dashboard with contextual quick actions
   return (
     <div className="workspace-home">
       <div className="wh-hub">
@@ -575,45 +617,79 @@ export default function WorkspaceHome() {
           <p className="wh-ws-desc">{meta.desc}</p>
         </div>
 
-        <div className="wh-search-wrap">
-          <div className="wh-search">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search capabilities..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="wh-search-input"
-            />
+        {/* Quick Actions */}
+        {quickActions.length > 0 && (
+          <div className="wh-section" style={{ marginBottom: 28 }}>
+            <div className="wh-section-label">QUICK ACTIONS</div>
+            <div className="wh-qa-grid">
+              {quickActions.map(action => {
+                const result = workflowResults[action.id];
+                return (
+                  <button key={action.id} className="wh-qa-card" onClick={() => handleCardClick(action.id)}>
+                    <div className="wh-qa-card-top">
+                      <div className="wh-qa-icon" style={{ color: action.color }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d={action.icon} />
+                        </svg>
+                      </div>
+                      {result?.verdict && (
+                        <span className={`wh-card-verdict wh-verdict-${result.verdict.toLowerCase().replace("-","")}`}>
+                          {result.verdict}
+                        </span>
+                      )}
+                    </div>
+                    <div className="wh-qa-title">{action.title}</div>
+                    <div className="wh-qa-desc">{action.desc}</div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="wh-cap-grid wh-cap-grid-lg">
-          {filtered.map(intent => {
-            const card = CAPABILITY_CARDS[intent];
-            if (!card) return null;
-            const result = workflowResults[intent];
-            return (
-              <button key={intent} className="wh-card" onClick={() => handleCardClick(intent)}>
-                <div className="wh-card-top">
-                  <div className="wh-card-icon" style={{ color: card.color }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d={card.icon} />
-                    </svg>
+        {/* All capabilities search */}
+        <div className="wh-section">
+          <div className="wh-section-label">ALL CAPABILITIES</div>
+          <div className="wh-search-wrap">
+            <div className="wh-search">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search capabilities..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="wh-search-input"
+              />
+            </div>
+          </div>
+
+          <div className="wh-cap-grid wh-cap-grid-lg">
+            {filtered.map(intent => {
+              const card = CAPABILITY_CARDS[intent];
+              if (!card) return null;
+              const result = workflowResults[intent];
+              return (
+                <button key={intent} className="wh-card" onClick={() => handleCardClick(intent)}>
+                  <div className="wh-card-top">
+                    <div className="wh-card-icon" style={{ color: card.color }}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d={card.icon} />
+                      </svg>
+                    </div>
+                    {result?.verdict && (
+                      <span className={`wh-card-verdict wh-verdict-${result.verdict.toLowerCase().replace("-","")}`}>
+                        {result.verdict}
+                      </span>
+                    )}
                   </div>
-                  {result?.verdict && (
-                    <span className={`wh-card-verdict wh-verdict-${result.verdict.toLowerCase().replace("-","")}`}>
-                      {result.verdict}
-                    </span>
-                  )}
-                </div>
-                <div className="wh-card-label">{card.label}</div>
-                <div className="wh-card-desc">{card.desc}</div>
-              </button>
-            );
-          })}
+                  <div className="wh-card-label">{card.label}</div>
+                  <div className="wh-card-desc">{card.desc}</div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

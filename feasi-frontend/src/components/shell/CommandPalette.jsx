@@ -18,6 +18,7 @@ const COMMANDS = [
   { id: "act-thermal", label: "Open Thermal Model (TEASER)", section: "Actions", action: "thermal" },
   { id: "act-pitch", label: "Open Pitch Deck", section: "Actions", action: "pitch" },
   { id: "act-nom", label: "Open NOM Explorer", section: "Actions", action: "nom" },
+  { id: "act-compare", label: "Compare Scenarios", section: "Actions", action: "compare" },
   { id: "act-pdf", label: "Download PDF Report", section: "Actions", action: "pdf" },
   { id: "act-settings", label: "Open Settings", section: "Actions", action: "settings" },
   { id: "act-browser", label: "Toggle Asset Browser", section: "Actions", action: "browser", shortcut: "Ctrl+B" },

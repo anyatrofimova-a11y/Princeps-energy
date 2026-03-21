@@ -62,6 +62,18 @@
           <span class="stat-value">{{ "%.1f"|format(site.flood_risk.water_occurrence_pct) }}%</span>
         </div>
         {% endif %}
+        {% if site.flood_risk.ea_stations_nearby is defined %}
+        <div class="stat-row">
+          <span class="stat-label">EA Monitoring Stations</span>
+          <span class="stat-value">{{ site.flood_risk.ea_stations_nearby }} within 5km</span>
+        </div>
+        {% endif %}
+        {% if site.flood_risk.source is defined %}
+        <div class="stat-row">
+          <span class="stat-label">Data Source</span>
+          <span class="stat-value text-xs">{{ site.flood_risk.source }}</span>
+        </div>
+        {% endif %}
         <div class="stat-row">
           <span class="stat-label">Environmental Constraint</span>
           <span class="stat-value">
@@ -94,35 +106,54 @@
         </div>
       </div>
 
-      <!-- Statutory Designations -->
-      <div class="card">
+      <!-- Statutory Designations (live from Natural England + planning.data.gov.uk) -->
+      <div class="card {% if site.hard_constraints > 0 %}card-accent-red{% else %}card-accent-green{% endif %}">
         <div class="card-header">Statutory Designations</div>
-        <div class="text-xs text-muted mb-8">Proximity to protected areas affects planning risk</div>
+        <div class="text-xs text-muted mb-8">
+          {% if site.designations %}Checked via Natural England ArcGIS + planning.data.gov.uk APIs{% else %}Proximity to protected areas affects planning risk{% endif %}
+        </div>
         <table>
           <tr><th>Designation</th><th>Status</th></tr>
-          <tr>
-            <td>SSSI (Site of Special Scientific Interest)</td>
-            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
-          </tr>
-          <tr>
-            <td>SAC (Special Area of Conservation)</td>
-            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
-          </tr>
-          <tr>
-            <td>SPA (Special Protection Area)</td>
-            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
-          </tr>
-          <tr>
-            <td>AONB / National Landscape</td>
-            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
-          </tr>
-          <tr>
-            <td>Green Belt</td>
-            <td><span style="color: {{ brand.green }}; font-weight: 600;">No overlap detected</span></td>
-          </tr>
+          {% set checked_types = ['sssi', 'sac', 'spa', 'ramsar', 'aonb', 'green_belt', 'ancient_woodland'] %}
+          {% set checked_labels = {
+            'sssi': 'SSSI (Site of Special Scientific Interest)',
+            'sac': 'SAC (Special Area of Conservation)',
+            'spa': 'SPA (Special Protection Area)',
+            'ramsar': 'Ramsar Wetland',
+            'aonb': 'AONB / National Landscape',
+            'green_belt': 'Green Belt',
+            'ancient_woodland': 'Ancient Woodland'
+          } %}
+          {% for dtype in checked_types %}
+            {% set match = namespace(found=false) %}
+            {% for d in site.designations if d.type == dtype %}
+              {% set match.found = true %}
+              <tr>
+                <td>{{ checked_labels.get(dtype, dtype) }}</td>
+                <td>
+                  {% if d.severity == 'hard' %}
+                  <span style="color: {{ brand.red }}; font-weight: 700;">OVERLAP &mdash; {{ d.name }}</span>
+                  {% else %}
+                  <span style="color: {{ brand.amber }}; font-weight: 600;">NEARBY &mdash; {{ d.name }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+            {% if not match.found %}
+              <tr>
+                <td>{{ checked_labels.get(dtype, dtype) }}</td>
+                <td><span style="color: {{ brand.green }}; font-weight: 600;">Clear</span></td>
+              </tr>
+            {% endif %}
+          {% endfor %}
         </table>
+        {% if site.hard_constraints > 0 %}
+        <div class="text-xs" style="color: {{ brand.red }}; margin-top: 6px; font-weight: 600;">
+          ⚠ {{ site.hard_constraints }} hard constraint(s) detected &mdash; may prevent development
+        </div>
+        {% endif %}
         <div class="text-xs text-muted mt-4">
-          Overlay checks based on PostGIS spatial queries. Confirm with Local Planning Authority and Natural England.
+          Source: Natural England ArcGIS REST + planning.data.gov.uk. Confirm with LPA and Natural England.
         </div>
       </div>
     </div>
@@ -145,7 +176,7 @@
           </div>
           <div>
             <div class="bold">tonnes CO2 avoided per year</div>
-            <div class="text-xs text-muted">Based on UK grid carbon intensity (0.20 tCO2/MWh)</div>
+            <div class="text-xs text-muted">Based on UK grid carbon intensity ({{ "%.3f"|format(site.get('carbon_intensity_gco2', 200) / 1000) }} tCO2/MWh{% if site.carbon_index %}, index: {{ site.carbon_index }}{% endif %})</div>
           </div>
         </div>
         <div class="stat-row">

@@ -258,76 +258,73 @@ async def environmental_assessment(
     """
     import asyncio
 
-    # Run all data fetches concurrently
-    flood_task = _ea_flood_risk(lat, lon)
-    designations_task = _natural_england_designations(lat, lon, radius_m)
-    carbon_task = _regional_carbon_intensity(lat, lon)
+    # Run all data fetches concurrently with overall timeout
+    try:
+        flood, designations, carbon = await asyncio.wait_for(
+            asyncio.gather(
+                _ea_flood_risk(lat, lon),
+                _natural_england_designations(lat, lon, radius_m),
+                _regional_carbon_intensity(lat, lon),
+            ),
+            timeout=20,
+        )
+    except asyncio.TimeoutError:
+        log.warning("Environmental API calls timed out — using fallbacks")
+        flood = {"flood_risk_level": "LOW", "flood_alerts": [], "nearby_stations": 0, "source": "timeout_fallback"}
+        designations = []
+        carbon = {"current_gco2_kwh": 200, "index": "moderate", "source": "timeout_fallback"}
 
-    flood, designations, carbon = await asyncio.gather(
-        flood_task, designations_task, carbon_task,
-    )
-
-    # DB queries — GeeFlow extractions + existing constraint zones
+    # DB queries — GeeFlow extractions (best-effort, non-blocking)
     geeflow_ndvi = None
     geeflow_landuse = None
     geeflow_flood = None
 
-    async with pool.acquire() as conn:
-        # NDVI from GeeFlow
-        row = await conn.fetchrow(
-            """SELECT result_data FROM geeflow_extractions
-               WHERE mode = 'vegetation'
-               AND ST_DWithin(geometry, ST_SetSRID(ST_MakePoint($1, $2), 4326), 0.05)
-               ORDER BY created_at DESC LIMIT 1""",
-            lon, lat,
-        )
-        if row and row["result_data"]:
-            geeflow_ndvi = json.loads(row["result_data"]) if isinstance(row["result_data"], str) else row["result_data"]
+    try:
+        async with pool.acquire(timeout=5) as conn:
+            for mode, target in [("vegetation", "ndvi"), ("land_use", "landuse"), ("flood_risk", "flood")]:
+                try:
+                    row = await asyncio.wait_for(conn.fetchrow(
+                        """SELECT result_data FROM geeflow_extractions
+                           WHERE mode = $1
+                           AND ST_DWithin(geometry, ST_SetSRID(ST_MakePoint($2, $3), 4326), 0.05)
+                           ORDER BY created_at DESC LIMIT 1""",
+                        mode, lon, lat,
+                    ), timeout=3)
+                    if row and row["result_data"]:
+                        data = json.loads(row["result_data"]) if isinstance(row["result_data"], str) else row["result_data"]
+                        if target == "ndvi": geeflow_ndvi = data
+                        elif target == "landuse": geeflow_landuse = data
+                        elif target == "flood": geeflow_flood = data
+                except Exception:
+                    pass
 
-        # Land use from GeeFlow
-        row = await conn.fetchrow(
-            """SELECT result_data FROM geeflow_extractions
-               WHERE mode = 'land_use'
-               AND ST_DWithin(geometry, ST_SetSRID(ST_MakePoint($1, $2), 4326), 0.05)
-               ORDER BY created_at DESC LIMIT 1""",
-            lon, lat,
-        )
-        if row and row["result_data"]:
-            geeflow_landuse = json.loads(row["result_data"]) if isinstance(row["result_data"], str) else row["result_data"]
-
-        # Flood risk from GeeFlow (JRC)
-        row = await conn.fetchrow(
-            """SELECT result_data FROM geeflow_extractions
-               WHERE mode = 'flood_risk'
-               AND ST_DWithin(geometry, ST_SetSRID(ST_MakePoint($1, $2), 4326), 0.05)
-               ORDER BY created_at DESC LIMIT 1""",
-            lon, lat,
-        )
-        if row and row["result_data"]:
-            geeflow_flood = json.loads(row["result_data"]) if isinstance(row["result_data"], str) else row["result_data"]
-
-        # DC constraint zones (pre-ingested)
-        db_constraints = await conn.fetch(
-            """SELECT zone_type, zone_name, distance_m
-               FROM dc_constraint_zones
-               WHERE ST_DWithin(
-                   geometry,
-                   ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700),
-                   $3
-               )
-               LIMIT 10""",
-            lon, lat, radius_m,
-        )
-        for c in db_constraints:
-            if not any(d["type"] == c["zone_type"] for d in designations):
-                designations.append({
-                    "type": c["zone_type"],
-                    "label": c["zone_type"].upper().replace("_", " "),
-                    "name": c["zone_name"],
-                    "severity": "hard" if c["zone_type"] in ("sssi", "sac", "spa", "ramsar", "aonb", "green_belt") else "soft",
-                    "status": "OVERLAP",
-                    "source": "postgis",
-                })
+            # DC constraint zones (pre-ingested, best-effort)
+            try:
+                db_constraints = await asyncio.wait_for(conn.fetch(
+                    """SELECT zone_type, zone_name
+                       FROM dc_constraint_zones
+                       WHERE ST_DWithin(
+                           geometry,
+                           ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700),
+                           $3
+                       )
+                       LIMIT 10""",
+                    lon, lat, radius_m,
+                ), timeout=5)
+                for c in db_constraints:
+                    if not any(d["type"] == c["zone_type"] for d in designations):
+                        designations.append({
+                            "type": c["zone_type"],
+                            "label": c["zone_type"].upper().replace("_", " "),
+                            "name": c["zone_name"],
+                            "severity": "hard" if c["zone_type"] in ("sssi", "sac", "spa", "ramsar", "aonb", "green_belt") else "soft",
+                            "status": "OVERLAP",
+                            "source": "postgis",
+                        })
+            except Exception:
+                pass
+    except Exception as e:
+        log.debug("DB queries skipped: %s", e)
 
     # Compute scores
     env_score = 85  # start optimistic

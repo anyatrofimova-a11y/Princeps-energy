@@ -1376,6 +1376,37 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         minzoom: 9,
       });
 
+      // Verdict badges — GO/CAUTION/NO-GO above substations
+      map.addLayer({
+        id: "gc-verdict-badges",
+        type: "symbol",
+        source: "gc-capacity-subs",
+        layout: {
+          visibility: "none",
+          "text-field": [
+            "case",
+            [">=", ["coalesce", ["get", "gen_headroom_mw"], 0], 50], "GO",
+            [">=", ["coalesce", ["get", "gen_headroom_mw"], 0], 10], "CAUTION",
+            "NO-GO"
+          ],
+          "text-size": 10,
+          "text-font": ["Noto Sans Bold"],
+          "text-offset": [0, -2],
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": [
+            "case",
+            [">=", ["coalesce", ["get", "gen_headroom_mw"], 0], 50], "#24a148",
+            [">=", ["coalesce", ["get", "gen_headroom_mw"], 0], 10], "#f1c21b",
+            "#da1e28"
+          ],
+          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-width": 1.5,
+        },
+        minzoom: 9,
+      });
+
       // Highlighted candidate substation (pulsing ring)
       map.addLayer({
         id: "gc-highlight-ring",
@@ -1400,13 +1431,28 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         window.dispatchEvent(new CustomEvent("princeps-node-click", {
           detail: { ...p, name, lat: coords[1], lon: coords[0] },
         }));
-        // Also show popup
-        const headroom = p.gen_headroom_mw != null ? `<br/><strong>Headroom: ${p.gen_headroom_mw} MW</strong>` : "";
-        const voltage = p.voltage_kv ? `<br/>Voltage: ${p.voltage_kv} kV` : "";
-        const queued = p.ecr_queued ? `<br/>Queue: ${p.ecr_queued} projects` : "";
-        new mapboxgl.Popup({ maxWidth: "240px" })
+        // Determine verdict
+        const hw = parseFloat(p.gen_headroom_mw) || 0;
+        const verdict = hw >= 50 ? "GO" : hw >= 10 ? "CAUTION" : "NO-GO";
+        const verdictColor = hw >= 50 ? "#24a148" : hw >= 10 ? "#f1c21b" : "#da1e28";
+        const voltageStr = p.voltage_kv ? `${p.voltage_kv}kV` : "";
+        const headroomStr = p.gen_headroom_mw != null ? `${p.gen_headroom_mw} MW` : "N/A";
+        const queueStr = p.ecr_queued ? `${p.ecr_queued} projects` : "N/A";
+        // Estimate connection cost (simplified UK rates)
+        const vkv = parseFloat(p.voltage_kv) || 33;
+        const costPerKm = vkv >= 132 ? 500 : vkv >= 33 ? 150 : 80;
+        const distKm = parseFloat(p.dist_km) || 2;
+        const estCostK = Math.round(costPerKm * distKm);
+        const timelineMonths = vkv >= 132 ? 36 : vkv >= 33 ? 24 : 12;
+        new mapboxgl.Popup({ maxWidth: "280px" })
           .setLngLat(e.lngLat)
-          .setHTML(`<div style="font-size:12px"><strong>${name}</strong>${voltage}${headroom}${queued}</div>`)
+          .setHTML(`<div style="font-size:12px;line-height:1.6">
+            <strong>${name}</strong>${voltageStr ? ` — ${voltageStr}` : ""}
+            <br/>Headroom: <strong>${headroomStr}</strong> | Queue: ${queueStr}
+            <br/>Verdict: <span style="color:${verdictColor};font-weight:700;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">${verdict}</span>
+            <br/>Est. Cost: <strong>\u00A3${estCostK}k</strong> | Timeline: ~${timelineMonths} months
+            <br/><span style="color:#78a9ff;cursor:pointer;text-decoration:underline" onclick="window.dispatchEvent(new CustomEvent('princeps-node-click',{detail:${JSON.stringify({ ...p, name, lat: coords[1], lon: coords[0] }).replace(/"/g, "'")}}))">Click for full analysis</span>
+          </div>`)
           .addTo(map);
       });
       map.on("mouseenter", "gc-capacity-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
@@ -1556,12 +1602,19 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         if (map._pickMode) return;
         const p = e.features[0].properties;
         const hmlrLink = p.hmlr_url ? `<br/><a href="${p.hmlr_url}" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:underline">View on HMLR</a>` : "";
+        // Land verdict based on ALC grade + area
+        const alcGrade = p.alc_grade || p.land_grade || "";
+        const areaHa = parseFloat(p.area_ha) || 0;
+        const landVerdict = (alcGrade && parseInt(alcGrade) <= 2) ? "NO-GO" : areaHa < 1 ? "CAUTION" : "GO";
+        const landVerdictColor = landVerdict === "GO" ? "#24a148" : landVerdict === "CAUTION" ? "#f1c21b" : "#da1e28";
         new mapboxgl.Popup({ maxWidth: "280px" })
           .setLngLat(e.lngLat)
-          .setHTML(`<div style="font-size:12px">
+          .setHTML(`<div style="font-size:12px;line-height:1.6">
             <strong>${p.title_number || "Parcel"}</strong>
             <br/>Tenure: <span style="color:${p.color}">${p.tenure}</span>
-            <br/>Area: ${p.area_ha} ha
+            | Area: <strong>${p.area_ha} ha</strong>
+            ${alcGrade ? `| ALC Grade: <strong>${alcGrade}</strong>` : ""}
+            <br/>Verdict: <span style="color:${landVerdictColor};font-weight:700;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">${landVerdict}</span>
             ${p.poly_id ? `<br/>INSPIRE ID: ${p.poly_id}` : ""}
             ${p.available ? '<br/><span style="color:#16a34a;font-weight:600">Potentially available</span>' : ""}
             ${hmlrLink}
@@ -2632,7 +2685,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
                  "osm-substation-circles", "osm-substation-labels",
                  "osm-tower-dots", "osm-generator-circles", "osm-generator-labels"],
       ngedSubs: ["nged-sub-circles", "nged-sub-labels"],
-      gridCapacity: ["gc-capacity-circles", "gc-capacity-labels", "gc-lines-glow", "gc-lines-core"],
+      gridCapacity: ["gc-capacity-circles", "gc-capacity-labels", "gc-verdict-badges", "gc-lines-glow", "gc-lines-core"],
       gridConstraints: ["constraint-zone-fill", "constraint-zone-outline", "constraint-zone-labels"],
       queueDepth: ["queue-depth-circles", "queue-depth-labels"],
       landParcels: ["land-parcels-fill", "land-parcels-outline", "land-parcels-labels", "land-available-markers"],
