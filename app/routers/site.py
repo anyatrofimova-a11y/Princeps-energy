@@ -589,46 +589,32 @@ async def create_from_location(
             body.area_m2,
         )
 
-        # Compute nearest substation — prioritise NGED (2k named, with voltage)
-        # then fall back to OSM (37k) and DNO seed data (8)
-        await conn.execute(
-            """
-            WITH parcel_pt AS (
-                SELECT ST_Transform(centroid, 4326) AS geom4326, centroid
-                FROM parcels WHERE parcel_id = $1::uuid
-            ),
-            nged_nearest AS (
-                SELECT id::text AS sub_id, name, NULL::numeric AS capacity_kw,
-                       ST_Distance(n.geometry::geography, p.geom4326::geography) / 1000.0 AS dist_km
-                FROM nged_substation n, parcel_pt p
-                ORDER BY n.geometry <-> p.geom4326
-                LIMIT 1
-            ),
-            osm_nearest AS (
-                SELECT osm_id::text AS sub_id, COALESCE(name, 'OSM Substation') AS name,
-                       NULL::numeric AS capacity_kw,
-                       ST_Distance(o.geometry::geography, p.geom4326::geography) / 1000.0 AS dist_km
-                FROM osm_power_substation o, parcel_pt p
-                WHERE o.name IS NOT NULL AND o.name != ''
-                ORDER BY o.geometry <-> p.geom4326
-                LIMIT 1
-            ),
-            best AS (
-                SELECT * FROM nged_nearest
-                UNION ALL
-                SELECT * FROM osm_nearest
-                ORDER BY dist_km
-                LIMIT 1
-            )
-            UPDATE parcels
-            SET nearest_substation_id   = best.sub_id,
-                distance_to_sub_km      = best.dist_km,
-                nearest_sub_capacity_kw = best.capacity_kw
-            FROM best
-            WHERE parcels.parcel_id = $1::uuid
-            """,
-            row["parcel_id"],
+        # Compute nearest substation from NGED (2,059 named substations with voltage)
+        parcel_4326 = await conn.fetchval(
+            "SELECT ST_Transform(centroid, 4326) FROM parcels WHERE parcel_id = $1::uuid",
+            UUID(row["parcel_id"]),
         )
+        if parcel_4326:
+            nearest = await conn.fetchrow(
+                """SELECT id::text AS sub_id, name,
+                          ST_Distance(geometry::geography, $1::geography) / 1000.0 AS dist_km,
+                          voltage_kv
+                   FROM nged_substation
+                   ORDER BY geometry <-> $1
+                   LIMIT 1""",
+                parcel_4326,
+            )
+            if nearest:
+                await conn.execute(
+                    """UPDATE parcels
+                       SET nearest_substation_id = $2,
+                           distance_to_sub_km = $3,
+                           nearest_sub_capacity_kw = NULL
+                       WHERE parcel_id = $1::uuid""",
+                    UUID(row["parcel_id"]),
+                    nearest["sub_id"],
+                    float(nearest["dist_km"]),
+                )
 
     return {
         "parcel_id": row["parcel_id"],

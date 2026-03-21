@@ -81,11 +81,11 @@ const STAGES = [
 ];
 
 const TYPE_ICONS = {
-  solar: "\u2600\uFE0F",
-  bess: "\u26A1",
-  wind: "\uD83C\uDF2C\uFE0F",
-  dc: "\uD83C\uDFE2",
-  hybrid: "\uD83D\uDD04",
+  solar: "PV",
+  bess: "BS",
+  wind: "WD",
+  dc: "DC",
+  hybrid: "HY",
 };
 
 function daysInStage(stageEnteredAt) {
@@ -345,10 +345,10 @@ function DocumentsSection({ projectId }) {
   };
 
   const DOC_TYPE_ICONS = {
-    report: "\uD83D\uDCCA", grid_offer: "\u26A1", planning_app: "\uD83D\uDCC4",
-    epc_contract: "\uD83D\uDCDD", ppa: "\uD83D\uDCB0", land_option: "\uD83C\uDFE0",
-    environmental: "\uD83C\uDF3F", financial: "\uD83D\uDCB3", technical: "\u2699\uFE0F",
-    correspondence: "\u2709\uFE0F", other: "\uD83D\uDCC1",
+    report: "RPT", grid_offer: "GRD", planning_app: "PLN",
+    epc_contract: "EPC", ppa: "PPA", land_option: "LND",
+    environmental: "ENV", financial: "FIN", technical: "TEC",
+    correspondence: "COR", other: "DOC",
   };
 
   return (
