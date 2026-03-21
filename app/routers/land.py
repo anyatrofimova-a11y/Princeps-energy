@@ -55,3 +55,99 @@ async def planning_density(
     """Planning application density around a point — REPD projects by status/technology."""
     from utils.planning_density import get_planning_density
     return await get_planning_density(pool, lat, lon, radius_km=radius_km)
+
+
+# ---------------------------------------------------------------------------
+# ML-Enhanced Land Classification
+# ---------------------------------------------------------------------------
+
+@router.get("/api/land/alc-real")
+async def land_alc_real(
+    lat: float = Query(..., description="Latitude (WGS84)"),
+    lon: float = Query(..., description="Longitude (WGS84)"),
+    radius_m: float = Query(500, description="Search radius in metres"),
+):
+    """Real Agricultural Land Classification from Natural England ArcGIS API.
+    Returns actual ALC grade (not latitude-band approximation), BMV status,
+    development suitability score, and all grades found within radius."""
+    from utils.land_classification_ml import query_natural_england_alc
+    return await query_natural_england_alc(lat, lon, radius_m)
+
+
+@router.get("/api/land/alc-adjusted")
+async def land_alc_adjusted(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    slope_mean_deg: float = Query(3, description="Mean slope in degrees"),
+    slope_p90_deg: float = Query(6, description="P90 slope in degrees"),
+):
+    """ALC grade adjusted for terrain slope.
+    MAFF guidelines: slopes >7° limit agricultural capability.
+    Returns slope-adjusted grade and development implications."""
+    from utils.land_classification_ml import query_natural_england_alc, adjust_alc_for_slope
+    alc = await query_natural_england_alc(lat, lon)
+    return adjust_alc_for_slope(alc, slope_mean_deg, slope_p90_deg)
+
+
+from pydantic import BaseModel
+
+
+class CropClassifyRequest(BaseModel):
+    monthly_ndvi: list[float]
+
+
+@router.post("/api/land/crop-classify")
+async def crop_classify(req: CropClassifyRequest):
+    """Classify crop type from 12-month NDVI profile using UK phenological matching.
+    Distinguishes: winter wheat, spring barley, oilseed rape, permanent pasture,
+    sugar beet, maize. Returns confidence, typical ALC grade, growth period."""
+    from utils.land_classification_ml import classify_crop_from_ndvi_profile
+    if len(req.monthly_ndvi) < 12:
+        from fastapi import HTTPException
+        raise HTTPException(400, "Need 12 monthly NDVI values (Jan-Dec)")
+    return classify_crop_from_ndvi_profile(req.monthly_ndvi)
+
+
+class LandSuitabilityRequest(BaseModel):
+    alc_score: float = 50
+    slope_mean_deg: float = 3
+    slope_p90_deg: float = 6
+    elevation_m: float = 80
+    south_facing_pct: float = 50
+    developable_pct: float = 65
+    built_pct: float = 10
+    trees_pct: float = 12
+    water_pct: float = 2
+    ndvi_mean: float = 0.5
+    ndvi_amplitude: float = 0.3
+    flood_zone: int = 1
+    grid_distance_km: float = 5
+    grid_headroom_mw: float = 10
+    sssi_proximity_km: float = 5
+    aonb_inside: int = 0
+    green_belt: int = 0
+    ghi_kwh_m2: float = 1000
+
+
+@router.post("/api/land/ml-suitability")
+async def land_ml_suitability(req: LandSuitabilityRequest):
+    """ML land suitability prediction (0-100) using XGBoost with 18 features.
+    Combines ALC grade, terrain, land use, constraints, grid access, solar resource.
+    Returns score, verdict (SUITABLE/MARGINAL/UNSUITABLE), constraints, SHAP factors."""
+    from utils.land_classification_ml import predict_land_suitability
+    return predict_land_suitability(req.model_dump())
+
+
+@router.get("/api/land/comprehensive")
+async def land_comprehensive(
+    lat: float = Query(..., description="Latitude"),
+    lon: float = Query(..., description="Longitude"),
+):
+    """Run full ML land classification pipeline:
+    1. Query real ALC from Natural England
+    2. Adjust for slope from GeeFlow terrain
+    3. ML suitability prediction with SHAP
+    4. Constraint overlay
+    Returns comprehensive land assessment with overall verdict and score."""
+    from utils.land_classification_ml import comprehensive_land_assessment
+    return await comprehensive_land_assessment(lat, lon)

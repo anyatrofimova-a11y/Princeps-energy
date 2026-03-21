@@ -251,6 +251,56 @@ async def setup_database(pool: asyncpg.Pool) -> None:
             "CREATE INDEX IF NOT EXISTS idx_documents_project ON project_documents(project_id)"
         )
 
+        # ── Site boundaries + land options ────────────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS site_boundaries (
+                boundary_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id    UUID REFERENCES projects(project_id) ON DELETE CASCADE,
+                parcel_id     UUID REFERENCES parcels(parcel_id) ON DELETE SET NULL,
+                name          TEXT,
+                boundary_type TEXT DEFAULT 'site',
+                geojson       JSONB NOT NULL,
+                area_m2       DOUBLE PRECISION,
+                area_ha       DOUBLE PRECISION,
+                perimeter_m   DOUBLE PRECISION,
+                centroid_lat  DOUBLE PRECISION,
+                centroid_lon  DOUBLE PRECISION,
+                geometry      GEOMETRY(Polygon, 4326),
+                metadata      JSONB DEFAULT '{}',
+                created_at    TIMESTAMPTZ DEFAULT NOW(),
+                updated_at    TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_site_boundaries_project ON site_boundaries(project_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_site_boundaries_geom ON site_boundaries USING GIST (geometry)")
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS land_options (
+                option_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id    UUID REFERENCES projects(project_id) ON DELETE CASCADE,
+                boundary_id   UUID REFERENCES site_boundaries(boundary_id) ON DELETE SET NULL,
+                landowner     TEXT,
+                landowner_contact TEXT,
+                option_type   TEXT DEFAULT 'option',
+                status        TEXT DEFAULT 'prospect',
+                option_fee_gbp DOUBLE PRECISION,
+                annual_rent_gbp_ha DOUBLE PRECISION,
+                term_years    INTEGER,
+                start_date    DATE,
+                expiry_date   DATE,
+                break_clause  TEXT,
+                solicitor     TEXT,
+                title_number  TEXT,
+                tenure        TEXT,
+                alc_grade     TEXT,
+                notes         TEXT,
+                documents     JSONB DEFAULT '[]',
+                metadata      JSONB DEFAULT '{}',
+                created_at    TIMESTAMPTZ DEFAULT NOW(),
+                updated_at    TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_land_options_project ON land_options(project_id)")
+
         # ── Placed assets (site design) ────────────────────────────────────
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS placed_assets (

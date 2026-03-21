@@ -602,6 +602,28 @@ const api = {
       post("/api/dc/prospect", { query, capacity_mw: mw, profile, min_headroom_mw: minHr, limit }),
   },
 
+  landMgmt: {
+    // Boundaries
+    createBoundary: (data) => post("/api/v1/land/boundaries", data),
+    listBoundaries: (projectId) => get(`/api/v1/land/boundaries${projectId ? `?project_id=${enc(projectId)}` : ""}`),
+    getBoundary: (id) => get(`/api/v1/land/boundaries/${enc(id)}`),
+    updateBoundary: (id, data) =>
+      fetch(`/api/v1/land/boundaries/${enc(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(json),
+    deleteBoundary: (id) =>
+      fetch(`/api/v1/land/boundaries/${enc(id)}`, { method: "DELETE" }).then(json),
+    analyseBoundary: (id) => get(`/api/v1/land/boundaries/${enc(id)}/analysis`),
+    // Land options
+    createOption: (data) => post("/api/v1/land/options", data),
+    listOptions: (projectId) => get(`/api/v1/land/options${projectId ? `?project_id=${enc(projectId)}` : ""}`),
+    getOption: (id) => get(`/api/v1/land/options/${enc(id)}`),
+    updateOption: (id, data) =>
+      fetch(`/api/v1/land/options/${enc(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(json),
+    deleteOption: (id) =>
+      fetch(`/api/v1/land/options/${enc(id)}`, { method: "DELETE" }).then(json),
+    // Project summary
+    projectLandSummary: (projectId) => get(`/api/v1/land/projects/${enc(projectId)}/summary`),
+  },
+
   design: {
     assetTypes: () => get("/api/v1/design/asset-types"),
     // Asset CRUD

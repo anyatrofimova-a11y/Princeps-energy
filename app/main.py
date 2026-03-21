@@ -211,6 +211,7 @@ from app.routers import (  # noqa: E402
     finance as finance_router,
     site_design as site_design_router,
     environment as environment_router,
+    land_management as land_mgmt_router,
 )
 
 _routers = [
@@ -234,6 +235,7 @@ _routers = [
     finance_router.router,
     site_design_router.router,
     environment_router.router,
+    land_mgmt_router.router,
 ]
 
 app.include_router(graph_router)
