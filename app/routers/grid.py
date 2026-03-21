@@ -549,6 +549,88 @@ async def grid_osm_summary(pool: asyncpg.Pool = Depends(get_pool)):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  DC ADVANCED DESIGN — Surpass Ramboll capabilities
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@router.post("/api/dc/heat-reuse")
+async def api_dc_heat_reuse(
+    it_load_kw: float = Query(10000),
+    pue: float = Query(1.3),
+    cooling_type: str = Query("hybrid"),
+    lat: float = Query(52.0),
+    nearest_heat_network_km: float = Query(2.0),
+    district_heat_demand_mw: float = Query(5.0),
+):
+    """Model waste heat recovery and district heating revenue opportunity."""
+    from utils.dc_advanced_design import heat_reuse_assessment
+    return heat_reuse_assessment(it_load_kw, pue, cooling_type, lat,
+                                 nearest_heat_network_km, district_heat_demand_mw)
+
+
+@router.post("/api/dc/liquid-cooling")
+async def api_dc_liquid_cooling(
+    it_load_kw: float = Query(10000),
+    target_rack_kw: float = Query(40),
+    lat: float = Query(52.0),
+):
+    """Compare all cooling technologies including liquid/immersion options."""
+    from utils.dc_advanced_design import liquid_cooling_comparison
+    return liquid_cooling_comparison(it_load_kw, target_rack_kw, lat)
+
+
+@router.post("/api/dc/bng")
+async def api_dc_bng(
+    site_area_ha: float = Query(5.0),
+    existing_habitat: str = Query("improved_grassland"),
+    development_footprint_pct: float = Query(80),
+    on_site_habitat_pct: float = Query(10),
+):
+    """Biodiversity Net Gain (BNG) cost estimation — 10% mandatory offset."""
+    from utils.dc_advanced_design import bng_assessment
+    return bng_assessment(site_area_ha, existing_habitat,
+                           development_footprint_pct, on_site_habitat_pct)
+
+
+@router.post("/api/dc/community-sentiment")
+async def api_dc_community_sentiment(
+    lat: float = Query(52.0),
+    lon: float = Query(-1.0),
+    it_load_mw: float = Query(30),
+    site_area_ha: float = Query(5.0),
+    nearest_residential_m: float = Query(500),
+    nearest_school_m: float = Query(1000),
+    existing_industrial: bool = Query(False),
+    height_m: float = Query(15),
+    backup_generators: int = Query(10),
+    construction_months: int = Query(24),
+):
+    """Predict community objection risk and recommend mitigation strategy."""
+    from utils.dc_advanced_design import community_sentiment_assessment
+    return community_sentiment_assessment(
+        lat, lon, it_load_mw, site_area_ha,
+        nearest_residential_m, nearest_school_m,
+        existing_industrial, height_m, backup_generators, construction_months,
+    )
+
+
+@router.post("/api/dc/thermal-field")
+async def api_dc_thermal_field(
+    rack_count: int = Query(50),
+    rack_kw: float = Query(15),
+    rows: int = Query(5),
+    cooling_type: str = Query("air_crac"),
+    crac_count: int = Query(4),
+    containment: str = Query("hot_aisle"),
+    supply_temp_c: float = Query(18),
+):
+    """CFD-lite thermal field model — 2D temperature heatmap for DC hall."""
+    from utils.dc_advanced_design import thermal_field_model
+    return thermal_field_model(rack_count, rack_kw, rows, cooling_type,
+                                crac_count, containment, supply_temp_c)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  GEMINI 3D ASSET MODELLER
 # ═══════════════════════════════════════════════════════════════════════════════
 

@@ -75,7 +75,7 @@ export default function App() {
     setActiveTab, setPanelOpen,
     setSelectedLsoa,
     dashboardOpen, setDashboardOpen,
-    digitalTwinOpen, setDigitalTwinOpen, twinData, realSiteContext,
+    digitalTwinOpen, setDigitalTwinOpen, terrainTwinOpen, setTerrainTwinOpen, twinData, realSiteContext,
     workflowStage,
     gridTwinOpen, setGridTwinOpen,
     bemsOpen, setBemsOpen,
@@ -542,6 +542,8 @@ export default function App() {
   const handleCmdAction = useCallback((action) => {
     switch (action) {
       case "twin": setGridTwinOpen(true); break;
+      case "site-twin": setDigitalTwinOpen(true); break;
+      case "terrain": setTerrainTwinOpen(true); break;
       case "bems": setBemsOpen(true); break;
       case "inspect": setAssetInspectorOpen(true); break;
       case "graph": setGridGraphOpen(true); break;
@@ -602,15 +604,24 @@ export default function App() {
 
       {/* Pipeline is now a workspace tab — no floating overlay */}
 
-      {/* 3D Site Digital Twin — satellite-textured terrain with deck.gl */}
+      {/* 3D Site Digital Twin — satellite-textured terrain with real infrastructure */}
       {digitalTwinOpen && (
-        <TerrainTwin
-          lat={pickedLocation?.lat || 52.5}
-          lon={pickedLocation?.lon || -1.5}
-          zoom={14}
-          placedAssets={placedAssets}
-          onClose={() => setDigitalTwinOpen(false)}
-        />
+        <Suspense fallback={<LazyFallback />}>
+          <DigitalTwin data={twinData} realContext={realSiteContext} onClose={() => setDigitalTwinOpen(false)} />
+        </Suspense>
+      )}
+
+      {/* Terrain Analysis Twin — LiDAR elevation/slope/aspect/viewshed/hydrology */}
+      {terrainTwinOpen && (
+        <Suspense fallback={<LazyFallback />}>
+          <TerrainTwin
+            lat={pickedLocation?.lat || 52.5}
+            lon={pickedLocation?.lon || -1.5}
+            zoom={14}
+            placedAssets={placedAssets}
+            onClose={() => setTerrainTwinOpen(false)}
+          />
+        </Suspense>
       )}
 
       {/* 3D Grid Digital Twin overlay */}

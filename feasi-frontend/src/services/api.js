@@ -336,6 +336,33 @@ const api = {
     summary: () => get("/planning/energy/summary"),
     nsip: (tech, status) => get(`/api/planning/nsip${tech || status ? '?' : ''}${tech ? `technology=${enc(tech)}` : ''}${tech && status ? '&' : ''}${status ? `status=${enc(status)}` : ''}`),
     nsipConflicts: (lat, lon, km = 20) => get(`/api/planning/nsip-conflicts?lat=${lat}&lon=${lon}&radius_km=${km}`),
+    // ML Planning Intelligence
+    predict: (lat, lon, mw = 50, technology = "solar", landHa, isGreenfield = true) =>
+      post("/api/planning/predict", { lat, lon, capacity_mw: mw, technology, land_area_ha: landHa, is_greenfield: isGreenfield }),
+    constraints: (lat, lon, radius = 2000) =>
+      get(`/api/planning/constraints?lat=${lat}&lon=${lon}&radius_m=${radius}`),
+    compliance: (lat, lon, mw = 50, technology = "solar") =>
+      get(`/api/planning/compliance?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(technology)}`),
+    authorityProfile: (name, technology = "solar") =>
+      get(`/api/planning/authority-profile?name=${enc(name)}&technology=${enc(technology)}`),
+    comparable: (lat, lon, mw = 50, technology = "solar", radiusKm = 20) =>
+      get(`/api/planning/comparable-decisions?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(technology)}&radius_km=${radiusKm}`),
+    modelStatus: () => get("/api/planning/model-status"),
+  },
+
+  bmrs: {
+    windSolar: () => get("/api/bmrs/wind-solar"),
+    windForecast: () => get("/api/bmrs/wind-forecast"),
+    warnings: () => get("/api/bmrs/warnings"),
+    temperature: () => get("/api/bmrs/temperature"),
+    frequency: () => get("/api/bmrs/frequency"),
+    generation: () => get("/api/bmrs/generation"),
+    snapshot: () => get("/api/bmrs/snapshot"),
+  },
+
+  tenderSearch: {
+    energy: (daysBack = 30, limit = 50, keywords) =>
+      get(`/api/tenders/energy?days_back=${daysBack}&limit=${limit}${keywords ? `&keywords=${enc(keywords)}` : ""}`),
   },
 
   opt: {

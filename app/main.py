@@ -213,6 +213,7 @@ from app.routers import (  # noqa: E402
     environment as environment_router,
     land_management as land_mgmt_router,
     terrain as terrain_router,
+    planning_ml as planning_ml_router,
 )
 
 _routers = [
@@ -238,6 +239,7 @@ _routers = [
     environment_router.router,
     land_mgmt_router.router,
     terrain_router.router,
+    planning_ml_router.router,
 ]
 
 app.include_router(graph_router)

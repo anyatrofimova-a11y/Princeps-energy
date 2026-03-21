@@ -144,6 +144,7 @@ export function SiteProvider({ children }) {
   const [visionLoading, setVisionLoading] = useState(false);
   const [visionUploads, setVisionUploads] = useState([]);
   const [digitalTwinOpen, setDigitalTwinOpen] = useState(false);
+  const [terrainTwinOpen, setTerrainTwinOpen] = useState(false);
   const [twinData, setTwinData] = useState(null);
 
   // ── Loading flags ──
@@ -570,6 +571,7 @@ export function SiteProvider({ children }) {
     visionLoading, setVisionLoading,
     visionUploads, setVisionUploads,
     digitalTwinOpen, setDigitalTwinOpen,
+    terrainTwinOpen, setTerrainTwinOpen,
     twinData, setTwinData,
     // Loading
     loading, agentLoading,
