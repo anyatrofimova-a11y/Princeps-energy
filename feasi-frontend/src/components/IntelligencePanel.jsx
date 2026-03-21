@@ -160,7 +160,7 @@ export default function IntelligencePanel({ onClose }) {
               <div className="intel-data-grid">
                 {Object.entries(bess).map(([k, v]) => (
                   <div key={k} className="intel-data-cell">
-                    <span className="intel-data-value">{typeof v === "number" ? v.toLocaleString() : String(v)}</span>
+                    <span className="intel-data-value">{typeof v === "number" ? v.toLocaleString() : typeof v === "object" ? (Array.isArray(v) ? v.length + " items" : Object.keys(v).length + " fields") : String(v).slice(0, 80)}</span>
                     <span className="intel-data-label">{k.replace(/_/g, " ")}</span>
                   </div>
                 ))}
@@ -182,7 +182,7 @@ export default function IntelligencePanel({ onClose }) {
                 <div className="intel-data-grid">
                   {Object.entries(riio).map(([k, v]) => (
                     <div key={k} className="intel-data-cell">
-                      <span className="intel-data-value">{typeof v === "number" ? v.toLocaleString() : String(v)}</span>
+                      <span className="intel-data-value">{typeof v === "number" ? v.toLocaleString() : typeof v === "object" ? (Array.isArray(v) ? v.length + " items" : Object.keys(v).length + " fields") : String(v).slice(0, 80)}</span>
                       <span className="intel-data-label">{k.replace(/_/g, " ")}</span>
                     </div>
                   ))}
@@ -199,7 +199,7 @@ export default function IntelligencePanel({ onClose }) {
               <div className="intel-data-grid">
                 {Object.entries(market).map(([k, v]) => (
                   <div key={k} className="intel-data-cell">
-                    <span className="intel-data-value">{typeof v === "number" ? v.toLocaleString() : String(v)}</span>
+                    <span className="intel-data-value">{typeof v === "number" ? v.toLocaleString() : typeof v === "object" ? (Array.isArray(v) ? v.length + " items" : Object.keys(v).length + " fields") : String(v).slice(0, 80)}</span>
                     <span className="intel-data-label">{k.replace(/_/g, " ")}</span>
                   </div>
                 ))}

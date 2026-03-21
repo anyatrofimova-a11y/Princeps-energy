@@ -118,13 +118,20 @@ async def retrain_model():
 @router.get("/api/planning/model-status")
 async def model_status():
     """Check model training status and accuracy metrics."""
-    from utils.planning_intelligence import get_predictor
-    predictor = await get_predictor()
-    return {
-        "trained": predictor._trained,
-        "feature_count": len(predictor.feature_names),
-        "features": predictor.feature_names[:20],
-    }
+    try:
+        from utils.planning_intelligence import PlanningPredictor
+        predictor = PlanningPredictor()
+        return {
+            "trained": predictor._trained,
+            "feature_count": len(predictor.feature_names),
+            "features": predictor.feature_names[:20],
+            "modules": {
+                "planning_intelligence": True,
+                "planning_predictor": True,
+            },
+        }
+    except Exception as e:
+        return {"trained": False, "error": str(e)}
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -48,6 +48,7 @@ const SettingsPage = lazy(() => import("./components/SettingsPage"));
 const PitchPage = lazy(() => import("./components/PitchPage"));
 const ProjectPipeline = lazy(() => import("./components/ProjectPipeline"));
 const SiteDashboard = lazy(() => import("./components/SiteDashboard"));
+const SiteDashboardV2 = lazy(() => import("./components/SiteDashboardV2"));
 const CommandPalette = lazy(() => import("./components/shell/CommandPalette"));
 const DrawingToolbar = lazy(() => import("./components/DrawingToolbar"));
 const DashboardBuilder = lazy(() => import("./components/DashboardBuilder"));
@@ -107,6 +108,10 @@ export default function App() {
 
   const [mapInstance, setMapInstance] = useState(null);
   const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [dashV2Closed, setDashV2Closed] = useState(false);
+
+  // Re-open dashboard when a new site is picked
+  useEffect(() => { if (pickedLocation) setDashV2Closed(false); }, [pickedLocation]);
   const [scenarioCompareOpen, setScenarioCompareOpen] = useState(false);
   const [dashboardBuilderOpen, setDashboardBuilderOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -553,9 +558,9 @@ export default function App() {
           />
         )}
 
-        {/* Site dashboard overlay */}
-        {dashboardOpen && (
-          <SiteDashboard onClose={() => setDashboardOpen(false)} />
+        {/* SiteDashboardV2 — auto-shows when site is selected, past discovery stage */}
+        {pickedLocation && workflowStage !== "site" && !dashV2Closed && (
+          <SiteDashboardV2 onClose={() => setDashV2Closed(true)} />
         )}
       </Suspense>
 

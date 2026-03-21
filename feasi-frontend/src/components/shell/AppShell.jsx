@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useWorkspace, WORKSPACES, WORKSPACE_VIEWS } from "../../contexts/WorkspaceContext";
 import NavRail from "./NavRail";
 import TopStatusBar from "./TopStatusBar";
+import LiveDataStrip from "./LiveDataStrip";
 
 export default function AppShell({ children, onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence }) {
   const { toggleBrowser, toggleDetail, setActiveWorkspace, activeWorkspace, setActiveViewMode } = useWorkspace();
@@ -73,6 +74,7 @@ export default function AppShell({ children, onGridTwin, onBems, onAssetInspect,
           onIntelligence={onIntelligence}
         />
         {children}
+        <LiveDataStrip />
       </div>
     </div>
   );

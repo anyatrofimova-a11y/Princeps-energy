@@ -5,7 +5,6 @@ import WorkspaceHome from "./WorkspaceHome";
 import DataTableView from "../views/DataTableView";
 import ChartView from "../views/ChartView";
 
-// Lazy-load grid-specific views to keep bundle lean
 const GridNetworkView = lazy(() => import("../grid/GridNetworkView"));
 const GridCircuitView = lazy(() => import("../grid/GridCircuitView"));
 const GridTablePlusView = lazy(() => import("../grid/GridTablePlusView"));
@@ -17,50 +16,38 @@ const ViewLoading = () => (
 );
 
 export default function CenterCanvas({ children, dashboardView }) {
-  const { activeViewMode, activeWorkspace } = useWorkspace();
+  const { activeViewMode } = useWorkspace();
+
+  // Map mode: no tab bar, map fills everything
+  const isMapMode = activeViewMode === "map" || activeViewMode === "explore" || activeViewMode === "satellite";
 
   return (
     <div className="center-canvas">
-      <ViewTabs />
+      {/* Only show tab bar when NOT in map mode — map should fill the screen */}
+      {!isMapMode && <ViewTabs />}
       <div className="center-canvas-body">
-        {/* Shared views */}
         {activeViewMode === "map" && children}
+        {activeViewMode === "explore" && children}
+        {activeViewMode === "satellite" && children}
         {activeViewMode === "table" && <DataTableView />}
         {activeViewMode === "chart" && <ChartView />}
         {activeViewMode === "dashboard" && (dashboardView || <WorkspaceHome />)}
 
-        {/* Grid workspace: "explore" = map with enhanced grid overlays */}
-        {activeViewMode === "explore" && children}
-
-        {/* Grid workspace: lazy-loaded specialized views */}
         {activeViewMode === "network" && (
-          <Suspense fallback={<ViewLoading />}>
-            <GridNetworkView />
-          </Suspense>
+          <Suspense fallback={<ViewLoading />}><GridNetworkView /></Suspense>
         )}
         {activeViewMode === "circuit" && (
-          <Suspense fallback={<ViewLoading />}>
-            <GridCircuitView />
-          </Suspense>
+          <Suspense fallback={<ViewLoading />}><GridCircuitView /></Suspense>
         )}
         {activeViewMode === "data" && (
-          <Suspense fallback={<ViewLoading />}>
-            <GridTablePlusView />
-          </Suspense>
+          <Suspense fallback={<ViewLoading />}><GridTablePlusView /></Suspense>
         )}
         {activeViewMode === "forecast" && (
-          <Suspense fallback={<ViewLoading />}>
-            <GSPExplorerView />
-          </Suspense>
+          <Suspense fallback={<ViewLoading />}><GSPExplorerView /></Suspense>
         )}
         {activeViewMode === "compare" && (
-          <Suspense fallback={<ViewLoading />}>
-            <GridCompareView />
-          </Suspense>
+          <Suspense fallback={<ViewLoading />}><GridCompareView /></Suspense>
         )}
-
-        {/* Feasibility satellite view (reuses map with satellite overlay) */}
-        {activeViewMode === "satellite" && children}
       </div>
     </div>
   );
