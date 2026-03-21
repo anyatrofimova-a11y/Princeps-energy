@@ -869,6 +869,97 @@ const api = {
     },
   },
 
+  bessRevenue: {
+    stack: (powerMw = 50, durationHours = 2, region = "Midlands", year = "2026", strategy = "balanced") =>
+      get(`/api/bess/revenue-stack?power_mw=${powerMw}&duration_hours=${durationHours}&region=${enc(region)}&year=${enc(year)}&strategy=${enc(strategy)}`),
+    forecast: (powerMw = 50, durationHours = 2, region = "Midlands", years = 10, strategy = "balanced") =>
+      get(`/api/bess/revenue-forecast?power_mw=${powerMw}&duration_hours=${durationHours}&region=${enc(region)}&years=${years}&strategy=${enc(strategy)}`),
+    benchmark: (powerMw = 50, durationHours = 2, region = "Midlands", year = "2026") =>
+      get(`/api/bess/benchmark?power_mw=${powerMw}&duration_hours=${durationHours}&region=${enc(region)}&year=${enc(year)}`),
+    streams: () => get("/api/bess/streams"),
+    optimalDuration: (powerMw = 50, region = "Midlands", year = "2026") =>
+      get(`/api/bess/optimal-duration?power_mw=${powerMw}&region=${enc(region)}&year=${enc(year)}`),
+  },
+
+  cableRoute: {
+    route: (siteLat, siteLon, subLat, subLon, capacityMw, voltageKv) => {
+      const q = new URLSearchParams({ site_lat: siteLat, site_lon: siteLon, sub_lat: subLat, sub_lon: subLon, capacity_mw: capacityMw });
+      if (voltageKv != null) q.set("voltage_kv", voltageKv);
+      return get(`/api/cable/route?${q}`);
+    },
+    bestRoute: (lat, lon, capacityMw, radiusKm = 20, maxCandidates = 5) => {
+      const q = new URLSearchParams({ lat, lon, capacity_mw: capacityMw, radius_km: radiusKm, max_candidates: maxCandidates });
+      return get(`/api/cable/best-route?${q}`);
+    },
+    costEstimate: (distanceKm, voltageKv = 33, terrain = "rural") =>
+      get(`/api/cable/cost-estimate?distance_km=${distanceKm}&voltage_kv=${voltageKv}&terrain=${enc(terrain)}`),
+    voltageOptions: (capacityMw, distanceKm = 5) =>
+      get(`/api/cable/voltage-options?capacity_mw=${capacityMw}&distance_km=${distanceKm}`),
+  },
+
+  construction: {
+    detect: (lat, lon, radiusM = 500) =>
+      get(`/api/construction/detect?lat=${lat}&lon=${lon}&radius_m=${radiusM}`),
+    monitorPipeline: () => get("/api/construction/monitor-pipeline"),
+    timeline: (technology = "solar", capacityMw = 50) =>
+      get(`/api/construction/timeline?technology=${enc(technology)}&capacity_mw=${capacityMw}`),
+    estimate: (projectId) => get(`/api/construction/estimate/${enc(projectId)}`),
+  },
+
+  yield: {
+    solar: (lat, lon, capacityMwp, tracking = "fixed", tilt, azimuth = 180) => {
+      const q = new URLSearchParams({ lat, lon, capacity_mwp: capacityMwp, tracking, azimuth });
+      if (tilt != null) q.set("tilt", tilt);
+      return get(`/api/yield/solar?${q}`);
+    },
+    wind: (lat, lon, capacityMw, hubHeight = 80, turbineClass = "IEC2", numTurbines = 1) =>
+      get(`/api/yield/wind?lat=${lat}&lon=${lon}&capacity_mw=${capacityMw}&hub_height=${hubHeight}&turbine_class=${enc(turbineClass)}&num_turbines=${numTurbines}`),
+    compare: (lat, lon, capacityMw) =>
+      get(`/api/yield/compare?lat=${lat}&lon=${lon}&capacity_mw=${capacityMw}`),
+    uncertainty: (technology, lat, lon, capacityMw) =>
+      get(`/api/yield/uncertainty?technology=${enc(technology)}&lat=${lat}&lon=${lon}&capacity_mw=${capacityMw}`),
+    degradation: (capacityMwp, annualYieldMwh, years = 25, degradationRate = 0.5) =>
+      get(`/api/yield/degradation?capacity_mwp=${capacityMwp}&annual_yield_mwh=${annualYieldMwh}&years=${years}&degradation_rate=${degradationRate}`),
+  },
+
+  portfolio: {
+    optimise: (budgetGbp, sites, constraints = {}) =>
+      post("/api/portfolio/optimise", { budget_gbp: budgetGbp, sites, constraints }),
+    diversification: (sites) =>
+      post("/api/portfolio/diversification", { sites }),
+    sensitivity: (portfolio, variables, nMontecarlo = 2000) =>
+      post("/api/portfolio/sensitivity", { portfolio, variables, n_montecarlo: nMontecarlo }),
+    compare: (portfolios) =>
+      post("/api/portfolio/compare", { portfolios }),
+    auto: (budgetGbp, targetIrr = 8, region, technologies) => {
+      const q = new URLSearchParams({ budget_gbp: budgetGbp, target_irr: targetIrr });
+      if (region) q.set("region", region);
+      if (technologies) q.set("technologies", technologies);
+      return get(`/api/portfolio/auto?${q}`);
+    },
+  },
+
+  gridQueue: {
+    analyse: (connectionSite) => get(`/api/grid-queue/analyse/${enc(connectionSite)}`),
+    predict: (lat, lon, capacityMw, technology = "solar", voltageKv, radiusKm = 30) => {
+      const q = new URLSearchParams({ lat, lon, capacity_mw: capacityMw, technology, radius_km: radiusKm });
+      if (voltageKv != null) q.set("voltage_kv", voltageKv);
+      return get(`/api/grid-queue/predict?${q}`);
+    },
+    benchmark: (capacityMw, voltageKv = 33, distanceKm = 5, region) => {
+      const q = new URLSearchParams({ capacity_mw: capacityMw, voltage_kv: voltageKv, distance_km: distanceKm });
+      if (region) q.set("region", region);
+      return get(`/api/grid-queue/benchmark?${q}`);
+    },
+    opportunities: (region, technology, minHeadroomMw = 10, limit = 30) => {
+      const q = new URLSearchParams({ min_headroom_mw: minHeadroomMw, limit });
+      if (region) q.set("region", region);
+      if (technology) q.set("technology", technology);
+      return get(`/api/grid-queue/opportunities?${q}`);
+    },
+    summary: () => get("/api/grid-queue/summary"),
+  },
+
   /**
    * Health check — GET /health (no retry, fast fail).
    * Returns { status, checks: { database, sam, claude, pool } } or null.

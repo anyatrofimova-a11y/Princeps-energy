@@ -2620,45 +2620,65 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.addSource("draw-tentative", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addSource("draw-handles", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
 
-      // Completed features — fill
+      // Completed features — fill (semi-transparent gold for visibility on dark basemap)
       map.addLayer({
         id: "draw-fill", type: "fill", source: "draw-features",
         filter: ["==", ["geometry-type"], "Polygon"],
         paint: {
-          "fill-color": ["case", ["boolean", ["feature-state", "selected"], false], "rgba(0,210,255,0.25)", "rgba(0,255,136,0.15)"],
-          "fill-outline-color": "rgba(0,210,255,0.6)",
+          "fill-color": ["case",
+            ["==", ["get", "drawMode"], "rectangle"], "rgba(255,100,100,0.25)",
+            "rgba(255,200,50,0.25)"
+          ],
+          "fill-outline-color": "rgba(255,200,50,0.8)",
         },
       });
-      // Completed features — line
+      // Completed features — line (bright gold outline)
       map.addLayer({
         id: "draw-line", type: "line", source: "draw-features",
         filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "LineString"]],
-        paint: { "line-color": "#00d2ff", "line-width": 2, "line-opacity": 0.9 },
+        paint: { "line-color": "#ffc832", "line-width": 2.5, "line-opacity": 1 },
       });
       // Completed features — points
       map.addLayer({
         id: "draw-points", type: "circle", source: "draw-features",
         filter: ["==", ["geometry-type"], "Point"],
-        paint: { "circle-radius": 6, "circle-color": "#00d2ff", "circle-stroke-width": 2, "circle-stroke-color": "#fff" },
+        paint: { "circle-radius": 7, "circle-color": "#ffc832", "circle-stroke-width": 2.5, "circle-stroke-color": "#fff" },
+      });
+      // Completed features — area labels (hectares) for polygons
+      map.addLayer({
+        id: "draw-area-labels", type: "symbol", source: "draw-features",
+        filter: ["==", ["geometry-type"], "Polygon"],
+        layout: {
+          "text-field": ["get", "areaLabel"],
+          "text-size": 14,
+          "text-font": ["DIN Pro Medium", "Arial Unicode MS Regular"],
+          "text-anchor": "center",
+          "text-allow-overlap": true,
+        },
+        paint: {
+          "text-color": "#fff",
+          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-width": 1.5,
+        },
       });
 
       // Tentative (preview) — fill
       map.addLayer({
         id: "draw-tentative-fill", type: "fill", source: "draw-tentative",
         filter: ["==", ["geometry-type"], "Polygon"],
-        paint: { "fill-color": "rgba(0,210,255,0.12)", "fill-outline-color": "rgba(0,210,255,0.5)" },
+        paint: { "fill-color": "rgba(255,200,50,0.15)", "fill-outline-color": "rgba(255,200,50,0.6)" },
       });
-      // Tentative — line
+      // Tentative — line (dashed gold)
       map.addLayer({
         id: "draw-tentative-line", type: "line", source: "draw-tentative",
         filter: ["any", ["==", ["geometry-type"], "Polygon"], ["==", ["geometry-type"], "LineString"]],
-        paint: { "line-color": "#00d2ff", "line-width": 2, "line-dasharray": [4, 3], "line-opacity": 0.7 },
+        paint: { "line-color": "#ffc832", "line-width": 2, "line-dasharray": [4, 3], "line-opacity": 0.8 },
       });
       // Tentative — point
       map.addLayer({
         id: "draw-tentative-point", type: "circle", source: "draw-tentative",
         filter: ["==", ["geometry-type"], "Point"],
-        paint: { "circle-radius": 5, "circle-color": "#00d2ff", "circle-opacity": 0.5, "circle-stroke-width": 1.5, "circle-stroke-color": "#fff" },
+        paint: { "circle-radius": 5, "circle-color": "#ffc832", "circle-opacity": 0.7, "circle-stroke-width": 1.5, "circle-stroke-color": "#fff" },
       });
 
       // Edit handles
@@ -2666,7 +2686,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         id: "draw-handles-circles", type: "circle", source: "draw-handles",
         paint: {
           "circle-radius": ["match", ["get", "handleType"], "midpoint", 4, 6],
-          "circle-color": ["match", ["get", "handleType"], "first", "#4caf50", "midpoint", "#7c4dff", "#00d2ff"],
+          "circle-color": ["match", ["get", "handleType"], "first", "#4caf50", "midpoint", "#7c4dff", "#ffc832"],
           "circle-stroke-width": 2,
           "circle-stroke-color": "#fff",
           "circle-opacity": ["match", ["get", "handleType"], "midpoint", 0.6, 1],
@@ -2675,32 +2695,37 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
       // Drawing click handler — draw mode takes priority over pick mode
       map.on("click", (e) => {
-        console.log("[MapView] draw-click check — drawMode:", map._drawMode, "pickMode:", map._pickMode);
         if (!map._drawMode || map._drawMode === "view") return;
-        console.log("[MapView] draw-click ACTIVE — mode:", map._drawMode);
 
         const { lng, lat } = e.lngLat;
 
         // Check if clicked an edit handle (must happen before modify's feature selection)
-        const handles = map.queryRenderedFeatures(e.point, { layers: ["draw-handles-circles"] });
         let handleIndex = -1;
-        if (handles.length > 0) {
-          handleIndex = handles[0].properties.positionIndex ?? -1;
-          // Midpoint handle — insert vertex
-          if (handles[0].properties.handleType === "midpoint" && map._onDrawDragVertex) {
-            map._onDrawDragVertex("insert", handles[0].properties.featureIndex, handles[0].properties.insertAfter, [lng, lat]);
-            return;
+        try {
+          const handles = map.getLayer("draw-handles-circles")
+            ? map.queryRenderedFeatures(e.point, { layers: ["draw-handles-circles"] })
+            : [];
+          if (handles.length > 0) {
+            handleIndex = handles[0].properties.positionIndex ?? -1;
+            // Midpoint handle — insert vertex
+            if (handles[0].properties.handleType === "midpoint" && map._onDrawDragVertex) {
+              map._onDrawDragVertex("insert", handles[0].properties.featureIndex, handles[0].properties.insertAfter, [lng, lat]);
+              return;
+            }
           }
-        }
+        } catch (err) { /* layer may not exist yet */ }
 
         if (map._drawMode === "modify") {
-          // Check if clicked on a drawn feature
-          const feats = map.queryRenderedFeatures(e.point, { layers: ["draw-fill", "draw-line", "draw-points"] });
-          if (feats.length > 0 && map._onDrawSelectFeature) {
-            // Find index by matching properties
-            const clickedId = feats[0].properties.created;
-            map._onDrawSelectFeature(clickedId);
-          }
+          try {
+            const queryLayers = ["draw-fill", "draw-line", "draw-points"].filter(id => map.getLayer(id));
+            const feats = queryLayers.length > 0
+              ? map.queryRenderedFeatures(e.point, { layers: queryLayers })
+              : [];
+            if (feats.length > 0 && map._onDrawSelectFeature) {
+              const clickedId = feats[0].properties.created;
+              map._onDrawSelectFeature(clickedId);
+            }
+          } catch (err) { /* layer may not exist yet */ }
           return;
         }
 
@@ -3832,12 +3857,14 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     }
   }, [chatLayers]);
 
-  // Sync drawing state to map sources
+  // Sync drawing callbacks to map instance — MUST always run (no isStyleLoaded guard)
+  // so the click/dblclick/mousemove handlers on the map can reach the React state setters.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded() || !drawState) return;
+    if (!map || !drawState) return;
 
-    // Update callbacks on map instance
+    // Always keep callbacks in sync — these are read by the click/dblclick/mousemove
+    // handlers registered during map setup, which fire regardless of style-load state.
     map._drawMode = drawState.mode;
     map._onDrawClick = onDrawClick;
     map._onDrawDoubleClick = onDrawDoubleClick;
@@ -3847,50 +3874,89 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
     // Disable double-click zoom while drawing (prevents zoom when finishing shapes)
     const drawing = drawState.mode && drawState.mode !== "view" && drawState.mode !== "modify";
-    if (drawing) {
-      map.doubleClickZoom.disable();
-    } else {
-      map.doubleClickZoom.enable();
+    try {
+      if (drawing) { map.doubleClickZoom.disable(); } else { map.doubleClickZoom.enable(); }
+    } catch {}
+
+    // Set cursor (getCursor returns "" for VIEW mode, which resets to default)
+    if (!pickMode) {
+      try { map.getCanvas().style.cursor = getCursor(drawState.mode); } catch {}
     }
+  }, [drawState?.mode, pickMode, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex]);
+
+  // Sync drawing geometry to map sources — needs sources to exist (style loaded)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !drawState) return;
+
+    // Helper: compute area label for polygon features
+    const addAreaLabels = (fc) => {
+      return {
+        ...fc,
+        features: fc.features.map(f => {
+          if (f.geometry?.type !== "Polygon") return f;
+          const ring = f.geometry.coordinates[0];
+          if (!ring || ring.length < 4) return f;
+          // Shoelace area in degrees, then convert to m2
+          let area = 0;
+          const n = ring.length;
+          for (let i = 0; i < n; i++) {
+            const j = (i + 1) % n;
+            area += ring[i][0] * ring[j][1];
+            area -= ring[j][0] * ring[i][1];
+          }
+          area = Math.abs(area) / 2;
+          const midLat = ring.reduce((s, p) => s + p[1], 0) / n;
+          const mPerDegLat = 111320;
+          const mPerDegLon = 111320 * Math.cos(midLat * Math.PI / 180);
+          const areaM2 = area * mPerDegLat * mPerDegLon;
+          const areaHa = areaM2 / 10000;
+          const label = areaHa >= 1 ? `${areaHa.toFixed(1)} ha` : `${Math.round(areaM2)} m\u00B2`;
+          return {
+            ...f,
+            properties: { ...f.properties, areaLabel: label },
+          };
+        }),
+      };
+    };
 
     // Update features source
     const featSrc = map.getSource("draw-features");
-    if (featSrc) featSrc.setData(drawState.features);
+    if (featSrc) {
+      try { featSrc.setData(addAreaLabels(drawState.features)); } catch {}
+    }
 
     // Update tentative guide source
     const tentSrc = map.getSource("draw-tentative");
     if (tentSrc) {
-      const guides = getTentativeGuides(drawState);
-      const tentativeOnly = {
-        type: "FeatureCollection",
-        features: guides.features.filter(f => f.properties.guideType === "tentative"),
-      };
-      tentSrc.setData(tentativeOnly);
-
-      // Handles source
-      const handleSrc = map.getSource("draw-handles");
-      if (handleSrc) {
-        const editHandles = guides.features.filter(f => f.properties.guideType === "editHandle");
-        const modifyHandles = getModifyGuides(drawState).features;
-        handleSrc.setData({
+      try {
+        const guides = getTentativeGuides(drawState);
+        const tentativeOnly = {
           type: "FeatureCollection",
-          features: [...editHandles, ...modifyHandles],
-        });
-      }
-    }
+          features: guides.features.filter(f => f.properties.guideType === "tentative"),
+        };
+        tentSrc.setData(tentativeOnly);
 
-    // Set cursor (getCursor returns "" for VIEW mode, which resets to default)
-    if (!pickMode) {
-      map.getCanvas().style.cursor = getCursor(drawState.mode);
+        // Handles source
+        const handleSrc = map.getSource("draw-handles");
+        if (handleSrc) {
+          const editHandles = guides.features.filter(f => f.properties.guideType === "editHandle");
+          const modifyHandles = getModifyGuides(drawState).features;
+          handleSrc.setData({
+            type: "FeatureCollection",
+            features: [...editHandles, ...modifyHandles],
+          });
+        }
+      } catch {}
     }
 
     // Ensure draw layers are always on top of other map layers
-    ['draw-fill', 'draw-line', 'draw-points', 'draw-tentative-fill', 'draw-tentative-line', 'draw-tentative-point', 'draw-handles-circles'].forEach(id => {
-      if (map.getLayer(id)) {
-        try { map.moveLayer(id); } catch {}
-      }
+    const drawLayerIds = ['draw-fill', 'draw-line', 'draw-points', 'draw-area-labels',
+      'draw-tentative-fill', 'draw-tentative-line', 'draw-tentative-point', 'draw-handles-circles'];
+    drawLayerIds.forEach(id => {
+      try { if (map.getLayer(id)) map.moveLayer(id); } catch {}
     });
-  }, [drawState, pickMode, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex]);
+  }, [drawState]);
 
   return (
     <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />

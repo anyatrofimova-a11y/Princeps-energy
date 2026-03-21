@@ -271,24 +271,65 @@ export function getModifyGuides(state) {
  */
 export function getMeasurements(state) {
   const { mode, clickSequence, mouseCoord } = state;
-  if (mode !== MODES.MEASURE || !mouseCoord || clickSequence.length === 0) return null;
 
-  const allPts = [...clickSequence, mouseCoord];
-
-  let totalDist = 0;
-  for (let i = 0; i < allPts.length - 1; i++) {
-    totalDist += haversineMetres(allPts[i], allPts[i + 1]);
+  // Show live measurements for measure mode AND polygon drawing modes
+  if (mode === MODES.MEASURE) {
+    if (!mouseCoord || clickSequence.length === 0) return null;
+    const allPts = [...clickSequence, mouseCoord];
+    let totalDist = 0;
+    for (let i = 0; i < allPts.length - 1; i++) {
+      totalDist += haversineMetres(allPts[i], allPts[i + 1]);
+    }
+    const result = { distance: totalDist };
+    if (allPts.length >= 3) {
+      const ring = [...allPts, allPts[0]];
+      result.area = polygonAreaM2(allPts);
+      result.perimeter = perimeterMetres(ring);
+    }
+    return result;
   }
 
-  const result = { distance: totalDist };
-
-  if (allPts.length >= 3) {
-    const ring = [...allPts, allPts[0]];
-    result.area = polygonAreaM2(allPts);
-    result.perimeter = perimeterMetres(ring);
+  // Live area/perimeter while drawing polygons and rectangles
+  if ((mode === MODES.POLYGON || mode === MODES.RECTANGLE) && mouseCoord && clickSequence.length >= 1) {
+    if (mode === MODES.RECTANGLE && clickSequence.length === 1) {
+      const [x0, y0] = clickSequence[0];
+      const [x1, y1] = mouseCoord;
+      const ring = [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]];
+      return {
+        area: polygonAreaM2(ring.slice(0, -1)),
+        perimeter: perimeterMetres(ring),
+      };
+    }
+    if (mode === MODES.POLYGON && clickSequence.length >= 2) {
+      const allPts = [...clickSequence, mouseCoord];
+      const ring = [...allPts, allPts[0]];
+      return {
+        area: polygonAreaM2(allPts),
+        perimeter: perimeterMetres(ring),
+      };
+    }
   }
 
-  return result;
+  // Live distance while drawing lines
+  if (mode === MODES.LINE && mouseCoord && clickSequence.length >= 1) {
+    const allPts = [...clickSequence, mouseCoord];
+    let totalDist = 0;
+    for (let i = 0; i < allPts.length - 1; i++) {
+      totalDist += haversineMetres(allPts[i], allPts[i + 1]);
+    }
+    return { distance: totalDist };
+  }
+
+  // Live radius while drawing circles
+  if (mode === MODES.CIRCLE && mouseCoord && clickSequence.length === 1) {
+    const radiusM = haversineMetres(clickSequence[0], mouseCoord);
+    return {
+      distance: radiusM,
+      area: Math.PI * radiusM * radiusM,
+    };
+  }
+
+  return null;
 }
 
 /**
