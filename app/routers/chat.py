@@ -25,6 +25,7 @@ class ChatSessionRequest(BaseModel):
 
 class ChatMessageRequest(BaseModel):
     message: str
+    context: dict | None = None
 
 
 @router.post("/chat/session")
@@ -57,6 +58,7 @@ async def chat_message(
             fetch_parcel_context=fetch_parcel_context,
             run_geeflow_subprocess=run_geeflow_subprocess,
             run_geoai_subprocess=run_geoai_subprocess,
+            ui_context=body.context,
         ),
         media_type="text/event-stream",
         headers={

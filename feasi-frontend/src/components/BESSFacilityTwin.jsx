@@ -7,9 +7,9 @@ import api from "../services/api";
 /* ── Design Tokens ────────────────────────────────────────────────────── */
 const T = {
   bg: "#F2F3F5",
-  accent: "#7c5cfc",
+  accent: "#D4A018",
   panel: "rgba(255, 255, 255, 0.95)",
-  border: "1px solid rgba(124, 92, 252, 0.2)",
+  border: "1px solid rgba(212, 160, 24, 0.2)",
   text: "#1A1D23",
   textSec: "#4B5563",
   green: "#52c41a",
@@ -112,7 +112,7 @@ function BatteryContainer({ position, container, index, selected, onClick }) {
       {/* Label */}
       <Html position={[0, 1.1, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div style={{
-          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(124,92,252,0.3)",
+          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(212,160,24,0.3)",
           borderRadius: 4, padding: "2px 8px", whiteSpace: "nowrap", fontSize: 10,
           color: T.text, fontFamily: "system-ui", textAlign: "center",
         }}>
@@ -144,7 +144,7 @@ function InverterUnit({ position, index, active }) {
       </mesh>
       <Html position={[0, 0.8, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div style={{
-          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(124,92,252,0.2)",
+          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(212,160,24,0.2)",
           borderRadius: 3, padding: "1px 6px", fontSize: 9, color: T.textSec, fontFamily: "system-ui",
         }}>
           PCS-{index + 1}
@@ -177,7 +177,7 @@ function Transformer({ position, loadPct }) {
       ))}
       <Html position={[0, 1.6, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div style={{
-          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(124,92,252,0.3)",
+          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(212,160,24,0.3)",
           borderRadius: 4, padding: "2px 8px", fontSize: 10, color: T.text, fontFamily: "system-ui",
         }}>
           33kV TX <span style={{ color: loadPct > 80 ? T.red : loadPct > 60 ? T.orange : T.green, fontWeight: 600 }}>{loadPct.toFixed(0)}%</span>
@@ -215,7 +215,7 @@ function GridPoint({ position, exportMw }) {
       </line>
       <Html position={[0, 3.5, 0]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div style={{
-          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(124,92,252,0.3)",
+          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(212,160,24,0.3)",
           borderRadius: 4, padding: "3px 10px", fontSize: 11, color: T.text, fontFamily: "system-ui", fontWeight: 600,
         }}>
           {exportMw > 0 ? "Export" : "Import"} {Math.abs(exportMw).toFixed(1)} MW
@@ -332,7 +332,7 @@ function BESSFacilityScene({ containers, systemState, selectedContainer, onSelec
       {/* Lighting */}
       <ambientLight intensity={0.3} />
       <directionalLight position={[10, 15, 8]} intensity={0.8} castShadow shadow-mapSize={[1024, 1024]} />
-      <pointLight position={[-5, 8, -3]} intensity={0.3} color="#7c5cfc" />
+      <pointLight position={[-5, 8, -3]} intensity={0.3} color="#D4A018" />
 
       {/* Ground */}
       <Grid
@@ -553,7 +553,7 @@ function SingleLineDiagram({ containers, systemState, txLoadPct, exportMw }) {
         const x = i * (elemW + gap);
         return (
           <g key={i}>
-            <rect x={x} y={8} width={elemW} height={44} rx={6} fill="rgba(124,92,252,0.08)" stroke="rgba(124,92,252,0.25)" strokeWidth={1} />
+            <rect x={x} y={8} width={elemW} height={44} rx={6} fill="rgba(212,160,24,0.08)" stroke="rgba(212,160,24,0.25)" strokeWidth={1} />
             <circle cx={x + 12} cy={18} r={4} fill={el.on ? el.color : T.red} />
             <text x={x + 20} y={22} fill={T.text} fontSize={10} fontWeight="600" fontFamily="system-ui">{el.label}</text>
             <text x={x + elemW / 2} y={42} textAnchor="middle" fill={el.color} fontSize={11} fontWeight="700" fontFamily="system-ui">{el.value}</text>
@@ -613,7 +613,7 @@ function BidderChart({ schedule, prices }) {
         );
       })}
       {/* Mid line (zero power) */}
-      <line x1={PAD.l} x2={W - PAD.r} y1={PAD.t + iH / 2} y2={PAD.t + iH / 2} stroke="rgba(124,92,252,0.2)" strokeDasharray="3,3" />
+      <line x1={PAD.l} x2={W - PAD.r} y1={PAD.t + iH / 2} y2={PAD.t + iH / 2} stroke="rgba(212,160,24,0.2)" strokeDasharray="3,3" />
       {/* Price line */}
       <polyline
         fill="none"
@@ -682,8 +682,8 @@ function BidderPanel({ powerMw, energyMwh, onClose }) {
           onClick={runBidder}
           disabled={bidderLoading}
           style={{
-            height: 28, padding: "0 12px", background: "rgba(124,92,252,0.2)",
-            border: "1px solid rgba(124,92,252,0.4)", borderRadius: 4,
+            height: 28, padding: "0 12px", background: "rgba(212,160,24,0.2)",
+            border: "1px solid rgba(212,160,24,0.4)", borderRadius: 4,
             color: T.accent, fontSize: 11, fontWeight: 600, cursor: "pointer",
           }}
         >
@@ -695,7 +695,7 @@ function BidderPanel({ powerMw, energyMwh, onClose }) {
         <>
           {/* Revenue summary */}
           <div style={{
-            background: "rgba(124,92,252,0.06)", border: T.border, borderRadius: 8,
+            background: "rgba(212,160,24,0.06)", border: T.border, borderRadius: 8,
             padding: 12, marginBottom: 10,
           }}>
             <div style={{ fontSize: 11, color: T.textSec, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
@@ -739,7 +739,7 @@ function BidderPanel({ powerMw, energyMwh, onClose }) {
 
           {/* Price & schedule chart */}
           <div style={{
-            background: "rgba(124,92,252,0.06)", border: T.border, borderRadius: 8,
+            background: "rgba(212,160,24,0.06)", border: T.border, borderRadius: 8,
             padding: 8, marginBottom: 10,
           }}>
             <div style={{ fontSize: 11, color: T.textSec, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
@@ -756,7 +756,7 @@ function BidderPanel({ powerMw, energyMwh, onClose }) {
           {/* Trade log */}
           {(r.trades?.length > 0 || r.schedule?.length > 0) && (
             <div style={{
-              background: "rgba(124,92,252,0.06)", border: T.border, borderRadius: 8,
+              background: "rgba(212,160,24,0.06)", border: T.border, borderRadius: 8,
               padding: 8, marginBottom: 10,
             }}>
               <div style={{ fontSize: 11, color: T.textSec, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
@@ -766,7 +766,7 @@ function BidderPanel({ powerMw, energyMwh, onClose }) {
                 {(r.trades || r.schedule.filter(s => (s.action || s.da_action) !== "idle")).slice(0, 30).map((t, i) => (
                   <div key={i} style={{
                     display: "flex", justifyContent: "space-between", padding: "3px 0",
-                    borderBottom: "1px solid rgba(124,92,252,0.06)", fontSize: 10,
+                    borderBottom: "1px solid rgba(212,160,24,0.06)", fontSize: 10,
                   }}>
                     <span style={{ color: (t.side || t.action || t.da_action) === "buy" || (t.side || t.action || t.da_action) === "charge" ? T.blue : T.green, fontWeight: 600, width: 35 }}>
                       {(t.side || t.action || t.da_action || "").toUpperCase()}
@@ -783,7 +783,7 @@ function BidderPanel({ powerMw, energyMwh, onClose }) {
           {/* SoC profile */}
           {r.soc_profile && (
             <div style={{
-              background: "rgba(124,92,252,0.06)", border: T.border, borderRadius: 8,
+              background: "rgba(212,160,24,0.06)", border: T.border, borderRadius: 8,
               padding: 8,
             }}>
               <div style={{ fontSize: 11, color: T.textSec, fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
@@ -959,7 +959,7 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
 
   /* ── Inline card style helper ── */
   const cardStyle = {
-    background: "rgba(124,92,252,0.06)",
+    background: "rgba(212,160,24,0.06)",
     border: T.border,
     borderRadius: 8,
     padding: 12,
@@ -1037,8 +1037,8 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
             api.bess.score(siteLat, siteLon).then(d => { if (d) setSiteScore(d); });
           }}
           style={{
-            height: 30, padding: "0 14px", background: "rgba(124,92,252,0.15)",
-            border: "1px solid rgba(124,92,252,0.4)", borderRadius: 5, color: T.accent,
+            height: 30, padding: "0 14px", background: "rgba(212,160,24,0.15)",
+            border: "1px solid rgba(212,160,24,0.4)", borderRadius: 5, color: T.accent,
             fontSize: 12, fontWeight: 600, cursor: "pointer",
           }}
         >
@@ -1047,8 +1047,8 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
         <button
           onClick={() => { runSizing(); runRevenue(); }}
           style={{
-            height: 30, padding: "0 14px", background: "rgba(124,92,252,0.15)",
-            border: "1px solid rgba(124,92,252,0.4)", borderRadius: 5, color: T.accent,
+            height: 30, padding: "0 14px", background: "rgba(212,160,24,0.15)",
+            border: "1px solid rgba(212,160,24,0.4)", borderRadius: 5, color: T.accent,
             fontSize: 12, fontWeight: 600, cursor: "pointer",
           }}
         >
@@ -1058,8 +1058,8 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
           onClick={() => setBidderOpen(p => !p)}
           style={{
             height: 30, padding: "0 14px",
-            background: bidderOpen ? "rgba(124,92,252,0.35)" : "rgba(250,140,22,0.15)",
-            border: `1px solid ${bidderOpen ? "rgba(124,92,252,0.6)" : "rgba(250,140,22,0.4)"}`,
+            background: bidderOpen ? "rgba(212,160,24,0.35)" : "rgba(250,140,22,0.15)",
+            border: `1px solid ${bidderOpen ? "rgba(212,160,24,0.6)" : "rgba(250,140,22,0.4)"}`,
             borderRadius: 5, color: bidderOpen ? T.accent : T.orange,
             fontSize: 12, fontWeight: 600, cursor: "pointer",
           }}
@@ -1179,8 +1179,8 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
           {/* State badge overlay */}
           <div style={{
             position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)",
-            background: systemState === "charging" ? "rgba(24,144,255,0.2)" : systemState === "discharging" ? "rgba(82,196,26,0.2)" : "rgba(124,92,252,0.12)",
-            border: `1px solid ${systemState === "charging" ? T.blue : systemState === "discharging" ? T.green : "rgba(124,92,252,0.3)"}`,
+            background: systemState === "charging" ? "rgba(24,144,255,0.2)" : systemState === "discharging" ? "rgba(82,196,26,0.2)" : "rgba(212,160,24,0.12)",
+            border: `1px solid ${systemState === "charging" ? T.blue : systemState === "discharging" ? T.green : "rgba(212,160,24,0.3)"}`,
             borderRadius: 20, padding: "4px 18px", fontSize: 12, fontWeight: 700,
             color: systemState === "charging" ? T.blue : systemState === "discharging" ? T.green : T.textSec,
             textTransform: "uppercase", letterSpacing: 1,
@@ -1273,7 +1273,7 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
             {alarms.map(a => (
               <div key={a.id} style={{
                 display: "flex", gap: 6, alignItems: "flex-start", padding: "4px 0",
-                borderBottom: "1px solid rgba(124,92,252,0.06)",
+                borderBottom: "1px solid rgba(212,160,24,0.06)",
               }}>
                 <div style={{
                   width: 7, height: 7, borderRadius: 4, marginTop: 4, flexShrink: 0,

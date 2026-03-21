@@ -19,7 +19,7 @@ const DIMENSIONS_15 = [
   { key: "regulatory_pathway", label: "Regulatory" },
 ];
 
-const SITE_COLORS = ["#6c5ce7", "#0f62fe", "#24a148", "#f1c21b", "#da1e28", "#00bcd4"];
+const SITE_COLORS = ["#D4A018", "#0f62fe", "#24a148", "#f1c21b", "#da1e28", "#00bcd4"];
 
 const GOOGLE_UK_SITES = [
   { name: "Waltham Cross", lat: 51.6862, lon: -0.0137 },
@@ -54,7 +54,7 @@ function fmtNum(v, dec = 1) {
 
 /* ─── 15-Axis Radar Chart (SVG) ──────────────────────────────────────── */
 
-function RadarChart15({ scores, size = 260, color = "#6c5ce7" }) {
+function RadarChart15({ scores, size = 260, color = "#D4A018" }) {
   const cx = size / 2, cy = size / 2, r = size / 2 - 35;
   const n = DIMENSIONS_15.length;
   const step = (2 * Math.PI) / n;
@@ -479,8 +479,8 @@ export default function DCComparisonDashboard({ onClose, initialSites }) {
           <span style={{ fontSize: 18, fontWeight: 700 }}>Multi-Site Comparison</span>
           <span
             style={{
-              background: "#6c5ce722",
-              color: "#6c5ce7",
+              background: "#D4A01822",
+              color: "#D4A018",
               borderRadius: 10,
               padding: "2px 10px",
               fontSize: 12,
@@ -589,7 +589,7 @@ export default function DCComparisonDashboard({ onClose, initialSites }) {
             step={10}
             value={capacityMw}
             onChange={(e) => setCapacityMw(Number(e.target.value))}
-            style={{ width: 160, accentColor: "#6c5ce7" }}
+            style={{ width: 160, accentColor: "#D4A018" }}
           />
         </div>
 
@@ -668,8 +668,8 @@ export default function DCComparisonDashboard({ onClose, initialSites }) {
           {recommendation && (
             <div
               style={{
-                background: "#6c5ce711",
-                border: "1px solid #6c5ce744",
+                background: "#D4A01811",
+                border: "1px solid #D4A01844",
                 borderRadius: 10,
                 padding: "14px 18px",
                 marginBottom: 20,
@@ -678,7 +678,7 @@ export default function DCComparisonDashboard({ onClose, initialSites }) {
                 color: "#ccc",
               }}
             >
-              <span style={{ fontWeight: 700, color: "#6c5ce7", marginRight: 8 }}>Recommendation:</span>
+              <span style={{ fontWeight: 700, color: "#D4A018", marginRight: 8 }}>Recommendation:</span>
               {recommendation}
             </div>
           )}
@@ -742,8 +742,8 @@ const selectStyle = {
 };
 
 const btnSmall = {
-  background: "#6c5ce722",
-  border: "1px solid #6c5ce755",
+  background: "#D4A01822",
+  border: "1px solid #D4A01855",
   borderRadius: 6,
   color: "#b8b0f0",
   padding: "5px 12px",
@@ -753,7 +753,7 @@ const btnSmall = {
 };
 
 const btnPrimary = {
-  background: "#6c5ce7",
+  background: "#D4A018",
   border: "none",
   borderRadius: 8,
   color: "#fff",
@@ -789,7 +789,7 @@ const spinnerStyle = {
   width: 36,
   height: 36,
   border: "3px solid #333",
-  borderTopColor: "#6c5ce7",
+  borderTopColor: "#D4A018",
   borderRadius: "50%",
   margin: "0 auto",
   animation: "spin 0.8s linear infinite",

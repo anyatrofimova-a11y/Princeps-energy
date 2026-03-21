@@ -17,7 +17,7 @@ function fmtN(v, d = 0) {
   return v.toLocaleString("en-GB", { maximumFractionDigits: d });
 }
 
-function BarChart({ data, valueKey, label, color = "#7c5cfc", maxVal }) {
+function BarChart({ data, valueKey, label, color = "#D4A018", maxVal }) {
   const max = maxVal || Math.max(...data.map(d => d[valueKey] || 0), 1);
   return (
     <div style={{ display: "flex", gap: 1, alignItems: "end", height: 60 }}>

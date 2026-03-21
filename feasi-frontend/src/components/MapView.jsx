@@ -636,6 +636,12 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       // Demand GSP source
       map.addSource("demand-gsps", { type: "geojson", data: EMPTY_FC });
 
+      // Constraint overlay + queue depth sources
+      map.addSource("grid-constraints", { type: "geojson", data: EMPTY_FC });
+      map.addSource("queue-depth", { type: "geojson", data: EMPTY_FC });
+      // Land registry parcels source
+      map.addSource("land-parcels", { type: "geojson", data: EMPTY_FC });
+
       // DC infrastructure sources
       map.addSource("dc-capacity", { type: "geojson", data: EMPTY_FC });
       map.addSource("dc-fibre", { type: "geojson", data: EMPTY_FC });
@@ -1370,7 +1376,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           "circle-radius": 18,
           "circle-color": "transparent",
           "circle-stroke-width": 3,
-          "circle-stroke-color": "#7c5cfc",
+          "circle-stroke-color": "#D4A018",
           "circle-opacity": 1,
         },
         layout: { visibility: "visible" },
@@ -1379,7 +1385,13 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.on("click", "gc-capacity-circles", (e) => {
         if (map._pickMode) return;
         const p = e.features[0].properties;
+        const coords = e.features[0].geometry.coordinates;
         const name = p.name || "Substation";
+        // Dispatch event for copilot node inspector
+        window.dispatchEvent(new CustomEvent("princeps-node-click", {
+          detail: { ...p, name, lat: coords[1], lon: coords[0] },
+        }));
+        // Also show popup
         const headroom = p.gen_headroom_mw != null ? `<br/><strong>Headroom: ${p.gen_headroom_mw} MW</strong>` : "";
         const voltage = p.voltage_kv ? `<br/>Voltage: ${p.voltage_kv} kV` : "";
         const queued = p.ecr_queued ? `<br/>Queue: ${p.ecr_queued} projects` : "";
@@ -1391,6 +1403,228 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.on("mouseenter", "gc-capacity-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "gc-capacity-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
 
+      // ── Grid Constraint Overlay — boundary zone polygons ──
+      map.addLayer({
+        id: "constraint-zone-fill",
+        type: "fill",
+        source: "grid-constraints",
+        paint: {
+          "fill-color": [
+            "match", ["get", "risk_level"],
+            "HIGH", "#f44336",
+            "MEDIUM", "#ff9800",
+            "LOW", "#4caf50",
+            "#888",
+          ],
+          "fill-opacity": [
+            "interpolate", ["linear"], ["get", "peak_constraint_prob"],
+            0, 0.08, 0.3, 0.18, 0.6, 0.35, 1.0, 0.55,
+          ],
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "constraint-zone-outline",
+        type: "line",
+        source: "grid-constraints",
+        paint: {
+          "line-color": [
+            "match", ["get", "risk_level"],
+            "HIGH", "#f44336",
+            "MEDIUM", "#ff9800",
+            "LOW", "#4caf50",
+            "#888",
+          ],
+          "line-width": 2,
+          "line-dasharray": [4, 2],
+          "line-opacity": 0.8,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "constraint-zone-labels",
+        type: "symbol",
+        source: "grid-constraints",
+        paint: {
+          "text-color": "#fff",
+          "text-halo-color": "rgba(0,0,0,0.85)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": [
+            "concat",
+            ["get", "boundary_id"], " ", ["get", "name"],
+            "\n", ["to-string", ["round", ["get", "peak_loading_pct"]]], "% loaded",
+            "\n£", ["to-string", ["get", "constraint_cost_gbp_mwh"]], "/MWh",
+          ],
+          "text-size": 12,
+          "text-font": ["Noto Sans Bold"],
+          "text-allow-overlap": true,
+        },
+        minzoom: 5,
+      });
+
+      map.on("click", "constraint-zone-fill", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new mapboxgl.Popup({ maxWidth: "280px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px">
+            <strong>${p.boundary_id} — ${p.name}</strong>
+            <br/>Capacity: ${p.capacity_gw} GW
+            <br/>Peak loading: ${p.peak_loading_pct}%
+            <br/>Risk: <span style="color:${p.risk_level === "HIGH" ? "#f44336" : p.risk_level === "MEDIUM" ? "#ff9800" : "#4caf50"}">${p.risk_level}</span>
+            <br/>Constrained hours (48h): ${p.constrained_hours}
+            <br/>Constraint cost: £${p.constraint_cost_gbp_mwh}/MWh
+          </div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "constraint-zone-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "constraint-zone-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── Land Registry Parcels ──
+      map.addLayer({
+        id: "land-parcels-fill",
+        type: "fill",
+        source: "land-parcels",
+        paint: {
+          "fill-color": ["get", "color"],
+          "fill-opacity": 0.15,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "land-parcels-outline",
+        type: "line",
+        source: "land-parcels",
+        paint: {
+          "line-color": ["get", "color"],
+          "line-width": 1.5,
+          "line-opacity": 0.7,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "land-parcels-labels",
+        type: "symbol",
+        source: "land-parcels",
+        paint: {
+          "text-color": "#f4f4f4",
+          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-width": 1.2,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": [
+            "concat",
+            ["to-string", ["get", "area_ha"]], " ha\n",
+            ["get", "tenure"],
+          ],
+          "text-size": 10,
+          "text-font": ["Noto Sans Regular"],
+          "text-allow-overlap": false,
+        },
+        minzoom: 14,
+      });
+      map.addLayer({
+        id: "land-available-markers",
+        type: "circle",
+        source: "land-parcels",
+        filter: ["==", ["get", "available"], true],
+        paint: {
+          "circle-radius": 6,
+          "circle-color": "#16a34a",
+          "circle-opacity": 0.8,
+          "circle-stroke-width": 2,
+          "circle-stroke-color": "#ffffff",
+        },
+        layout: { visibility: "none" },
+        minzoom: 12,
+      });
+      map.on("click", "land-parcels-fill", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new mapboxgl.Popup({ maxWidth: "260px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px">
+            <strong>${p.title_number || "Parcel"}</strong>
+            <br/>Tenure: <span style="color:${p.color}">${p.tenure}</span>
+            <br/>Area: ${p.area_ha} ha
+            ${p.available ? '<br/><span style="color:#16a34a;font-weight:600">Potentially available</span>' : ""}
+          </div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "land-parcels-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "land-parcels-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── Queue Depth circles at substations ──
+      map.addLayer({
+        id: "queue-depth-circles",
+        type: "circle",
+        source: "queue-depth",
+        paint: {
+          "circle-radius": [
+            "interpolate", ["linear"], ["get", "queue_count"],
+            1, 5, 5, 10, 15, 18, 30, 26,
+          ],
+          "circle-color": [
+            "match", ["get", "queue_pressure"],
+            "HIGH", "#e040fb",
+            "MEDIUM", "#ab47bc",
+            "LOW", "#7e57c2",
+            "#888",
+          ],
+          "circle-opacity": 0.7,
+          "circle-stroke-width": 1.5,
+          "circle-stroke-color": "rgba(255,255,255,0.5)",
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "queue-depth-labels",
+        type: "symbol",
+        source: "queue-depth",
+        paint: {
+          "text-color": "#f4f4f4",
+          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": [
+            "concat",
+            ["get", "name"],
+            "\n", ["to-string", ["get", "queue_count"]], " queued · ",
+            ["to-string", ["get", "estimated_wait_months"]], "mo",
+          ],
+          "text-size": 10,
+          "text-offset": [0, 2],
+          "text-anchor": "top",
+          "text-optional": true,
+        },
+        minzoom: 8,
+      });
+
+      map.on("click", "queue-depth-circles", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        new mapboxgl.Popup({ maxWidth: "280px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px">
+            <strong>${p.name}</strong> (${p.dno})
+            <br/>Voltage: ${p.voltage_kv} kV
+            <br/>Queue: ${p.queue_count} projects (${p.queued_mw} MW)
+            <br/>Connected: ${p.connected_count} (${p.connected_mw} MW)
+            <br/>Headroom: ${p.headroom_mw} MW
+            <br/>Est. wait: <strong>${p.estimated_wait_months} months</strong>
+            <br/>Pressure: <span style="color:${p.queue_pressure === "HIGH" ? "#e040fb" : p.queue_pressure === "MEDIUM" ? "#ab47bc" : "#7e57c2"}">${p.queue_pressure}</span>
+          </div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "queue-depth-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "queue-depth-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
       // ── DC Capacity circles (green-yellow-red by suitability) ──
       map.addLayer({
         id: "dc-capacity-circles",
@@ -1398,7 +1632,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         source: "dc-capacity",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 5, 5, 10, 10, 14, 16],
-          "circle-color": ["coalesce", ["get", "color"], "#6c5ce7"],
+          "circle-color": ["coalesce", ["get", "color"], "#D4A018"],
           "circle-opacity": 0.8,
           "circle-stroke-width": 1.5,
           "circle-stroke-color": "rgba(255,255,255,0.5)",
@@ -2179,6 +2413,9 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
                  "osm-tower-dots", "osm-generator-circles", "osm-generator-labels"],
       ngedSubs: ["nged-sub-circles", "nged-sub-labels"],
       gridCapacity: ["gc-capacity-circles", "gc-capacity-labels", "gc-lines-glow", "gc-lines-core"],
+      gridConstraints: ["constraint-zone-fill", "constraint-zone-outline", "constraint-zone-labels"],
+      queueDepth: ["queue-depth-circles", "queue-depth-labels"],
+      landParcels: ["land-parcels-fill", "land-parcels-outline", "land-parcels-labels", "land-available-markers"],
       demandGsps: ["demand-gsp-circles", "demand-gsp-labels"],
       tecPipeline: ["eso-tec-circles", "eso-tec-labels"],
       repdProjects: ["repd-circles", "repd-labels"],
@@ -2627,6 +2864,91 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       if (s2) s2.setData(EMPTY_FC);
     };
   }, [layers.gridCapacity]);
+
+  // Grid constraint overlay — fetch boundary zones with congestion risk
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !layers.gridConstraints) return;
+    let cancelled = false;
+
+    fetch("/api/grid/constraints?hours_ahead=48")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (cancelled || !data) return;
+        const src = map.getSource("grid-constraints");
+        if (src) src.setData({ type: "FeatureCollection", features: data.features || [] });
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      const src = map.getSource("grid-constraints");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [mapReady, layers.gridConstraints]);
+
+  // Queue depth per substation — fetch ECR queue metrics
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !layers.queueDepth) return;
+    let cancelled = false;
+
+    fetch("/api/grid/queue-depth")
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (cancelled || !data) return;
+        const src = map.getSource("queue-depth");
+        if (src) src.setData(data);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      const src = map.getSource("queue-depth");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [mapReady, layers.queueDepth]);
+
+  // Land registry parcels — viewport-based loading (zoom 12+)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !layers.landParcels) return;
+    let timer = null;
+
+    const loadParcels = async () => {
+      if (map.getZoom() < 12) {
+        const src = map.getSource("land-parcels");
+        if (src) src.setData(EMPTY_FC);
+        return;
+      }
+      const bounds = map.getBounds();
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+      try {
+        const data = await api.land.parcels(bbox);
+        if (data) {
+          const src = map.getSource("land-parcels");
+          if (src) src.setData(data);
+        }
+      } catch (err) {
+        console.warn("Land parcels load error:", err);
+      }
+    };
+
+    const debouncedLoad = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loadParcels, 400);
+    };
+
+    loadParcels();
+    map.on("moveend", debouncedLoad);
+
+    return () => {
+      if (timer) clearTimeout(timer);
+      map.off("moveend", debouncedLoad);
+      const src = map.getSource("land-parcels");
+      if (src) src.setData(EMPTY_FC);
+    };
+  }, [mapReady, layers.landParcels]);
 
   // DC capacity map — viewport-based loading
   useEffect(() => {

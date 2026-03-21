@@ -37,6 +37,57 @@ BOUNDARIES = {
             "wind_sensitivity": 1.9, "solar_sensitivity": 0.1, "constraint_cost_mwh": 70},
 }
 
+# Approximate boundary zone polygons (WGS84) — simplified corridors
+# Each boundary is a polygon strip across GB where the constraint applies
+BOUNDARY_ZONES = {
+    "B1": [[-4.5, 55.2], [-2.0, 55.2], [-2.0, 55.9], [-4.5, 55.9], [-4.5, 55.2]],
+    "B2": [[-3.5, 53.5], [-0.5, 53.5], [-0.5, 54.2], [-3.5, 54.2], [-3.5, 53.5]],
+    "B4": [[-3.0, 52.0], [0.5, 52.0], [0.5, 52.7], [-3.0, 52.7], [-3.0, 52.0]],
+    "B6": [[-1.0, 51.2], [0.5, 51.2], [0.5, 51.7], [-1.0, 51.7], [-1.0, 51.2]],
+    "B7": [[-4.5, 52.2], [-2.5, 52.2], [-2.5, 52.9], [-4.5, 52.9], [-4.5, 52.2]],
+    "B8": [0.0, 51.5, 1.5, 51.5, 1.5, 52.2, 0.0, 52.2, 0.0, 51.5],
+    "B9": [[-3.0, 55.4], [-1.5, 55.4], [-1.5, 56.0], [-3.0, 56.0], [-3.0, 55.4]],
+}
+# Fix B8 to nested list format
+BOUNDARY_ZONES["B8"] = [[0.0, 51.5], [1.5, 51.5], [1.5, 52.2], [0.0, 52.2], [0.0, 51.5]]
+
+
+def constraints_to_geojson(hours_ahead: int = 48, date: str = None) -> dict:
+    """Return constraint forecast as GeoJSON FeatureCollection with polygon zones."""
+    full = forecast_constraints(hours_ahead, date)
+    features = []
+    for b_id, bf in full["boundaries"].items():
+        coords = BOUNDARY_ZONES.get(b_id)
+        if not coords:
+            continue
+        # Current hour stats (first entry)
+        current = bf["hourly"][0] if bf["hourly"] else {}
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Polygon", "coordinates": [coords]},
+            "properties": {
+                "boundary_id": b_id,
+                "name": bf["name"],
+                "capacity_gw": bf["capacity_gw"],
+                "peak_loading_pct": bf["peak_loading_pct"],
+                "peak_constraint_prob": bf["peak_constraint_prob"],
+                "constrained_hours": bf["constrained_hours"],
+                "current_loading_pct": current.get("loading_pct", 0),
+                "current_flow_gw": current.get("flow_gw", 0),
+                "current_prob": current.get("constraint_probability", 0),
+                "risk_level": "HIGH" if bf["peak_constraint_prob"] > 0.6
+                              else "MEDIUM" if bf["peak_constraint_prob"] > 0.3
+                              else "LOW",
+                "constraint_cost_gbp_mwh": BOUNDARIES[b_id]["constraint_cost_mwh"],
+            },
+        })
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "summary": full["summary"],
+        "constraint_windows": full["constraint_windows"][:10],
+    }
+
 # Typical UK weather patterns for forecast
 def _weather_forecast(start_dt: datetime, hours: int) -> list:
     """Generate synthetic weather forecast (wind, solar, temperature, demand)."""

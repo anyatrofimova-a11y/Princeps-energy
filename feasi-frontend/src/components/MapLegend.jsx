@@ -56,7 +56,7 @@ function LegendItem({ layer }) {
   );
 }
 
-function LegendSwatch({ type, color = "#7c5cfc", style = {} }) {
+function LegendSwatch({ type, color = "#D4A018", style = {} }) {
   if (type === "symbol") {
     const iconName = style.icon || "substation";
     return <img src={`/icons/${iconName}.svg`} className="legend-swatch-icon" alt="" />;

@@ -417,7 +417,7 @@ export default function SatelliteCard() {
       )}
 
       {geeflowLoading && (
-        <div style={{ textAlign: "center", padding: "16px 0", color: "#7c5cfc" }}>
+        <div style={{ textAlign: "center", padding: "16px 0", color: "#D4A018" }}>
           <div className="spinner" /> Analysing satellite data...
         </div>
       )}

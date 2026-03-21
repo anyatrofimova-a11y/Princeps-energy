@@ -74,6 +74,11 @@ const api = {
     circuitPath: (fromId, toId) => get(`/grid/cim/path?from_id=${enc(fromId)}&to_id=${enc(toId)}`),
     circuitDownstream: (subId) => get(`/grid/cim/downstream/${enc(subId)}`),
     circuitHealth: () => get("/grid/cim/health"),
+    // National Grid overlays
+    constraints:  (bbox) => bbox ? get(`/api/grid/constraints?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`) : get("/api/grid/constraints"),
+    queueDepth:   (substationId) => get(`/api/grid/queue-depth/${substationId}`),
+    queueSummary: (bbox) => bbox ? get(`/api/grid/queue-summary?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`) : get("/api/grid/queue-summary"),
+    liveStatus:   () => get("/api/grid/live-status"),
     // Grid connection capacity endpoints
     capacityMap: (bbox) => get(`/grid/capacity-map?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
     gridLines: (bbox) => get(`/grid/lines?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
@@ -83,6 +88,12 @@ const api = {
       if (contingency) q.set("contingency", "true");
       return post(`/grid/power-flow?${q}`);
     },
+  },
+
+  land: {
+    parcels:  (bbox) => get(`/api/land/parcels?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
+    alc:      (lat, lon) => get(`/api/land/alc?lat=${lat}&lon=${lon}`),
+    listings: (lat, lon, radiusKm = 10) => get(`/api/land/listings?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
   },
 
   demand: {

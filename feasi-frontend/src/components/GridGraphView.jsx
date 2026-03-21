@@ -15,7 +15,7 @@ const NODE_TYPES = {
   GridSupplyPoint:      { color: "#f44336", radius: 18, label: "GSP (400/275 kV)",  voltage: 400 },
   BulkSupplyPoint:      { color: "#ff9800", radius: 13, label: "BSP (132 kV)",      voltage: 132 },
   PrimarySubstation:    { color: "#4caf50", radius: 9,  label: "Primary (33/66 kV)", voltage: 33  },
-  SecondarySubstation:  { color: "#7c5cfc", radius: 5,  label: "Secondary (11 kV)",  voltage: 11  },
+  SecondarySubstation:  { color: "#D4A018", radius: 5,  label: "Secondary (11 kV)",  voltage: 11  },
 };
 
 const EDGE_VOLTAGE_COLORS = {
@@ -24,14 +24,14 @@ const EDGE_VOLTAGE_COLORS = {
   132: "#ff9800",
   66:  "#4caf50",
   33:  "#4caf50",
-  11:  "#7c5cfc",
+  11:  "#D4A018",
 };
 
 function edgeColor(voltage_kv) {
   if (voltage_kv >= 275) return "#f44336";
   if (voltage_kv >= 132) return "#ff9800";
   if (voltage_kv >= 33)  return "#4caf50";
-  if (voltage_kv >= 11)  return "#7c5cfc";
+  if (voltage_kv >= 11)  return "#D4A018";
   return "#555";
 }
 
@@ -55,7 +55,7 @@ const S = {
     flexDirection: "column",
     background: "#F2F3F5",
     color: "var(--cds-text-primary, #1A1D23)",
-    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+    fontFamily: "'Roboto', -apple-system, BlinkMacSystemFont, sans-serif",
     overflow: "hidden",
   },
   topBar: {
@@ -82,7 +82,7 @@ const S = {
   badge: {
     padding: "3px 10px",
     borderRadius: 12,
-    background: "var(--cds-interactive, #7c5cfc)",
+    background: "var(--cds-interactive, #D4A018)",
     color: "#fff",
     fontSize: 11,
     fontWeight: 600,
@@ -211,7 +211,7 @@ const S = {
     width: 36,
     height: 36,
     border: "3px solid rgba(0,0,0,0.1)",
-    borderTopColor: "#7c5cfc",
+    borderTopColor: "#D4A018",
     borderRadius: "50%",
     animation: "ggv-spin 0.8s linear infinite",
   },
@@ -649,7 +649,7 @@ export default function GridGraphView({ lat, lon, onNodeClick }) {
     <div style={S.root}>
       {/* ── Top bar ── */}
       <div style={S.topBar}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c5cfc" strokeWidth="2">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D4A018" strokeWidth="2">
           <circle cx="6" cy="6" r="3" /><circle cx="18" cy="6" r="3" />
           <circle cx="6" cy="18" r="3" /><circle cx="18" cy="18" r="3" />
           <line x1="9" y1="6" x2="15" y2="6" /><line x1="6" y1="9" x2="6" y2="15" />
@@ -689,7 +689,7 @@ export default function GridGraphView({ lat, lon, onNodeClick }) {
           )}
         </div>
         <span style={S.badge}>{nodes.length} nodes</span>
-        <span style={{ ...S.badge, background: "rgba(124,92,252,0.2)", color: "#7c5cfc" }}>{links.length} edges</span>
+        <span style={{ ...S.badge, background: "rgba(212,160,24,0.2)", color: "#D4A018" }}>{links.length} edges</span>
         <button style={S.zoomBtn} onClick={zoomIn} title="Zoom in">+</button>
         <button style={S.zoomBtn} onClick={zoomOut} title="Zoom out">&minus;</button>
         <button style={{ ...S.zoomBtn, fontSize: 12 }} onClick={fitToView} title="Fit to view">
@@ -786,7 +786,7 @@ export default function GridGraphView({ lat, lon, onNodeClick }) {
                         cx={n.x} cy={n.y}
                         r={r + 6 / transform.k}
                         fill="none"
-                        stroke="#7c5cfc"
+                        stroke="#D4A018"
                         strokeWidth={2 / transform.k}
                         strokeOpacity={0.7}
                         style={{ animation: "ggv-pulse 1.5s ease-in-out infinite" }}
@@ -888,8 +888,8 @@ export default function GridGraphView({ lat, lon, onNodeClick }) {
                   y={minimapData.vy}
                   width={Math.max(4, minimapData.vw)}
                   height={Math.max(4, minimapData.vh)}
-                  fill="rgba(124,92,252,0.1)"
-                  stroke="#7c5cfc"
+                  fill="rgba(212,160,24,0.1)"
+                  stroke="#D4A018"
                   strokeWidth={1}
                   rx={2}
                 />
@@ -992,7 +992,7 @@ export default function GridGraphView({ lat, lon, onNodeClick }) {
                         key={cn.id}
                         style={S.connItem}
                         onClick={() => navigateToNode(cn)}
-                        onMouseEnter={e => e.currentTarget.style.background = "var(--cds-interactive, #7c5cfc)22"}
+                        onMouseEnter={e => e.currentTarget.style.background = "var(--cds-interactive, #D4A018)22"}
                         onMouseLeave={e => e.currentTarget.style.background = "var(--cds-layer-02, #F7F8FA)"}
                       >
                         <span style={{ ...S.legendDot(nodeConfig(cn.type).color, 8), marginRight: 6 }} />

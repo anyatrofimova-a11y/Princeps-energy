@@ -1,0 +1,798 @@
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useSite } from "../SiteContext";
+import { useWorkspace } from "../contexts/WorkspaceContext";
+import api from "../services/api";
+
+const TOOL_LABELS = {
+  run_solar_yield: "Solar Simulation",
+  get_site_context: "Site Analysis",
+  create_site_parcel: "Create Parcel",
+  get_grid_connection: "Grid Connection",
+  run_financial_analysis: "Financial Analysis",
+  get_energy_prices: "Energy Prices",
+  get_demand_forecast: "Demand Forecast",
+  query_planning_apps: "Planning Search",
+  run_bipv_analysis: "BIPV Analysis",
+  get_inventory_bom: "Bill of Materials",
+  search_substations: "Substation Search",
+  get_grid_live: "Grid Live Data",
+  create_map_layer: "Map Layer",
+  zoom_to_location: "Map Zoom",
+  process_uploaded_file: "File Analysis",
+  query_energy_scenario: "Energy Scenario",
+  get_electricity_map: "Electricity Map",
+  run_satellite_analysis: "Satellite Analysis",
+  score_tender_sites: "Tender Site Scoring",
+  run_geoai_analysis: "GeoAI Deep Learning",
+  query_legacy_assets: "Legacy Assets",
+  assess_asset_lifecycle: "Lifecycle Assessment",
+  score_candidate_site_prospector: "Site Scoring",
+  scan_region_for_sites: "Regional Scan",
+  find_similar_sites: "Similar Sites",
+};
+
+/** Copilot tab definitions — mirrors ViewTabs style */
+const COPILOT_TABS = [
+  { id: "chat",    label: "AI Copilot",  icon: "M12 2a10 10 0 0 1 10 10 10 10 0 0 1-10 10 10 10 0 0 1-7.07-2.93M2 12h4l2-3 3 6 2-3h3" },
+  { id: "grid",    label: "Grid",        icon: "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" },
+  { id: "node",    label: "Node",        icon: "M16 16v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h2m5.66 0H14a2 2 0 012 2v3.34l1 1L23 3" },
+  { id: "connect", label: "Connection",  icon: "M13 2L3 14h9l-1 8 10-12h-9l1-8z" },
+  { id: "detail",  label: "Detail",      icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
+  { id: "design",  label: "Design",      icon: "M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" },
+  { id: "land",    label: "Land",        icon: "M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" },
+];
+
+function MessageText({ text }) {
+  if (!text) return null;
+  const parts = text.split("\n").map((line, i) => {
+    const rendered = line
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/`(.+?)`/g, "<code>$1</code>");
+    return (
+      <span key={i} dangerouslySetInnerHTML={{
+        __html: rendered + (i < text.split("\n").length - 1 ? "<br/>" : ""),
+      }} />
+    );
+  });
+  return <>{parts}</>;
+}
+
+function fmtMw(v) {
+  if (v == null) return "--";
+  return v >= 1000 ? `${(v / 1000).toFixed(1)} GW` : `${Number(v).toFixed(1)} MW`;
+}
+
+/* ══════════════════════════════════════════════════════════
+   NodeInspector — inline panel for clicked substations
+   ══════════════════════════════════════════════════════════ */
+function NodeInspector({ node, onClose, onZoomTo }) {
+  const [detail, setDetail] = useState(null);
+  const [queueData, setQueueData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!node?.id) return;
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/grid/substation/${node.id}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/grid/queue-depth/${node.id}`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([d, q]) => {
+      setDetail(d);
+      setQueueData(q);
+      setLoading(false);
+    });
+  }, [node?.id]);
+
+  if (!node) return null;
+
+  const ragColor = { green: "#24a148", amber: "#f1c21b", red: "#da1e28" };
+
+  return (
+    <div className="node-inspector">
+      <div className="ni-header">
+        <div className="ni-header-left">
+          <span className="ni-voltage-dot" style={{
+            background: node.voltage_kv >= 275 ? "#f44336" : node.voltage_kv >= 132 ? "#ff9800" : node.voltage_kv >= 33 ? "#4caf50" : "#D4A018",
+          }} />
+          <div>
+            <div className="ni-name">{node.name}</div>
+            <div className="ni-sub">{node.voltage_kv} kV &middot; {node.dno || "Unknown DNO"}</div>
+          </div>
+        </div>
+        <div className="ni-header-actions">
+          {node.lat && (
+            <button className="ni-btn" onClick={() => onZoomTo?.({ lat: node.lat, lon: node.lon, zoom: 14 })} title="Zoom to">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+            </button>
+          )}
+          <button className="ni-btn" onClick={onClose} title="Close">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="ni-body">
+        {/* RAG status */}
+        <div className="ni-rag-row">
+          <div className="ni-rag">
+            <span className="ni-rag-dot" style={{ background: ragColor[node.rag_demand] || "#8d8d8d" }} />
+            <span className="ni-rag-label">Demand</span>
+            <span className="ni-rag-value">{fmtMw(node.demand_headroom_mw)} headroom</span>
+          </div>
+          <div className="ni-rag">
+            <span className="ni-rag-dot" style={{ background: ragColor[node.rag_generation] || "#8d8d8d" }} />
+            <span className="ni-rag-label">Generation</span>
+            <span className="ni-rag-value">{fmtMw(node.gen_headroom_mw)} headroom</span>
+          </div>
+        </div>
+
+        {/* Properties */}
+        <div className="ni-section">
+          <div className="ni-section-title">Properties</div>
+          {[
+            ["Demand", fmtMw(node.demand_mw)],
+            ["Generation", fmtMw(node.generation_mw)],
+            ["Transformer", node.transformer_mva ? `${node.transformer_mva} MVA` : "--"],
+            ["Fault level", node.fault_level_ka ? `${node.fault_level_ka} kA` : "--"],
+            ["Type", node.site_type || "--"],
+          ].map(([label, value]) => (
+            <div key={label} className="ni-prop">
+              <span className="ni-prop-label">{label}</span>
+              <span className="ni-prop-value">{value}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Queue detail from API */}
+        {loading && <div className="ni-loading">Loading detail...</div>}
+        {detail?.queue_summary && (
+          <div className="ni-section">
+            <div className="ni-section-title">Connection Queue</div>
+            {[
+              ["Accepted", detail.queue_summary.accepted],
+              ["Queued", detail.queue_summary.queued],
+              ["Connected", detail.queue_summary.connected],
+              ["Total capacity", detail.queue_summary.total_capacity_mw ? fmtMw(detail.queue_summary.total_capacity_mw) : "--"],
+            ].map(([label, value]) => (
+              <div key={label} className="ni-prop">
+                <span className="ni-prop-label">{label}</span>
+                <span className="ni-prop-value">{value ?? "--"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Connected DER */}
+        {detail?.connected_der?.length > 0 && (
+          <div className="ni-section">
+            <div className="ni-section-title">Connected DER ({detail.connected_der.length})</div>
+            <div className="ni-der-list">
+              {detail.connected_der.slice(0, 8).map((d, i) => (
+                <div key={i} className="ni-der-item">
+                  <span className="ni-der-tech">{d.technology}</span>
+                  <span className="ni-der-cap">{fmtMw(d.capacity_mw)}</span>
+                </div>
+              ))}
+              {detail.connected_der.length > 8 && (
+                <div className="ni-der-more">+{detail.connected_der.length - 8} more</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Queue Timeline */}
+        {queueData && (
+          <div className="ni-section">
+            <div className="ni-section-title">Queue Timeline</div>
+            <div className="ni-queue-wait">
+              <span className={`ni-queue-badge ni-queue-${queueData.risk_level}`}>
+                {queueData.estimated_wait_months} months
+              </span>
+              <span className="ni-queue-risk">{queueData.risk_level} risk</span>
+            </div>
+            {/* Queued vs Accepted bar */}
+            {(queueData.queued_count > 0 || queueData.accepted_count > 0) && (
+              <div className="ni-queue-bars">
+                <div className="ni-queue-bar-row">
+                  <span className="ni-queue-bar-label">Queued</span>
+                  <div className="ni-queue-bar-track">
+                    <div className="ni-queue-bar-fill ni-queue-bar-queued"
+                      style={{ width: `${Math.min(100, (queueData.queued_count / Math.max(1, queueData.queued_count + queueData.accepted_count)) * 100)}%` }} />
+                  </div>
+                  <span className="ni-queue-bar-val">{queueData.queued_count}</span>
+                </div>
+                <div className="ni-queue-bar-row">
+                  <span className="ni-queue-bar-label">Accepted</span>
+                  <div className="ni-queue-bar-track">
+                    <div className="ni-queue-bar-fill ni-queue-bar-accepted"
+                      style={{ width: `${Math.min(100, (queueData.accepted_count / Math.max(1, queueData.queued_count + queueData.accepted_count)) * 100)}%` }} />
+                  </div>
+                  <span className="ni-queue-bar-val">{queueData.accepted_count}</span>
+                </div>
+              </div>
+            )}
+            <div className="ni-prop">
+              <span className="ni-prop-label">Total queued</span>
+              <span className="ni-prop-value">{fmtMw(queueData.total_queued_mw)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Coordinates */}
+        {node.lat && (
+          <div className="ni-coords">
+            {Number(node.lat).toFixed(5)}, {Number(node.lon).toFixed(5)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════
+   CopilotWidget — Full-width bottom bar (matches ViewTabs)
+   ══════════════════════════════════════════════════════════ */
+export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
+  const site = useSite();
+  const ws = useWorkspace();
+
+  const {
+    parcelId, workflowStage, explain, solarYield, gridContext,
+    gridConnectionOpen, setGridConnectionOpen,
+    demandForecastOpen, gridTwinOpen, setGridTwinOpen,
+    geeflowData, pickedLocation, chatLayers,
+    layers, setLayers,
+  } = site;
+
+  const { activeWorkspace, activeIntent, activeViewMode } = ws;
+
+  const [activeTab, setActiveTab] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [expandedTools, setExpandedTools] = useState({});
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [selectedAsset, setSelectedAsset] = useState(null);
+  const [landListings, setLandListings] = useState([]);
+  const [landLoading, setLandLoading] = useState(false);
+
+  const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const abortRef = useRef(null);
+  const inputRef = useRef(null);
+  const pendingRef = useRef(null);
+
+  // Auto-scroll
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Listen for princeps-chat events
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail?.text) {
+        pendingRef.current = e.detail.text;
+        setInput(e.detail.text);
+        setActiveTab("chat");
+      }
+    };
+    window.addEventListener("princeps-chat", handler);
+    return () => window.removeEventListener("princeps-chat", handler);
+  }, []);
+
+  useEffect(() => {
+    if (pendingRef.current && input === pendingRef.current && !streaming) {
+      pendingRef.current = null;
+      sendMessage();
+    }
+  }, [input]);
+
+  // Listen for substation clicks from the map
+  useEffect(() => {
+    const handler = (e) => {
+      setSelectedNode(e.detail);
+      setActiveTab("node");
+    };
+    window.addEventListener("princeps-node-click", handler);
+    return () => window.removeEventListener("princeps-node-click", handler);
+  }, []);
+
+  // Listen for 3D asset clicks
+  useEffect(() => {
+    const handler = (e) => {
+      setSelectedAsset(e.detail);
+      setActiveTab("design");
+    };
+    window.addEventListener("princeps-asset-click", handler);
+    return () => window.removeEventListener("princeps-asset-click", handler);
+  }, []);
+
+  // Ctrl+J to toggle chat tab
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "j") {
+        e.preventDefault();
+        setActiveTab((prev) => (prev === "chat" ? null : "chat"));
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  // When Node or Grid tab is active, ensure gridCapacity layer is on
+  useEffect(() => {
+    if (activeTab === "node" || activeTab === "grid") {
+      if (!layers.gridCapacity) {
+        setLayers((prev) => ({ ...prev, gridCapacity: true }));
+      }
+    }
+  }, [activeTab]);
+
+  // Fetch land listings when Land tab opens with a location
+  useEffect(() => {
+    if (activeTab !== "land" || !pickedLocation) return;
+    setLandLoading(true);
+    fetch(`/api/land/listings?lat=${pickedLocation.lat}&lon=${pickedLocation.lon}&radius_km=10`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => { setLandListings(Array.isArray(data) ? data : []); setLandLoading(false); })
+      .catch(() => setLandLoading(false));
+  }, [activeTab, pickedLocation?.lat, pickedLocation?.lon]);
+
+  // Tab click handler
+  const handleTabClick = useCallback(
+    (tabId) => {
+      if (tabId === activeTab) {
+        setActiveTab(null);
+        return;
+      }
+      setActiveTab(tabId);
+
+      // Non-chat tabs trigger app-level actions
+      if (tabId === "grid") {
+        setLayers((prev) => ({ ...prev, gridCapacity: true }));
+      }
+      if (tabId === "node") {
+        setLayers((prev) => ({ ...prev, gridCapacity: true }));
+      }
+      if (tabId === "connect") {
+        setGridConnectionOpen?.(true);
+      }
+      if (tabId === "land") {
+        setLayers((prev) => ({ ...prev, landParcels: true }));
+      }
+    },
+    [activeTab, setLayers, setGridConnectionOpen]
+  );
+
+  // Build context snapshot
+  const buildContext = useCallback(() => {
+    const ctx = { workspace: activeWorkspace, view: activeViewMode, stage: workflowStage };
+    if (activeIntent) ctx.intent = activeIntent;
+    if (parcelId) ctx.parcel_id = parcelId;
+    if (pickedLocation) ctx.picked_location = { lat: pickedLocation.lat, lon: pickedLocation.lon };
+    const visible = [];
+    if (explain) visible.push("site_explanation");
+    if (solarYield) visible.push("solar_yield");
+    if (gridContext) visible.push("grid_context");
+    if (geeflowData) visible.push("satellite_data");
+    if (visible.length) ctx.visible_data = visible;
+    const panels = [];
+    if (gridConnectionOpen) panels.push("grid_connection");
+    if (demandForecastOpen) panels.push("demand_forecast");
+    if (gridTwinOpen) panels.push("grid_twin");
+    if (panels.length) ctx.open_panels = panels;
+    if (chatLayers?.length) ctx.map_layers = chatLayers.map((l) => l.name || "unnamed");
+    if (selectedNode) ctx.selected_substation = { id: selectedNode.id, name: selectedNode.name, voltage_kv: selectedNode.voltage_kv };
+    return ctx;
+  }, [
+    activeWorkspace, activeViewMode, activeIntent, workflowStage, parcelId,
+    pickedLocation, explain, solarYield, gridContext, geeflowData,
+    gridConnectionOpen, demandForecastOpen, gridTwinOpen, chatLayers, selectedNode,
+  ]);
+
+  const ensureSession = useCallback(async () => {
+    if (sessionId) return sessionId;
+    try {
+      const res = await fetch("/chat/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parcel_id: parcelId || null }),
+      });
+      const data = await res.json();
+      if (data.session_id) { setSessionId(data.session_id); return data.session_id; }
+    } catch (err) { console.error("Failed to create chat session:", err); }
+    return null;
+  }, [sessionId, parcelId]);
+
+  const toggleTool = useCallback((key) => {
+    setExpandedTools((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const sendMessage = useCallback(async () => {
+    const text = input.trim();
+    if (!text || streaming) return;
+    setInput("");
+    setStreaming(true);
+    setActiveTab("chat");
+
+    setMessages((prev) => [...prev, { role: "user", content: text, timestamp: Date.now() }]);
+    setMessages((prev) => [...prev, { role: "assistant", content: "", toolCalls: [], mapLayers: [], timestamp: Date.now() }]);
+
+    const sid = await ensureSession();
+    if (!sid) {
+      setMessages((prev) => { const c = [...prev]; c[c.length - 1].content = "Failed to create chat session."; return c; });
+      setStreaming(false);
+      return;
+    }
+
+    const context = buildContext();
+
+    try {
+      abortRef.current = new AbortController();
+      let res = await fetch(`/chat/${sid}/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, context }),
+        signal: abortRef.current.signal,
+      });
+
+      if (res.status === 404) {
+        setSessionId(null);
+        try {
+          const sessRes = await fetch("/chat/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ parcel_id: parcelId || null }) });
+          const sessData = await sessRes.json();
+          if (sessData.session_id) {
+            setSessionId(sessData.session_id);
+            res = await fetch(`/chat/${sessData.session_id}/message`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, context }), signal: abortRef.current.signal });
+          }
+        } catch { /* fall through */ }
+      }
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        setMessages((prev) => { const c = [...prev]; c[c.length - 1] = { ...c[c.length - 1], content: `[Error ${res.status}: ${errText.slice(0, 120) || "request failed"}]` }; return c; });
+        setStreaming(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          let event;
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+
+          if (event.type === "text_delta") {
+            setMessages((prev) => { const c = [...prev]; const l = { ...c[c.length - 1] }; l.content += event.content; c[c.length - 1] = l; return c; });
+          } else if (event.type === "tool_call") {
+            setMessages((prev) => { const c = [...prev]; const l = { ...c[c.length - 1] }; l.toolCalls = [...l.toolCalls, { name: event.name, args: event.args, status: "running" }]; c[c.length - 1] = l; return c; });
+          } else if (event.type === "tool_result") {
+            setMessages((prev) => { const c = [...prev]; const l = { ...c[c.length - 1] }; const tc = [...l.toolCalls]; const idx = tc.findLastIndex((t) => t.name === event.name && t.status === "running"); if (idx >= 0) tc[idx] = { ...tc[idx], result: event.result, status: "done" }; l.toolCalls = tc; c[c.length - 1] = l; return c; });
+          } else if (event.type === "map_layer") {
+            setMessages((prev) => { const c = [...prev]; const l = { ...c[c.length - 1] }; l.mapLayers = [...l.mapLayers, event.layer]; c[c.length - 1] = l; return c; });
+            if (onMapLayer) onMapLayer(event.layer);
+          } else if (event.type === "zoom_to") {
+            if (onZoomTo) onZoomTo({ lat: event.lat, lon: event.lon, zoom: event.zoom, label: event.label });
+          } else if (event.type === "action") {
+            if (onAction) onAction(event.action, event.payload);
+          } else if (event.type === "error") {
+            setMessages((prev) => { const c = [...prev]; const l = { ...c[c.length - 1] }; l.content += `\n\n[Error: ${event.message}]`; c[c.length - 1] = l; return c; });
+          }
+        }
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        console.error("Chat stream error:", err);
+        setMessages((prev) => { const c = [...prev]; const l = { ...c[c.length - 1] }; l.content += "\n\n[Connection error]"; c[c.length - 1] = l; return c; });
+      }
+    } finally {
+      setStreaming(false);
+      abortRef.current = null;
+    }
+  }, [input, streaming, ensureSession, buildContext, onMapLayer, onZoomTo, onAction, parcelId]);
+
+  const handleFileUpload = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const sid = await ensureSession();
+    if (!sid) return;
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch(`/chat/${sid}/upload`, { method: "POST", body: form });
+      const data = await res.json();
+      setMessages((prev) => [...prev, { role: "system", content: `Uploaded: **${data.filename}** (${(data.size / 1024).toFixed(1)} KB, ${data.type})`, timestamp: Date.now() }]);
+    } catch (err) { console.error("Upload failed:", err); }
+  }, [ensureSession]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === "Escape") setActiveTab(null);
+  };
+
+  const clearChat = useCallback(() => {
+    setMessages([]);
+    setSessionId(null);
+    setExpandedTools({});
+  }, []);
+
+  const chatOpen = activeTab === "chat";
+  const nodeOpen = activeTab === "node";
+  const gridOpen = activeTab === "grid";
+
+  return (
+    <div className="copilot-dock">
+      {/* ── Chat panel ── */}
+      {chatOpen && (
+        <div className="copilot-chat-panel">
+          <div className="copilot-chat-header">
+            <div className="copilot-chat-header-left">
+              <span className="copilot-chat-title">Princeps AI</span>
+              <span className="copilot-chat-ctx">
+                {activeWorkspace} / {workflowStage}
+                {activeIntent ? ` / ${activeIntent.replace(/_/g, " ")}` : ""}
+              </span>
+            </div>
+            <div className="copilot-chat-header-actions">
+              <button className="copilot-chat-hdr-btn" onClick={clearChat} title="New conversation">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+              <button className="copilot-chat-hdr-btn" onClick={() => setActiveTab(null)} title="Close">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="copilot-chat-messages">
+            {messages.length === 0 && (
+              <div className="copilot-chat-welcome">
+                <div className="copilot-chat-welcome-title">Princeps Copilot</div>
+                <div className="copilot-chat-welcome-sub">
+                  I see your current view and can help with any feature — analyse sites, modify the map, run simulations, explain results.
+                </div>
+                <div className="copilot-chat-suggestions">
+                  {["What am I looking at?", "Find a solar site near Bristol", "Run grid connection study", "Show demand forecast"].map((q) => (
+                    <button key={q} className="copilot-chat-chip" onClick={() => { setInput(q); setTimeout(() => { pendingRef.current = q; }, 0); }}>{q}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {messages.map((msg, i) => (
+              <div key={i} className={`cpc-msg cpc-msg-${msg.role}`}>
+                {msg.role === "assistant" && <div className="cpc-msg-avatar">P</div>}
+                <div className="cpc-msg-body">
+                  {msg.content && <MessageText text={msg.content} />}
+                  {msg.toolCalls?.map((tc, j) => {
+                    const key = `${i}-${j}`;
+                    const expanded = expandedTools[key];
+                    return (
+                      <div key={j} className={`cpc-tool ${tc.status === "running" ? "running" : ""}`}>
+                        <button className="cpc-tool-hdr" onClick={() => toggleTool(key)}>
+                          <span className={`cpc-tool-dot ${tc.status}`} />
+                          <span className="cpc-tool-name">{TOOL_LABELS[tc.name] || tc.name}</span>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                            style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+                        {expanded && tc.result && (
+                          <pre className="cpc-tool-result">
+                            {typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {msg.mapLayers?.map((layer, j) => (
+                    <div key={j} className="cpc-map-layer">
+                      <span className="cpc-map-dot" style={{ background: layer.color || "var(--cds-interactive)" }} />
+                      {layer.name} added to map
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="copilot-chat-input">
+            <button className="cpc-attach" onClick={() => fileInputRef.current?.click()} title="Upload file" disabled={streaming}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+            </button>
+            <input type="file" ref={fileInputRef} style={{ display: "none" }}
+              accept=".csv,.xlsx,.xls,.pdf,.jpg,.jpeg,.png,.tif,.tiff,.webp" onChange={handleFileUpload} />
+            <textarea ref={inputRef} className="cpc-input" value={input}
+              onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown}
+              placeholder="Ask anything about this view..." rows={1} disabled={streaming} autoFocus />
+            <button className="cpc-send" onClick={sendMessage} disabled={!input.trim() || streaming} title="Send">
+              {streaming ? <div className="cpc-spinner" /> : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Node inspector panel ── */}
+      {nodeOpen && (
+        <div className="copilot-chat-panel" style={{ height: selectedNode ? "auto" : 120, maxHeight: "50vh" }}>
+          <div className="copilot-chat-header">
+            <div className="copilot-chat-header-left">
+              <span className="copilot-chat-title">Grid Nodes</span>
+              <span className="copilot-chat-ctx">
+                Click a substation on the map to inspect
+              </span>
+            </div>
+            <button className="copilot-chat-hdr-btn" onClick={() => setActiveTab(null)} title="Close">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+          </div>
+          {selectedNode ? (
+            <NodeInspector
+              node={selectedNode}
+              onClose={() => setSelectedNode(null)}
+              onZoomTo={onZoomTo}
+            />
+          ) : (
+            <div className="ni-empty">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--cds-text-helper)" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" />
+                <line x1="12" y1="2" x2="12" y2="5" /><line x1="12" y1="19" x2="12" y2="22" />
+                <line x1="2" y1="12" x2="5" y2="12" /><line x1="19" y1="12" x2="22" y2="12" />
+              </svg>
+              <span>Substations &amp; lines are now visible on the map.<br />Click any node to inspect.</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Grid layer info panel ── */}
+      {gridOpen && (
+        <div className="copilot-chat-panel" style={{ height: 100 }}>
+          <div className="copilot-chat-header">
+            <div className="copilot-chat-header-left">
+              <span className="copilot-chat-title">Grid Overlay</span>
+              <span className="copilot-chat-ctx">Substations, lines &amp; capacity shown on map</span>
+            </div>
+            <button className="copilot-chat-hdr-btn" onClick={() => { setLayers((p) => ({ ...p, gridCapacity: false })); setActiveTab(null); }} title="Hide &amp; close">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+          </div>
+          <div style={{ padding: "10px 14px", fontSize: 11, color: "var(--cds-text-helper)" }}>
+            Colour = RAG headroom status. Size = generation headroom MW. Lines coloured by voltage.
+          </div>
+        </div>
+      )}
+
+      {/* ── Design tab — asset inspector ── */}
+      {activeTab === "design" && (
+        <div className="copilot-chat-panel" style={{ height: selectedAsset ? "auto" : 100, maxHeight: "40vh" }}>
+          <div className="copilot-chat-header">
+            <div className="copilot-chat-header-left">
+              <span className="copilot-chat-title">Asset Design</span>
+              <span className="copilot-chat-ctx">
+                {selectedAsset ? selectedAsset.name : "Click a 3D asset on the map to inspect"}
+              </span>
+            </div>
+            <button className="copilot-chat-hdr-btn" onClick={() => setActiveTab(null)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+          </div>
+          {selectedAsset ? (
+            <div className="ni-body">
+              <div className="ni-section">
+                <div className="ni-section-title">Component</div>
+                {[
+                  ["Type", selectedAsset.assetType?.replace(/_/g, " ")],
+                  ["Capacity", selectedAsset.mw ? `${selectedAsset.mw} MW` : "--"],
+                  ["Height", selectedAsset.height ? `${selectedAsset.height}m` : "--"],
+                ].map(([label, value]) => (
+                  <div key={label} className="ni-prop">
+                    <span className="ni-prop-label">{label}</span>
+                    <span className="ni-prop-value">{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="ni-empty">
+              <span>Drag assets from the dock onto the map to create 3D buildings.<br />Click any asset to edit parameters.</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Land tab — property rights & listings ── */}
+      {activeTab === "land" && (
+        <div className="copilot-chat-panel" style={{ height: 340, maxHeight: "45vh" }}>
+          <div className="copilot-chat-header">
+            <div className="copilot-chat-header-left">
+              <span className="copilot-chat-title">Land &amp; Property</span>
+              <span className="copilot-chat-ctx">
+                HM Land Registry boundaries on map{pickedLocation ? " + listings nearby" : ""}
+              </span>
+            </div>
+            <button className="copilot-chat-hdr-btn" onClick={() => { setLayers((p) => ({ ...p, landParcels: false })); setActiveTab(null); }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+            </button>
+          </div>
+          <div style={{ padding: "8px 14px", fontSize: 10, color: "var(--cds-text-helper)", borderBottom: "1px solid var(--cds-border-subtle)" }}>
+            <span style={{ color: "#2563eb", fontWeight: 600 }}>Blue</span> = Freehold &nbsp;
+            <span style={{ color: "#ea580c", fontWeight: 600 }}>Orange</span> = Leasehold &nbsp;
+            <span style={{ color: "#16a34a", fontWeight: 600 }}>Green dot</span> = Available (&gt;2ha)
+            <br />Zoom to 12+ to see parcel boundaries. Click parcels on map for title details.
+          </div>
+          <div className="copilot-chat-messages">
+            {landLoading && <div className="ni-loading">Loading listings...</div>}
+            {!landLoading && !pickedLocation && (
+              <div className="ni-empty">
+                <span>Select a site location first to see nearby land listings.</span>
+              </div>
+            )}
+            {!landLoading && landListings.length > 0 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.4px", color: "var(--cds-text-helper)", padding: "4px 0" }}>
+                  {landListings.length} listings within 10km
+                </div>
+                {landListings.map((l) => (
+                  <div key={l.id} className="land-listing-card" onClick={() => onZoomTo?.({ lat: l.lat, lon: l.lon, zoom: 15 })}>
+                    <div className="land-listing-header">
+                      <span className={`land-listing-type land-type-${l.type}`}>{l.type.replace(/_/g, " ")}</span>
+                      <span className="land-listing-price">£{(l.price_gbp / 1000).toFixed(0)}k</span>
+                    </div>
+                    <div className="land-listing-title">{l.title}</div>
+                    <div className="land-listing-meta">
+                      {l.area_ha} ha &middot; £{(l.price_per_ha_gbp / 1000).toFixed(0)}k/ha &middot; {l.source}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+            {!landLoading && pickedLocation && landListings.length === 0 && (
+              <div className="ni-empty"><span>No listings found nearby.</span></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab strip ── */}
+      <div className="copilot-tabs">
+        {COPILOT_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            className={`copilot-tab${activeTab === tab.id ? " active" : ""}${tab.id === "chat" && streaming ? " streaming" : ""}`}
+            onClick={() => handleTabClick(tab.id)}
+            title={tab.label}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d={tab.icon} />
+            </svg>
+            <span>{tab.label}</span>
+            {tab.id === "chat" && messages.length > 0 && !chatOpen && (
+              <span className="copilot-tab-badge">{messages.length}</span>
+            )}
+            {tab.id === "node" && selectedNode && !nodeOpen && (
+              <span className="copilot-tab-badge">1</span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

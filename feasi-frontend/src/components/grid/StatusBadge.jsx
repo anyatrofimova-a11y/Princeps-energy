@@ -4,7 +4,7 @@ const VARIANTS = {
   green:  { bg: "rgba(36, 161, 72, 0.15)", color: "#24a148", border: "rgba(36, 161, 72, 0.3)" },
   red:    { bg: "rgba(218, 30, 40, 0.15)", color: "#da1e28", border: "rgba(218, 30, 40, 0.3)" },
   amber:  { bg: "rgba(241, 194, 27, 0.15)", color: "#f1c21b", border: "rgba(241, 194, 27, 0.3)" },
-  blue:   { bg: "rgba(124, 92, 252, 0.15)", color: "#7c5cfc", border: "rgba(124, 92, 252, 0.3)" },
+  blue:   { bg: "rgba(212, 160, 24, 0.15)", color: "#D4A018", border: "rgba(212, 160, 24, 0.3)" },
   grey:   { bg: "rgba(141, 141, 141, 0.15)", color: "#8d8d8d", border: "rgba(141, 141, 141, 0.3)" },
 };
 

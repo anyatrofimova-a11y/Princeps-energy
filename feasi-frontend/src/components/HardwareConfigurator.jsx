@@ -327,7 +327,7 @@ export default function HardwareConfigurator({ onClose }) {
       }}>
         <div style={{
           width: 28, height: 28, borderRadius: 6,
-          background: "#7c5cfc22", color: "#7c5cfc",
+          background: "#D4A01822", color: "#D4A018",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 14, fontWeight: 700,
         }}>{"\u25A3"}</div>
@@ -411,8 +411,8 @@ export default function HardwareConfigurator({ onClose }) {
                   style={{
                     flex: 1, padding: "8px 0", fontSize: 11, fontWeight: 600,
                     background: "none", border: "none", cursor: "pointer",
-                    color: activeTab === tab.key ? "#7c5cfc" : "var(--cds-text-secondary, #c6c6c6)",
-                    borderBottom: activeTab === tab.key ? "2px solid #7c5cfc" : "2px solid transparent",
+                    color: activeTab === tab.key ? "#D4A018" : "var(--cds-text-secondary, #c6c6c6)",
+                    borderBottom: activeTab === tab.key ? "2px solid #D4A018" : "2px solid transparent",
                   }}>
             {tab.label}
           </button>
@@ -490,8 +490,8 @@ export default function HardwareConfigurator({ onClose }) {
                     </div>
                     <button onClick={e => { e.stopPropagation(); addFromCatalogue(m.id); }}
                             style={{
-                              background: inKit ? "#7c5cfc30" : "var(--cds-layer-02, #393939)",
-                              border: "none", borderRadius: 4, color: inKit ? "#7c5cfc" : "var(--cds-text-secondary, #c6c6c6)",
+                              background: inKit ? "#D4A01830" : "var(--cds-layer-02, #393939)",
+                              border: "none", borderRadius: 4, color: inKit ? "#D4A018" : "var(--cds-text-secondary, #c6c6c6)",
                               padding: "3px 10px", fontSize: 10, fontWeight: 600, cursor: "pointer",
                             }}>
                       {inKit ? `${customQty[m.id]}x` : "+ Add"}
@@ -537,7 +537,7 @@ function Stat({ label, value, accent }) {
     <div style={{ textAlign: "center" }}>
       <div style={{
         fontSize: 14, fontWeight: 700,
-        color: accent ? "#7c5cfc" : "var(--cds-text-primary, #f4f4f4)",
+        color: accent ? "#D4A018" : "var(--cds-text-primary, #f4f4f4)",
       }}>{value}</div>
       <div style={{ fontSize: 9, color: "var(--cds-text-helper, #a8a8a8)", marginTop: 1 }}>{label}</div>
     </div>

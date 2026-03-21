@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import { useSite } from "../../SiteContext";
 import { useWorkspace, WORKSPACES } from "../../contexts/WorkspaceContext";
 import api from "../../services/api";
+import LiveStatusStrip from "../LiveStatusStrip";
 
 const STEPS = [
   { id: "site",  label: "Discover", sub: "Find & select sites",  icon: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z", num: "1" },
@@ -85,7 +86,7 @@ function MoreMenu({ items }) {
                 background: "transparent", color: "#374151", fontSize: 12,
                 textAlign: "left", cursor: "pointer",
               }}
-                onMouseEnter={e => e.target.style.background = "rgba(124,92,252,0.06)"}
+                onMouseEnter={e => e.target.style.background = "rgba(212,160,24,0.06)"}
                 onMouseLeave={e => e.target.style.background = "transparent"}
               >{it.label}</button>
             ))}
@@ -96,7 +97,7 @@ function MoreMenu({ items }) {
   );
 }
 
-export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin }) {
+export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline }) {
   const {
     solarYield, gridContext, explain,
     agentResult, workflowSummary,
@@ -212,6 +213,7 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
         >
           {pdfLoading ? "..." : "PDF"}
         </button>
+        <button className="btn-topbar-action" onClick={onPipeline} title="Project Pipeline" style={{ fontWeight: 900, letterSpacing: "0.04em" }}>Pipeline</button>
         <button className="btn-topbar-action" onClick={onGridTwin} title="Grid Digital Twin">Twin</button>
         <button className="btn-topbar-action" onClick={onDcTwin} title="Data Centre Twin">DC</button>
         <button className="btn-topbar-action" onClick={onBessFacility} title="BESS Facility Twin">BESS</button>
@@ -232,6 +234,7 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
+        <LiveStatusStrip />
       </div>
     </header>
   );

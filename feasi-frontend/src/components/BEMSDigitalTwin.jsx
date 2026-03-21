@@ -6,9 +6,9 @@ import * as THREE from "three";
 /* ── Design Tokens ────────────────────────────────────────────────────── */
 const T = {
   bg: "#F2F3F5",
-  accent: "#7c5cfc",
+  accent: "#D4A018",
   panel: "rgba(255, 255, 255, 0.95)",
-  border: "1px solid rgba(124, 92, 252, 0.2)",
+  border: "1px solid rgba(212, 160, 24, 0.2)",
   text: "#1A1D23",
   textSec: "#4B5563",
   green: "#52c41a",
@@ -127,7 +127,7 @@ function BuildingEdges({ position, size }) {
   return (
     <lineSegments position={position}>
       <edgesGeometry args={[geo]} />
-      <lineBasicMaterial color="#7c5cfc" opacity={0.4} transparent />
+      <lineBasicMaterial color="#D4A018" opacity={0.4} transparent />
     </lineSegments>
   );
 }
@@ -166,7 +166,7 @@ function EnergyParticles({ count = 60 }) {
   return (
     <instancedMesh ref={meshRef} args={[null, null, count]}>
       <sphereGeometry args={[1, 8, 8]} />
-      <meshBasicMaterial color="#7c5cfc" transparent opacity={0.7} />
+      <meshBasicMaterial color="#D4A018" transparent opacity={0.7} />
     </instancedMesh>
   );
 }
@@ -196,7 +196,7 @@ function EquipmentPiece({ position, size, color, label, status, alertLevel, data
         <boxGeometry args={size} />
         <meshStandardMaterial
           color={color}
-          emissive={selected ? "#7c5cfc" : color}
+          emissive={selected ? "#D4A018" : color}
           emissiveIntensity={0.15}
           transparent
           opacity={hovered ? 1 : 0.9}
@@ -207,7 +207,7 @@ function EquipmentPiece({ position, size, color, label, status, alertLevel, data
       {/* Equipment label — always visible */}
       <Html position={[0, size[1] / 2 + 0.3, 0]} center distanceFactor={10} style={{ pointerEvents: "none" }}>
         <div style={{
-          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(124,92,252,0.3)",
+          background: "rgba(255,255,255,0.92)", border: "1px solid rgba(212,160,24,0.3)",
           borderRadius: 4, padding: "2px 8px", whiteSpace: "nowrap", fontSize: 10,
           color: "#1A1D23", fontFamily: "system-ui", textAlign: "center",
         }}>
@@ -236,7 +236,7 @@ function PropertyPopup({ equipment, onClose }) {
   return (
     <Html position={[position[0] + 1.5, position[1] + 0.5, position[2]]} style={{ pointerEvents: "auto" }}>
       <div style={{
-        background: "rgba(255,255,255,0.95)", border: "1px solid rgba(124,92,252,0.3)",
+        background: "rgba(255,255,255,0.95)", border: "1px solid rgba(212,160,24,0.3)",
         borderRadius: 8, padding: 14, width: 220, fontFamily: "system-ui",
         color: "#1A1D23", boxShadow: "0 8px 32px rgba(0,0,0,0.12)",
       }}>
@@ -245,8 +245,8 @@ function PropertyPopup({ equipment, onClose }) {
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#4B5563", cursor: "pointer", fontSize: 16 }}>×</button>
         </div>
         <div style={{ display: "flex", gap: 12, marginBottom: 8 }}>
-          <button style={{ background: "rgba(124,92,252,0.2)", border: "1px solid rgba(124,92,252,0.4)", borderRadius: 4, color: "#1A1D23", padding: "2px 10px", fontSize: 11, cursor: "pointer" }}>State</button>
-          <button style={{ background: "transparent", border: "1px solid rgba(124,92,252,0.2)", borderRadius: 4, color: "#4B5563", padding: "2px 10px", fontSize: 11, cursor: "pointer" }}>All properties</button>
+          <button style={{ background: "rgba(212,160,24,0.2)", border: "1px solid rgba(212,160,24,0.4)", borderRadius: 4, color: "#1A1D23", padding: "2px 10px", fontSize: 11, cursor: "pointer" }}>State</button>
+          <button style={{ background: "transparent", border: "1px solid rgba(212,160,24,0.2)", borderRadius: 4, color: "#4B5563", padding: "2px 10px", fontSize: 11, cursor: "pointer" }}>All properties</button>
         </div>
         {data?.alertMessage && (
           <div style={{ background: "rgba(245,34,45,0.1)", border: "1px solid rgba(245,34,45,0.3)", borderRadius: 4, padding: "6px 8px", marginBottom: 8, fontSize: 11 }}>
@@ -254,7 +254,7 @@ function PropertyPopup({ equipment, onClose }) {
           </div>
         )}
         {data && Object.entries(data).filter(([k]) => k !== "alertMessage").map(([key, val]) => (
-          <div key={key} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid rgba(124,92,252,0.08)" }}>
+          <div key={key} style={{ display: "flex", justifyContent: "space-between", padding: "3px 0", borderBottom: "1px solid rgba(212,160,24,0.08)" }}>
             <span style={{ fontSize: 11, color: "#4B5563" }}>{key.replace(/([A-Z])/g, " $1").trim()}</span>
             <span style={{ fontSize: 11, fontWeight: 600, color: "#1A1D23" }}>{typeof val === "number" ? val.toFixed(1) : String(val)}</span>
           </div>
@@ -385,8 +385,8 @@ function Scene({ zones, chillers, transformers, selectedEquipment, onSelectEquip
     <>
       <ambientLight intensity={0.3} />
       <directionalLight position={[8, 12, 5]} intensity={0.8} castShadow />
-      <directionalLight position={[-5, 8, -3]} intensity={0.3} color="#7c5cfc" />
-      <pointLight position={[0, 10, 0]} intensity={0.4} color="#7c5cfc" />
+      <directionalLight position={[-5, 8, -3]} intensity={0.3} color="#D4A018" />
+      <pointLight position={[0, 10, 0]} intensity={0.4} color="#D4A018" />
       <Building zones={zones} chillers={chillers} transformers={transformers} selectedEquipment={selectedEquipment} onSelectEquipment={onSelectEquipment} />
       <Grid
         args={[30, 30]}
@@ -442,7 +442,7 @@ function EERChart({ data }) {
     const maxV = Math.max(...vals) + 0.2;
 
     // Grid lines
-    ctx.strokeStyle = "rgba(124, 92, 252, 0.1)";
+    ctx.strokeStyle = "rgba(212, 160, 24, 0.1)";
     ctx.lineWidth = 0.5;
     for (let i = 0; i <= 4; i++) {
       const y = pad.top + (ch * i) / 4;
@@ -471,8 +471,8 @@ function EERChart({ data }) {
 
     // Gradient fill
     const gradient = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
-    gradient.addColorStop(0, "rgba(124, 92, 252, 0.3)");
-    gradient.addColorStop(1, "rgba(124, 92, 252, 0.02)");
+    gradient.addColorStop(0, "rgba(212, 160, 24, 0.3)");
+    gradient.addColorStop(1, "rgba(212, 160, 24, 0.02)");
 
     ctx.beginPath();
     data.forEach((d, i) => {
@@ -545,7 +545,7 @@ function PowerFactorGauge({ value }) {
       <path
         d={`M ${arcStart.x} ${arcStart.y} A ${r} ${r} 0 1 1 ${arcFullEnd.x} ${arcFullEnd.y}`}
         fill="none"
-        stroke="rgba(124, 92, 252, 0.15)"
+        stroke="rgba(212, 160, 24, 0.15)"
         strokeWidth="8"
         strokeLinecap="round"
       />
@@ -675,7 +675,7 @@ function SingleLineDiagram({ breakerStates, powerKw }) {
         if (el.type === "busbar") {
           return (
             <g key={el.label}>
-              <rect x={el.x - 30} y={35} width={60} height={10} rx={2} fill="rgba(124,92,252,0.2)" stroke={T.accent} strokeWidth="1.5" />
+              <rect x={el.x - 30} y={35} width={60} height={10} rx={2} fill="rgba(212,160,24,0.2)" stroke={T.accent} strokeWidth="1.5" />
               <text x={el.x} y={70} textAnchor="middle" fill={T.textSec} fontSize="8">
                 {el.label}
               </text>
@@ -827,7 +827,7 @@ export default function BEMSDigitalTwin({ onClose }) {
     overlay: {
       position: "fixed", inset: 0, zIndex: 9999,
       background: T.bg, display: "flex", flexDirection: "column",
-      fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+      fontFamily: "'Roboto', 'Segoe UI', system-ui, sans-serif",
       color: T.text, overflow: "hidden",
     },
     topBar: {
@@ -840,12 +840,12 @@ export default function BEMSDigitalTwin({ onClose }) {
     title: { fontSize: 16, fontWeight: 700, color: T.text, letterSpacing: "0.5px" },
     titleAccent: { color: T.accent },
     closeBtn: {
-      background: "rgba(124, 92, 252, 0.1)", border: T.border, borderRadius: 6,
+      background: "rgba(212, 160, 24, 0.1)", border: T.border, borderRadius: 6,
       color: T.text, padding: "4px 12px", cursor: "pointer", fontSize: 13,
       transition: "all 0.2s",
     },
     select: {
-      background: "rgba(124, 92, 252, 0.08)", border: T.border, borderRadius: 6,
+      background: "rgba(212, 160, 24, 0.08)", border: T.border, borderRadius: 6,
       color: T.text, padding: "4px 10px", fontSize: 12, outline: "none",
       cursor: "pointer",
     },
@@ -874,7 +874,7 @@ export default function BEMSDigitalTwin({ onClose }) {
       padding: "4px 16px", flexShrink: 0,
     },
     card: {
-      background: "rgba(124, 92, 252, 0.04)", border: T.border, borderRadius: 8,
+      background: "rgba(212, 160, 24, 0.04)", border: T.border, borderRadius: 8,
       padding: 12,
     },
     cardTitle: {
@@ -896,7 +896,7 @@ export default function BEMSDigitalTwin({ onClose }) {
       border: `1px solid ${running ? T.green : T.red}`,
     }),
     progressBar: (pct, color) => ({
-      height: 6, borderRadius: 3, background: "rgba(124,92,252,0.1)",
+      height: 6, borderRadius: 3, background: "rgba(212,160,24,0.1)",
       position: "relative", marginTop: 4,
     }),
     progressFill: (pct, color) => ({
@@ -907,12 +907,12 @@ export default function BEMSDigitalTwin({ onClose }) {
       display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6,
     },
     zoneCard: {
-      background: "rgba(124,92,252,0.04)", border: T.border, borderRadius: 6,
+      background: "rgba(212,160,24,0.04)", border: T.border, borderRadius: 6,
       padding: 8, fontSize: 11,
     },
     alarmItem: (severity) => ({
       display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 0",
-      borderBottom: "1px solid rgba(124,92,252,0.08)",
+      borderBottom: "1px solid rgba(212,160,24,0.08)",
     }),
     alarmDot: (severity) => ({
       width: 6, height: 6, borderRadius: 3, marginTop: 5, flexShrink: 0,
@@ -949,9 +949,9 @@ export default function BEMSDigitalTwin({ onClose }) {
             <span style={S.wsIndicator} />
             <span style={S.liveLabel}>{wsConnected ? "Live" : "Simulated"}</span>
           </span>
-          <div style={{ display: "flex", gap: 0, borderRadius: 4, overflow: "hidden", border: "1px solid rgba(124,92,252,0.3)" }}>
-            <button style={{ padding: "3px 12px", fontSize: 11, background: "rgba(124,92,252,0.15)", color: "#1A1D23", border: "none", cursor: "pointer" }}>Build</button>
-            <button style={{ padding: "3px 12px", fontSize: 11, background: "rgba(124,92,252,0.4)", color: "#fff", border: "none", cursor: "pointer", fontWeight: 600 }}>View</button>
+          <div style={{ display: "flex", gap: 0, borderRadius: 4, overflow: "hidden", border: "1px solid rgba(212,160,24,0.3)" }}>
+            <button style={{ padding: "3px 12px", fontSize: 11, background: "rgba(212,160,24,0.15)", color: "#1A1D23", border: "none", cursor: "pointer" }}>Build</button>
+            <button style={{ padding: "3px 12px", fontSize: 11, background: "rgba(212,160,24,0.4)", color: "#fff", border: "none", cursor: "pointer", fontWeight: 600 }}>View</button>
           </div>
         </div>
         <div style={S.topRight}>
@@ -967,8 +967,8 @@ export default function BEMSDigitalTwin({ onClose }) {
           <button
             style={S.closeBtn}
             onClick={onClose}
-            onMouseEnter={(e) => { e.target.style.background = "rgba(124,92,252,0.25)"; }}
-            onMouseLeave={(e) => { e.target.style.background = "rgba(124,92,252,0.1)"; }}
+            onMouseEnter={(e) => { e.target.style.background = "rgba(212,160,24,0.25)"; }}
+            onMouseLeave={(e) => { e.target.style.background = "rgba(212,160,24,0.1)"; }}
           >
             Close
           </button>
@@ -982,7 +982,7 @@ export default function BEMSDigitalTwin({ onClose }) {
           {/* Elements Tree (Azure DT style) */}
           <div style={{ ...S.card, maxHeight: 220, display: "flex", flexDirection: "column" }}>
             <div style={{ ...S.cardTitle, display: "flex", alignItems: "center", gap: 6 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c5cfc" strokeWidth="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D4A018" strokeWidth="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></svg>
               Elements
             </div>
             <input
@@ -991,7 +991,7 @@ export default function BEMSDigitalTwin({ onClose }) {
               value={elementFilter}
               onChange={(e) => setElementFilter(e.target.value)}
               style={{
-                background: "rgba(124,92,252,0.06)", border: "1px solid rgba(124,92,252,0.15)",
+                background: "rgba(212,160,24,0.06)", border: "1px solid rgba(212,160,24,0.15)",
                 borderRadius: 4, padding: "5px 8px", fontSize: 11, color: "#1A1D23",
                 outline: "none", marginBottom: 6, width: "100%",
               }}
@@ -1007,7 +1007,7 @@ export default function BEMSDigitalTwin({ onClose }) {
                     style={{
                       padding: "4px 6px", cursor: "pointer", borderRadius: 4, fontSize: 11,
                       display: "flex", alignItems: "center", gap: 6,
-                      background: selectedEquipment?.label === ch.id ? "rgba(124,92,252,0.15)" : "transparent",
+                      background: selectedEquipment?.label === ch.id ? "rgba(212,160,24,0.15)" : "transparent",
                     }}
                   >
                     {hasAlert && <span style={{ width: 6, height: 14, borderRadius: 2, background: "#fa8c16", flexShrink: 0 }} />}
@@ -1029,7 +1029,7 @@ export default function BEMSDigitalTwin({ onClose }) {
                   style={{
                     padding: "4px 6px", cursor: "pointer", borderRadius: 4, fontSize: 11,
                     display: "flex", alignItems: "center", gap: 6,
-                    background: selectedEquipment?.label === tx.id ? "rgba(124,92,252,0.15)" : "transparent",
+                    background: selectedEquipment?.label === tx.id ? "rgba(212,160,24,0.15)" : "transparent",
                   }}
                 >
                   {tx.loadPct > 80 && <span style={{ width: 6, height: 14, borderRadius: 2, background: "#fa8c16", flexShrink: 0 }} />}
@@ -1048,7 +1048,7 @@ export default function BEMSDigitalTwin({ onClose }) {
                     style={{
                       padding: "4px 6px", cursor: "pointer", borderRadius: 4, fontSize: 11,
                       display: "flex", alignItems: "center", gap: 6,
-                      background: selectedEquipment?.label === z.name ? "rgba(124,92,252,0.15)" : "transparent",
+                      background: selectedEquipment?.label === z.name ? "rgba(212,160,24,0.15)" : "transparent",
                     }}
                   >
                     {hasAlert && <span style={{ width: 6, height: 14, borderRadius: 2, background: diff > 1.5 ? "#f5222d" : "#fa8c16", flexShrink: 0 }} />}
@@ -1221,7 +1221,7 @@ export default function BEMSDigitalTwin({ onClose }) {
                       {z.humidity.toFixed(0)}% RH
                       <span style={{
                         marginLeft: 6, fontSize: 9, padding: "1px 4px", borderRadius: 3,
-                        background: z.mode === "cooling" ? "rgba(24,144,255,0.15)" : z.mode === "heating" ? "rgba(250,140,22,0.15)" : "rgba(124,92,252,0.08)",
+                        background: z.mode === "cooling" ? "rgba(24,144,255,0.15)" : z.mode === "heating" ? "rgba(250,140,22,0.15)" : "rgba(212,160,24,0.08)",
                         color: z.mode === "cooling" ? T.blue : z.mode === "heating" ? T.orange : T.textSec,
                       }}>
                         {z.mode}

@@ -191,7 +191,7 @@ function ComponentLabels() {
     padding: '6px 10px',
     borderRadius: 6,
     fontSize: 11,
-    fontFamily: "'Inter', 'SF Pro Display', sans-serif",
+    fontFamily: "'Roboto', 'SF Pro Display', sans-serif",
     whiteSpace: 'nowrap',
     pointerEvents: 'none',
     border: '1px solid rgba(100, 180, 255, 0.3)',
@@ -245,15 +245,15 @@ function SchematicView() {
   const elemStyle = (id) => ({
     cursor: 'pointer',
     transition: 'filter 0.15s, opacity 0.15s',
-    filter: hovered === id ? 'drop-shadow(0 0 6px rgba(124, 92, 252, 0.8))' : 'none',
+    filter: hovered === id ? 'drop-shadow(0 0 6px rgba(212, 160, 24, 0.8))' : 'none',
     opacity: hovered && hovered !== id ? 0.45 : 1,
   });
 
   const labelStyle = {
-    fontSize: 10, fill: COLORS.textSec, fontFamily: "'Inter', sans-serif",
+    fontSize: 10, fill: COLORS.textSec, fontFamily: "'Roboto', sans-serif",
   };
   const valStyle = {
-    fontSize: 9, fill: COLORS.accent, fontFamily: "'Inter', sans-serif", fontWeight: 600,
+    fontSize: 9, fill: COLORS.accent, fontFamily: "'Roboto', sans-serif", fontWeight: 600,
   };
 
   return (
@@ -265,16 +265,16 @@ function SchematicView() {
         {/* Background grid */}
         <defs>
           <pattern id="sld-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(124,92,252,0.06)" strokeWidth="0.5" />
+            <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(212,160,24,0.06)" strokeWidth="0.5" />
           </pattern>
         </defs>
         <rect width="820" height="360" fill="url(#sld-grid)" rx="8" />
 
         {/* Title block */}
-        <text x="16" y="24" style={{ fontSize: 13, fill: COLORS.text, fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>
+        <text x="16" y="24" style={{ fontSize: 13, fill: COLORS.text, fontFamily: "'Roboto', sans-serif", fontWeight: 600 }}>
           Single-Line Diagram — 11kV/400V Distribution
         </text>
-        <text x="16" y="40" style={{ fontSize: 10, fill: COLORS.textSec, fontFamily: "'Inter', sans-serif" }}>
+        <text x="16" y="40" style={{ fontSize: 10, fill: COLORS.textSec, fontFamily: "'Roboto', sans-serif" }}>
           Pole-mount transformer substation — 3 feeder circuits
         </text>
 
@@ -314,10 +314,10 @@ function SchematicView() {
           <line x1="250" y1="140" x2="280" y2="140" stroke={COLORS.red} strokeWidth="2" />
           {/* Primary winding */}
           <circle cx="300" cy="140" r="20" fill={COLORS.bg} stroke={COLORS.red} strokeWidth="2" />
-          <text x="292" y="144" style={{ fontSize: 10, fill: COLORS.red, fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>HV</text>
+          <text x="292" y="144" style={{ fontSize: 10, fill: COLORS.red, fontFamily: "'Roboto', sans-serif", fontWeight: 600 }}>HV</text>
           {/* Secondary winding */}
           <circle cx="340" cy="140" r="20" fill={COLORS.bg} stroke={COLORS.blue} strokeWidth="2" />
-          <text x="333" y="144" style={{ fontSize: 10, fill: COLORS.blue, fontFamily: "'Inter', sans-serif", fontWeight: 600 }}>LV</text>
+          <text x="333" y="144" style={{ fontSize: 10, fill: COLORS.blue, fontFamily: "'Roboto', sans-serif", fontWeight: 600 }}>LV</text>
           <line x1="360" y1="140" x2="390" y2="140" stroke={COLORS.blue} strokeWidth="2" />
           {/* Rating label */}
           <text x="300" y="104" style={{ ...labelStyle, textAnchor: 'middle', fontSize: 11 }}>Transformer</text>
@@ -357,7 +357,7 @@ function SchematicView() {
           <polygon points="620,96 620,124 650,110" fill={COLORS.bg} stroke={COLORS.green} strokeWidth="1.5" />
           <text x="560" y="94" style={labelStyle}>Feeder 1 — Lighting</text>
           <text x="660" y="108" style={valStyle}>63A</text>
-          <text x="660" y="120" style={{ fontSize: 8, fill: COLORS.textSec, fontFamily: "'Inter', sans-serif" }}>32 kW</text>
+          <text x="660" y="120" style={{ fontSize: 8, fill: COLORS.textSec, fontFamily: "'Roboto', sans-serif" }}>32 kW</text>
         </g>
 
         {/* ── Feeder 2 ── */}
@@ -369,7 +369,7 @@ function SchematicView() {
           <polygon points="620,161 620,189 650,175" fill={COLORS.bg} stroke={COLORS.green} strokeWidth="1.5" />
           <text x="560" y="160" style={labelStyle}>Feeder 2 — Power</text>
           <text x="660" y="173" style={valStyle}>100A</text>
-          <text x="660" y="185" style={{ fontSize: 8, fill: COLORS.textSec, fontFamily: "'Inter', sans-serif" }}>55 kW</text>
+          <text x="660" y="185" style={{ fontSize: 8, fill: COLORS.textSec, fontFamily: "'Roboto', sans-serif" }}>55 kW</text>
         </g>
 
         {/* ── Feeder 3 ── */}
@@ -381,7 +381,7 @@ function SchematicView() {
           <polygon points="620,226 620,254 650,240" fill={COLORS.bg} stroke={COLORS.green} strokeWidth="1.5" />
           <text x="560" y="225" style={labelStyle}>Feeder 3 — Aux / EV</text>
           <text x="660" y="238" style={valStyle}>32A</text>
-          <text x="660" y="250" style={{ fontSize: 8, fill: COLORS.textSec, fontFamily: "'Inter', sans-serif" }}>18 kW</text>
+          <text x="660" y="250" style={{ fontSize: 8, fill: COLORS.textSec, fontFamily: "'Roboto', sans-serif" }}>18 kW</text>
         </g>
 
         {/* ── Earth symbol ── */}
@@ -395,20 +395,20 @@ function SchematicView() {
 
         {/* ── Voltage labels at top ── */}
         <rect x="30" y="56" width="220" height="22" rx="4" fill="rgba(248,113,113,0.1)" stroke="rgba(248,113,113,0.2)" strokeWidth="1" />
-        <text x="140" y="71" style={{ fontSize: 10, fill: COLORS.red, fontFamily: "'Inter', sans-serif", fontWeight: 600, textAnchor: 'middle' }}>
+        <text x="140" y="71" style={{ fontSize: 10, fill: COLORS.red, fontFamily: "'Roboto', sans-serif", fontWeight: 600, textAnchor: 'middle' }}>
           11kV HV ZONE
         </text>
         <rect x="460" y="56" width="260" height="22" rx="4" fill="rgba(96,165,250,0.1)" stroke="rgba(96,165,250,0.2)" strokeWidth="1" />
-        <text x="590" y="71" style={{ fontSize: 10, fill: COLORS.blue, fontFamily: "'Inter', sans-serif", fontWeight: 600, textAnchor: 'middle' }}>
+        <text x="590" y="71" style={{ fontSize: 10, fill: COLORS.blue, fontFamily: "'Roboto', sans-serif", fontWeight: 600, textAnchor: 'middle' }}>
           400V LV ZONE
         </text>
 
         {/* ── Hover tooltip ── */}
         {hovered && (
-          <rect x="16" y="332" width={200} height="20" rx="4" fill="rgba(124,92,252,0.12)" stroke="rgba(124,92,252,0.25)" strokeWidth="1" />
+          <rect x="16" y="332" width={200} height="20" rx="4" fill="rgba(212,160,24,0.12)" stroke="rgba(212,160,24,0.25)" strokeWidth="1" />
         )}
         {hovered && (
-          <text x="26" y="346" style={{ fontSize: 10, fill: COLORS.accent, fontFamily: "'Inter', sans-serif" }}>
+          <text x="26" y="346" style={{ fontSize: 10, fill: COLORS.accent, fontFamily: "'Roboto', sans-serif" }}>
             Selected: {hovered.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
           </text>
         )}
@@ -469,7 +469,7 @@ function PhotosView() {
           border: COLORS.border, background: 'rgba(255, 255, 255, 0.95)',
           transition: 'transform 0.2s, box-shadow 0.2s', cursor: 'pointer',
         }}
-          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(124,92,252,0.15)'; }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(212,160,24,0.15)'; }}
           onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}
         >
           {/* Simulated photo area */}
@@ -549,7 +549,7 @@ function PhotoViewer() {
       <div style={{ display: 'flex', gap: 6 }}>
         {[1, 2, 3].map(i => (
           <div key={i} style={{
-            flex: 1, height: 64, background: 'rgba(124, 92, 252, 0.06)',
+            flex: 1, height: 64, background: 'rgba(212, 160, 24, 0.06)',
             border: COLORS.border, borderRadius: 6, display: 'flex',
             alignItems: 'center', justifyContent: 'center',
           }}>
@@ -579,12 +579,12 @@ function AttrRow({ label, value, editable = true }) {
           value={val}
           onChange={e => setVal(e.target.value)}
           style={{
-            background: 'rgba(124, 92, 252, 0.08)', border: '1px solid rgba(124, 92, 252, 0.15)',
+            background: 'rgba(212, 160, 24, 0.08)', border: '1px solid rgba(212, 160, 24, 0.15)',
             borderRadius: 4, padding: '2px 6px', color: COLORS.text, fontSize: 11,
             width: 100, textAlign: 'right', outline: 'none', fontFamily: 'inherit',
           }}
           onFocus={e => e.target.style.borderColor = COLORS.accent}
-          onBlur={e => e.target.style.borderColor = 'rgba(124, 92, 252, 0.15)'}
+          onBlur={e => e.target.style.borderColor = 'rgba(212, 160, 24, 0.15)'}
         />
       ) : (
         <span style={{ fontSize: 11, color: COLORS.text }}>{value}</span>
@@ -602,7 +602,7 @@ function Section({ title, badge, defaultOpen = false, children }) {
         onClick={() => setOpen(!open)}
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 6,
-          background: 'rgba(124, 92, 252, 0.06)', border: 'none', borderRadius: 6,
+          background: 'rgba(212, 160, 24, 0.06)', border: 'none', borderRadius: 6,
           padding: '7px 10px', cursor: 'pointer', color: COLORS.text, fontSize: 12,
           fontFamily: 'inherit', textAlign: 'left',
         }}
@@ -750,7 +750,7 @@ export default function AssetInspector({ onClose }) {
       style={{
         padding: '5px 14px', fontSize: 12, borderRadius: 6, cursor: 'pointer',
         border: mode === key ? `1px solid ${COLORS.accent}` : '1px solid rgba(0,0,0,0.08)',
-        background: mode === key ? 'rgba(124, 92, 252, 0.18)' : 'transparent',
+        background: mode === key ? 'rgba(212, 160, 24, 0.18)' : 'transparent',
         color: mode === key ? COLORS.text : COLORS.textSec,
         fontFamily: 'inherit', transition: 'all 0.15s',
       }}
@@ -763,7 +763,7 @@ export default function AssetInspector({ onClose }) {
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
       background: COLORS.bg, display: 'flex', flexDirection: 'column',
-      fontFamily: "'Inter', 'SF Pro Display', -apple-system, sans-serif",
+      fontFamily: "'Roboto', 'SF Pro Display', -apple-system, sans-serif",
       color: COLORS.text,
     }}>
 
@@ -780,7 +780,7 @@ export default function AssetInspector({ onClose }) {
           </svg>
           <span style={{ fontWeight: 600, fontSize: 15 }}>Asset Inspector</span>
           <span style={{
-            background: 'rgba(124, 92, 252, 0.15)', color: COLORS.accent,
+            background: 'rgba(212, 160, 24, 0.15)', color: COLORS.accent,
             fontSize: 10, padding: '2px 8px', borderRadius: 10, fontWeight: 600,
             letterSpacing: 0.5,
           }}>qSurvey</span>
@@ -800,7 +800,7 @@ export default function AssetInspector({ onClose }) {
           style={{
             marginLeft: 'auto', padding: '5px 14px', fontSize: 12, borderRadius: 6,
             cursor: detecting ? 'wait' : 'pointer',
-            border: `1px solid ${COLORS.accent}`, background: detecting ? 'rgba(124, 92, 252, 0.25)' : 'rgba(124, 92, 252, 0.12)',
+            border: `1px solid ${COLORS.accent}`, background: detecting ? 'rgba(212, 160, 24, 0.25)' : 'rgba(212, 160, 24, 0.12)',
             color: COLORS.accent, fontFamily: 'inherit', fontWeight: 500,
             display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
           }}
@@ -826,7 +826,7 @@ export default function AssetInspector({ onClose }) {
           style={{
             padding: '5px 10px', fontSize: 11, borderRadius: 6, cursor: 'pointer',
             border: labelsVisible ? `1px solid ${COLORS.accent}` : '1px solid rgba(0,0,0,0.08)',
-            background: labelsVisible ? 'rgba(124, 92, 252, 0.12)' : 'transparent',
+            background: labelsVisible ? 'rgba(212, 160, 24, 0.12)' : 'transparent',
             color: labelsVisible ? COLORS.accent : COLORS.textSec,
             fontFamily: 'inherit',
           }}
@@ -894,7 +894,7 @@ export default function AssetInspector({ onClose }) {
                 <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 8 }}>Running AI Component Detection</div>
                 <div style={{ fontSize: 12, color: COLORS.textSec }}>Classifying point cloud segments...</div>
                 <div style={{
-                  marginTop: 12, height: 3, background: 'rgba(124, 92, 252, 0.15)',
+                  marginTop: 12, height: 3, background: 'rgba(212, 160, 24, 0.15)',
                   borderRadius: 2, overflow: 'hidden',
                 }}>
                   <div style={{

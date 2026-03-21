@@ -499,6 +499,133 @@ async def grid_osm_summary(pool: asyncpg.Pool = Depends(get_pool)):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  CONSTRAINT COST OVERLAY + QUEUE DEPTH (Phase 7)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/grid/constraints")
+async def api_grid_constraints(
+    hours_ahead: int = Query(48, ge=1, le=168),
+):
+    """
+    Grid constraint forecast as GeoJSON — colored boundary zones showing
+    congestion risk, loading, and constraint cost per MWh.
+    """
+    from utils.constraint_forecaster import constraints_to_geojson
+    return constraints_to_geojson(hours_ahead=hours_ahead)
+
+
+@router.get("/api/grid/queue-depth")
+async def api_grid_queue_depth(
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Queue depth per substation — how many MW are waiting for connection,
+    estimated wait time based on ECR progression rates.
+
+    Returns GeoJSON FeatureCollection of substations with queue metrics.
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT
+                s.id,
+                s.name,
+                s.dno,
+                s.voltage_kv,
+                ST_X(ST_Transform(s.geom, 4326)) AS lon,
+                ST_Y(ST_Transform(s.geom, 4326)) AS lat,
+                s.demand_headroom_mw,
+                s.gen_headroom_mw,
+                COUNT(e.id) AS queue_count,
+                COALESCE(SUM(e.capacity_mw), 0) AS queued_mw,
+                COUNT(e.id) FILTER (WHERE e.status ILIKE '%%accepted%%'
+                    OR e.status ILIKE '%%connect%%') AS connected_count,
+                COALESCE(SUM(e.capacity_mw) FILTER (WHERE e.status ILIKE '%%accepted%%'
+                    OR e.status ILIKE '%%connect%%'), 0) AS connected_mw
+            FROM grid_substations s
+            LEFT JOIN grid_ecr e ON e.substation_id = s.id
+            WHERE s.geom IS NOT NULL
+            GROUP BY s.id
+            HAVING COUNT(e.id) > 0
+            ORDER BY COUNT(e.id) DESC
+            LIMIT 500
+        """)
+
+    features = []
+    for r in rows:
+        queue_count = r["queue_count"]
+        queued_mw = float(r["queued_mw"] or 0)
+        connected_mw = float(r["connected_mw"] or 0)
+        headroom = float(r["gen_headroom_mw"] or 0)
+
+        # Estimate wait time: UK average ~3-5 years for >10MW, 1-2 years for <5MW
+        # Scale by queue depth and headroom ratio
+        if headroom > 0 and queued_mw > 0:
+            congestion_ratio = queued_mw / max(headroom, 1)
+            wait_months = min(84, int(12 + congestion_ratio * 18))
+        else:
+            wait_months = 36 if queue_count > 5 else 18
+
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [float(r["lon"]), float(r["lat"])]},
+            "properties": {
+                "id": r["id"],
+                "name": r["name"],
+                "dno": r["dno"],
+                "voltage_kv": r["voltage_kv"],
+                "queue_count": queue_count,
+                "queued_mw": round(queued_mw, 1),
+                "connected_count": r["connected_count"],
+                "connected_mw": round(connected_mw, 1),
+                "headroom_mw": round(headroom, 1),
+                "estimated_wait_months": wait_months,
+                "queue_pressure": "HIGH" if queue_count > 10 or queued_mw > headroom * 2
+                                  else "MEDIUM" if queue_count > 5 or queued_mw > headroom
+                                  else "LOW",
+            },
+        })
+
+    return {"type": "FeatureCollection", "features": features}
+
+
+@router.get("/api/grid/live-status")
+async def api_grid_live_status():
+    """
+    Compact live grid status for the status strip — generation mix,
+    carbon intensity, frequency, wholesale price.
+    Designed for 30s polling from the frontend.
+    """
+    data = await fetch_all_live()
+    gen = data.get("generation", {})
+    carbon = data.get("carbon") or {}
+    ics = data.get("interconnectors", {})
+
+    total_gen = gen.get("total_generation_mw", 0)
+    wind_mw = gen.get("wind", 0)
+    solar_mw = gen.get("solar", 0)
+    nuclear_mw = gen.get("nuclear", 0)
+    gas_mw = gen.get("gas", 0)
+    renewable_mw = wind_mw + solar_mw + gen.get("hydro", 0) + gen.get("biomass", 0)
+    net_imports = sum(ics.values())
+
+    return {
+        "total_generation_mw": total_gen,
+        "wind_mw": wind_mw,
+        "solar_mw": solar_mw,
+        "nuclear_mw": nuclear_mw,
+        "gas_mw": gas_mw,
+        "renewable_pct": round(renewable_mw / max(total_gen, 1) * 100, 1),
+        "carbon_intensity": carbon.get("intensity_gco2"),
+        "carbon_index": carbon.get("index"),
+        "frequency_hz": data.get("frequency_hz"),
+        "price_gbp_mwh": data.get("sell_price_gbp_mwh"),
+        "net_imports_mw": net_imports,
+        "timestamp": data.get("timestamp"),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  3D GRID DIGITAL TWIN — WebSocket + REST (Phase 6)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -973,3 +1100,57 @@ async def ws_dc_twin(ws: WebSocket):
         pass
     finally:
         _dc_twin_clients.discard(ws)
+
+
+# ══════════════════════════════════════════════════════════
+# Queue Depth Analysis
+# ══════════════════════════════════════════════════════════
+
+@router.get("/api/grid/queue-depth/{substation_id}")
+async def queue_depth(substation_id: int, pool: asyncpg.Pool = Depends(get_pool)):
+    """Queue depth analysis for a single substation."""
+    from utils.queue_analyser import get_queue_depth
+    result = await get_queue_depth(pool, substation_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Substation not found or no queue data")
+    return result
+
+
+@router.get("/api/grid/queue-summary")
+async def queue_summary(
+    west: float = None, south: float = None,
+    east: float = None, north: float = None,
+    limit: int = Query(50, le=200),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Queue depth summaries for substations in viewport."""
+    from utils.queue_analyser import get_queue_summary
+    bbox = (west, south, east, north) if all(v is not None for v in [west, south, east, north]) else None
+    return await get_queue_summary(pool, bbox=bbox, limit=limit)
+
+
+# ══════════════════════════════════════════════════════════
+# Constraint Cost Overlay
+# ══════════════════════════════════════════════════════════
+
+@router.get("/api/grid/constraints")
+async def get_constraints(
+    west: float = None, south: float = None,
+    east: float = None, north: float = None,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Return constraint cost zones as GeoJSON for map overlay."""
+    from utils.constraint_overlay import get_constraint_zones
+    bbox = (west, south, east, north) if all(v is not None for v in [west, south, east, north]) else None
+    return await get_constraint_zones(pool, bbox=bbox)
+
+
+# ══════════════════════════════════════════════════════════
+# Live Grid Status
+# ══════════════════════════════════════════════════════════
+
+@router.get("/api/grid/live-status")
+async def live_grid_status():
+    """Real-time UK grid demand, carbon intensity, and generation mix."""
+    from utils.live_grid_status import get_live_status
+    return await get_live_status()

@@ -40,7 +40,7 @@ function verdictColor(v) {
 
 function ratingColor(r) {
   if (r === "Excellent") return "#24a148";
-  if (r === "Good") return "#6c5ce7";
+  if (r === "Good") return "#D4A018";
   if (r === "Moderate") return "#f1c21b";
   return "#da1e28";
 }
@@ -99,11 +99,11 @@ function RadarChart({ scores, dimensions, size = 240 }) {
           </g>
         );
       })}
-      <polygon points={pts(vals)} fill="rgba(108,92,231,0.25)" stroke="#6c5ce7" strokeWidth={2} />
+      <polygon points={pts(vals)} fill="rgba(108,92,231,0.25)" stroke="#D4A018" strokeWidth={2} />
       {vals.map((v, i) => {
         const a = -Math.PI / 2 + i * step;
         const d = (v / 100) * r;
-        return <circle key={i} cx={cx + d * Math.cos(a)} cy={cy + d * Math.sin(a)} r={2.5} fill="#6c5ce7" />;
+        return <circle key={i} cx={cx + d * Math.cos(a)} cy={cy + d * Math.sin(a)} r={2.5} fill="#D4A018" />;
       })}
     </svg>
   );
@@ -280,7 +280,7 @@ function RegulatoryBadge({ regData }) {
           </span>
         )}
         {regData.dc_precedent && (
-          <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 600, background: "rgba(108,92,231,0.15)", color: "#6c5ce7", border: "1px solid #6c5ce7" }}>
+          <span style={{ padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 600, background: "rgba(108,92,231,0.15)", color: "#D4A018", border: "1px solid #D4A018" }}>
             DC Precedent
           </span>
         )}
@@ -440,12 +440,12 @@ export default function DataCentrePanel({ onClose, onOpenComparison }) {
             onClick={() => setProfile(p.key)}
             style={{
               padding: "6px 2px", borderRadius: 6,
-              border: profile === p.key ? "2px solid #6c5ce7" : "1px solid rgba(255,255,255,0.08)",
+              border: profile === p.key ? "2px solid #D4A018" : "1px solid rgba(255,255,255,0.08)",
               background: profile === p.key ? "rgba(108,92,231,0.15)" : "transparent",
               color: "#e0e0e0", cursor: "pointer", textAlign: "center", fontSize: 10,
             }}
           >
-            <div style={{ fontSize: 14, fontWeight: 700, color: profile === p.key ? "#6c5ce7" : "#888" }}>{p.icon}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: profile === p.key ? "#D4A018" : "#888" }}>{p.icon}</div>
             <div style={{ fontWeight: 600, fontSize: 9 }}>{p.label}</div>
             <div style={{ fontSize: 8, color: "#666" }}>{p.range}</div>
           </button>
@@ -465,7 +465,7 @@ export default function DataCentrePanel({ onClose, onOpenComparison }) {
           onClick={assess} disabled={loading}
           style={{
             padding: "6px 14px", borderRadius: 4, border: "none",
-            background: "#6c5ce7", color: "#fff", fontWeight: 600, fontSize: 12,
+            background: "#D4A018", color: "#fff", fontWeight: 600, fontSize: 12,
             cursor: loading ? "wait" : "pointer", opacity: loading ? 0.6 : 1,
           }}
         >
@@ -499,7 +499,7 @@ export default function DataCentrePanel({ onClose, onOpenComparison }) {
           <div style={{ marginTop: 10 }}>
             <button
               onClick={() => setShowWeights(!showWeights)}
-              style={{ background: "none", border: "none", color: "#6c5ce7", cursor: "pointer", fontSize: 11, padding: 0 }}
+              style={{ background: "none", border: "none", color: "#D4A018", cursor: "pointer", fontSize: 11, padding: 0 }}
             >
               {showWeights ? "Hide weights" : "Show weights"}
             </button>
@@ -511,7 +511,7 @@ export default function DataCentrePanel({ onClose, onOpenComparison }) {
                     <div style={{ flex: 1, height: 4, background: "#222", borderRadius: 2 }}>
                       <div style={{
                         width: `${r.weights?.[d.key] ?? 0}%`, height: "100%",
-                        background: "#6c5ce7", borderRadius: 2,
+                        background: "#D4A018", borderRadius: 2,
                       }} />
                     </div>
                     <span style={{ fontSize: 10, color: "#aaa", width: 24, textAlign: "right" }}>{Math.round(r.weights?.[d.key] ?? 0)}</span>
@@ -659,8 +659,8 @@ export default function DataCentrePanel({ onClose, onOpenComparison }) {
                 onClick={() => onOpenComparison([{ lat: getLat(), lon: getLon(), name: r.grid_connection?.substation || "Current Site" }])}
                 style={{
                   flex: 1, padding: 8, borderRadius: 4,
-                  border: "1px solid #6c5ce7", background: "transparent",
-                  color: "#6c5ce7", fontWeight: 600, fontSize: 11, cursor: "pointer",
+                  border: "1px solid #D4A018", background: "transparent",
+                  color: "#D4A018", fontWeight: 600, fontSize: 11, cursor: "pointer",
                 }}
               >
                 Compare with...
@@ -684,8 +684,8 @@ export default function DataCentrePanel({ onClose, onOpenComparison }) {
               onClick={scan} disabled={scanLoading}
               style={{
                 width: "100%", padding: 8, borderRadius: 4,
-                border: "1px solid #6c5ce7", background: "transparent",
-                color: "#6c5ce7", fontWeight: 600, fontSize: 12,
+                border: "1px solid #D4A018", background: "transparent",
+                color: "#D4A018", fontWeight: 600, fontSize: 12,
                 cursor: scanLoading ? "wait" : "pointer",
               }}
             >

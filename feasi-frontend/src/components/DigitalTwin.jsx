@@ -582,10 +582,10 @@ export default function DigitalTwin({ data, onClose }) {
             title="Measure distance"
             style={{
               padding: "4px 8px", fontSize: 10, fontWeight: 700,
-              border: "1px solid " + (measureMode ? "#7c5cfc" : "rgba(0,0,0,0.1)"),
+              border: "1px solid " + (measureMode ? "#D4A018" : "rgba(0,0,0,0.1)"),
               borderRadius: 2, cursor: "pointer", fontFamily: "inherit",
               background: measureMode ? "rgba(0,229,255,0.15)" : "transparent",
-              color: measureMode ? "#7c5cfc" : "#4B5563",
+              color: measureMode ? "#D4A018" : "#4B5563",
             }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />

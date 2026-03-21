@@ -42,7 +42,7 @@ export default function AnalyticsStrip() {
 
   const metrics = [
     { label: "YIELD", value: annualKwh ? `${(annualKwh / 1000).toFixed(1)} MWh/yr` : "--", color: "#ff9800" },
-    { label: "CF", value: cf ? `${cf.toFixed(1)}%` : "--", color: "#7c5cfc" },
+    { label: "CF", value: cf ? `${cf.toFixed(1)}%` : "--", color: "#D4A018" },
     { label: "SCORE", value: score != null ? `${score}/120` : "--", color: "#22c55e" },
     { label: "GRID", value: gridDist ? `${gridDist.toFixed(1)} km` : "--", color: "#2196f3" },
     { label: "CONF", value: confidence ? `${Math.round(confidence * 100)}%` : "--", color: "#7c4dff" },

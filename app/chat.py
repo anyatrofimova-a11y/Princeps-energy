@@ -1354,7 +1354,7 @@ def _prune_history(messages: list[dict], max_chars: int = 300_000) -> list[dict]
     return messages
 
 
-def build_system_prompt(session: ChatSession) -> str:
+def build_system_prompt(session: ChatSession, ui_context: dict | None = None) -> str:
     parts = [
         "You are Princeps AI, an expert energy analyst and solar site feasibility assistant.",
         "You help users analyse sites for renewable energy projects across the UK.",
@@ -1390,6 +1390,31 @@ def build_system_prompt(session: ChatSession) -> str:
     if session.map_layers:
         parts.append(f"\nMap layers created in this session: {len(session.map_layers)}")
 
+    # UI context — tells you what the user is currently seeing on screen
+    if ui_context:
+        parts.append("\n--- Current UI State (what the user sees right now) ---")
+        if ui_context.get("workspace"):
+            parts.append(f"Active workspace: {ui_context['workspace']}")
+        if ui_context.get("view"):
+            parts.append(f"Active view: {ui_context['view']}")
+        if ui_context.get("stage"):
+            parts.append(f"Workflow stage: {ui_context['stage']}")
+        if ui_context.get("intent"):
+            parts.append(f"Active intent/analysis: {ui_context['intent']}")
+        if ui_context.get("parcel_id"):
+            parts.append(f"Selected parcel: {ui_context['parcel_id']}")
+        if ui_context.get("picked_location"):
+            loc = ui_context["picked_location"]
+            parts.append(f"Picked location: {loc.get('lat')}, {loc.get('lon')}")
+        if ui_context.get("visible_data"):
+            parts.append(f"Data visible on screen: {', '.join(ui_context['visible_data'])}")
+        if ui_context.get("open_panels"):
+            parts.append(f"Open panels: {', '.join(ui_context['open_panels'])}")
+        if ui_context.get("map_layers"):
+            parts.append(f"Active map layers: {', '.join(ui_context['map_layers'])}")
+        parts.append("Use this context to give relevant, contextual answers. "
+                      "If the user asks 'what am I looking at?', describe their current view.")
+
     return "\n".join(parts)
 
 
@@ -1408,6 +1433,7 @@ async def stream_chat_response(
     fetch_parcel_context,
     run_geeflow_subprocess=None,
     run_geoai_subprocess=None,
+    ui_context: dict | None = None,
 ):
     """
     Async generator yielding SSE events for the chat response.
@@ -1423,7 +1449,7 @@ async def stream_chat_response(
     # Append user message
     session.messages.append({"role": "user", "content": user_message})
 
-    system_prompt = build_system_prompt(session)
+    system_prompt = build_system_prompt(session, ui_context=ui_context)
     max_turns = 10  # prevent infinite tool loops
 
     for turn in range(max_turns):

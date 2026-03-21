@@ -186,7 +186,7 @@ function RadarChart({ scores, size = 200 }) {
       {/* Data polygon */}
       <polygon
         points={dataPoints.map(p => p.join(",")).join(" ")}
-        fill="rgba(124, 92, 252, 0.15)"
+        fill="rgba(212, 160, 24, 0.15)"
         stroke="var(--cds-interactive)"
         strokeWidth="1.5"
       />
@@ -477,7 +477,7 @@ export default function SiteDashboard({ onClose }) {
               <div className="sd-workflow-btns">
                 {[
                   { preset: "full_feasibility", label: "Full Feasibility", desc: "7-step comprehensive assessment", color: "#24a148" },
-                  { preset: "grid_deep_dive", label: "Grid Deep Dive", desc: "Grid + BESS + financial", color: "#7c5cfc" },
+                  { preset: "grid_deep_dive", label: "Grid Deep Dive", desc: "Grid + BESS + financial", color: "#D4A018" },
                   { preset: "investment_ready", label: "Investment Ready", desc: "Due-diligence package", color: "#a56eff" },
                 ].map((wf) => {
                   const isRunning = workflowRunning && workflowProgress?.preset === wf.preset;

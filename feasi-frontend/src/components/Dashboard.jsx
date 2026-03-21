@@ -65,7 +65,7 @@ export default function Dashboard() {
     { id: "prospector", label: "Prospector", color: "#009688" },
     { id: "bess", label: "BESS", color: "#4caf50" },
     { id: "classify", label: "Classify", color: "#ff6f00" },
-    { id: "analytics", label: "AI Energy", color: "#7c5cfc" },
+    { id: "analytics", label: "AI Energy", color: "#D4A018" },
     { id: "agent", label: "Analysis", color: "#7c4dff" },
   ];
 

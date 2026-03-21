@@ -200,7 +200,7 @@ function StaticAnalytics() {
 
   const metrics = [
     { label: "YIELD", value: annualKwh ? `${(annualKwh / 1000).toFixed(1)} MWh/yr` : "--", color: "#ff9800" },
-    { label: "CF", value: cf ? `${cf.toFixed(1)}%` : "--", color: "#7c5cfc" },
+    { label: "CF", value: cf ? `${cf.toFixed(1)}%` : "--", color: "#D4A018" },
     { label: "SCORE", value: score != null ? `${score}/120` : "--", color: "#22c55e" },
     { label: "GRID", value: gridDist ? `${gridDist.toFixed(1)} km` : "--", color: "#2196f3" },
     { label: "CONF", value: confidence ? `${Math.round(confidence * 100)}%` : "--", color: "#7c4dff" },
@@ -282,9 +282,9 @@ function MockMapView() {
         )}
         {/* Site boundary + substation overlay */}
         <svg className="pf-map-overlay" viewBox="0 0 500 320" preserveAspectRatio="xMidYMid slice">
-          <polygon points="160,100 340,90 350,230 170,240" fill="rgba(124,92,252,0.12)" stroke="#7c5cfc" strokeWidth="1.5" strokeDasharray="4,2" />
+          <polygon points="160,100 340,90 350,230 170,240" fill="rgba(212,160,24,0.12)" stroke="#D4A018" strokeWidth="1.5" strokeDasharray="4,2" />
           <line x1="345" y1="160" x2="400" y2="145" stroke="#f1c21b" strokeWidth="1" strokeDasharray="3,3" opacity="0.6" />
-          <text x="250" y="175" textAnchor="middle" fill="#7c5cfc" fontSize="9" fontWeight="700">5 MW SOLAR SITE</text>
+          <text x="250" y="175" textAnchor="middle" fill="#D4A018" fontSize="9" fontWeight="700">5 MW SOLAR SITE</text>
           <text x="400" y="135" textAnchor="middle" fill="#f1c21b" fontSize="7">33kV PRIMARY</text>
           <text x="375" y="165" textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="6">1.8km</text>
         </svg>
@@ -296,7 +296,7 @@ function MockMapView() {
       </div>
       <div className="pf-map-kpi pf-map-kpi-tr">
         <span className="pf-kpi-label">CF</span>
-        <span className="pf-kpi-value" style={{ color: "#7c5cfc" }}>10.95%</span>
+        <span className="pf-kpi-value" style={{ color: "#D4A018" }}>10.95%</span>
       </div>
       <div className="pf-map-kpi pf-map-kpi-bl">
         <span className="pf-kpi-label">YIELD</span>
@@ -349,7 +349,7 @@ function DomainRadar({ domains: customDomains, keys: customKeys }) {
         return <line key={i} x1={cx} y1={cy} x2={cx + r * Math.cos(angle)} y2={cy + r * Math.sin(angle)} stroke="rgba(82,82,82,0.15)" strokeWidth="0.5" />;
       })}
       {/* Data polygon */}
-      <polygon points={polyPoints} fill="rgba(124,92,252,0.15)" stroke="#7c5cfc" strokeWidth="1.5" />
+      <polygon points={polyPoints} fill="rgba(212,160,24,0.15)" stroke="#D4A018" strokeWidth="1.5" />
       {/* Data points */}
       {points.map((p, i) => (
         <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={p.status === "GO" ? "#24a148" : p.status === "CAUTION" ? "#f1c21b" : "#da1e28"} />
@@ -385,7 +385,7 @@ function MonthlyYieldChart() {
 function LandUseDonut() {
   const classes = DEMO_GEEFLOW_DATA.extractions.land_use.class_percentages;
   const colors = {
-    grass: "#24a148", crops: "#f1c21b", built: "#da1e28", trees: "#7c5cfc",
+    grass: "#24a148", crops: "#f1c21b", built: "#da1e28", trees: "#D4A018",
     shrub_and_scrub: "#a56eff", bare: "#8d8d8d", water: "#1e90ff",
     flooded_vegetation: "#00bcd4", snow_and_ice: "#e0e0e0",
   };
@@ -854,7 +854,7 @@ function SlideDCGoogleSites() {
             <svg viewBox="0 0 200 320" style={{ width: "100%", height: "100%" }}>
               {/* Simplified UK outline */}
               <path d="M80,20 C90,15 110,18 115,25 C120,35 125,45 120,60 C118,70 122,80 125,90 C130,105 135,115 130,130 C125,140 128,150 132,160 C138,175 140,185 135,200 C130,210 125,220 120,230 C115,240 110,248 105,255 C100,262 95,268 90,275 C85,280 80,285 78,290 C75,295 72,298 70,300 C68,295 65,285 68,275 C70,265 72,255 68,245 C65,235 60,225 62,215 C64,205 68,195 70,185 C72,175 70,165 68,155 C65,145 62,135 65,125 C68,115 72,105 70,95 C68,85 65,75 68,65 C70,55 75,45 78,35 C79,28 80,24 80,20Z"
-                fill="rgba(124,92,252,0.06)" stroke="rgba(124,92,252,0.2)" strokeWidth="1" />
+                fill="rgba(212,160,24,0.06)" stroke="rgba(212,160,24,0.2)" strokeWidth="1" />
               {/* Site markers */}
               {googleSites.map(s => {
                 // Map lat/lon to SVG coordinates (approximate)
@@ -983,7 +983,7 @@ function SlideDCData() {
     { category: "Carbon & Energy", sources: ["Carbon Intensity API", "REPD", "TEC Register", "BMRS Demand"], color: "var(--pg-green)", icon: "\u2600" },
     { category: "Environmental", sources: ["Natural England (SSSI/AONB/ALC)", "EA Flood Data", "EA Water Resources"], color: "#24a148", icon: "\uD83C\uDF3F" },
     { category: "Connectivity", sources: ["PeeringDB", "Ofcom", "OS MasterMap"], color: "var(--pg-purple)", icon: "\uD83C\uDF10" },
-    { category: "Satellite (GeeFlow)", sources: ["DynamicWorld", "ERA5-Land", "Sentinel-2", "NASADEM"], color: "#7c5cfc", icon: "\uD83D\uDEF0" },
+    { category: "Satellite (GeeFlow)", sources: ["DynamicWorld", "ERA5-Land", "Sentinel-2", "NASADEM"], color: "#D4A018", icon: "\uD83D\uDEF0" },
     { category: "Planning & Land", sources: ["Planning Portal", "Land Registry", "INSPIRE WMS"], color: "var(--pg-accent)", icon: "\uD83D\uDCCB" },
   ];
   return (
@@ -1051,7 +1051,7 @@ function SlideArchitecture() {
           {/* 3D Digital Twin */}
           <div className="ps-twin-preview ps-twin-large">
             <div className="ps-twin-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7c5cfc" strokeWidth="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D4A018" strokeWidth="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
               <span>3D DIGITAL TWIN</span>
               <span className="ps-twin-live">LIVE</span>
             </div>
@@ -1132,13 +1132,13 @@ function SlideArchitecture() {
                   <text x="428" y="174" textAnchor="middle" fill="rgba(255,255,255,0.4)" fontSize="5">33kV Tx</text>
                 </g>
 
-                <path d="M220,160 Q240,155 258,168" fill="none" stroke="#7c5cfc" strokeWidth="0.8" strokeDasharray="3,2" opacity="0.5" />
+                <path d="M220,160 Q240,155 258,168" fill="none" stroke="#D4A018" strokeWidth="0.8" strokeDasharray="3,2" opacity="0.5" />
                 <path d="M310,178 Q325,165 338,155" fill="none" stroke="#24a148" strokeWidth="0.8" strokeDasharray="3,2" opacity="0.5" />
                 <path d="M395,160 L400,158" fill="none" stroke="#f1c21b" strokeWidth="0.8" strokeDasharray="3,2" opacity="0.5" />
                 <path d="M450,135 L470,125 L470,90" fill="none" stroke="#f1c21b" strokeWidth="1" strokeDasharray="4,3" />
                 <text x="470" y="86" textAnchor="middle" fill="#f1c21b" fontSize="5" fontWeight="700">GRID</text>
 
-                <circle r="2" fill="#7c5cfc" filter="url(#glow)" opacity="0.9">
+                <circle r="2" fill="#D4A018" filter="url(#glow)" opacity="0.9">
                   <animateMotion dur="3s" repeatCount="indefinite" path="M180,155 Q240,150 270,170 Q320,165 350,155 L420,140" />
                 </circle>
                 <circle r="1.5" fill="#24a148" filter="url(#glow)" opacity="0.8">
@@ -1159,7 +1159,7 @@ function SlideArchitecture() {
                 <g>
                   <rect x="5" y="5" width="72" height="30" rx="5" fill="rgba(10,15,30,0.85)" stroke="rgba(0,229,255,0.3)" strokeWidth="0.5" />
                   <text x="12" y="16" fill="rgba(255,255,255,0.5)" fontSize="5" fontWeight="600">OUTPUT</text>
-                  <text x="12" y="28" fill="#7c5cfc" fontSize="10" fontWeight="800">4.8 MW</text>
+                  <text x="12" y="28" fill="#D4A018" fontSize="10" fontWeight="800">4.8 MW</text>
                 </g>
                 <g>
                   <rect x="5" y="40" width="72" height="30" rx="5" fill="rgba(10,15,30,0.85)" stroke="rgba(36,161,72,0.3)" strokeWidth="0.5" />

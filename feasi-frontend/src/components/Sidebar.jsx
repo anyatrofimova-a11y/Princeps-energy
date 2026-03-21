@@ -215,7 +215,7 @@ export default function Sidebar({ chatLayers, onRemoveChatLayer }) {
           <div className="sidebar-flyout-title">AI Layers</div>
           {chatLayers.map((l) => (
             <label key={l.id} className="layer-item">
-              <span className="layer-dot" style={{ background: l.color || "#7c5cfc" }} />
+              <span className="layer-dot" style={{ background: l.color || "#D4A018" }} />
               {l.name}
               <button
                 className="chat-layer-remove"

@@ -227,6 +227,9 @@ export function SiteProvider({ children }) {
     electricityZones: false,
     epcZones: false, epcDom: false, epcNondom: false, postcodes: false,
     dcCapacity: false, dcFibre: false, dcIxp: false,
+    gridConstraints: false,
+    queueDepth: false,
+    landParcels: false,
   });
   const toggleLayer = useCallback((id) => {
     setLayers(l => ({ ...l, [id]: !l[id] }));

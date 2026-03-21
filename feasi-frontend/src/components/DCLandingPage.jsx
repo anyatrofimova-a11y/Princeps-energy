@@ -51,7 +51,7 @@ const DIFFERENTIATORS = [
 function statusColor(status) {
   if (status === "Operational") return "#24a148";
   if (status === "Approved") return "#0f62fe";
-  if (status === "Acquired") return "#6c5ce7";
+  if (status === "Acquired") return "#D4A018";
   return "#f1c21b";
 }
 
@@ -110,7 +110,7 @@ export default function DCLandingPage({ onClose, onScoreSite, onCompareSites, on
   const overlay = {
     position: "fixed", inset: 0, zIndex: 1000,
     background: "#1a1a2e", color: "#e0e0e0",
-    overflowY: "auto", fontFamily: "'Inter', 'Segoe UI', system-ui, sans-serif",
+    overflowY: "auto", fontFamily: "'Roboto', 'Segoe UI', system-ui, sans-serif",
   };
 
   const header = {
@@ -136,7 +136,7 @@ export default function DCLandingPage({ onClose, onScoreSite, onCompareSites, on
 
   const heroH1 = {
     fontSize: 42, fontWeight: 800, lineHeight: 1.15, margin: 0,
-    background: "linear-gradient(135deg, #0f62fe, #6c5ce7, #0f62fe)",
+    background: "linear-gradient(135deg, #0f62fe, #D4A018, #0f62fe)",
     WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
     maxWidth: 780, marginLeft: "auto", marginRight: "auto",
   };
@@ -338,7 +338,7 @@ export default function DCLandingPage({ onClose, onScoreSite, onCompareSites, on
                           <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>
                             {site.lat?.toFixed(4)}, {site.lon?.toFixed(4)}
                             {site.headroom_mw != null && <span style={{ marginLeft: 12, color: "#24a148" }}>{site.headroom_mw} MW headroom</span>}
-                            {site.overall_score != null && <span style={{ marginLeft: 12, color: "#6c5ce7" }}>Score: {site.overall_score}/100</span>}
+                            {site.overall_score != null && <span style={{ marginLeft: 12, color: "#D4A018" }}>Score: {site.overall_score}/100</span>}
                           </div>
                         </div>
                         <button
@@ -375,7 +375,7 @@ export default function DCLandingPage({ onClose, onScoreSite, onCompareSites, on
                 <button
                   onClick={handleCompare}
                   style={{
-                    background: "#6c5ce7", color: "#fff", border: "none", borderRadius: 8,
+                    background: "#D4A018", color: "#fff", border: "none", borderRadius: 8,
                     padding: "10px 24px", fontWeight: 700, fontSize: 13, cursor: "pointer",
                   }}
                 >

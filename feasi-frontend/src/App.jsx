@@ -7,10 +7,11 @@ import MapView from "./components/MapView";
 import ComponentPalette from "./components/ComponentPalette";
 import AssetDock from "./components/AssetDock";
 import EnergyFlowPanel from "./components/EnergyFlowPanel";
+import ProjectPipeline from "./components/ProjectPipeline";
 import AppShell from "./components/shell/AppShell";
 import WorkspaceRouter from "./components/workspace/WorkspaceRouter";
 import LayerRail from "./components/LayerRail";
-import CommandBar from "./components/CommandBar";
+import CopilotWidget from "./components/CopilotWidget";
 import DrawingToolbar from "./components/DrawingToolbar";
 import CameraToolbar from "./components/CameraToolbar";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -33,6 +34,8 @@ import DCLandingPage from "./components/DCLandingPage";
 import DCComparisonDashboard from "./components/DCComparisonDashboard";
 import MapLegend from "./components/MapLegend";
 import MapAssetLayer from "./components/MapAssetLayer";
+import DCMapOverlay from "./components/DCMapOverlay";
+import Asset3DOverlay from "./components/Asset3DOverlay";
 import {
   MODES, createDrawState, handleClick as drawHandleClick, handleDoubleClick as drawHandleDoubleClick,
   moveVertex, insertVertex, deleteFeature, getMeasurements, findSnapTarget,
@@ -77,6 +80,7 @@ export default function App() {
   } = useSite();
 
   const [mapInstance, setMapInstance] = useState(null);
+  const [pipelineOpen, setPipelineOpen] = useState(false);
 
   // ── Map drop handler: place asset at lat/lon ──
   const handleMapDrop = useCallback((e) => {
@@ -340,6 +344,8 @@ export default function App() {
       </ErrorBoundary>
 
       <MapAssetLayer map={mapInstance} />
+      <DCMapOverlay mapInstance={mapInstance} dcAssets={placedAssets.filter(a => a.assetType === "data_centre")} />
+      <Asset3DOverlay mapInstance={mapInstance} assets={placedAssets} />
 
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
       <MapLegend chatLayers={chatLayers} />
@@ -409,6 +415,7 @@ export default function App() {
       case "dc-twin": setDcTwinOpen(true); break;
       case "dc-landing": setDcLandingOpen(true); break;
       case "dc-compare": setDcComparisonOpen(true); break;
+      case "pipeline": setPipelineOpen(true); break;
       case "settings": setSettingsMode(true); break;
       default: break;
     }
@@ -426,6 +433,7 @@ export default function App() {
       onDcTwin={() => setDcTwinOpen(true)}
       onDcLanding={() => setDcLandingOpen(true)}
       onDcCompare={() => setDcComparisonOpen(true)}
+      onPipeline={() => setPipelineOpen(true)}
       onPitch={() => setPitchMode(true)}
       onNomExplorer={() => setNomMode(true)}
       onSettings={() => setSettingsMode(true)}
@@ -435,7 +443,7 @@ export default function App() {
         <WorkspaceRouter mapContent={mapContent} />
       </div>
 
-      <CommandBar onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} />
+      <CopilotWidget onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} onAction={handleCmdAction} />
 
       {/* Command Palette */}
       <CommandPalette
@@ -443,6 +451,16 @@ export default function App() {
         onClose={() => setCmdPaletteOpen(false)}
         onAction={handleCmdAction}
       />
+
+      {/* Project Pipeline — Kanban board */}
+      {pipelineOpen && (
+        <ProjectPipeline
+          onClose={() => setPipelineOpen(false)}
+          onSelectProject={(p) => {
+            if (p.lat && p.lon) setPickedLocation({ lat: p.lat, lon: p.lon });
+          }}
+        />
+      )}
 
       {/* 3D Site Digital Twin overlay */}
       {digitalTwinOpen && twinData && (

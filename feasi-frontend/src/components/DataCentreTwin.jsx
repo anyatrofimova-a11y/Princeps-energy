@@ -7,7 +7,7 @@ import { useSite } from "../SiteContext";
 /* ── Design Tokens ───────────────────────────────────────────────────────── */
 const T = {
   bg: "#F2F3F5",
-  accent: "#6c5ce7",
+  accent: "#D4A018",
   panel: "rgba(255, 255, 255, 0.95)",
   border: "1px solid rgba(108, 92, 231, 0.2)",
   text: "#1A1D23",
@@ -17,7 +17,7 @@ const T = {
   orange: "#f1c21b",
   blue: "#1890ff",
   cyan: "#00bcd4",
-  purple: "#6c5ce7",
+  purple: "#D4A018",
 };
 
 /* ── Utils ────────────────────────────────────────────────────────────────── */
@@ -202,7 +202,7 @@ function UPSUnit({ position }) {
     <group position={position}>
       <mesh castShadow>
         <boxGeometry args={[1.2, 1.8, 0.8]} />
-        <meshStandardMaterial color="#2a1f4e" emissive="#6c5ce7" emissiveIntensity={0.1} roughness={0.3} metalness={0.7} />
+        <meshStandardMaterial color="#2a1f4e" emissive="#D4A018" emissiveIntensity={0.1} roughness={0.3} metalness={0.7} />
       </mesh>
       <Html position={[0, 1.2, 0.41]} center distanceFactor={12} style={{ pointerEvents: "none" }}>
         <div style={{ fontSize: 8, color: T.accent, fontWeight: 600, fontFamily: "system-ui" }}>UPS</div>
@@ -427,7 +427,7 @@ function DCScene({ rackLayout, telemetry, selectedRack, onSelectRack, colorBy, c
       <ambientLight intensity={0.35} />
       <directionalLight position={[20, 30, 10]} intensity={0.65} castShadow
         shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-      <pointLight position={[-10, 15, -10]} intensity={0.25} color="#6c5ce7" />
+      <pointLight position={[-10, 15, -10]} intensity={0.25} color="#D4A018" />
       {/* Hemisphere fill light (Grafana pattern) */}
       <hemisphereLight args={["#2a2f45", "#0a0e17", 0.4]} />
 
