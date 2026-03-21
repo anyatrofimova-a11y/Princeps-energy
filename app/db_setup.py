@@ -204,6 +204,53 @@ async def setup_database(pool: asyncpg.Pool) -> None:
         except Exception as e:
             log.warning("DC constraint tables setup skipped: %s", e)
 
+        # ── Pipeline project management ──────────────────────────────────
+        await conn.execute("ALTER TABLE projects ALTER COLUMN user_id DROP NOT NULL")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS technology TEXT")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS capacity_mw DOUBLE PRECISION")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS stage TEXT DEFAULT 'prospect'")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS verdict TEXT")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS lon DOUBLE PRECISION")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS blocker TEXT")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS stage_entered_at TIMESTAMPTZ DEFAULT NOW()")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS repd_id TEXT")
+        await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS tec_id TEXT")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_stage ON projects(stage)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_technology ON projects(technology)")
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_stage_history (
+                history_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id   UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+                from_stage   TEXT,
+                to_stage     TEXT NOT NULL,
+                changed_by   UUID REFERENCES users(user_id),
+                notes        TEXT,
+                created_at   TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_stage_history_project ON project_stage_history(project_id)"
+        )
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_documents (
+                doc_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id    UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+                doc_type      TEXT DEFAULT 'other',
+                title         TEXT,
+                filename      TEXT NOT NULL,
+                content_type  TEXT,
+                size_bytes    INTEGER,
+                storage_path  TEXT NOT NULL,
+                uploaded_by   UUID REFERENCES users(user_id),
+                metadata      JSONB DEFAULT '{}',
+                created_at    TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_documents_project ON project_documents(project_id)"
+        )
+
         # ── Notifications / alerts ────────────────────────────────────────
         await setup_notifications_table(conn)
 

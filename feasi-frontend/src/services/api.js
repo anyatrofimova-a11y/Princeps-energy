@@ -90,6 +90,17 @@ const api = {
     },
   },
 
+  energy: {
+    assumptions: () => get("/api/energy/assumptions"),
+    npv: (capacityMw = 50, technology = "solar", ppaPrice, lifetime) => {
+      const q = new URLSearchParams({ capacity_mw: capacityMw, technology });
+      if (ppaPrice != null) q.set("ppa_price", ppaPrice);
+      if (lifetime != null) q.set("lifetime", lifetime);
+      return get(`/api/energy/npv?${q}`);
+    },
+    compare: (capacityMw = 50) => get(`/api/energy/compare?capacity_mw=${capacityMw}`),
+  },
+
   land: {
     parcels:  (bbox) => get(`/api/land/parcels?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
     alc:      (lat, lon) => get(`/api/land/alc?lat=${lat}&lon=${lon}`),
@@ -512,6 +523,40 @@ const api = {
       get(`/api/dc/google-sites?capacity_mw=${mw}&profile=${enc(profile)}`),
     prospect: (query, mw = 100, profile = "google_hyperscale", minHr = 50, limit = 20) =>
       post("/api/dc/prospect", { query, capacity_mw: mw, profile, min_headroom_mw: minHr, limit }),
+  },
+
+  projects: {
+    list: (params = {}) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, v);
+      return get(`/api/v1/projects?${q}`);
+    },
+    summary: () => get("/api/v1/projects/summary"),
+    get: (id) => get(`/api/v1/projects/${enc(id)}`),
+    create: (data) => post("/api/v1/projects", data),
+    update: (id, data) =>
+      fetch(`/api/v1/projects/${enc(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }).then(json),
+    delete: (id) =>
+      fetch(`/api/v1/projects/${enc(id)}`, { method: "DELETE" }).then(json),
+    timeline: (id) => get(`/api/v1/projects/${enc(id)}/timeline`),
+    importRepd: (repdId) => post(`/api/v1/projects/import-repd/${enc(repdId)}`),
+    importTec: (tecId) => post(`/api/v1/projects/import-tec/${enc(tecId)}`),
+    // Documents
+    listDocuments: (id) => get(`/api/v1/projects/${enc(id)}/documents`),
+    uploadDocument: (id, file, docType = "other", title) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("doc_type", docType);
+      if (title) fd.append("title", title);
+      return fetch(`/api/v1/projects/${enc(id)}/documents`, { method: "POST", body: fd }).then(json);
+    },
+    downloadDocument: (docId) => `/api/v1/projects/documents/${enc(docId)}/download`,
+    deleteDocument: (docId) =>
+      fetch(`/api/v1/projects/documents/${enc(docId)}`, { method: "DELETE" }).then(json),
   },
 
   assessments: {

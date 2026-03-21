@@ -186,6 +186,7 @@ from app.routers import (  # noqa: E402
     dc_planner as dc_planner_router,
     eurosat as eurosat_router,
     land as land_router,
+    projects as projects_router,
 )
 
 _routers = [
@@ -205,6 +206,7 @@ _routers = [
     dc_planner_router.router,
     eurosat_router.router,
     land_router.router,
+    projects_router.router,
 ]
 
 app.include_router(graph_router)

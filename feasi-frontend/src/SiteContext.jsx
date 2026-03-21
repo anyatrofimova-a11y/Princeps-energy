@@ -305,6 +305,14 @@ export function SiteProvider({ children }) {
         console.warn("Vision auto-fetch failed:", visionErr);
         setVisionLoading(false);
       }
+
+      // Auto-load 3D digital twin data so it's ready when user opens twin
+      try {
+        const td = await api.vision.getTwinData(id, 500);
+        if (td) setTwinData(td);
+      } catch (twinErr) {
+        console.warn("Twin data auto-fetch failed:", twinErr);
+      }
     } catch (err) {
       console.error(err);
     } finally {

@@ -625,6 +625,51 @@ async def api_grid_live_status():
     }
 
 
+@router.get("/api/energy/assumptions")
+async def api_energy_assumptions():
+    """UK energy system assumptions — CB7/BEIS/FES sourced reference data."""
+    from utils.uk_energy_assumptions import (
+        RENEWABLES, BESS, NUCLEAR, GAS_CCS, INTERCONNECTORS,
+        GRID_CONNECTION_COSTS_GBP_KM, FINANCIAL_DEFAULTS,
+        AVERAGE_LCOE_GBP_MWH, AVERAGE_CAPACITY_FACTOR,
+        CB7_ENERGY_DEMAND_2050_TWH, TRANSMISSION_LOSSES,
+    )
+    return {
+        "renewables": RENEWABLES,
+        "bess": BESS,
+        "nuclear": NUCLEAR,
+        "gas_ccs": GAS_CCS,
+        "interconnectors": INTERCONNECTORS,
+        "grid_connection_costs_gbp_km": GRID_CONNECTION_COSTS_GBP_KM,
+        "financial_defaults": FINANCIAL_DEFAULTS,
+        "average_lcoe_gbp_mwh": AVERAGE_LCOE_GBP_MWH,
+        "average_capacity_factor": AVERAGE_CAPACITY_FACTOR,
+        "cb7_demand_2050_twh": CB7_ENERGY_DEMAND_2050_TWH,
+        "transmission_losses": TRANSMISSION_LOSSES,
+    }
+
+
+@router.get("/api/energy/npv")
+async def api_energy_npv(
+    capacity_mw: float = Query(50, ge=0.1),
+    technology: str = Query("solar"),
+    ppa_price: float = Query(None),
+    lifetime: int = Query(None),
+):
+    """Quick NPV/IRR/LCOE calculation for a project using CB7 assumptions."""
+    from utils.uk_energy_assumptions import project_npv
+    return project_npv(capacity_mw, technology, ppa_price, lifetime)
+
+
+@router.get("/api/energy/compare")
+async def api_energy_compare(
+    capacity_mw: float = Query(50, ge=0.1),
+):
+    """Compare all technologies at a given capacity."""
+    from utils.uk_energy_assumptions import technology_comparison
+    return technology_comparison(capacity_mw)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  3D GRID DIGITAL TWIN — WebSocket + REST (Phase 6)
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -634,11 +679,13 @@ _grid_twin_clients: set[WebSocket] = set()
 
 
 @router.get("/api/grid-twin/state")
-async def api_grid_twin_state():
+async def api_grid_twin_state(
+    pool: asyncpg.Pool = Depends(get_pool),
+    limit: int = Query(80, le=200),
+):
     """
     Full grid state snapshot for 3D digital twin.
-    Returns substations (with demand/gen), lines (with flow), GSP demand,
-    and system-level metrics.
+    Pulls real substations from PostGIS, applies simulated diurnal demand dynamics.
     """
     now = datetime.now()
     hour = now.hour + now.minute / 60.0
@@ -651,80 +698,55 @@ async def api_grid_twin_state():
     diurnal = max(night, morning, evening)
     seasonal = 0.7 + 0.3 * math.cos(2 * math.pi * (day_of_year - 15) / 365)
 
-    # Representative UK substations with 3D positions
-    substations = [
-        {"id": "ABHA", "name": "Abham", "lat": 51.35, "lon": 0.55, "voltage_kv": 275,
-         "capacity_mw": 360, "type": "GSP"},
-        {"id": "BEDD", "name": "Beddington", "lat": 51.37, "lon": -0.13, "voltage_kv": 275,
-         "capacity_mw": 500, "type": "GSP"},
-        {"id": "BRWA", "name": "Bramley", "lat": 51.33, "lon": -1.06, "voltage_kv": 400,
-         "capacity_mw": 640, "type": "GSP"},
-        {"id": "CELL", "name": "Cellarhead", "lat": 53.00, "lon": -2.02, "voltage_kv": 275,
-         "capacity_mw": 300, "type": "GSP"},
-        {"id": "DEES", "name": "Deeside", "lat": 53.22, "lon": -3.04, "voltage_kv": 400,
-         "capacity_mw": 450, "type": "GSP"},
-        {"id": "EDIN", "name": "Edinburgh South", "lat": 55.92, "lon": -3.19, "voltage_kv": 275,
-         "capacity_mw": 360, "type": "GSP"},
-        {"id": "MANN", "name": "Manchester South", "lat": 53.45, "lon": -2.25, "voltage_kv": 400,
-         "capacity_mw": 600, "type": "GSP"},
-        {"id": "INDQ", "name": "Indian Queens", "lat": 50.39, "lon": -4.95, "voltage_kv": 132,
-         "capacity_mw": 160, "type": "GSP"},
-        {"id": "KEAD", "name": "Keadby", "lat": 53.60, "lon": -0.75, "voltage_kv": 275,
-         "capacity_mw": 360, "type": "GSP"},
-        {"id": "EXET", "name": "Exeter Main", "lat": 50.72, "lon": -3.53, "voltage_kv": 132,
-         "capacity_mw": 200, "type": "GSP"},
-        {"id": "NORW", "name": "Norwich Main", "lat": 52.62, "lon": 1.30, "voltage_kv": 275,
-         "capacity_mw": 280, "type": "GSP"},
-        {"id": "CAMA", "name": "Cambridge", "lat": 52.19, "lon": 0.14, "voltage_kv": 132,
-         "capacity_mw": 250, "type": "GSP"},
-        {"id": "LOVE", "name": "Lovedon", "lat": 51.08, "lon": -1.20, "voltage_kv": 132,
-         "capacity_mw": 260, "type": "GSP"},
-        {"id": "FLEE", "name": "Fleet", "lat": 51.28, "lon": -0.83, "voltage_kv": 132,
-         "capacity_mw": 280, "type": "GSP"},
-        {"id": "BOLN", "name": "Bolney", "lat": 50.98, "lon": -0.23, "voltage_kv": 275,
-         "capacity_mw": 400, "type": "GSP"},
-    ]
+    # Pull real substations from PostGIS (high-voltage only for twin)
+    substations = []
+    try:
+        rows = await pool.fetch("""
+            SELECT id, name, dno, voltage_kv,
+                   demand_mw, generation_mw,
+                   demand_headroom_mw, gen_headroom_mw,
+                   transformer_rating_mva, rag_demand, rag_generation,
+                   ST_Y(ST_Transform(geom, 4326)) AS lat,
+                   ST_X(ST_Transform(geom, 4326)) AS lon
+            FROM grid_substations
+            WHERE voltage_kv >= 33 AND geom IS NOT NULL
+            ORDER BY voltage_kv DESC, demand_mw DESC NULLS LAST
+            LIMIT $1
+        """, limit)
+        for r in rows:
+            capacity = float(r["transformer_rating_mva"] or r["demand_headroom_mw"] or 100)
+            base_demand = float(r["demand_mw"] or capacity * 0.5)
+            base_gen = float(r["generation_mw"] or 0)
 
-    # Add live demand/generation
-    for s in substations:
-        base_demand = s["capacity_mw"] * 0.55 * diurnal * seasonal
-        s["demand_mw"] = round(base_demand * (1 + random.gauss(0, 0.04)), 1)
-        solar_factor = max(0, math.sin(math.pi * max(0, min(1, (hour - 6) / 12))))
-        solar_season = max(0.1, math.sin(math.pi * (day_of_year - 80) / 365))
-        s["generation_mw"] = round(s["capacity_mw"] * 0.12 * solar_factor * solar_season * (1 + random.gauss(0, 0.05)), 1)
-        s["net_demand_mw"] = round(s["demand_mw"] - s["generation_mw"], 1)
-        s["utilisation"] = round(s["demand_mw"] / s["capacity_mw"], 3)
-        s["headroom_mw"] = round(s["capacity_mw"] - s["demand_mw"], 1)
+            # Apply diurnal/seasonal dynamics + noise
+            live_demand = round(base_demand * diurnal * seasonal * (1 + random.gauss(0, 0.04)), 1)
+            solar_factor = max(0, math.sin(math.pi * max(0, min(1, (hour - 6) / 12))))
+            solar_season = max(0.1, math.sin(math.pi * (day_of_year - 80) / 365))
+            live_gen = round(max(base_gen, capacity * 0.08) * solar_factor * solar_season * (1 + random.gauss(0, 0.05)), 1)
 
-    # Lines connecting substations (major transmission corridors)
-    lines = [
-        {"from": "BRWA", "to": "BEDD", "voltage_kv": 400, "rating_mw": 1200},
-        {"from": "BRWA", "to": "ABHA", "voltage_kv": 275, "rating_mw": 800},
-        {"from": "BEDD", "to": "BOLN", "voltage_kv": 275, "rating_mw": 600},
-        {"from": "BEDD", "to": "FLEE", "voltage_kv": 132, "rating_mw": 200},
-        {"from": "BRWA", "to": "FLEE", "voltage_kv": 132, "rating_mw": 200},
-        {"from": "BRWA", "to": "LOVE", "voltage_kv": 132, "rating_mw": 200},
-        {"from": "ABHA", "to": "CAMA", "voltage_kv": 275, "rating_mw": 600},
-        {"from": "CAMA", "to": "NORW", "voltage_kv": 275, "rating_mw": 500},
-        {"from": "CELL", "to": "MANN", "voltage_kv": 275, "rating_mw": 800},
-        {"from": "MANN", "to": "DEES", "voltage_kv": 400, "rating_mw": 1000},
-        {"from": "MANN", "to": "KEAD", "voltage_kv": 275, "rating_mw": 600},
-        {"from": "DEES", "to": "EDIN", "voltage_kv": 400, "rating_mw": 1000},
-        {"from": "EXET", "to": "INDQ", "voltage_kv": 132, "rating_mw": 200},
-        {"from": "BOLN", "to": "EXET", "voltage_kv": 275, "rating_mw": 500},
-    ]
+            substations.append({
+                "id": str(r["id"]),
+                "name": r["name"] or f"Sub-{r['id']}",
+                "lat": float(r["lat"]),
+                "lon": float(r["lon"]),
+                "voltage_kv": float(r["voltage_kv"]),
+                "capacity_mw": round(capacity, 1),
+                "type": "GSP" if float(r["voltage_kv"]) >= 275 else "BSP" if float(r["voltage_kv"]) >= 132 else "Primary",
+                "dno": r["dno"],
+                "demand_mw": live_demand,
+                "generation_mw": live_gen,
+                "net_demand_mw": round(live_demand - live_gen, 1),
+                "utilisation": round(live_demand / max(capacity, 1), 3),
+                "headroom_mw": round(capacity - live_demand, 1),
+                "rag_demand": r["rag_demand"],
+                "rag_generation": r["rag_generation"],
+            })
+    except Exception as e:
+        # Fallback to synthetic if DB unavailable
+        substations = _fallback_substations(diurnal, seasonal, hour, day_of_year)
 
-    sub_map = {s["id"]: s for s in substations}
-    for line in lines:
-        src = sub_map.get(line["from"], {})
-        dst = sub_map.get(line["to"], {})
-        line["from_coords"] = [src.get("lon", 0), src.get("lat", 0)]
-        line["to_coords"] = [dst.get("lon", 0), dst.get("lat", 0)]
-        # Flow: positive = from->to, magnitude based on net demand difference
-        demand_diff = dst.get("net_demand_mw", 0) - src.get("net_demand_mw", 0)
-        line["flow_mw"] = round(demand_diff * 0.6 * (1 + random.gauss(0, 0.08)), 1)
-        line["loading_pct"] = round(abs(line["flow_mw"]) / line["rating_mw"] * 100, 1)
-        line["congested"] = line["loading_pct"] > 80
+    # Build lines by connecting nearby substations at same/adjacent voltage tiers
+    lines = _build_twin_lines(substations)
 
     # System metrics
     total_demand = sum(s["demand_mw"] for s in substations)
@@ -739,7 +761,7 @@ async def api_grid_twin_state():
             "total_demand_mw": round(total_demand, 1),
             "total_generation_mw": round(total_gen, 1),
             "total_capacity_mw": round(total_capacity, 1),
-            "system_utilisation": round(total_demand / total_capacity, 3),
+            "system_utilisation": round(total_demand / max(total_capacity, 1), 3),
             "frequency_hz": round(50.0 + random.gauss(0, 0.02), 3),
             "hour": round(hour, 1),
             "day_of_year": day_of_year,
@@ -747,17 +769,93 @@ async def api_grid_twin_state():
     }
 
 
+def _build_twin_lines(substations: list[dict]) -> list[dict]:
+    """Build transmission lines by connecting nearby substations."""
+    lines = []
+    seen = set()
+    sub_map = {s["id"]: s for s in substations}
+
+    # Sort by voltage descending so high-voltage links come first
+    sorted_subs = sorted(substations, key=lambda s: s["voltage_kv"], reverse=True)
+
+    for i, s in enumerate(sorted_subs):
+        # Connect to nearest 3 substations at same or adjacent voltage tier
+        candidates = []
+        for j, t in enumerate(sorted_subs):
+            if i == j:
+                continue
+            # Only connect within 2 voltage tiers
+            v_ratio = max(s["voltage_kv"], t["voltage_kv"]) / max(min(s["voltage_kv"], t["voltage_kv"]), 1)
+            if v_ratio > 4:
+                continue
+            dist = math.hypot(s["lat"] - t["lat"], s["lon"] - t["lon"])
+            candidates.append((dist, j, t))
+
+        candidates.sort()
+        for dist, j, t in candidates[:2]:  # max 2 connections per sub
+            key = tuple(sorted([s["id"], t["id"]]))
+            if key in seen:
+                continue
+            seen.add(key)
+
+            voltage = min(s["voltage_kv"], t["voltage_kv"])
+            rating = {400: 1200, 275: 800, 132: 400, 66: 200, 33: 100}.get(int(voltage), 100)
+
+            demand_diff = t.get("net_demand_mw", 0) - s.get("net_demand_mw", 0)
+            flow = round(demand_diff * 0.6 * (1 + random.gauss(0, 0.08)), 1)
+
+            lines.append({
+                "from": s["id"],
+                "to": t["id"],
+                "voltage_kv": voltage,
+                "rating_mw": rating,
+                "from_coords": [s["lon"], s["lat"]],
+                "to_coords": [t["lon"], t["lat"]],
+                "flow_mw": flow,
+                "loading_pct": round(abs(flow) / max(rating, 1) * 100, 1),
+                "congested": abs(flow) / max(rating, 1) > 0.8,
+            })
+
+    return lines
+
+
+def _fallback_substations(diurnal, seasonal, hour, day_of_year):
+    """Fallback hardcoded substations if DB is unavailable."""
+    fallback = [
+        {"id": "BRWA", "name": "Bramley", "lat": 51.33, "lon": -1.06, "voltage_kv": 400, "capacity_mw": 640, "type": "GSP", "dno": "SSEN"},
+        {"id": "BEDD", "name": "Beddington", "lat": 51.37, "lon": -0.13, "voltage_kv": 275, "capacity_mw": 500, "type": "GSP", "dno": "UKPN"},
+        {"id": "MANN", "name": "Manchester South", "lat": 53.45, "lon": -2.25, "voltage_kv": 400, "capacity_mw": 600, "type": "GSP", "dno": "ENWL"},
+        {"id": "EDIN", "name": "Edinburgh South", "lat": 55.92, "lon": -3.19, "voltage_kv": 275, "capacity_mw": 360, "type": "GSP", "dno": "SPEN"},
+        {"id": "EXET", "name": "Exeter Main", "lat": 50.72, "lon": -3.53, "voltage_kv": 132, "capacity_mw": 200, "type": "BSP", "dno": "NGED"},
+        {"id": "CAMA", "name": "Cambridge", "lat": 52.19, "lon": 0.14, "voltage_kv": 132, "capacity_mw": 250, "type": "BSP", "dno": "UKPN"},
+        {"id": "NORW", "name": "Norwich Main", "lat": 52.62, "lon": 1.30, "voltage_kv": 275, "capacity_mw": 280, "type": "GSP", "dno": "UKPN"},
+        {"id": "KEAD", "name": "Keadby", "lat": 53.60, "lon": -0.75, "voltage_kv": 275, "capacity_mw": 360, "type": "GSP", "dno": "NPG"},
+    ]
+    for s in fallback:
+        base = s["capacity_mw"] * 0.55 * diurnal * seasonal
+        s["demand_mw"] = round(base * (1 + random.gauss(0, 0.04)), 1)
+        sf = max(0, math.sin(math.pi * max(0, min(1, (hour - 6) / 12))))
+        ss = max(0.1, math.sin(math.pi * (day_of_year - 80) / 365))
+        s["generation_mw"] = round(s["capacity_mw"] * 0.12 * sf * ss * (1 + random.gauss(0, 0.05)), 1)
+        s["net_demand_mw"] = round(s["demand_mw"] - s["generation_mw"], 1)
+        s["utilisation"] = round(s["demand_mw"] / s["capacity_mw"], 3)
+        s["headroom_mw"] = round(s["capacity_mw"] - s["demand_mw"], 1)
+        s["rag_demand"] = "green" if s["utilisation"] < 0.6 else "amber" if s["utilisation"] < 0.8 else "red"
+        s["rag_generation"] = "green"
+    return fallback
+
+
 @router.websocket("/ws/grid-twin")
-async def ws_grid_twin(ws: WebSocket):
+async def ws_grid_twin(ws: WebSocket, pool: asyncpg.Pool = Depends(get_pool)):
     """
     WebSocket for real-time grid twin state updates.
-    Sends grid state snapshot every 5 seconds.
+    Sends grid state snapshot every 5 seconds with real DB data.
     """
     await ws.accept()
     _grid_twin_clients.add(ws)
     try:
         while True:
-            state = await api_grid_twin_state()
+            state = await api_grid_twin_state(pool=pool)
             await ws.send_json(state)
             await asyncio.sleep(5)
     except WebSocketDisconnect:
@@ -772,6 +870,7 @@ async def ws_grid_twin(ws: WebSocket):
 async def api_grid_twin_scenario(
     scenario_name: str,
     year: int = Query(2030),
+    pool: asyncpg.Pool = Depends(get_pool),
 ):
     """
     Apply a NESO FES scenario to the grid state.
@@ -787,7 +886,7 @@ async def api_grid_twin_scenario(
     rate = growth_rates.get(scenario_name, 0.02)
     years = year - 2024
 
-    base = await api_grid_twin_state()
+    base = await api_grid_twin_state(pool=pool)
     for s in base["substations"]:
         factor = (1 + rate) ** years
         s["demand_mw"] = round(s["demand_mw"] * factor, 1)

@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import api from "../services/api";
 
 /**
  * EnergyFlowPanel — SVG Sankey / node-flow diagram
@@ -88,8 +89,14 @@ function FlowEdge({ x1, y1, x2, y2, color, width = 2, animated = false, label })
 
 export default function EnergyFlowPanel({ placedAssets = [], solarYield, gridContext, onClose, onNodeClick }) {
   const [activeNode, setActiveNode] = useState(null);
+  const [assumptions, setAssumptions] = useState(null);
 
-  // Compute flow data from placed assets
+  // Load CB7 assumptions once
+  useEffect(() => {
+    api.energy.assumptions().then(a => { if (a) setAssumptions(a); });
+  }, []);
+
+  // Compute flow data from placed assets using CB7 assumptions
   const flow = useMemo(() => {
     const solarMW = placedAssets
       .filter(a => a.assetType === "solar_array")
@@ -104,14 +111,25 @@ export default function EnergyFlowPanel({ placedAssets = [], solarYield, gridCon
     const hasWind = windMW > 0;
     const hasSolar = solarMW > 0;
 
-    const cf = solarYield?.capacity_factor_pct || 11;
-    const annualMWh = solarMW * cf / 100 * 8760 + windMW * 0.26 * 8760;
+    // Use CB7 capacity factors when available, fall back to SAM yield
+    const solarCF = assumptions?.renewables?.solar?.capacity_factor || (solarYield?.capacity_factor_pct ? solarYield.capacity_factor_pct / 100 : 0.108);
+    const windCF = assumptions?.renewables?.onshore_wind?.capacity_factor || 0.293;
+    const cf = solarYield?.capacity_factor_pct || solarCF * 100;
+
+    const annualMWh = solarMW * solarCF * 8760 + windMW * windCF * 8760;
     const curtailed = hasBess ? annualMWh * 0.02 : annualMWh * 0.08;
     const exported = annualMWh - curtailed;
-    const revenue = exported * 55; // £55/MWh avg
 
-    return { solarMW, windMW, bessMWh, hasBess, hasWind, hasSolar, annualMWh, curtailed, exported, revenue, cf };
-  }, [placedAssets, solarYield]);
+    // Use PPA price from CB7 financial defaults
+    const ppaPrice = assumptions?.financial_defaults?.ppa_price_gbp_mwh || 55;
+    const revenue = exported * ppaPrice;
+
+    // LCOE from CB7
+    const solarLCOE = assumptions?.renewables?.solar?.lcoe_gbp_mwh || 30;
+    const windLCOE = assumptions?.renewables?.onshore_wind?.lcoe_gbp_mwh || 36;
+
+    return { solarMW, windMW, bessMWh, hasBess, hasWind, hasSolar, annualMWh, curtailed, exported, revenue, cf, solarLCOE, windLCOE, ppaPrice };
+  }, [placedAssets, solarYield, assumptions]);
 
   const handleNodeClick = (nodeId) => {
     setActiveNode(activeNode === nodeId ? null : nodeId);

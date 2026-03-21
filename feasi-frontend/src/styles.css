@@ -12642,49 +12642,55 @@ input[type="range"] { accent-color: var(--accent); }
 /* Dock container — fixed to bottom, full width */
 .copilot-dock {
   position: fixed;
-  bottom: 0;
-  left: 60px;          /* clear NavRail */
-  right: 0;
+  bottom: 16px;
+  right: 16px;
   z-index: 900;
   display: flex;
   flex-direction: column;
+  align-items: flex-end;
   pointer-events: none;
+  max-width: 420px;
+  width: 100%;
 }
 .copilot-dock > * { pointer-events: auto; }
 
-/* ── Tab strip — identical to .view-tabs ── */
+/* ── Tab strip — bottom-right pill bar ── */
 .copilot-tabs {
   display: flex;
   align-items: center;
   gap: 0;
-  height: 32px;
+  height: 40px;
   background: var(--cds-layer-01);
-  border-top: 1px solid var(--cds-border-subtle);
-  padding: 0 8px;
+  border: 1px solid var(--cds-border-subtle);
+  border-radius: 20px;
+  padding: 0 4px;
   flex-shrink: 0;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 .copilot-tab {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 12px;
+  padding: 6px 10px;
   border: none;
   background: transparent;
   color: var(--cds-text-helper);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
   cursor: pointer;
-  border-top: 2px solid transparent;
+  border-radius: 16px;
   transition: all 0.15s ease;
   position: relative;
+  letter-spacing: 0.02em;
 }
 .copilot-tab:hover {
   color: var(--cds-text-primary);
+  background: var(--cds-layer-03);
 }
 .copilot-tab.active {
-  color: var(--cds-interactive);
-  border-top-color: var(--cds-interactive);
-  font-weight: 600;
+  color: #fff;
+  background: var(--cds-interactive);
+  font-weight: 700;
 }
 .copilot-tab.streaming svg {
   animation: copilot-tab-pulse 1.2s ease-in-out infinite;
@@ -12709,15 +12715,20 @@ input[type="range"] { accent-color: var(--accent); }
   margin-left: 2px;
 }
 
-/* ── Chat panel — slides up above the tab strip ── */
+/* ── Chat panel — floating card above tab pill ── */
 .copilot-chat-panel {
-  height: 420px;
+  height: 480px;
   max-height: calc(100vh - 120px);
+  width: 100%;
   background: var(--cds-layer-01);
-  border-top: 1px solid var(--cds-border-subtle);
+  border: 1px solid var(--cds-border-subtle);
+  border-radius: 16px;
   display: flex;
   flex-direction: column;
   animation: copilot-slide-up 0.2s ease-out;
+  margin-bottom: 8px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
 }
 @keyframes copilot-slide-up {
   from { opacity: 0; transform: translateY(12px); }
@@ -12741,8 +12752,10 @@ input[type="range"] { accent-color: var(--accent); }
 }
 .copilot-chat-title {
   font-size: 12px;
-  font-weight: 600;
-  color: var(--cds-text-primary);
+  font-weight: 900;
+  color: var(--cds-interactive);
+  letter-spacing: 0.04em;
+  font-family: "Roboto", sans-serif;
 }
 .copilot-chat-ctx {
   font-size: 10px;
@@ -13641,3 +13654,69 @@ input[type="range"] { accent-color: var(--accent); }
   letter-spacing: 0.02em; transition: all 0.15s;
 }
 .pp-goto-btn:hover { background: var(--cds-interactive-hover); }
+
+/* Pipeline — new project button, source badges, create modal, forms */
+.pp-btn-primary {
+  padding: 6px 16px; border: none; border-radius: 6px;
+  background: var(--cds-interactive); color: white;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  white-space: nowrap; transition: all 0.15s;
+}
+.pp-btn-primary:hover { background: var(--cds-interactive-hover); }
+.pp-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.pp-btn-secondary {
+  padding: 6px 16px; border: 1px solid var(--border); border-radius: 6px;
+  background: white; color: var(--cds-text-primary);
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: all 0.15s;
+}
+.pp-btn-secondary:hover { background: #f9fafb; }
+
+.pp-card-source { margin-top: 4px; }
+.pp-card-source-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 3px;
+  background: #dbeafe; color: #2563eb;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+}
+
+/* Create project modal */
+.pp-modal-overlay {
+  position: fixed; inset: 0; z-index: 1100;
+  background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.pp-modal {
+  background: white; border-radius: 12px;
+  width: 480px; max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+.pp-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid #f3f4f6;
+}
+.pp-modal-header h3 {
+  margin: 0; font-size: 16px; font-weight: 600; color: var(--cds-text-primary);
+}
+.pp-modal-body { padding: 16px 20px; }
+.pp-modal-footer {
+  display: flex; gap: 8px; justify-content: flex-end;
+  padding: 12px 20px; border-top: 1px solid #f3f4f6;
+}
+
+.pp-form-label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; font-weight: 600; color: #6b7280;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin-bottom: 12px;
+}
+.pp-form-input {
+  padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 6px;
+  font-size: 13px; color: var(--cds-text-primary);
+  background: #f9fafb; outline: none; transition: border-color 0.15s;
+  font-family: inherit;
+}
+.pp-form-input:focus { border-color: var(--cds-interactive); background: white; }
+.pp-form-textarea { min-height: 60px; resize: vertical; }
+.pp-form-row { display: flex; gap: 12px; }
+.pp-form-row > * { flex: 1; }

@@ -6,8 +6,128 @@ const COMP_COLORS = {
   PNL: 0x1e88e5, INV: 0xff9800, BAT: 0x4caf50, TRF: 0x9e9e9e,
   MON: 0xe91e63, CBL: 0x607d8b, MNT: 0x795548, BOS: 0x00bcd4,
 };
-
 const SUN_PATH_COLORS = { summer: 0xffeb3b, winter: 0x2196f3, equinox: 0xff9800 };
+
+/* ══════════════════════════════════════════════════════════
+   Environment builders
+   ══════════════════════════════════════════════════════════ */
+
+function buildSkyGradient(scene) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 2;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d");
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, "#0a1628");
+  grad.addColorStop(0.15, "#1a3a5c");
+  grad.addColorStop(0.35, "#4a8ab5");
+  grad.addColorStop(0.5, "#87ceeb");
+  grad.addColorStop(0.7, "#b8dce8");
+  grad.addColorStop(1.0, "#d4e4d0");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 2, 512);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  scene.background = tex;
+}
+
+function buildGroundPlane() {
+  // Large textured ground with grass color
+  const geom = new THREE.PlaneGeometry(1200, 1200, 1, 1);
+  geom.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshStandardMaterial({
+    color: 0x3d6b35,
+    roughness: 0.95,
+    metalness: 0,
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.y = -0.2;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function buildGrid() {
+  const grid = new THREE.GridHelper(400, 40, 0x556655, 0x445544);
+  grid.position.y = 0.01;
+  grid.material.opacity = 0.15;
+  grid.material.transparent = true;
+  return grid;
+}
+
+function buildTrees(count = 40, spread = 180) {
+  const group = new THREE.Group();
+  group.name = "trees";
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2e7d32, roughness: 0.8 });
+  const trunkGeom = new THREE.CylinderGeometry(0.3, 0.5, 4, 6);
+  const leafGeom = new THREE.SphereGeometry(2.5, 6, 5);
+
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 80 + Math.random() * spread;
+    const x = Math.cos(angle) * dist;
+    const z = Math.sin(angle) * dist;
+    const scale = 0.6 + Math.random() * 0.8;
+
+    const trunk = new THREE.Mesh(trunkGeom, trunkMat);
+    trunk.position.set(x, 2 * scale, z);
+    trunk.scale.set(scale, scale, scale);
+    trunk.castShadow = true;
+    group.add(trunk);
+
+    const leaves = new THREE.Mesh(leafGeom, leafMat);
+    leaves.position.set(x, 5.5 * scale, z);
+    leaves.scale.set(scale, scale * 1.2, scale);
+    leaves.castShadow = true;
+    group.add(leaves);
+  }
+  return group;
+}
+
+function buildClouds(count = 8) {
+  const group = new THREE.Group();
+  group.name = "clouds";
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+
+  for (let i = 0; i < count; i++) {
+    const cloud = new THREE.Group();
+    const blobs = 3 + Math.floor(Math.random() * 3);
+    for (let j = 0; j < blobs; j++) {
+      const geom = new THREE.SphereGeometry(8 + Math.random() * 6, 6, 4);
+      const m = new THREE.Mesh(geom, mat);
+      m.position.set(j * 10 - blobs * 5, Math.random() * 4, Math.random() * 8 - 4);
+      m.scale.set(1, 0.4 + Math.random() * 0.3, 1);
+      cloud.add(m);
+    }
+    cloud.position.set(
+      Math.random() * 400 - 200,
+      100 + Math.random() * 40,
+      Math.random() * 400 - 200,
+    );
+    group.add(cloud);
+  }
+  return group;
+}
+
+function buildWindParticles(scene) {
+  const count = 200;
+  const geom = new THREE.BufferGeometry();
+  const positions = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    positions[i * 3] = Math.random() * 400 - 200;
+    positions[i * 3 + 1] = Math.random() * 60 + 2;
+    positions[i * 3 + 2] = Math.random() * 400 - 200;
+  }
+  geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 0.3, transparent: true, opacity: 0.3 });
+  const points = new THREE.Points(geom, mat);
+  points.name = "wind_particles";
+  return points;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Data builders (terrain, buildings, solar, sun paths, etc.)
+   ══════════════════════════════════════════════════════════ */
 
 function buildTerrainMesh(heightmap, satelliteTexture) {
   if (!heightmap?.values) return null;
@@ -34,7 +154,6 @@ function buildTerrainMesh(heightmap, satelliteTexture) {
   geom.setAttribute("color", new THREE.BufferAttribute(colors, 3));
   geom.computeVertexNormals();
 
-  // Use satellite imagery texture if available, fall back to vertex colors
   const matOpts = { side: THREE.DoubleSide, roughness: 0.85, metalness: 0.05 };
   if (satelliteTexture) {
     matOpts.map = satelliteTexture;
@@ -44,8 +163,23 @@ function buildTerrainMesh(heightmap, satelliteTexture) {
   }
   const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial(matOpts));
   mesh.receiveShadow = true;
+  mesh.castShadow = true;
   mesh.name = "terrain";
   return mesh;
+}
+
+function buildDefaultTerrain() {
+  // Procedural terrain when no data available
+  const size = 64;
+  const vals = [];
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const nx = c / size - 0.5, ny = r / size - 0.5;
+      const e = 50 + 15 * Math.sin(nx * 4) * Math.cos(ny * 3) + 8 * Math.sin(nx * 8 + ny * 6) + Math.random() * 2;
+      vals.push(Math.round(e * 10) / 10);
+    }
+  }
+  return buildTerrainMesh({ width: size, height: size, values: vals }, null);
 }
 
 function buildBuildings(buildings) {
@@ -59,7 +193,6 @@ function buildBuildings(buildings) {
     const coords = f.geometry?.coordinates?.[0];
     if (!coords || coords.length < 3) return;
 
-    // Simple box for each building (approximate)
     const xs = coords.map(c => c[0]);
     const ys = coords.map(c => c[1]);
     const minX = Math.min(...xs), maxX = Math.max(...xs);
@@ -76,12 +209,32 @@ function buildBuildings(buildings) {
     );
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    mesh.userData.type = "building";
-    mesh.userData.height = height;
-    mesh.userData.index = idx;
+    mesh.userData = { type: "building", height, index: idx };
     group.add(mesh);
   });
+  return group;
+}
 
+function buildDefaultBuildings() {
+  // A few placeholder buildings when no data
+  const group = new THREE.Group();
+  group.name = "buildings";
+  const mat = new THREE.MeshStandardMaterial({ color: 0x78909c, roughness: 0.7, metalness: 0.2 });
+  const defs = [
+    { x: -20, z: -15, w: 12, h: 6, d: 8 },
+    { x: 15, z: -25, w: 8, h: 4, d: 6 },
+    { x: -35, z: 20, w: 15, h: 8, d: 10 },
+    { x: 30, z: 10, w: 10, h: 5, d: 7 },
+  ];
+  defs.forEach((b, i) => {
+    const geom = new THREE.BoxGeometry(b.w, b.h, b.d);
+    const mesh = new THREE.Mesh(geom, mat.clone());
+    mesh.position.set(b.x, b.h / 2, b.z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData = { type: "building", height: b.h, index: i };
+    group.add(mesh);
+  });
   return group;
 }
 
@@ -107,6 +260,48 @@ function buildSolarLayout(layout) {
     mesh.castShadow = true;
     group.add(mesh);
   });
+  return group;
+}
+
+function buildDefaultSolarField() {
+  // Demo solar array
+  const group = new THREE.Group();
+  group.name = "solar_layout";
+  const panelMat = new THREE.MeshStandardMaterial({ color: 0x1565c0, metalness: 0.7, roughness: 0.2 });
+
+  for (let row = 0; row < 6; row++) {
+    for (let col = 0; col < 8; col++) {
+      const geom = new THREE.BoxGeometry(4, 0.08, 2.5);
+      const panel = new THREE.Mesh(geom, panelMat);
+      panel.position.set(-30 + col * 7, 2.5, 10 + row * 5);
+      panel.rotation.x = THREE.MathUtils.degToRad(-25);
+      panel.castShadow = true;
+      group.add(panel);
+
+      // Support structure
+      const legGeom = new THREE.CylinderGeometry(0.08, 0.08, 2.5, 4);
+      const legMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+      [-1.5, 1.5].forEach(dx => {
+        const leg = new THREE.Mesh(legGeom, legMat);
+        leg.position.set(-30 + col * 7 + dx, 1.25, 10 + row * 5);
+        group.add(leg);
+      });
+    }
+  }
+
+  // Inverter box
+  const invGeom = new THREE.BoxGeometry(2, 2.5, 1.5);
+  const inv = new THREE.Mesh(invGeom, new THREE.MeshStandardMaterial({ color: 0xff9800, roughness: 0.4, metalness: 0.4 }));
+  inv.position.set(30, 1.25, 20);
+  inv.castShadow = true;
+  group.add(inv);
+
+  // Transformer
+  const txGeom = new THREE.BoxGeometry(3, 3.5, 3);
+  const tx = new THREE.Mesh(txGeom, new THREE.MeshStandardMaterial({ color: 0x607d8b, roughness: 0.6, metalness: 0.3 }));
+  tx.position.set(35, 1.75, 20);
+  tx.castShadow = true;
+  group.add(tx);
 
   return group;
 }
@@ -137,8 +332,24 @@ function buildSunPaths(sunPath) {
       group.add(line);
     }
   }
-
   return group;
+}
+
+function buildDefaultSunPaths() {
+  // Approximate UK sun paths for lat ~52°
+  const paths = {};
+  for (const [season, maxAlt, daylength] of [["summer", 60, 16], ["equinox", 38, 12], ["winter", 15, 8]]) {
+    const hours = [];
+    const sunrise = 12 - daylength / 2;
+    for (let h = sunrise; h <= sunrise + daylength; h += 0.5) {
+      const frac = (h - sunrise) / daylength;
+      const alt = maxAlt * Math.sin(frac * Math.PI);
+      const az = 90 + 180 * frac;
+      hours.push({ hour: Math.round(h), altitude: alt, azimuth: az });
+    }
+    paths[season] = hours;
+  }
+  return buildSunPaths(paths);
 }
 
 function buildDetectionOverlays(detections) {
@@ -147,7 +358,6 @@ function buildDetectionOverlays(detections) {
   group.name = "detections";
   const findings = detections.findings;
 
-  // Exclusion zones as red planes
   const exclusions = findings.exclusion_zones || [];
   exclusions.forEach((ez, i) => {
     const geom = new THREE.PlaneGeometry(15, 15);
@@ -157,12 +367,10 @@ function buildDetectionOverlays(detections) {
     }));
     mesh.position.set(-40 + i * 30, 0.5, -30 + i * 20);
     mesh.name = "exclusion_zone";
-    mesh.userData.type = ez.type;
-    mesh.userData.reason = ez.reason;
+    mesh.userData = { type: ez.type, reason: ez.reason };
     group.add(mesh);
   });
 
-  // Usable area as green plane (proportional to usable_area_pct)
   const usable = findings.usable_area_pct || 0;
   if (usable > 0) {
     const scale = Math.sqrt(usable / 100);
@@ -175,7 +383,6 @@ function buildDetectionOverlays(detections) {
     mesh.name = "usable_area";
     group.add(mesh);
   }
-
   return group;
 }
 
@@ -184,22 +391,20 @@ function buildRetrofitGeometry(retrofitData) {
   const group = new THREE.Group();
   group.name = "retrofit_geometry";
 
-  retrofitData.forEach((feature, idx) => {
+  retrofitData.forEach((feature) => {
     const props = feature.properties || {};
     const type = props.type || "extension";
     const height = props.height_m || 3;
     const coords = feature.geometry?.coordinates?.[0];
     if (!coords || coords.length < 3) return;
 
-    // Extension volumes — semi-transparent purple
     if (type.includes("extension")) {
       const shape = new THREE.Shape();
       coords.forEach((c, i) => {
         if (i === 0) shape.moveTo(c[0], c[1]);
         else shape.lineTo(c[0], c[1]);
       });
-      const extrudeSettings = { depth: height, bevelEnabled: false };
-      const geom = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+      const geom = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
       geom.rotateX(-Math.PI / 2);
       const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({
         color: 0x8e24aa, transparent: true, opacity: 0.45, roughness: 0.6,
@@ -208,51 +413,43 @@ function buildRetrofitGeometry(retrofitData) {
       mesh.name = `retrofit_${type}`;
       mesh.userData = props;
       group.add(mesh);
-
-      // Wireframe outline
-      const wire = new THREE.LineSegments(
+      group.add(new THREE.LineSegments(
         new THREE.EdgesGeometry(geom),
-        new THREE.LineBasicMaterial({ color: 0xce93d8, linewidth: 2 })
-      );
-      group.add(wire);
+        new THREE.LineBasicMaterial({ color: 0xce93d8, linewidth: 2 }),
+      ));
     }
   });
 
-  // Add insulation shell indicator (thin overlay on buildings)
+  // Insulation shell + solar panels + heat pump
   const shellGeom = new THREE.BoxGeometry(22, 10, 16);
-  const shellMat = new THREE.MeshStandardMaterial({
+  const shell = new THREE.Mesh(shellGeom, new THREE.MeshStandardMaterial({
     color: 0xff9800, transparent: true, opacity: 0.15, side: THREE.DoubleSide, roughness: 1,
-  });
-  const shell = new THREE.Mesh(shellGeom, shellMat);
+  }));
   shell.position.set(0, 5, 0);
   shell.name = "insulation_shell";
   group.add(shell);
 
-  // Solar panels on roof
   const panelGeom = new THREE.PlaneGeometry(8, 5);
   panelGeom.rotateX(-Math.PI / 4);
-  const panelMat = new THREE.MeshStandardMaterial({ color: 0x1565c0, metalness: 0.8, roughness: 0.2 });
-  const panel = new THREE.Mesh(panelGeom, panelMat);
+  const panel = new THREE.Mesh(panelGeom, new THREE.MeshStandardMaterial({ color: 0x1565c0, metalness: 0.8, roughness: 0.2 }));
   panel.position.set(0, 11, -2);
   panel.name = "solar_panels";
   group.add(panel);
 
-  // Heat pump unit in garden
-  const hpGeom = new THREE.BoxGeometry(1.2, 0.9, 0.5);
-  const hpMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.5 });
-  const hp = new THREE.Mesh(hpGeom, hpMat);
+  const hp = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 0.5), new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.5 }));
   hp.position.set(-12, 0.45, 8);
   hp.name = "heat_pump";
-  // Fan grill on front
-  const fanGeom = new THREE.CircleGeometry(0.3, 16);
-  const fanMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
-  const fan = new THREE.Mesh(fanGeom, fanMat);
-  fan.position.set(-12, 0.45, 8.26);
   group.add(hp);
+  const fan = new THREE.Mesh(new THREE.CircleGeometry(0.3, 16), new THREE.MeshBasicMaterial({ color: 0x333333 }));
+  fan.position.set(-12, 0.45, 8.26);
   group.add(fan);
 
   return group;
 }
+
+/* ══════════════════════════════════════════════════════════
+   Main Component
+   ══════════════════════════════════════════════════════════ */
 
 export default function DigitalTwin({ data, onClose }) {
   const containerRef = useRef(null);
@@ -262,6 +459,8 @@ export default function DigitalTwin({ data, onClose }) {
   const controlsRef = useRef(null);
   const sunLightRef = useRef(null);
   const sunSphereRef = useRef(null);
+  const cloudsRef = useRef(null);
+  const windRef = useRef(null);
   const raycasterRef = useRef(new THREE.Raycaster());
   const mouseRef = useRef(new THREE.Vector2());
 
@@ -280,102 +479,136 @@ export default function DigitalTwin({ data, onClose }) {
     if (!containerRef.current) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x1a2030);
-    scene.fog = new THREE.Fog(0x1a2030, 300, 600);
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(60, containerRef.current.clientWidth / containerRef.current.clientHeight, 0.5, 1000);
+    // Sky gradient background
+    buildSkyGradient(scene);
+    scene.fog = new THREE.FogExp2(0x88aacc, 0.0015);
+
+    const camera = new THREE.PerspectiveCamera(60, containerRef.current.clientWidth / containerRef.current.clientHeight, 0.5, 1500);
     camera.position.set(120, 80, 120);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
-    controls.maxDistance = 400;
-    controls.minDistance = 20;
+    controls.maxDistance = 500;
+    controls.minDistance = 10;
     controls.maxPolarAngle = Math.PI * 0.48;
     controls.target.set(0, 10, 0);
     controlsRef.current = controls;
 
-    // Lights
-    const ambient = new THREE.AmbientLight(0x404060, 0.6);
+    // ── Lighting ──
+    const ambient = new THREE.AmbientLight(0x8899aa, 0.5);
     scene.add(ambient);
-    const hemi = new THREE.HemisphereLight(0x88aacc, 0x443322, 0.4);
+    const hemi = new THREE.HemisphereLight(0x87ceeb, 0x3d6b35, 0.6);
     scene.add(hemi);
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    sunLight.position.set(50, 80, 30);
+    const sunLight = new THREE.DirectionalLight(0xffeedd, 1.5);
+    sunLight.position.set(60, 100, 40);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.set(2048, 2048);
-    sunLight.shadow.camera.left = -120;
-    sunLight.shadow.camera.right = 120;
-    sunLight.shadow.camera.top = 120;
-    sunLight.shadow.camera.bottom = -120;
+    sunLight.shadow.camera.left = -150;
+    sunLight.shadow.camera.right = 150;
+    sunLight.shadow.camera.top = 150;
+    sunLight.shadow.camera.bottom = -150;
+    sunLight.shadow.camera.far = 400;
+    sunLight.shadow.bias = -0.001;
     scene.add(sunLight);
     sunLightRef.current = sunLight;
 
-    // Sun indicator sphere
-    const sunGeom = new THREE.SphereGeometry(3, 16, 16);
-    const sunMat = new THREE.MeshBasicMaterial({ color: 0xffeb3b });
+    // Sun indicator
+    const sunGeom = new THREE.SphereGeometry(4, 16, 16);
+    const sunMat = new THREE.MeshBasicMaterial({ color: 0xffee88 });
     const sunSphere = new THREE.Mesh(sunGeom, sunMat);
     sunSphere.position.copy(sunLight.position);
     scene.add(sunSphere);
     sunSphereRef.current = sunSphere;
 
-    // Ground plane (for shadow catching)
-    const groundGeom = new THREE.PlaneGeometry(600, 600);
-    groundGeom.rotateX(-Math.PI / 2);
-    const ground = new THREE.Mesh(groundGeom, new THREE.ShadowMaterial({ opacity: 0.3 }));
-    ground.receiveShadow = true;
-    ground.position.y = -0.1;
-    scene.add(ground);
+    // ── Environment ──
+    scene.add(buildGroundPlane());
+    scene.add(buildGrid());
+    const trees = buildTrees();
+    scene.add(trees);
+    const clouds = buildClouds();
+    scene.add(clouds);
+    cloudsRef.current = clouds;
+    const wind = buildWindParticles();
+    scene.add(wind);
+    windRef.current = wind;
 
-    // Load satellite imagery as terrain texture, then build scene
+    // Shadow catcher
+    const shadowGeom = new THREE.PlaneGeometry(600, 600);
+    shadowGeom.rotateX(-Math.PI / 2);
+    const shadowMesh = new THREE.Mesh(shadowGeom, new THREE.ShadowMaterial({ opacity: 0.25 }));
+    shadowMesh.receiveShadow = true;
+    shadowMesh.position.y = 0;
+    scene.add(shadowMesh);
+
+    // ── Site Data or Defaults ──
     const buildScene = (satTexture) => {
+      // Terrain
       if (data?.heightmap) {
         const terrain = buildTerrainMesh(data.heightmap, satTexture);
         if (terrain) scene.add(terrain);
+      } else {
+        const defTerrain = buildDefaultTerrain();
+        if (defTerrain) scene.add(defTerrain);
       }
+
+      // Buildings
       if (data?.buildings) {
         const bldgs = buildBuildings(data.buildings);
         if (bldgs) scene.add(bldgs);
+      } else {
+        scene.add(buildDefaultBuildings());
       }
+
+      // Solar layout
       if (data?.solar_layout) {
         const layout = buildSolarLayout(data.solar_layout);
         if (layout) scene.add(layout);
+      } else {
+        scene.add(buildDefaultSolarField());
       }
+
+      // Sun paths
       if (data?.sun_path) {
         const paths = buildSunPaths(data.sun_path);
         if (paths) scene.add(paths);
+      } else {
+        const defPaths = buildDefaultSunPaths();
+        if (defPaths) scene.add(defPaths);
       }
+
+      // Detection overlays
       if (data?.vision_detections) {
         const overlays = buildDetectionOverlays(data.vision_detections);
         if (overlays) scene.add(overlays);
       }
+
+      // Retrofit geometry (hidden by default)
       if (data?.retrofit_geometry) {
         const retro = buildRetrofitGeometry(data.retrofit_geometry);
-        if (retro) {
-          retro.visible = false; // off by default, toggled via layer control
-          scene.add(retro);
-        }
+        if (retro) { retro.visible = false; scene.add(retro); }
       }
     };
 
-    // Load a 3x3 grid of satellite tiles and composite into a single texture
+    // Load satellite texture if available
     const tile = data?.satellite_tile;
     if (tile?.url) {
-      const z = tile.zoom;
-      const cx = tile.tile_x;
-      const cy = tile.tile_y;
-      const GRID = 3; // 3x3 tiles = 768x768 px
-      const TILE_PX = 256;
+      const z = tile.zoom, cx = tile.tile_x, cy = tile.tile_y;
+      const GRID = 3, TILE_PX = 256;
       const canvas = document.createElement("canvas");
       canvas.width = GRID * TILE_PX;
       canvas.height = GRID * TILE_PX;
@@ -388,9 +621,7 @@ export default function DigitalTwin({ data, onClose }) {
         for (let dx = -1; dx <= 1; dx++) {
           const img = new Image();
           img.crossOrigin = "anonymous";
-          const tx = cx + dx;
-          const ty = cy + dy;
-          img.src = `${baseUrl}/${z}/${ty}/${tx}`;
+          img.src = `${baseUrl}/${z}/${cy + dy}/${cx + dx}`;
           img.onload = () => {
             ctx2d.drawImage(img, (dx + 1) * TILE_PX, (dy + 1) * TILE_PX, TILE_PX, TILE_PX);
             loaded++;
@@ -400,30 +631,44 @@ export default function DigitalTwin({ data, onClose }) {
               buildScene(tex);
             }
           };
-          img.onerror = () => {
-            loaded++;
-            if (loaded === total) {
-              const tex = loaded > 0 ? new THREE.CanvasTexture(canvas) : null;
-              if (tex) tex.colorSpace = THREE.SRGBColorSpace;
-              buildScene(tex);
-            }
-          };
+          img.onerror = () => { loaded++; if (loaded === total) buildScene(null); };
         }
       }
     } else {
       buildScene(null);
     }
 
-    // Animation loop
+    // ── Animation loop ──
     let animId;
+    let clock = new THREE.Clock();
     const animate = () => {
       animId = requestAnimationFrame(animate);
+      const dt = clock.getDelta();
       controls.update();
+
+      // Animate clouds
+      if (cloudsRef.current) {
+        cloudsRef.current.children.forEach((c, i) => {
+          c.position.x += dt * (1 + i * 0.3);
+          if (c.position.x > 300) c.position.x = -300;
+        });
+      }
+
+      // Animate wind particles
+      if (windRef.current) {
+        const pos = windRef.current.geometry.attributes.position;
+        for (let i = 0; i < pos.count; i++) {
+          pos.setX(i, pos.getX(i) + dt * 8);
+          pos.setY(i, pos.getY(i) + Math.sin(Date.now() * 0.001 + i) * dt * 0.5);
+          if (pos.getX(i) > 200) pos.setX(i, -200);
+        }
+        pos.needsUpdate = true;
+      }
+
       renderer.render(scene, camera);
     };
     animate();
 
-    // Resize handler
     const handleResize = () => {
       if (!containerRef.current) return;
       const w = containerRef.current.clientWidth;
@@ -445,21 +690,50 @@ export default function DigitalTwin({ data, onClose }) {
     };
   }, [data]);
 
-  // Update sun position based on time/season
+  // Update sun position
   useEffect(() => {
-    if (!sunLightRef.current || !data?.sun_path) return;
-    const path = data.sun_path[season] || [];
-    const hourData = path.find(h => h.hour === Math.round(timeOfDay)) || path[Math.floor(path.length / 2)];
-    if (!hourData) return;
+    if (!sunLightRef.current) return;
+    // Use real sun path data or computed position
+    const sunData = data?.sun_path;
+    const path = sunData?.[season] || [];
+    const hourData = path.find(h => h.hour === Math.round(timeOfDay));
 
-    const alt = THREE.MathUtils.degToRad(hourData.altitude);
-    const az = THREE.MathUtils.degToRad(hourData.azimuth);
-    const r = 100;
-    const x = r * Math.cos(alt) * Math.sin(az);
-    const y = r * Math.sin(alt) + 10;
-    const z = -r * Math.cos(alt) * Math.cos(az);
-    sunLightRef.current.position.set(x, Math.max(y, 10), z);
-    if (sunSphereRef.current) sunSphereRef.current.position.set(x, Math.max(y, 10), z);
+    let x, y, z;
+    if (hourData) {
+      const alt = THREE.MathUtils.degToRad(hourData.altitude);
+      const az = THREE.MathUtils.degToRad(hourData.azimuth);
+      const r = 120;
+      x = r * Math.cos(alt) * Math.sin(az);
+      y = r * Math.sin(alt) + 10;
+      z = -r * Math.cos(alt) * Math.cos(az);
+    } else {
+      // Computed fallback for lat ~52°N
+      const maxAlts = { summer: 60, equinox: 38, winter: 15 };
+      const dayLens = { summer: 16, equinox: 12, winter: 8 };
+      const maxAlt = maxAlts[season] || 38;
+      const dayLen = dayLens[season] || 12;
+      const sunrise = 12 - dayLen / 2;
+      const frac = Math.max(0, Math.min(1, (timeOfDay - sunrise) / dayLen));
+      const alt = THREE.MathUtils.degToRad(maxAlt * Math.sin(frac * Math.PI));
+      const az = THREE.MathUtils.degToRad(90 + 180 * frac);
+      const r = 120;
+      x = r * Math.cos(alt) * Math.sin(az);
+      y = Math.max(5, r * Math.sin(alt) + 10);
+      z = -r * Math.cos(alt) * Math.cos(az);
+    }
+
+    sunLightRef.current.position.set(x, y, z);
+    sunLightRef.current.intensity = Math.max(0.2, Math.min(1.5, y / 60));
+    if (sunSphereRef.current) {
+      sunSphereRef.current.position.set(x, y, z);
+      sunSphereRef.current.material.color.setHSL(0.12, 0.9, 0.5 + 0.3 * Math.min(1, y / 80));
+    }
+
+    // Adjust sky tint based on time
+    if (sceneRef.current) {
+      const nightFactor = Math.max(0, 1 - y / 40);
+      sceneRef.current.fog.color.setHSL(0.58, 0.3 - nightFactor * 0.2, 0.6 - nightFactor * 0.4);
+    }
   }, [timeOfDay, season, data?.sun_path]);
 
   // Layer visibility
@@ -472,7 +746,7 @@ export default function DigitalTwin({ data, onClose }) {
     });
   }, [layers]);
 
-  // Click handler for measurement / info
+  // Click handler
   const handleClick = useCallback((e) => {
     if (!containerRef.current || !sceneRef.current || !cameraRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -488,10 +762,8 @@ export default function DigitalTwin({ data, onClose }) {
       if (newPoints.length === 2) {
         const dist = newPoints[0].distanceTo(newPoints[1]);
         setInfo(`Distance: ${dist.toFixed(1)}m`);
-        // Draw line
         const geom = new THREE.BufferGeometry().setFromPoints(newPoints);
-        const line = new THREE.Line(geom, new THREE.LineBasicMaterial({ color: 0x00e5ff, linewidth: 2 }));
-        sceneRef.current.add(line);
+        sceneRef.current.add(new THREE.Line(geom, new THREE.LineBasicMaterial({ color: 0x00e5ff, linewidth: 2 })));
         setMeasurePoints([]);
       } else {
         setMeasurePoints(newPoints);
@@ -531,6 +803,7 @@ export default function DigitalTwin({ data, onClose }) {
           </button>
           <span style={{ fontWeight: 700, fontSize: 13, color: "#7c4dff", letterSpacing: 1 }}>3D DIGITAL TWIN</span>
           {data?.lat && <span style={{ fontSize: 11, color: "#4B5563" }}>{data.lat.toFixed(4)}N, {Math.abs(data.lon).toFixed(4)}{data.lon < 0 ? "W" : "E"}</span>}
+          {!data && <span style={{ fontSize: 11, color: "#D4A018" }}>Demo environment — select a site for real data</span>}
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -553,9 +826,7 @@ export default function DigitalTwin({ data, onClose }) {
                   borderRadius: 2, cursor: "pointer", fontFamily: "inherit",
                   background: season === s ? "rgba(124,77,255,0.2)" : "transparent",
                   color: season === s ? "#7c4dff" : "#4B5563",
-                }}>
-                {s.slice(0, 3)}
-              </button>
+                }}>{s.slice(0, 3)}</button>
             ))}
           </div>
 
@@ -571,13 +842,11 @@ export default function DigitalTwin({ data, onClose }) {
                   background: layers[key] ? "rgba(0,0,0,0.05)" : "transparent",
                   color: layers[key] ? "#1A1D23" : "#9CA3AF",
                   textTransform: "uppercase",
-                }}>
-                {key.slice(0, 4)}
-              </button>
+                }}>{key.slice(0, 4)}</button>
             ))}
           </div>
 
-          {/* Tools */}
+          {/* Measure + Screenshot */}
           <button onClick={() => { setMeasureMode(!measureMode); setMeasurePoints([]); setInfo(null); }}
             title="Measure distance"
             style={{
@@ -592,13 +861,9 @@ export default function DigitalTwin({ data, onClose }) {
             </svg>
           </button>
           <button onClick={handleScreenshot} title="Screenshot"
-            style={{
-              padding: "4px 8px", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 2,
-              cursor: "pointer", background: "transparent", color: "#4B5563",
-            }}>
+            style={{ padding: "4px 8px", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 2, cursor: "pointer", background: "transparent", color: "#4B5563" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-              <circle cx="12" cy="13" r="4" />
+              <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" /><circle cx="12" cy="13" r="4" />
             </svg>
           </button>
         </div>

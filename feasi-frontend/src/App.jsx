@@ -462,8 +462,8 @@ export default function App() {
         />
       )}
 
-      {/* 3D Site Digital Twin overlay */}
-      {digitalTwinOpen && twinData && (
+      {/* 3D Site Digital Twin overlay — works with or without data */}
+      {digitalTwinOpen && (
         <DigitalTwin data={twinData} onClose={() => setDigitalTwinOpen(false)} />
       )}
 
