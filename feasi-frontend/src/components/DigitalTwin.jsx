@@ -448,10 +448,273 @@ function buildRetrofitGeometry(retrofitData) {
 }
 
 /* ══════════════════════════════════════════════════════════
+   Real infrastructure builders (REPD, OSM, grid data)
+   ══════════════════════════════════════════════════════════ */
+
+const TECH_COLORS = {
+  "Solar Photovoltaics": 0xfdd835,
+  "Wind Onshore": 0x42a5f5,
+  "Wind Offshore": 0x1565c0,
+  "Battery": 0x66bb6a,
+  "Biomass": 0x8d6e63,
+  "Landfill Gas": 0x78909c,
+  "Hydro": 0x26c6da,
+};
+const VOLTAGE_COLORS = {
+  400: 0xe53935, 275: 0xf44336, 132: 0xff7043,
+  66: 0xffa726, 33: 0xffca28, 11: 0x66bb6a,
+};
+
+function voltageColor(kv) {
+  if (!kv) return 0x9e9e9e;
+  if (kv >= 275) return VOLTAGE_COLORS[400];
+  if (kv >= 100) return VOLTAGE_COLORS[132];
+  if (kv >= 50) return VOLTAGE_COLORS[66];
+  if (kv >= 20) return VOLTAGE_COLORS[33];
+  return VOLTAGE_COLORS[11];
+}
+
+function buildRealRenewables(renewables, centreLat, centreLon) {
+  if (!renewables?.length) return null;
+  const group = new THREE.Group();
+  group.name = "real_renewables";
+  const SCALE = 2000; // metres per scene unit (approx)
+
+  renewables.forEach((proj) => {
+    const dx = (proj.lon - centreLon) * 111320 * Math.cos(centreLat * Math.PI / 180) / SCALE;
+    const dz = -(proj.lat - centreLat) * 110540 / SCALE;
+
+    // Clamp to visible area
+    if (Math.abs(dx) > 200 || Math.abs(dz) > 200) return;
+
+    const tech = proj.technology || "Unknown";
+    const color = TECH_COLORS[tech] || 0xab47bc;
+    const capMw = proj.capacity_mw || 1;
+    const height = Math.max(1, Math.min(12, capMw * 0.5));
+    const radius = Math.max(0.8, Math.min(4, capMw * 0.3));
+
+    if (tech.includes("Wind")) {
+      // Wind turbine — tall cylinder + blade disc
+      const tower = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.3, height * 2, 6),
+        new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.6 }),
+      );
+      tower.position.set(dx, height, dz);
+      tower.castShadow = true;
+      group.add(tower);
+      const blades = new THREE.Mesh(
+        new THREE.CircleGeometry(height * 0.6, 3),
+        new THREE.MeshStandardMaterial({ color: 0xdddddd, side: THREE.DoubleSide, transparent: true, opacity: 0.7 }),
+      );
+      blades.position.set(dx, height * 2 - 0.5, dz);
+      blades.rotation.y = Math.random() * Math.PI;
+      group.add(blades);
+    } else {
+      // Solar / other — flat coloured marker
+      const geom = new THREE.CylinderGeometry(radius, radius, 0.6, 8);
+      const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.3 }));
+      mesh.position.set(dx, 0.3, dz);
+      mesh.castShadow = true;
+      mesh.userData = { type: "repd_project", name: proj.name, technology: tech, capacity_mw: capMw, status: proj.status };
+      group.add(mesh);
+    }
+
+    // Label sprite
+    const canvas = document.createElement("canvas");
+    canvas.width = 256; canvas.height = 64;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(0, 0, 256, 64);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px sans-serif";
+    const label = `${(proj.name || tech).slice(0, 20)} ${capMw.toFixed(1)}MW`;
+    ctx.fillText(label, 6, 24);
+    ctx.font = "14px sans-serif";
+    ctx.fillStyle = "#bbbbbb";
+    ctx.fillText(proj.status || "", 6, 48);
+    const tex = new THREE.CanvasTexture(canvas);
+    const spriteMat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.85 });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.position.set(dx, height + 3, dz);
+    sprite.scale.set(12, 3, 1);
+    group.add(sprite);
+  });
+  return group;
+}
+
+function buildRealSubstations(osmSubs, gridSubs, centreLat, centreLon) {
+  const all = [];
+  const SCALE = 2000;
+
+  (osmSubs || []).forEach(s => {
+    all.push({ ...s, source: "osm" });
+  });
+  (gridSubs || []).forEach(s => {
+    all.push({ ...s, source: "grid" });
+  });
+  if (!all.length) return null;
+
+  const group = new THREE.Group();
+  group.name = "real_substations";
+
+  all.forEach((sub) => {
+    const dx = (sub.lon - centreLon) * 111320 * Math.cos(centreLat * Math.PI / 180) / SCALE;
+    const dz = -(sub.lat - centreLat) * 110540 / SCALE;
+    if (Math.abs(dx) > 200 || Math.abs(dz) > 200) return;
+
+    const kv = sub.voltage_kv || 11;
+    const color = voltageColor(kv);
+    const size = Math.max(1.5, Math.min(5, kv / 30));
+    const height = Math.max(2, Math.min(8, kv / 20));
+
+    const geom = new THREE.BoxGeometry(size, height, size);
+    const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.4 }));
+    mesh.position.set(dx, height / 2, dz);
+    mesh.castShadow = true;
+    mesh.userData = {
+      type: "substation", name: sub.name, voltage_kv: kv, source: sub.source,
+      demand_mw: sub.demand_mw, headroom_mw: sub.demand_headroom_mw,
+    };
+    group.add(mesh);
+
+    // Fence / outline
+    const wireGeom = new THREE.EdgesGeometry(new THREE.BoxGeometry(size + 0.5, height + 0.3, size + 0.5));
+    const wire = new THREE.LineSegments(wireGeom, new THREE.LineBasicMaterial({ color: 0x888888 }));
+    wire.position.copy(mesh.position);
+    group.add(wire);
+
+    // Label
+    const canvas = document.createElement("canvas");
+    canvas.width = 256; canvas.height = 48;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(0, 0, 256, 48);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 16px sans-serif";
+    ctx.fillText(`${(sub.name || "Substation").slice(0, 22)} ${kv}kV`, 4, 20);
+    if (sub.demand_headroom_mw != null) {
+      ctx.font = "13px sans-serif";
+      ctx.fillStyle = "#aaaaaa";
+      ctx.fillText(`Headroom: ${sub.demand_headroom_mw.toFixed(1)}MW`, 4, 40);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.8 }));
+    sprite.position.set(dx, height + 2, dz);
+    sprite.scale.set(10, 2.5, 1);
+    group.add(sprite);
+  });
+  return group;
+}
+
+function buildRealPowerLines(lines, centreLat, centreLon) {
+  if (!lines?.length) return null;
+  const group = new THREE.Group();
+  group.name = "real_power_lines";
+  const SCALE = 2000;
+
+  lines.forEach((line) => {
+    const coords = line.geometry?.coordinates;
+    if (!coords || coords.length < 2) return;
+
+    const kv = line.voltage_kv || 11;
+    const color = voltageColor(kv);
+    const lineHeight = Math.max(3, Math.min(15, kv / 15));
+
+    const points = coords.map(([lng, lat]) => {
+      const dx = (lng - centreLon) * 111320 * Math.cos(centreLat * Math.PI / 180) / SCALE;
+      const dz = -(lat - centreLat) * 110540 / SCALE;
+      return new THREE.Vector3(dx, lineHeight, dz);
+    }).filter(p => Math.abs(p.x) <= 250 && Math.abs(p.z) <= 250);
+
+    if (points.length < 2) return;
+
+    // Power line as tube
+    const curve = new THREE.CatmullRomCurve3(points);
+    const tubeRadius = Math.max(0.05, Math.min(0.3, kv / 400));
+    const tubeGeom = new THREE.TubeGeometry(curve, Math.max(4, points.length * 2), tubeRadius, 4, false);
+    const tubeMesh = new THREE.Mesh(tubeGeom, new THREE.MeshStandardMaterial({
+      color, roughness: 0.4, metalness: 0.6, transparent: true, opacity: 0.8,
+    }));
+    tubeMesh.userData = { type: "power_line", voltage_kv: kv, name: line.name, line_type: line.line_type };
+    group.add(tubeMesh);
+
+    // Pylons at intervals
+    const pylonMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.8 });
+    const interval = Math.max(1, Math.floor(points.length / 5));
+    for (let i = 0; i < points.length; i += interval) {
+      const p = points[i];
+      const pylon = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.2, lineHeight, 4),
+        pylonMat,
+      );
+      pylon.position.set(p.x, lineHeight / 2, p.z);
+      group.add(pylon);
+      // Cross-arm
+      const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(1.5, 0.1, 0.1),
+        pylonMat,
+      );
+      arm.position.set(p.x, lineHeight - 0.5, p.z);
+      group.add(arm);
+    }
+  });
+  return group;
+}
+
+function buildRealTecQueue(tecProjects, centreLat, centreLon) {
+  if (!tecProjects?.length) return null;
+  const group = new THREE.Group();
+  group.name = "real_tec_queue";
+  const SCALE = 2000;
+
+  tecProjects.forEach((proj) => {
+    const dx = (proj.lon - centreLon) * 111320 * Math.cos(centreLat * Math.PI / 180) / SCALE;
+    const dz = -(proj.lat - centreLat) * 110540 / SCALE;
+    if (Math.abs(dx) > 200 || Math.abs(dz) > 200) return;
+
+    const capMw = proj.capacity_mw || 10;
+    const radius = Math.max(0.6, Math.min(3, capMw / 100));
+
+    // Diamond shape for TEC projects
+    const geom = new THREE.OctahedronGeometry(radius);
+    const color = proj.plant_type?.toLowerCase().includes("solar") ? 0xfdd835
+      : proj.plant_type?.toLowerCase().includes("wind") ? 0x42a5f5
+      : proj.plant_type?.toLowerCase().includes("battery") ? 0x66bb6a
+      : 0xce93d8;
+    const mesh = new THREE.Mesh(geom, new THREE.MeshStandardMaterial({
+      color, roughness: 0.3, metalness: 0.5, transparent: true, opacity: 0.7,
+    }));
+    mesh.position.set(dx, radius + 0.5, dz);
+    mesh.castShadow = true;
+    mesh.userData = { type: "tec_project", name: proj.project_name, capacity_mw: capMw, status: proj.status, plant_type: proj.plant_type };
+    group.add(mesh);
+
+    // Label
+    const canvas = document.createElement("canvas");
+    canvas.width = 256; canvas.height = 48;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "rgba(80,0,120,0.6)";
+    ctx.fillRect(0, 0, 256, 48);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillText(`TEC: ${(proj.project_name || "").slice(0, 20)} ${capMw}MW`, 4, 20);
+    ctx.font = "12px sans-serif";
+    ctx.fillStyle = "#cccccc";
+    ctx.fillText(`${proj.plant_type || ""} | ${proj.status || ""}`, 4, 40);
+    const tex = new THREE.CanvasTexture(canvas);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.8 }));
+    sprite.position.set(dx, radius * 2 + 3, dz);
+    sprite.scale.set(10, 2.5, 1);
+    group.add(sprite);
+  });
+  return group;
+}
+
+/* ══════════════════════════════════════════════════════════
    Main Component
    ══════════════════════════════════════════════════════════ */
 
-export default function DigitalTwin({ data, onClose }) {
+export default function DigitalTwin({ data, realContext, onClose }) {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
   const sceneRef = useRef(null);
@@ -472,6 +735,7 @@ export default function DigitalTwin({ data, onClose }) {
   const [layers, setLayers] = useState({
     terrain: true, buildings: true, solar_layout: true,
     sun_paths: true, detections: true, retrofit_geometry: false,
+    real_renewables: true, real_substations: true, real_power_lines: true, real_tec_queue: true,
   });
 
   // Build scene
@@ -602,6 +866,23 @@ export default function DigitalTwin({ data, onClose }) {
         const retro = buildRetrofitGeometry(data.retrofit_geometry);
         if (retro) { retro.visible = false; scene.add(retro); }
       }
+
+      // ── Real infrastructure from REPD / OSM / Grid / TEC ──
+      const cLat = data?.lat ?? realContext?.centre?.lat;
+      const cLon = data?.lon ?? realContext?.centre?.lon;
+      if (realContext && cLat && cLon) {
+        const renewables = buildRealRenewables(realContext.nearby_renewables, cLat, cLon);
+        if (renewables) scene.add(renewables);
+
+        const subs = buildRealSubstations(realContext.osm_substations, realContext.grid_substations, cLat, cLon);
+        if (subs) scene.add(subs);
+
+        const lines = buildRealPowerLines(realContext.osm_lines, cLat, cLon);
+        if (lines) scene.add(lines);
+
+        const tec = buildRealTecQueue(realContext.tec_queue, cLat, cLon);
+        if (tec) scene.add(tec);
+      }
     };
 
     // Load satellite texture if available
@@ -688,7 +969,7 @@ export default function DigitalTwin({ data, onClose }) {
         containerRef.current.removeChild(renderer.domElement);
       }
     };
-  }, [data]);
+  }, [data, realContext]);
 
   // Update sun position
   useEffect(() => {
@@ -773,6 +1054,15 @@ export default function DigitalTwin({ data, onClose }) {
       const obj = hit.object;
       if (obj.userData?.type === "building") {
         setInfo(`Building #${obj.userData.index + 1} — Height: ${obj.userData.height}m`);
+      } else if (obj.userData?.type === "repd_project") {
+        setInfo(`REPD: ${obj.userData.name || "?"} — ${obj.userData.technology} ${obj.userData.capacity_mw}MW [${obj.userData.status}]`);
+      } else if (obj.userData?.type === "substation") {
+        const hd = obj.userData.headroom_mw != null ? ` | Headroom: ${obj.userData.headroom_mw.toFixed(1)}MW` : "";
+        setInfo(`Substation: ${obj.userData.name || "?"} — ${obj.userData.voltage_kv}kV (${obj.userData.source})${hd}`);
+      } else if (obj.userData?.type === "power_line") {
+        setInfo(`Power line: ${obj.userData.name || obj.userData.line_type || "?"} — ${obj.userData.voltage_kv}kV`);
+      } else if (obj.userData?.type === "tec_project") {
+        setInfo(`TEC Queue: ${obj.userData.name || "?"} — ${obj.userData.plant_type} ${obj.userData.capacity_mw}MW [${obj.userData.status}]`);
       } else if (obj.name === "exclusion_zone") {
         setInfo(`Exclusion: ${obj.userData.type} — ${obj.userData.reason}`);
       } else if (obj.name === "terrain") {
@@ -871,6 +1161,51 @@ export default function DigitalTwin({ data, onClose }) {
 
       {/* Canvas */}
       <div className="twin-canvas" ref={containerRef} onClick={handleClick} />
+
+      {/* Real infrastructure summary strip */}
+      {realContext && (realContext.nearby_renewables?.length > 0 || realContext.grid_substations?.length > 0) && (
+        <div style={{
+          position: "absolute", bottom: 40, left: 12, right: 12, display: "flex", gap: 12,
+          background: "rgba(10,10,20,0.75)", borderRadius: 4, padding: "6px 12px",
+          backdropFilter: "blur(6px)", zIndex: 10,
+        }}>
+          {realContext.total_renewable_mw > 0 && (
+            <span style={{ fontSize: 11, color: "#fdd835", fontWeight: 700 }}>
+              {realContext.total_renewable_mw.toFixed(1)} MW RE nearby
+            </span>
+          )}
+          {realContext.nearby_renewables?.length > 0 && (
+            <span style={{ fontSize: 11, color: "#aaa" }}>
+              {realContext.nearby_renewables.length} REPD projects
+            </span>
+          )}
+          {realContext.osm_substations?.length > 0 && (
+            <span style={{ fontSize: 11, color: "#ff7043" }}>
+              {realContext.osm_substations.length} OSM substations
+            </span>
+          )}
+          {realContext.grid_substations?.length > 0 && (
+            <span style={{ fontSize: 11, color: "#ffa726" }}>
+              {realContext.grid_substations.length} DNO substations
+            </span>
+          )}
+          {realContext.osm_lines?.length > 0 && (
+            <span style={{ fontSize: 11, color: "#42a5f5" }}>
+              {realContext.osm_lines.length} power lines
+            </span>
+          )}
+          {realContext.tec_queue?.length > 0 && (
+            <span style={{ fontSize: 11, color: "#ce93d8" }}>
+              {realContext.tec_queue.length} TEC queue
+            </span>
+          )}
+          {realContext.technology_mix && Object.keys(realContext.technology_mix).length > 0 && (
+            <span style={{ fontSize: 10, color: "#777", marginLeft: 8 }}>
+              Mix: {Object.entries(realContext.technology_mix).map(([t, mw]) => `${t.replace("Solar Photovoltaics", "Solar").replace("Wind Onshore", "Wind")} ${mw.toFixed(0)}MW`).join(", ")}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Info panel */}
       {info && (

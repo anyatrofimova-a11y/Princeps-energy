@@ -133,6 +133,9 @@ export function SiteProvider({ children }) {
   // ── Thermal Model (TEASER) ──
   const [thermalModelOpen, setThermalModelOpen] = useState(false);
 
+  // ── Real Site Context (REPD, OSM, grid, TEC) ──
+  const [realSiteContext, setRealSiteContext] = useState(null);
+
   // ── Vision AI ──
   const [visionData, setVisionData] = useState(null);
   const [visionLoading, setVisionLoading] = useState(false);
@@ -313,6 +316,19 @@ export function SiteProvider({ children }) {
       } catch (twinErr) {
         console.warn("Twin data auto-fetch failed:", twinErr);
       }
+
+      // Fetch real nearby infrastructure data for twin enrichment (REPD, OSM, grid, TEC)
+      try {
+        const loc = val(results[1]); // explain has context with lat/lon
+        const lat = loc?.context?.location?.lat ?? loc?.lat ?? pickedLocation?.lat;
+        const lon = loc?.context?.location?.lon ?? loc?.lon ?? pickedLocation?.lon;
+        if (lat && lon) {
+          const ctx = await api.site.realContext(lat, lon, 5);
+          if (ctx) setRealSiteContext(ctx);
+        }
+      } catch (rcErr) {
+        console.warn("Real site context fetch failed:", rcErr);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -470,6 +486,8 @@ export function SiteProvider({ children }) {
     geeflowData, setGeeflowData,
     geeflowLoading, setGeeflowLoading,
     geeflowJobId, setGeeflowJobId,
+    // Real Site Context
+    realSiteContext, setRealSiteContext,
     // Vision AI
     visionData, setVisionData,
     visionLoading, setVisionLoading,

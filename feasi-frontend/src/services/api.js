@@ -43,6 +43,8 @@ const api = {
       post("/site/from-location", { lat, lon, area_m2: area }),
     agent: (id, intent, kw, day) =>
       post(`/site/${enc(id)}/agent`, { intent, capacity_kw: kw, day_of_year: day }),
+    realContext: (lat, lon, radiusKm = 5) =>
+      get(`/api/site/real-context?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
   },
 
   grid: {

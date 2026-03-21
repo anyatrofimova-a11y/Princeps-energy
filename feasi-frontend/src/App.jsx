@@ -60,7 +60,7 @@ export default function App() {
     setActiveTab, setPanelOpen,
     setSelectedLsoa,
     dashboardOpen, setDashboardOpen,
-    digitalTwinOpen, setDigitalTwinOpen, twinData,
+    digitalTwinOpen, setDigitalTwinOpen, twinData, realSiteContext,
     workflowStage,
     gridTwinOpen, setGridTwinOpen,
     bemsOpen, setBemsOpen,
@@ -464,7 +464,7 @@ export default function App() {
 
       {/* 3D Site Digital Twin overlay — works with or without data */}
       {digitalTwinOpen && (
-        <DigitalTwin data={twinData} onClose={() => setDigitalTwinOpen(false)} />
+        <DigitalTwin data={twinData} realContext={realSiteContext} onClose={() => setDigitalTwinOpen(false)} />
       )}
 
       {/* 3D Grid Digital Twin overlay */}

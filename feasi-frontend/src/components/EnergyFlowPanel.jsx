@@ -265,8 +265,8 @@ export default function EnergyFlowPanel({ placedAssets = [], solarYield, gridCon
           ) : (
             /* Empty state */
             <g>
-              <rect x={40} y={160} width={240} height={120} rx={16} fill="#0F0E0A" opacity={0.03}
-                stroke="#D4A018" strokeWidth={1} strokeDasharray="6 4" opacity={0.3}/>
+              <rect x={40} y={160} width={240} height={120} rx={16} fill="#0F0E0A"
+                stroke="#D4A018" strokeWidth={1} strokeDasharray="6 4" opacity={0.15}/>
               <text x={160} y={210} textAnchor="middle" fill="#8A857D" fontSize="12" fontFamily="Roboto" fontWeight="500">
                 Drag assets onto the map
               </text>

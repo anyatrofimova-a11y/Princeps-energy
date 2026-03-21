@@ -87,6 +87,9 @@ GEE_PROJECT = os.environ.get("GEE_PROJECT", "")
 _geeflow_path = Path(GEEFLOW_PYTHON).absolute()
 GEEFLOW_PYTHON = str(_geeflow_path)
 
+# ── Real site context (REPD, OSM, grid, TEC) ─────────────────────────────
+from utils.real_site_context import get_real_site_context
+
 # ── Pydantic models ────────────────────────────────────────────────────────
 
 
@@ -608,6 +611,26 @@ async def create_from_location(
         "lon": float(row["lon"]),
         "area_m2": body.area_m2,
     }
+
+
+# ---------------------------------------------------------------------------
+# Real site context — REPD, OSM power, grid substations, ESO TEC
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/site/real-context")
+async def real_site_context(
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    radius_km: float = Query(5, ge=0.5, le=50),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Real data context for 3D twin enrichment.
+
+    Queries REPD renewable projects, OSM power infrastructure,
+    UK DNO grid substations, and ESO TEC queue within radius of a point.
+    """
+    return await get_real_site_context(pool, lat, lon, radius_km)
 
 
 # ---------------------------------------------------------------------------
@@ -2150,3 +2173,19 @@ async def run_workflow(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+# ══════════════════════════════════════════════════════════
+# Real Site Context — nearby REPD, OSM, grid, TEC data
+# ══════════════════════════════════════════════════════════
+
+@router.get("/api/site/real-context")
+async def real_site_context(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    radius_km: float = Query(5, le=20),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Real data context for 3D twin enrichment — REPD, OSM, grid, TEC."""
+    from utils.real_site_context import get_real_site_context
+    return await get_real_site_context(pool, lat, lon, radius_km)

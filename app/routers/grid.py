@@ -685,20 +685,37 @@ async def api_grid_twin_state(
 ):
     """
     Full grid state snapshot for 3D digital twin.
-    Pulls real substations from PostGIS, applies simulated diurnal demand dynamics.
+    Pulls real substations from PostGIS and scales demand using live BMRS data.
+    Falls back to simulated diurnal dynamics if live API is unavailable.
     """
+    from utils.live_grid_status import get_live_status
+
     now = datetime.now()
     hour = now.hour + now.minute / 60.0
     day_of_year = now.timetuple().tm_yday
 
-    # Diurnal demand factor
+    # ── Fetch real-time grid status from BMRS + Carbon Intensity ─────────
+    live: dict = {}
+    try:
+        live = await get_live_status()
+    except Exception:
+        pass  # fall back to simulated
+
+    real_demand_gw = live.get("demand_gw")  # GW from BMRS
+    real_demand_mw = real_demand_gw * 1000 if real_demand_gw else None
+    gen_mix = live.get("generation_mix", {})
+    wind_pct = gen_mix.get("wind_pct", 0) / 100 if gen_mix else 0
+    solar_pct = gen_mix.get("solar_pct", 0) / 100 if gen_mix else 0
+    renewable_pct = wind_pct + solar_pct
+
+    # Simulated diurnal/seasonal (used as fallback if live data unavailable)
     morning = math.exp(-0.5 * ((hour - 8.5) / 1.8) ** 2) * 0.85
     evening = math.exp(-0.5 * ((hour - 17.5) / 2.0) ** 2) * 1.0
     night = 0.35 + 0.15 * math.cos(2 * math.pi * (hour - 3) / 24)
     diurnal = max(night, morning, evening)
     seasonal = 0.7 + 0.3 * math.cos(2 * math.pi * (day_of_year - 15) / 365)
 
-    # Pull real substations from PostGIS (high-voltage only for twin)
+    # ── Pull real substations from PostGIS ───────────────────────────────
     substations = []
     try:
         rows = await pool.fetch("""
@@ -713,20 +730,63 @@ async def api_grid_twin_state(
             ORDER BY voltage_kv DESC, demand_mw DESC NULLS LAST
             LIMIT $1
         """, limit)
+
+        # ── ECR queue data from grid_ecr ─────────────────────────────────
+        ecr_map: dict[int, dict] = {}
+        try:
+            ecr_rows = await pool.fetch("""
+                SELECT substation_id, COUNT(*) AS ecr_count,
+                       COALESCE(SUM(capacity_mw), 0) AS ecr_mw
+                FROM grid_ecr
+                WHERE substation_id IS NOT NULL
+                GROUP BY substation_id
+            """)
+            for er in ecr_rows:
+                ecr_map[er["substation_id"]] = {
+                    "ecr_queued": int(er["ecr_count"]),
+                    "ecr_mw": round(float(er["ecr_mw"]), 1),
+                }
+        except Exception:
+            pass  # ECR enrichment is non-critical
+
+        # Sum of DB-stored demand for proportional scaling
+        total_db_demand = sum(
+            float(r["demand_mw"] or (float(r["transformer_rating_mva"] or r["demand_headroom_mw"] or 100) * 0.5))
+            for r in rows
+        )
+
         for r in rows:
             capacity = float(r["transformer_rating_mva"] or r["demand_headroom_mw"] or 100)
             base_demand = float(r["demand_mw"] or capacity * 0.5)
             base_gen = float(r["generation_mw"] or 0)
+            sub_id = r["id"]
 
-            # Apply diurnal/seasonal dynamics + noise
-            live_demand = round(base_demand * diurnal * seasonal * (1 + random.gauss(0, 0.04)), 1)
-            solar_factor = max(0, math.sin(math.pi * max(0, min(1, (hour - 6) / 12))))
-            solar_season = max(0.1, math.sin(math.pi * (day_of_year - 80) / 365))
-            live_gen = round(max(base_gen, capacity * 0.08) * solar_factor * solar_season * (1 + random.gauss(0, 0.05)), 1)
+            # ── Demand: scale by real national demand or fall back to simulated ──
+            if real_demand_mw and total_db_demand > 0:
+                scale = real_demand_mw / total_db_demand
+                live_demand = round(base_demand * scale, 1)
+            else:
+                live_demand = round(base_demand * diurnal * seasonal * (1 + random.gauss(0, 0.04)), 1)
+
+            # ── Generation: use real wind+solar mix or fall back to solar-only ──
+            if gen_mix and renewable_pct > 0:
+                # Distribute national renewable gen proportionally to each sub's capacity
+                # Wind: spread more evenly; Solar: weight by daytime factor
+                solar_factor = max(0, math.sin(math.pi * max(0, min(1, (hour - 6) / 12))))
+                wind_gen = capacity * 0.10 * wind_pct * (1 + random.gauss(0, 0.03))
+                solar_gen = capacity * 0.10 * solar_pct * solar_factor * (1 + random.gauss(0, 0.03))
+                live_gen = round(max(base_gen, wind_gen + solar_gen), 1)
+            else:
+                solar_factor = max(0, math.sin(math.pi * max(0, min(1, (hour - 6) / 12))))
+                solar_season = max(0.1, math.sin(math.pi * (day_of_year - 80) / 365))
+                live_gen = round(max(base_gen, capacity * 0.08) * solar_factor * solar_season * (1 + random.gauss(0, 0.05)), 1)
+
+            # ── ECR enrichment ───────────────────────────────────────────
+            ecr_info = ecr_map.get(sub_id, {})
 
             substations.append({
-                "id": str(r["id"]),
-                "name": r["name"] or f"Sub-{r['id']}",
+                "id": str(sub_id),
+                "name": r["name"] or f"Sub-{sub_id}",
                 "lat": float(r["lat"]),
                 "lon": float(r["lon"]),
                 "voltage_kv": float(r["voltage_kv"]),
@@ -740,6 +800,8 @@ async def api_grid_twin_state(
                 "headroom_mw": round(capacity - live_demand, 1),
                 "rag_demand": r["rag_demand"],
                 "rag_generation": r["rag_generation"],
+                "ecr_queued": ecr_info.get("ecr_queued", 0),
+                "ecr_mw": ecr_info.get("ecr_mw", 0.0),
             })
     except Exception as e:
         # Fallback to synthetic if DB unavailable
@@ -748,7 +810,7 @@ async def api_grid_twin_state(
     # Build lines by connecting nearby substations at same/adjacent voltage tiers
     lines = _build_twin_lines(substations)
 
-    # System metrics
+    # System metrics — prefer real data, fall back to computed totals
     total_demand = sum(s["demand_mw"] for s in substations)
     total_gen = sum(s["generation_mw"] for s in substations)
     total_capacity = sum(s["capacity_mw"] for s in substations)
@@ -762,9 +824,13 @@ async def api_grid_twin_state(
             "total_generation_mw": round(total_gen, 1),
             "total_capacity_mw": round(total_capacity, 1),
             "system_utilisation": round(total_demand / max(total_capacity, 1), 3),
-            "frequency_hz": round(50.0 + random.gauss(0, 0.02), 3),
+            "frequency_hz": live.get("frequency_hz") or round(50.0 + random.gauss(0, 0.02), 3),
+            "carbon_intensity": live.get("carbon_intensity_gco2_kwh"),
+            "carbon_index": live.get("carbon_index"),
+            "generation_mix": gen_mix,
             "hour": round(hour, 1),
             "day_of_year": day_of_year,
+            "live_data": real_demand_mw is not None,
         },
     }
 

@@ -306,6 +306,85 @@ function CreateProjectModal({ onClose, onCreate }) {
   );
 }
 
+// Phase 3 — Data source toggle options
+const DATA_SOURCES = [
+  { id: "my_projects", label: "My Projects" },
+  { id: "repd", label: "REPD Market" },
+  { id: "combined", label: "Combined" },
+];
+
+function DocumentsSection({ projectId }) {
+  const [documents, setDocuments] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    api.projects.listDocuments(projectId).then(d => { if (d) setDocuments(d); });
+  }, [projectId]);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const result = await api.projects.uploadDocument(projectId, file);
+    setUploading(false);
+    if (result) setDocuments(prev => [result, ...prev]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDelete = async (docId) => {
+    const result = await api.projects.deleteDocument(docId);
+    if (result?.deleted) setDocuments(prev => prev.filter(d => d.doc_id !== docId));
+  };
+
+  const formatSize = (bytes) => {
+    if (!bytes) return "—";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1048576).toFixed(1)} MB`;
+  };
+
+  const DOC_TYPE_ICONS = {
+    report: "\uD83D\uDCCA", grid_offer: "\u26A1", planning_app: "\uD83D\uDCC4",
+    epc_contract: "\uD83D\uDCDD", ppa: "\uD83D\uDCB0", land_option: "\uD83C\uDFE0",
+    environmental: "\uD83C\uDF3F", financial: "\uD83D\uDCB3", technical: "\u2699\uFE0F",
+    correspondence: "\u2709\uFE0F", other: "\uD83D\uDCC1",
+  };
+
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div className="pp-next-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>DOCUMENTS ({documents.length})</span>
+        <label className="pp-btn-primary" style={{ fontSize: 10, padding: "3px 10px", cursor: "pointer" }}>
+          {uploading ? "Uploading..." : "+ Upload"}
+          <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={handleUpload} disabled={uploading} />
+        </label>
+      </div>
+      {documents.length === 0 && (
+        <div style={{ fontSize: 11, color: "#9CA3AF", padding: "8px 0" }}>No documents attached yet.</div>
+      )}
+      {documents.map(doc => (
+        <div key={doc.doc_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #f3f4f6", fontSize: 11 }}>
+          <span>{DOC_TYPE_ICONS[doc.doc_type] || "\uD83D\uDCC1"}</span>
+          <a
+            href={api.projects.downloadDocument(doc.doc_id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ flex: 1, color: "var(--cds-interactive)", textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+          >
+            {doc.title || doc.filename}
+          </a>
+          <span style={{ color: "#9CA3AF", flexShrink: 0 }}>{formatSize(doc.size_bytes)}</span>
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDelete(doc.doc_id); }}
+            style={{ background: "none", border: "none", color: "#ef4444", cursor: "pointer", fontSize: 12, padding: "0 2px" }}
+          >&times;</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ProjectPipeline({ onClose, onSelectProject }) {
   const { setPickedLocation } = useSite();
   const [projects, setProjects] = useState([]);
@@ -317,6 +396,10 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
   const [dragOverStage, setDragOverStage] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [timeline, setTimeline] = useState(null);
+  const [dataSource, setDataSource] = useState("my_projects");
+  const [repdData, setRepdData] = useState(null);
+  const [repdLoading, setRepdLoading] = useState(false);
+  const [importing, setImporting] = useState({});
   const loadedRef = useRef(false);
 
   // Load projects from backend
@@ -330,12 +413,35 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
     setLoading(false);
   }, []);
 
+  // Load REPD market data
+  const loadRepd = useCallback(async () => {
+    if (repdData) return; // already loaded
+    setRepdLoading(true);
+    const data = await api.tracker.repdSummary();
+    setRepdData(data);
+    setRepdLoading(false);
+  }, [repdData]);
+
   useEffect(() => {
     if (!loadedRef.current) {
       loadedRef.current = true;
       loadProjects();
     }
   }, [loadProjects]);
+
+  useEffect(() => {
+    if (dataSource === "repd" || dataSource === "combined") loadRepd();
+  }, [dataSource, loadRepd]);
+
+  const handleImportRepd = useCallback(async (repdId) => {
+    setImporting(prev => ({ ...prev, [repdId]: true }));
+    const result = await api.projects.importRepd(repdId);
+    setImporting(prev => ({ ...prev, [repdId]: false }));
+    if (result) {
+      setProjects(prev => [result, ...prev]);
+      api.projects.summary().then(s => { if (s) setSummary(s); });
+    }
+  }, []);
 
   const filtered = filterType
     ? projects.filter(p => p.technology === filterType)
@@ -444,6 +550,19 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
             ))}
           </div>
 
+          {/* Data source toggle */}
+          <div className="pp-view-toggle">
+            {DATA_SOURCES.map(ds => (
+              <button
+                key={ds.id}
+                className={`pp-view-btn ${dataSource === ds.id ? "active" : ""}`}
+                onClick={() => setDataSource(ds.id)}
+              >
+                {ds.label}
+              </button>
+            ))}
+          </div>
+
           {/* Create button */}
           <button className="pp-btn-primary" onClick={() => setShowCreate(true)}>
             + New Project
@@ -460,6 +579,60 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
       {loading ? (
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", flex: 1, color: "#8A857D" }}>
           Loading pipeline...
+        </div>
+      ) : dataSource === "repd" ? (
+        /* REPD Market View */
+        <div className="pp-table-wrap">
+          {repdLoading ? (
+            <div style={{ textAlign: "center", padding: 40, color: "#8A857D" }}>Loading REPD data...</div>
+          ) : repdData ? (
+            <>
+              <div className="pp-summary-bar" style={{ borderBottom: "1px solid #f3f4f6", marginBottom: 0 }}>
+                <div className="pp-summary-item">
+                  <span className="pp-summary-value">{repdData.total_projects?.toLocaleString()}</span>
+                  <span className="pp-summary-label">REPD Projects</span>
+                </div>
+                <div className="pp-summary-item">
+                  <span className="pp-summary-value">{Math.round(repdData.total_mw || 0).toLocaleString()}</span>
+                  <span className="pp-summary-label">Market MW</span>
+                </div>
+              </div>
+              <table className="pp-table">
+                <thead>
+                  <tr>
+                    <th>Technology</th>
+                    <th>Projects</th>
+                    <th>Total MW</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(repdData.by_technology || []).map(t => (
+                    <tr key={t.technology || t.tech_category}>
+                      <td>{TYPE_ICONS[t.technology || t.tech_category] || ""} {t.technology || t.tech_category}</td>
+                      <td>{t.count?.toLocaleString()}</td>
+                      <td>{Math.round(t.total_mw || 0).toLocaleString()} MW</td>
+                      <td>
+                        <button
+                          className="pp-btn-secondary"
+                          style={{ fontSize: 10, padding: "2px 8px" }}
+                          onClick={() => {
+                            setDataSource("my_projects");
+                            setFilterType(t.technology || t.tech_category);
+                          }}
+                        >
+                          View in pipeline
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ padding: "8px 12px", fontSize: 10, color: "#9CA3AF" }}>
+                Source: BEIS REPD + ESO TEC Register. Import individual projects via search.
+              </div>
+            </>
+          ) : null}
         </div>
       ) : (
         <>
@@ -518,7 +691,11 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
                         </td>
                         <td className="pp-table-days">{days}d</td>
                         <td className="pp-table-blocker">{p.blocker || "\u2014"}</td>
-                        <td>{p.repd_id ? <span className="pp-card-source-badge">REPD</span> : "\u2014"}</td>
+                        <td>
+                          {p.repd_id ? <span className="pp-card-source-badge">REPD</span>
+                            : p.tec_id ? <span className="pp-card-source-badge" style={{ background: "#d1fae5", color: "#059669" }}>TEC</span>
+                            : "\u2014"}
+                        </td>
                       </tr>
                     );
                   })}
@@ -632,6 +809,9 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
                 ))}
               </div>
             )}
+
+            {/* Documents */}
+            <DocumentsSection projectId={selectedProject.project_id} />
 
             {/* Next actions */}
             <div className="pp-next-actions">
