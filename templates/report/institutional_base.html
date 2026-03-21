@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Princeps — {{ site.name }} — Site Assessment Report</title>
+<style>
+  /* ═══════════════════════════════════════════════════════════
+     Institutional-Grade Report — DNV GL / RICS / NESO standard
+     ═══════════════════════════════════════════════════════════ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 10.5pt; }
+  body {
+    font-family: 'Segoe UI', Calibri, -apple-system, sans-serif;
+    color: #333333;
+    background: #fff;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page { margin: 20mm 18mm 18mm 18mm; }
+  .page-break { page-break-after: always; break-after: page; }
+
+  /* ── Brand palette (institutional teal/navy) ── */
+  :root {
+    --inst-navy: #1B365D;
+    --inst-teal: #007A8C;
+    --inst-teal-light: #E8F4F6;
+    --inst-green: #228B22;
+    --inst-amber: #D4A017;
+    --inst-red: #C0392B;
+    --inst-grey: #6B7280;
+    --inst-grey-light: #F5F5F5;
+    --inst-border: #D1D5DB;
+  }
+
+  /* ── Page header/footer ── */
+  .rpt-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; margin-bottom: 16px;
+    border-bottom: 3px solid var(--inst-teal);
+  }
+  .rpt-header-logo { font-size: 16px; font-weight: 800; color: var(--inst-navy); letter-spacing: 3px; }
+  .rpt-header-meta { font-size: 8pt; color: var(--inst-grey); text-align: right; }
+  .rpt-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0; margin-top: 20px; border-top: 1px solid var(--inst-border);
+    font-size: 7.5pt; color: var(--inst-grey);
+  }
+
+  /* ── Section headings ── */
+  h1.rpt-title { font-size: 24pt; font-weight: 700; color: var(--inst-navy); margin-bottom: 6px; }
+  h2.rpt-section { font-size: 14pt; font-weight: 700; color: var(--inst-navy); border-bottom: 2px solid var(--inst-teal); padding-bottom: 4px; margin: 20px 0 10px; }
+  h3.rpt-sub { font-size: 11pt; font-weight: 600; color: var(--inst-navy); margin: 14px 0 6px; }
+  h4.rpt-minor { font-size: 10pt; font-weight: 600; color: #555; margin: 10px 0 4px; }
+
+  /* ── Tables ── */
+  table.rpt-table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 9.5pt; }
+  table.rpt-table th {
+    background: var(--inst-teal); color: #fff;
+    padding: 5px 8px; text-align: left; font-weight: 600; font-size: 9pt;
+  }
+  table.rpt-table td { padding: 4px 8px; border-bottom: 1px solid #E5E7EB; }
+  table.rpt-table tr:nth-child(even) td { background: var(--inst-grey-light); }
+  table.rpt-table td.num { text-align: right; font-family: 'Consolas', 'Courier New', monospace; }
+  table.rpt-table tr.total td { font-weight: 700; border-top: 2px solid var(--inst-navy); }
+
+  /* ── KV pairs (label: value) ── */
+  .rpt-kv { display: flex; padding: 3px 0; border-bottom: 1px solid #F0F0F0; }
+  .rpt-kv-label { width: 45%; font-weight: 600; color: #555; font-size: 9.5pt; }
+  .rpt-kv-value { width: 55%; font-size: 9.5pt; }
+
+  /* ── Verdict badges ── */
+  .verdict-badge {
+    display: inline-block; padding: 4px 14px; border-radius: 4px;
+    font-weight: 800; font-size: 14pt; color: #fff;
+  }
+  .verdict-go { background: var(--inst-green); }
+  .verdict-caution { background: var(--inst-amber); }
+  .verdict-nogo { background: var(--inst-red); }
+
+  /* ── Score gauge ── */
+  .score-gauge { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+  .score-gauge-track { flex: 1; height: 8px; background: #E5E7EB; border-radius: 4px; overflow: hidden; }
+  .score-gauge-fill { height: 100%; border-radius: 4px; }
+  .score-gauge-value { font-size: 16pt; font-weight: 800; color: var(--inst-navy); min-width: 50px; }
+
+  /* ── Charts ── */
+  .chart-container { margin: 10px 0; text-align: center; }
+  .chart-container img { max-width: 100%; border: 1px solid #E5E7EB; border-radius: 4px; }
+  .chart-caption { font-size: 8pt; color: var(--inst-grey); margin-top: 3px; font-style: italic; }
+
+  /* ── Risk matrix ── */
+  .risk-item { padding: 4px 0; border-bottom: 1px solid #F0F0F0; display: flex; gap: 8px; }
+  .risk-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
+  .risk-high { background: var(--inst-red); }
+  .risk-med { background: var(--inst-amber); }
+  .risk-low { background: var(--inst-green); }
+
+  /* ── Two-column layout ── */
+  .rpt-cols { display: flex; gap: 20px; }
+  .rpt-col { flex: 1; }
+
+  /* ── Cover page ── */
+  .cover { display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 90vh; text-align: center; }
+  .cover-brand { font-size: 32pt; font-weight: 800; color: var(--inst-navy); letter-spacing: 5px; margin-bottom: 30px; }
+  .cover-title { font-size: 20pt; font-weight: 600; color: var(--inst-teal); margin-bottom: 10px; }
+  .cover-site { font-size: 16pt; color: #555; margin-bottom: 40px; }
+  .cover-meta { font-size: 9pt; color: var(--inst-grey); line-height: 1.8; }
+  .cover-bar { width: 80px; height: 4px; background: var(--inst-teal); margin: 20px auto; }
+
+  /* ── Disclaimer ── */
+  .disclaimer { font-size: 8.5pt; color: #666; line-height: 1.6; }
+  .disclaimer p { margin-bottom: 8px; }
+  .disclaimer strong { color: #333; }
+
+  /* ── Document control ── */
+  table.doc-control { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  table.doc-control th { background: var(--inst-navy); color: #fff; padding: 4px 8px; text-align: left; }
+  table.doc-control td { padding: 4px 8px; border: 1px solid var(--inst-border); }
+
+  /* ── Confidence labels ── */
+  .conf-label { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 8pt; font-weight: 600; }
+  .conf-p50 { background: #DBEAFE; color: #1E40AF; }
+  .conf-p75 { background: #E0E7FF; color: #4338CA; }
+  .conf-p90 { background: #FEF3C7; color: #92400E; }
+  .conf-p95 { background: #FED7AA; color: #9A3412; }
+  .conf-p99 { background: #FECACA; color: #991B1B; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════ COVER PAGE ═══════════════════ -->
+<div class="cover">
+  <div class="cover-brand">PRINCEPS</div>
+  <div class="cover-bar"></div>
+  <div class="cover-title">Site Feasibility Assessment Report</div>
+  <div class="cover-site">{{ site.name }}</div>
+  <div class="cover-meta">
+    Report No: {{ report.number }}<br>
+    Revision: {{ report.revision | default('A') }}<br>
+    Date: {{ report.date }}<br>
+    Classification: {{ report.classification | default('Commercial in Confidence') }}<br>
+    <br>
+    Prepared for: {{ report.client | default('[Client Name]') }}<br>
+    Technology: {{ site.technology | default('Solar PV') }} — {{ site.capacity_mw | default('—') }} MW<br>
+    Location: {{ site.lat }}°N, {{ site.lon | abs }}°{{ 'W' if site.lon < 0 else 'E' }}
+  </div>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ DISCLAIMER ═══════════════════ -->
+<div class="rpt-header">
+  <span class="rpt-header-logo">PRINCEPS</span>
+  <span class="rpt-header-meta">{{ report.number }} | Rev {{ report.revision | default('A') }}</span>
+</div>
+<h2 class="rpt-section">Important Notice</h2>
+<div class="disclaimer">
+  <p><strong>Limitation of Liability.</strong> This report has been prepared by Princeps AI Platform using automated data aggregation, machine learning models, and satellite-derived analysis. While every effort has been made to ensure accuracy, Princeps does not warrant the completeness or reliability of the information contained herein. All predictions, scores, and estimates are indicative and should not be relied upon as the sole basis for investment, planning, or development decisions.</p>
+  <p><strong>Independent Verification Required.</strong> This report does not constitute a bankable yield assessment, environmental impact assessment, or planning application document. Before proceeding with any development, the client should commission independent verification by qualified professionals including: (a) a PVsyst-certified yield analyst for bankable energy production estimates; (b) an accredited ecologist for protected species surveys; (c) a chartered engineer for grid connection detailed design; (d) a planning consultant for formal pre-application advice.</p>
+  <p><strong>Data Sources.</strong> This report uses data from: Google Earth Engine (DynamicWorld, ERA5-Land, NASADEM, Sentinel-2), HM Land Registry INSPIRE, Natural England ArcGIS, Environment Agency, NREL PvWattsv8, Elexon BMRS, UK DNO open data (UKPN, SSEN, NPg, NGED, SPEN, ENWL), Companies House, and Carbon Intensity API. Data accuracy depends on source update frequency and spatial resolution.</p>
+  <p><strong>Document Classification.</strong> This document is classified as <strong>{{ report.classification | default('Commercial in Confidence') }}</strong>. Distribution is restricted to the named client and their appointed professional advisors. Princeps accepts no liability for use of this report by third parties.</p>
+</div>
+<div class="page-break"></div>
+
+<!-- ═══════════════════ DOCUMENT CONTROL ═══════════════════ -->
+<div class="rpt-header">
+  <span class="rpt-header-logo">PRINCEPS</span>
+  <span class="rpt-header-meta">{{ report.number }} | Rev {{ report.revision | default('A') }}</span>
+</div>
+<h2 class="rpt-section">Document Control</h2>
+
+<table class="doc-control">
+  <tr><th>Project</th><td>{{ site.name }}</td><th>Report No.</th><td>{{ report.number }}</td></tr>
+  <tr><th>Client</th><td>{{ report.client | default('[Client]') }}</td><th>Date</th><td>{{ report.date }}</td></tr>
+  <tr><th>Technology</th><td>{{ site.technology | default('Solar PV') }}</td><th>Capacity</th><td>{{ site.capacity_mw | default('—') }} MW</td></tr>
+  <tr><th>Location</th><td>{{ site.lat }}°N, {{ site.lon | abs }}°{{ 'W' if site.lon < 0 else 'E' }}</td><th>Classification</th><td>{{ report.classification | default('Commercial in Confidence') }}</td></tr>
+</table>
+
+<h3 class="rpt-sub">Sign-off</h3>
+<table class="doc-control">
+  <tr><th width="25%">Role</th><th width="35%">Name</th><th width="20%">Date</th><th width="20%">Signature</th></tr>
+  <tr><td>Prepared by</td><td>Princeps AI Engine v{{ report.version | default('2.0') }}</td><td>{{ report.date }}</td><td style="color: var(--inst-teal); font-style: italic;">Auto-generated</td></tr>
+  <tr><td>Reviewed by</td><td>{{ report.reviewer | default('[Reviewer Name, Credentials]') }}</td><td></td><td></td></tr>
+  <tr><td>Approved by</td><td>{{ report.approver | default('[Approver Name, Credentials]') }}</td><td></td><td></td></tr>
+</table>
+
+<h3 class="rpt-sub">Revision History</h3>
+<table class="doc-control">
+  <tr><th>Rev</th><th>Date</th><th>Description</th><th>By</th></tr>
+  <tr><td>A</td><td>{{ report.date }}</td><td>Initial issue — AI-generated assessment</td><td>Princeps</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════ EXECUTIVE SUMMARY ═══════════════════ -->
+<div class="rpt-header">
+  <span class="rpt-header-logo">PRINCEPS</span>
+  <span class="rpt-header-meta">{{ report.number }} | Rev {{ report.revision | default('A') }}</span>
+</div>
+
+<h2 class="rpt-section">1. Executive Summary</h2>
+
+<div class="rpt-cols">
+  <div class="rpt-col">
+    <div style="margin-bottom: 12px;">
+      <span class="verdict-badge verdict-{{ verdict.verdict | lower | replace('-', '') }}">{{ verdict.verdict }}</span>
+      <span style="margin-left: 10px; font-size: 11pt; color: var(--inst-grey);">{{ verdict.confidence }}% confidence</span>
+    </div>
+    <p style="margin-bottom: 10px;">{{ verdict.summary }}</p>
+  </div>
+  <div class="rpt-col">
+    <div class="score-gauge">
+      <div class="score-gauge-track">
+        <div class="score-gauge-fill" style="width: {{ score.total }}%; background: {% if score.total >= 70 %}var(--inst-green){% elif score.total >= 40 %}var(--inst-amber){% else %}var(--inst-red){% endif %};"></div>
+      </div>
+      <div class="score-gauge-value">{{ score.total }}<span style="font-size: 9pt; color: var(--inst-grey);">/100</span></div>
+    </div>
+  </div>
+</div>
+
+<h3 class="rpt-sub">Key Metrics</h3>
+<table class="rpt-table">
+  <tr><th>Metric</th><th>Value</th><th>Notes</th></tr>
+  <tr><td>Installed Capacity</td><td class="num">{{ yield.capacity_kw | default('—') }} kW</td><td>{{ site.technology | default('Solar PV') }}</td></tr>
+  <tr><td>Annual Yield (P50)</td><td class="num">{{ yield.annual_mwh_p50 | default(yield.annual_energy_kwh / 1000 if yield.annual_energy_kwh else '—') | round(1) }} MWh</td><td>Year 1, before degradation</td></tr>
+  <tr><td>Specific Yield</td><td class="num">{{ yield.specific_yield | default('—') }} kWh/kWp</td><td></td></tr>
+  <tr><td>Capacity Factor</td><td class="num">{{ yield.capacity_factor_pct | default('—') }}%</td><td>UK average: ~10-12%</td></tr>
+  <tr><td>Performance Ratio</td><td class="num">{{ yield.performance_ratio | default('—') }}%</td><td>Target: >80%</td></tr>
+  <tr><td>Grid Connection</td><td class="num">{{ grid.nearest_substation | default('—') }}</td><td>{{ grid.distance_km | default('—') }} km, {{ grid.voltage_kv | default('—') }}kV</td></tr>
+  <tr><td>Grid Headroom</td><td class="num">{{ grid.headroom_mw | default('—') }} MW</td><td></td></tr>
+  <tr><td>Connection Cost (P50)</td><td class="num">£{{ '{:,.0f}'.format(grid.connection_cost_p50 | default(0)) }}</td><td>P10-P90: £{{ '{:,.0f}'.format(grid.connection_cost_p10 | default(0)) }}–{{ '{:,.0f}'.format(grid.connection_cost_p90 | default(0)) }}</td></tr>
+  <tr><td>ALC Grade</td><td>{{ land.alc_grade | default('—') }}</td><td>{{ 'BMV — planning restriction' if land.bmv else 'Non-BMV' }}</td></tr>
+  <tr><td>Flood Zone</td><td>{{ land.flood_zone | default('—') }}</td><td></td></tr>
+</table>
+
+{% if yield.probability_table %}
+<h3 class="rpt-sub">Energy Production Probability of Exceedance</h3>
+<table class="rpt-table">
+  <tr>
+    <th>Period</th>
+    <th><span class="conf-p50">P50</span></th>
+    <th><span class="conf-p75">P75</span></th>
+    <th><span class="conf-p90">P90</span></th>
+    <th><span class="conf-p95">P95</span></th>
+    <th><span class="conf-p99">P99</span></th>
+  </tr>
+  {% for row in yield.probability_table %}
+  <tr>
+    <td>{{ row.period }}</td>
+    <td class="num">{{ row.p50 }}</td>
+    <td class="num">{{ row.p75 }}</td>
+    <td class="num">{{ row.p90 }}</td>
+    <td class="num">{{ row.p95 }}</td>
+    <td class="num">{{ row.p99 }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if charts.radar %}
+<div class="chart-container">
+  <img src="data:image/png;base64,{{ charts.radar }}" alt="Multi-criteria feasibility radar" style="max-height: 280px;">
+  <div class="chart-caption">Figure 1: Multi-criteria feasibility score breakdown</div>
+</div>
+{% endif %}
+
+<div class="page-break"></div>
+
+<!-- ═══════════════════ SUBSEQUENT SECTIONS ═══════════════════ -->
+<!-- Sections 2-11 follow the same pattern — injected by the Python renderer -->
+{% for section in sections %}
+<div class="rpt-header">
+  <span class="rpt-header-logo">PRINCEPS</span>
+  <span class="rpt-header-meta">{{ report.number }} | Rev {{ report.revision | default('A') }}</span>
+</div>
+
+<h2 class="rpt-section">{{ section.number }}. {{ section.title }}</h2>
+{{ section.content | safe }}
+
+{% if not loop.last %}
+<div class="page-break"></div>
+{% endif %}
+{% endfor %}
+
+<!-- ═══════════════════ FOOTER ON EVERY PAGE ═══════════════════ -->
+<div class="rpt-footer">
+  <span>Princeps AI Platform — {{ site.name }}</span>
+  <span>{{ report.number }} | {{ report.classification | default('Commercial in Confidence') }}</span>
+</div>
+
+</body>
+</html>
