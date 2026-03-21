@@ -20,7 +20,12 @@ const STAGES = [
     short: "PRSP",
     color: "#8A857D",
     description: "Land identified, not yet screened",
-    actions: ["Run feasibility", "Check constraints"],
+    actions: [
+      { label: "Run feasibility", type: "internal", desc: "8-axis AI feasibility assessment" },
+      { label: "Check constraints", type: "internal", desc: "Environmental + planning screening" },
+      { label: "REPD stalled projects", type: "internal", desc: "Find stalled/withdrawn REPD sites to acquire" },
+      { label: "Land Registry INSPIRE", type: "link", url: "https://use-land-property-data.service.gov.uk/", desc: "HMLR title & ownership lookup" },
+    ],
   },
   {
     id: "screened",
@@ -28,7 +33,11 @@ const STAGES = [
     short: "SCRN",
     color: "#D4A018",
     description: "Feasibility complete, viable site",
-    actions: ["Submit grid app", "Secure land option"],
+    actions: [
+      { label: "Apply for grid connection", type: "dno", desc: "Submit G99/G100 application to your DNO" },
+      { label: "Secure land option", type: "internal", desc: "Record land option / heads of terms" },
+      { label: "Download G99 pack", type: "internal", desc: "Pre-filled ENA G99 application form" },
+    ],
   },
   {
     id: "grid_applied",
@@ -36,7 +45,11 @@ const STAGES = [
     short: "GAPP",
     color: "#0891b2",
     description: "Connection application submitted to DNO",
-    actions: ["Track application", "Prepare planning"],
+    actions: [
+      { label: "Track on DNO portal", type: "dno", desc: "Check application status with your DNO" },
+      { label: "Prepare planning app", type: "link", url: "https://www.planningportal.co.uk/", desc: "Planning Portal — submit application" },
+      { label: "ESO connection queue", type: "link", url: "https://www.neso.energy/industry-information/connections", desc: "NESO connections register" },
+    ],
   },
   {
     id: "grid_offer",
@@ -44,7 +57,12 @@ const STAGES = [
     short: "GOFF",
     color: "#3b82f6",
     description: "Connection offer received, reviewing terms",
-    actions: ["Accept offer", "Negotiate terms", "Reject & reapply"],
+    actions: [
+      { label: "Review offer terms", type: "internal", desc: "Compare P10/P50/P90 cost estimates vs offer" },
+      { label: "Run power flow", type: "internal", desc: "Tier 2 pandapower validation of offer assumptions" },
+      { label: "DNO offer portal", type: "dno", desc: "Accept/reject on your DNO's connection portal" },
+      { label: "ENA connection guide", type: "link", url: "https://www.energynetworks.org/operating-the-networks/connecting-to-the-networks", desc: "ENA connection process guide" },
+    ],
   },
   {
     id: "planning",
@@ -52,7 +70,12 @@ const STAGES = [
     short: "PLAN",
     color: "#a855f7",
     description: "Planning application submitted to LPA",
-    actions: ["Track planning", "Prepare EIA", "Community engagement"],
+    actions: [
+      { label: "Track on Planning Portal", type: "link", url: "https://www.planningportal.co.uk/planning/tracking", desc: "Track your planning application" },
+      { label: "NSIP register", type: "link", url: "https://infrastructure.planninginspectorate.gov.uk/projects/register-of-applications/", desc: "PINS nationally significant projects" },
+      { label: "Generate EIA report", type: "internal", desc: "Environmental Impact Assessment" },
+      { label: "BNG assessment", type: "link", url: "https://www.gov.uk/guidance/biodiversity-net-gain", desc: "DEFRA Biodiversity Net Gain guidance" },
+    ],
   },
   {
     id: "fid",
@@ -60,7 +83,12 @@ const STAGES = [
     short: "FID",
     color: "#16a34a",
     description: "Final investment decision — PPA & funding secured",
-    actions: ["Execute PPA", "Appoint EPC", "Finalise BOM"],
+    actions: [
+      { label: "Financial model", type: "internal", desc: "25-year DCF with sensitivity analysis" },
+      { label: "CfD register", type: "link", url: "https://www.gov.uk/government/collections/contracts-for-difference", desc: "DESNZ Contracts for Difference" },
+      { label: "PPA marketplace", type: "link", url: "https://www.pexapark.com/", desc: "Pexapark PPA marketplace" },
+      { label: "Download investment memo", type: "internal", desc: "Branded PDF investment memorandum" },
+    ],
   },
   {
     id: "construction",
@@ -68,7 +96,11 @@ const STAGES = [
     short: "CNST",
     color: "#f59e0b",
     description: "EPC mobilised, building on site",
-    actions: ["Track milestones", "Commission tests"],
+    actions: [
+      { label: "DNO pre-connection", type: "dno", desc: "Schedule pre-connection inspection" },
+      { label: "Ofgem accreditation", type: "link", url: "https://www.ofgem.gov.uk/environmental-and-social-schemes", desc: "Register for ROCs/FITs/SEG" },
+      { label: "Commission checklist", type: "internal", desc: "G99 commissioning requirements" },
+    ],
   },
   {
     id: "energised",
@@ -76,9 +108,23 @@ const STAGES = [
     short: "ENRG",
     color: "#22c55e",
     description: "Connected and generating",
-    actions: ["Monitor output", "Dispatch optimise"],
+    actions: [
+      { label: "BMRS registration", type: "link", url: "https://www.elexon.co.uk/operations-settlement/bsc-central-services/balancing-mechanism-reporting-agent/", desc: "Register as BM participant" },
+      { label: "Monitor performance", type: "internal", desc: "Live output vs forecast comparison" },
+      { label: "Revenue dashboard", type: "internal", desc: "Dispatch optimisation + revenue stacking" },
+    ],
   },
 ];
+
+// DNO portal URLs by region/operator
+const DNO_PORTALS = {
+  "UKPN": { name: "UK Power Networks", url: "https://www.ukpowernetworks.co.uk/electricity/new-connection" },
+  "SSEN": { name: "SSEN", url: "https://www.ssen.co.uk/connections/" },
+  "NGED": { name: "National Grid ED", url: "https://www.nationalgrid.co.uk/connections" },
+  "NPg":  { name: "Northern Powergrid", url: "https://www.northernpowergrid.com/new-connections" },
+  "ENWL": { name: "Electricity North West", url: "https://www.enwl.co.uk/get-connected/" },
+  "SPEN": { name: "SP Energy Networks", url: "https://www.spenergynetworks.co.uk/pages/connections.aspx" },
+};
 
 const TYPE_ICONS = {
   solar: "PV",
@@ -828,9 +874,41 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
             {/* Next actions */}
             <div className="pp-next-actions">
               <div className="pp-next-title">NEXT ACTIONS</div>
-              {STAGES.find(s => s.id === selectedProject.stage)?.actions.map((action, i) => (
-                <button key={i} className="pp-action-btn">{action}</button>
-              ))}
+              {STAGES.find(s => s.id === selectedProject.stage)?.actions.map((action, i) => {
+                const isLink = action.type === "link" || action.type === "dno";
+                const url = action.type === "dno"
+                  ? (Object.values(DNO_PORTALS).find(d => d.name.toLowerCase().includes((selectedProject.metadata?.region || "").toLowerCase()))?.url || DNO_PORTALS.NGED.url)
+                  : action.url;
+
+                return isLink ? (
+                  <a
+                    key={i}
+                    className="pp-action-btn"
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={action.desc}
+                    style={{ textDecoration: "none", display: "flex", alignItems: "center", justifyContent: "space-between" }}
+                  >
+                    <span>{action.label}</span>
+                    <span style={{ fontSize: 10, opacity: 0.5 }}>{action.type === "dno" ? "DNO \u2197" : "\u2197"}</span>
+                  </a>
+                ) : (
+                  <button
+                    key={i}
+                    className="pp-action-btn"
+                    title={action.desc}
+                    onClick={() => {
+                      if (action.label.includes("feasibility")) onClose?.();
+                      if (action.label.includes("Financial")) onClose?.();
+                      if (action.label.includes("power flow")) onClose?.();
+                    }}
+                  >
+                    <span>{action.label}</span>
+                    <span style={{ fontSize: 9, color: "#9CA3AF", marginLeft: 8 }}>{action.desc}</span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Quick navigate */}

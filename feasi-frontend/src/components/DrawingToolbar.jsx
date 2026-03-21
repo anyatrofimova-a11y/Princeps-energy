@@ -21,6 +21,7 @@ export default function DrawingToolbar({
   onClearAll,
   onExportGeoJSON,
   measurement,
+  onAnalyseArea,
 }) {
   const isDrawing = drawMode && drawMode !== MODES.VIEW;
 
@@ -63,6 +64,17 @@ export default function DrawingToolbar({
             </div>
           )}
         </div>
+      )}
+
+      {/* Analyse drawn area */}
+      {measurement?.area != null && onAnalyseArea && (
+        <button
+          className="draw-analyse-btn"
+          onClick={onAnalyseArea}
+          title="Run feasibility on drawn area"
+        >
+          Analyse
+        </button>
       )}
 
       {/* Feature management */}

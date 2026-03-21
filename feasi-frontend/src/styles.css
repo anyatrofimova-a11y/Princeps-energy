@@ -15508,3 +15508,21 @@ input[type="range"] { accent-color: var(--accent); }
     padding: 8px;
   }
 }
+
+.fstrip-report-btn {
+  padding: 4px 10px; border: none; border-radius: 6px;
+  background: var(--cds-interactive); color: #0F0E0A;
+  font-size: 9px; font-weight: 900; cursor: pointer;
+  letter-spacing: 0.06em; transition: all 0.15s;
+  white-space: nowrap;
+}
+.fstrip-report-btn:hover { background: #E8C44A; transform: translateY(-1px); }
+
+.draw-analyse-btn {
+  width: 100%; padding: 5px; margin-top: 4px;
+  border: none; border-radius: 6px;
+  background: var(--cds-interactive); color: #0F0E0A;
+  font-size: 9px; font-weight: 900; cursor: pointer;
+  letter-spacing: 0.06em; transition: all 0.15s;
+}
+.draw-analyse-btn:hover { background: #E8C44A; }

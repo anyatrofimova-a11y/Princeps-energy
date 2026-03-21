@@ -38,10 +38,12 @@ export default function FinancialStrip() {
     else setTech("solar");
   }, [placedAssets]);
 
+  // Recalculate whenever capacity, tech, or placed assets change
+  const assetCount = placedAssets?.length || 0;
   useEffect(() => {
     if (capacityMw <= 0) return;
     api.energy.npv(capacityMw, tech).then(d => { if (d) setData(d); });
-  }, [capacityMw, tech]);
+  }, [capacityMw, tech, assetCount]);
 
   if (!parcelId && !placedAssets?.length) return null;
   if (!data) return null;
@@ -127,6 +129,27 @@ export default function FinancialStrip() {
         <span className="fstrip-value">{fmtGbp(data.total_capex_gbp)}</span>
         <span className="fstrip-label">CAPEX</span>
       </div>
+
+      <div className="fstrip-divider" />
+
+      {/* Download Report — prominent CTA */}
+      <button
+        className="fstrip-report-btn"
+        onClick={async () => {
+          const lat = gridContext?.nearest_substation?.lat || placedAssets?.[0]?.lat;
+          const lon = gridContext?.nearest_substation?.lon || placedAssets?.[0]?.lon;
+          if (!lat) return;
+          try {
+            const blob = await api.reports.siteAssessment(lat, lon, "Site Report", capacityMw);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url; a.download = "princeps-report.pdf"; a.click();
+            URL.revokeObjectURL(url);
+          } catch { /* silent */ }
+        }}
+        title="Download PDF feasibility report"
+      >
+        PDF
+      </button>
     </div>
   );
 }

@@ -28,6 +28,9 @@ const SECTIONS = [
       </svg>
     ),
     layers: [
+      { id: "gridCapacity", label: "Grid Capacity (RAG)", color: "#D4A018" },
+      { id: "gridConstraints", label: "Constraint Zones", color: "#f44336" },
+      { id: "queueDepth", label: "Queue Depth", color: "#e040fb" },
       { id: "gridFlow", label: "Substations", color: "#24a148" },
       { id: "osmPower", label: "Transmission Lines", color: "#B54EB2" },
       { id: "ngedSubs", label: "NGED Substations", color: "#1b5e20" },
@@ -50,6 +53,7 @@ const SECTIONS = [
       </svg>
     ),
     layers: [
+      { id: "envConstraints", label: "Constraints (SSSI/AONB/Flood)", color: "#ef4444" },
       { id: "geeflowLandUse", label: "Land Use (GEE)", color: "#D4A018" },
       { id: "environment", label: "Energy Assets", color: "#f1c21b" },
       { id: "carbon", label: "Carbon (PBCC)", color: "#da1e28" },

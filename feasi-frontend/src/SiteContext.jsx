@@ -364,6 +364,9 @@ export function SiteProvider({ children }) {
       setWorkflowHistory(prev => prev.includes("study") ? prev : [...prev, "study"]);
       setDashboardOpen(true);
 
+      // Auto-enable constraint + grid layers when site selected
+      setLayers(prev => ({ ...prev, envConstraints: true, gridCapacity: true }));
+
       // Auto-fetch satellite image → instant Claude Vision analysis
       try {
         const loc = val(results[1]); // explain has lat/lon

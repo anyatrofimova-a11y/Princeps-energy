@@ -161,6 +161,15 @@ const api = {
     compare: (capacityMw = 50) => get(`/api/energy/compare?capacity_mw=${capacityMw}`),
   },
 
+  liveGrid: {
+    snapshot: () => get("/api/live/snapshot"),
+    demandForecast: (hours = 48) => get(`/api/live/demand-forecast?hours_ahead=${hours}`),
+    windSolarForecast: () => get("/api/live/wind-solar-forecast"),
+    generationMix: () => get("/api/live/generation-mix"),
+    systemPrice: () => get("/api/live/system-price"),
+    carbonRegional: () => get("/api/live/carbon-regional"),
+  },
+
   land: {
     parcels:  (bbox) => get(`/api/land/parcels?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
     alc:      (lat, lon) => get(`/api/land/alc?lat=${lat}&lon=${lon}`),

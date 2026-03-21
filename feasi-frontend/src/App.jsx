@@ -495,6 +495,18 @@ export default function App() {
           onClearAll={handleClearDrawFeatures}
           onExportGeoJSON={handleExportGeoJSON}
           measurement={measurement}
+          onAnalyseArea={() => {
+            // Get centroid of last drawn polygon and run feasibility
+            const lastFeature = drawState.features.features[drawState.features.features.length - 1];
+            if (lastFeature?.geometry?.type === "Polygon") {
+              const coords = lastFeature.geometry.coordinates[0];
+              let sumLat = 0, sumLon = 0;
+              for (const [lon, lat] of coords) { sumLat += lat; sumLon += lon; }
+              const centLat = sumLat / coords.length;
+              const centLon = sumLon / coords.length;
+              handleMapPick({ lat: centLat, lon: centLon });
+            }
+          }}
         />
       </Suspense>
 

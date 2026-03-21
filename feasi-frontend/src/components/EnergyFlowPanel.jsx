@@ -307,14 +307,57 @@ export default function EnergyFlowPanel({ placedAssets = [], solarYield, gridCon
                 <div className="efp-detail-row"><span>Est. Connection Cost</span><span>£{((gridContext?.nearest_substation?.distance_km || 3) * 150000 / 1e6).toFixed(1)}M</span></div>
               </div>
             )}
-            {activeNode === "revenue" && (
-              <div className="efp-detail-rows">
-                <div className="efp-detail-row"><span>Gross Revenue</span><span>£{(flow.revenue / 1e6).toFixed(1)}M/yr</span></div>
-                <div className="efp-detail-row"><span>Avg Price</span><span>£55/MWh</span></div>
-                <div className="efp-detail-row"><span>Exported</span><span>{flow.exported.toFixed(0)} MWh/yr</span></div>
-                <div className="efp-detail-row"><span>25yr NPV (est.)</span><span>£{(flow.revenue * 15 / 1e6).toFixed(0)}M</span></div>
-              </div>
-            )}
+            {activeNode === "revenue" && (() => {
+              // Revenue stacking breakdown (Modo Energy pattern)
+              const ppa = flow.ppaPrice || 55;
+              const wholesale = flow.exported * ppa * 0.6;  // 60% PPA
+              const merchant = flow.exported * ppa * 0.25;  // 25% merchant
+              const capacity = (flow.solarMW + flow.windMW) * 35000;  // £35k/MW/yr capacity market
+              const embedded = (flow.solarMW + flow.windMW) * 15000;  // £15k/MW/yr TNUoS avoidance
+              const bess_rev = flow.hasBess ? flow.bessMWh / 4 * 75000 : 0;  // £75k/MW/yr BESS
+              const total = wholesale + merchant + capacity + embedded + bess_rev;
+              const maxStream = Math.max(wholesale, merchant, capacity, embedded, bess_rev, 1);
+
+              const streams = [
+                { label: "PPA / Wholesale", value: wholesale, color: "#3b82f6" },
+                { label: "Merchant", value: merchant, color: "#f59e0b" },
+                { label: "Capacity Market", value: capacity, color: "#16a34a" },
+                { label: "Embedded Benefits", value: embedded, color: "#a855f7" },
+              ];
+              if (bess_rev > 0) streams.push({ label: "BESS Revenue", value: bess_rev, color: "#22c55e" });
+
+              return (
+                <div className="efp-detail-rows">
+                  {/* Stacked revenue bar */}
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ display: "flex", height: 12, borderRadius: 6, overflow: "hidden" }}>
+                      {streams.map((s, i) => (
+                        <div key={i} style={{ width: `${(s.value / total) * 100}%`, background: s.color, minWidth: s.value > 0 ? 4 : 0 }}
+                          title={`${s.label}: £${(s.value / 1e6).toFixed(1)}M`} />
+                      ))}
+                    </div>
+                  </div>
+                  {/* Breakdown rows */}
+                  {streams.map((s, i) => (
+                    <div key={i} className="efp-detail-row">
+                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 3, background: s.color, flexShrink: 0 }} />
+                        {s.label}
+                      </span>
+                      <span>£{(s.value / 1e6).toFixed(1)}M/yr</span>
+                    </div>
+                  ))}
+                  <div className="efp-detail-row" style={{ borderTop: "1px solid var(--cds-border-subtle)", paddingTop: 4, marginTop: 4 }}>
+                    <span style={{ fontWeight: 700 }}>Total Revenue</span>
+                    <span style={{ fontWeight: 700, color: "#D4A018" }}>£{(total / 1e6).toFixed(1)}M/yr</span>
+                  </div>
+                  <div className="efp-detail-row">
+                    <span>25yr NPV (est.)</span>
+                    <span>£{(total * 15 / 1e6).toFixed(0)}M</span>
+                  </div>
+                </div>
+              );
+            })()}
             {activeNode === "bess" && (
               <div className="efp-detail-rows">
                 <div className="efp-detail-row"><span>Power</span><span>{(flow.bessMWh / 4).toFixed(0)} MW</span></div>
