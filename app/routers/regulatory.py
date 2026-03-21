@@ -302,3 +302,129 @@ async def rag_ingest(pool: asyncpg.Pool = Depends(get_pool)):
     """Trigger regulatory document ingestion."""
     job = await jobs.submit("rag_ingest", ingest_ofgem_documents, pool)
     return job.to_dict()
+
+
+# ══════════════════════════════════════════════════════════════
+# UK Regulatory Alerts (Halcyon-style monitoring for UK market)
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/api/regulatory/alerts")
+async def regulatory_alerts(
+    relevance: str = Query(None, description="Filter: HIGH, MEDIUM, LOW"),
+    source: str = Query(None, description="Filter: ofgem, neso, dno_ukpn, etc."),
+    limit: int = Query(50, le=200),
+):
+    """UK regulatory alert feed — Ofgem decisions, NESO publications, DNO policy changes.
+    Surfaces developments relevant to energy developers: connection charging,
+    queue reform, flexible connections, RIIO outcomes, FES scenarios."""
+    from utils.regulatory_alerts import get_all_regulatory_alerts
+    return await get_all_regulatory_alerts(filter_relevance=relevance, filter_source=source, limit=limit)
+
+
+# ══════════════════════════════════════════════════════════════
+# UK BESS Pipeline Tracker
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/api/bess/pipeline")
+async def bess_pipeline(
+    region: str = Query(None, description="Filter by county/region"),
+    min_mw: float = Query(None, description="Minimum capacity MW"),
+    status: str = Query(None, description="Status group: submitted, approved, construction, operational, refused"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """UK BESS project pipeline from REPD. Returns all battery/storage projects with filters."""
+    from utils.bess_pipeline import get_bess_pipeline
+    return await get_bess_pipeline(pool, region=region, min_mw=min_mw, status=status)
+
+
+@router.get("/api/bess/statistics")
+async def bess_statistics(pool: asyncpg.Pool = Depends(get_pool)):
+    """Aggregated UK BESS pipeline statistics — by status, region, developer.
+    Includes revenue stacking benchmarks (FFR, DC, CM, arbitrage)."""
+    from utils.bess_pipeline import get_bess_statistics
+    return await get_bess_statistics(pool)
+
+
+@router.get("/api/bess/pipeline/geojson")
+async def bess_pipeline_geojson(
+    west: float = Query(None), south: float = Query(None),
+    east: float = Query(None), north: float = Query(None),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """BESS projects as GeoJSON for map overlay. Color-coded by status, sized by capacity."""
+    from utils.bess_pipeline import get_bess_geojson
+    bbox = (west, south, east, north) if all(v is not None for v in [west, south, east, north]) else None
+    return await get_bess_geojson(pool, bbox=bbox)
+
+
+# ══════════════════════════════════════════════════════════════
+# Large Load Connection Tracker (Data Centres, Industrial)
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/api/grid/large-loads")
+async def large_load_pipeline(
+    region: str = Query(None), min_mw: float = Query(None),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Large demand connection projects from TEC register — data centres, industrial, EV hubs."""
+    from utils.large_load_tracker import get_large_load_pipeline
+    return await get_large_load_pipeline(pool, region=region, min_mw=min_mw)
+
+
+@router.get("/api/grid/dc-clusters")
+async def dc_cluster_analysis(pool: asyncpg.Pool = Depends(get_pool)):
+    """UK data centre cluster analysis with grid capacity context.
+    10 known DC clusters with operators, estimated MW, DNO, growth status."""
+    from utils.large_load_tracker import get_dc_cluster_analysis
+    return await get_dc_cluster_analysis(pool)
+
+
+@router.get("/api/grid/demand-forecast-dc")
+async def dc_demand_forecast():
+    """UK data centre demand growth projection (2024-2050).
+    Current 3.2GW → 6.5GW by 2030 → 20GW by 2050. Grid implications and drivers."""
+    from utils.large_load_tracker import get_large_load_forecast
+    return get_large_load_forecast()
+
+
+# ══════════════════════════════════════════════════════════════
+# RIIO-ED2 Price Control Tracker
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/api/regulatory/riio")
+async def riio_overview():
+    """RIIO-ED2 price control overview (2023-2028) — all 6 UK DNOs.
+    Totex allowances, connection volume forecasts, DSO maturity, flexibility spend."""
+    from utils.riio_tracker import get_riio_overview
+    return get_riio_overview()
+
+
+@router.get("/api/regulatory/riio/{dno}")
+async def riio_dno_detail(dno: str):
+    """Detailed RIIO-ED2 business plan for a specific DNO.
+    Includes connection charging rates, key investments, queue management policy."""
+    from utils.riio_tracker import get_dno_detail
+    result = get_dno_detail(dno)
+    if "error" in result:
+        raise HTTPException(404, result["error"])
+    return result
+
+
+@router.get("/api/regulatory/connection-charging")
+async def connection_charging(dno: str = Query(None, description="DNO code (UKPN, SSEN, etc.) or None for comparison")):
+    """Connection charging rates comparison across all DNOs.
+    Shows £/km by voltage, reinforcement policy, queue management."""
+    from utils.riio_tracker import get_connection_charging
+    return get_connection_charging(dno)
+
+
+@router.get("/api/regulatory/developer-impact")
+async def developer_impact(
+    lat: float = Query(..., description="Site latitude"),
+    lon: float = Query(..., description="Site longitude"),
+):
+    """Site-specific RIIO-ED2 impact analysis.
+    Identifies DNO, shows connection costs, capacity context, DSO services,
+    investment plans, and actionable developer recommendations."""
+    from utils.riio_tracker import get_developer_impact
+    return get_developer_impact(lat, lon)
