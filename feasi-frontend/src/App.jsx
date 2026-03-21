@@ -95,7 +95,7 @@ export default function App() {
     solarYield, gridContext,
   } = useSite();
 
-  const { setActiveWorkspace, navigateToIntent } = useWorkspace();
+  const { activeWorkspace, setActiveWorkspace, navigateToIntent } = useWorkspace();
 
   const [mapInstance, setMapInstance] = useState(null);
   const [pipelineOpen, setPipelineOpen] = useState(false);
@@ -509,12 +509,14 @@ export default function App() {
           <ComponentPalette catalogue={solarCatalogue} />
         )}
 
-        {/* Asset Dock — drag components onto map */}
-        <AssetDock
-          placedAssets={placedAssets}
-          mapInstance={mapInstance}
-          onAssetPlaced={addPlacedAsset}
-        />
+        {/* Asset Dock — only visible in Design workspace or Plan stage */}
+        {(activeWorkspace === "design" || workflowStage === "plan") && (
+          <AssetDock
+            placedAssets={placedAssets}
+            mapInstance={mapInstance}
+            onAssetPlaced={addPlacedAsset}
+          />
+        )}
 
         {/* Energy Flow Panel — right side Sankey */}
         {energyFlowOpen && (
@@ -545,6 +547,7 @@ export default function App() {
       case "nom": setNomMode(true); break;
       case "bess-facility": setBessFacilityOpen(true); break;
       case "hardware": setHwConfigOpen(true); break;
+      case "asset-3d": setAsset3dOpen(true); break;
       case "thermal": setThermalModelOpen(true); break;
       case "dc-twin": setDcTwinOpen(true); break;
       case "dc-landing": setDcLandingOpen(true); break;
@@ -565,6 +568,7 @@ export default function App() {
       onGridGraph={() => setGridGraphOpen(true)}
       onBessFacility={() => setBessFacilityOpen(true)}
       onHardware={() => setHwConfigOpen(true)}
+      onAsset3d={() => setAsset3dOpen(true)}
       onThermal={() => setThermalModelOpen(true)}
       onDcTwin={() => setDcTwinOpen(true)}
       onDcLanding={() => setDcLandingOpen(true)}
@@ -683,6 +687,25 @@ export default function App() {
       {/* Hardware Configurator panel */}
       {hwConfigOpen && (
         <HardwareConfigurator onClose={() => setHwConfigOpen(false)} />
+      )}
+
+      {/* Gemini 3D Asset Modeller */}
+      {asset3dOpen && (
+        <Asset3DModeller
+          onClose={() => setAsset3dOpen(false)}
+          onPlaceOnMap={(spec) => {
+            setAsset3dOpen(false);
+            // Add placed asset via existing system
+            if (pickedLocation && spec) {
+              addPlacedAsset({
+                assetType: spec.name?.includes("Data Centre") ? "data_centre" : "generic",
+                lat: pickedLocation.lat,
+                lon: pickedLocation.lon,
+                spec,
+              });
+            }
+          }}
+        />
       )}
 
       {/* Thermal Model panel */}

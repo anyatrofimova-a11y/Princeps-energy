@@ -19,9 +19,9 @@ export const WORKSPACE_ALIASES = {
 // Per-workspace view configurations
 export const WORKSPACE_VIEWS = {
   home:    ["dashboard", "map"],
-  analyse: ["explore", "map", "network", "circuit", "data", "forecast", "compare", "table", "chart", "satellite", "dashboard"],
-  design:  ["map", "table", "chart", "dashboard"],
-  comply:  ["dashboard", "table", "compare"],
+  analyse: ["map", "network", "forecast", "table", "chart"],
+  design:  ["map", "table", "chart"],
+  comply:  ["dashboard", "table"],
 };
 
 export const WORKSPACE_DEFAULTS = {
@@ -102,12 +102,12 @@ export function WorkspaceProvider({ children }) {
   const toggleBrowser = useCallback(() => setBrowserOpen(p => !p), []);
   const toggleDetail = useCallback(() => setDetailOpen(p => !p), []);
 
-  // Auto-open panels when transitioning from site → study
+  // Auto-switch workspace when transitioning from site → study
   useEffect(() => {
     if (site.workflowStage === "study") {
-      setDetailOpen(true);
       setBrowserOpen(true);
       if (activeWorkspace === "home") setActiveWorkspace("analyse");
+      // Detail panel stays closed — user opens via Ctrl+D or clicking analysis
     }
   }, [site.workflowStage]);
 

@@ -300,6 +300,7 @@ export function SiteProvider({ children }) {
     electricityZones: false,
     epcZones: false, epcDom: false, epcNondom: false, postcodes: false,
     dcCapacity: false, dcFibre: false, dcIxp: false,
+    google3d: false,
     gridConstraints: false,
     envConstraints: false,
     queueDepth: false,

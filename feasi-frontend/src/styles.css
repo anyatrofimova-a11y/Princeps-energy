@@ -1552,15 +1552,18 @@ html, body, #root { height: 100%; margin: 0; overflow: hidden; background: var(-
   top: 8px;
   right: 8px;
   bottom: 8px;
-  width: 380px;
+  width: 340px;
   z-index: 10;
   overflow-y: auto;
   overflow-x: hidden;
-  display: flex;
+  display: none; /* Hidden by default — map gets full width */
   flex-direction: column;
   gap: 6px;
   padding: 4px;
   scrollbar-width: thin;
+}
+.floating-cards.fc-visible {
+  display: flex;
 }
 .floating-cards::-webkit-scrollbar { width: 4px; }
 .floating-cards::-webkit-scrollbar-track { background: transparent; }

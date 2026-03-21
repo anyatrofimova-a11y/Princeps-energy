@@ -2,14 +2,14 @@ import React from "react";
 import { MODES, formatArea, formatDistance } from "../lib/draw-modes";
 
 const TOOLS = [
-  { mode: MODES.VIEW, label: "V", title: "View (Esc)", icon: "\u25C7" },
-  { mode: MODES.POINT, label: "P", title: "Draw Point", icon: "\u25CF" },
-  { mode: MODES.LINE, label: "L", title: "Draw Line", icon: "\u2571" },
-  { mode: MODES.POLYGON, label: "Pg", title: "Draw Polygon", icon: "\u2B21" },
-  { mode: MODES.RECTANGLE, label: "R", title: "Draw Rectangle", icon: "\u25AD" },
-  { mode: MODES.CIRCLE, label: "C", title: "Draw Circle", icon: "\u25CB" },
-  { mode: MODES.MODIFY, label: "M", title: "Modify Features", icon: "\u270E" },
-  { mode: MODES.MEASURE, label: "\u0394", title: "Measure Area/Distance", icon: "\u25B3" },
+  { mode: MODES.VIEW, title: "Select / Pan (Esc)", icon: "◇", label: "Select" },
+  { mode: MODES.POLYGON, title: "Draw site boundary", icon: "⬡", label: "Site Boundary" },
+  { mode: MODES.RECTANGLE, title: "Draw exclusion zone", icon: "▭", label: "Exclusion Zone" },
+  { mode: MODES.LINE, title: "Measure route / cable", icon: "╱", label: "Route" },
+  { mode: MODES.POINT, title: "Mark point of interest", icon: "●", label: "Mark Point" },
+  { mode: MODES.CIRCLE, title: "Draw buffer zone", icon: "○", label: "Buffer Zone" },
+  { mode: MODES.MEASURE, title: "Measure area / distance", icon: "△", label: "Measure" },
+  { mode: MODES.MODIFY, title: "Edit existing features", icon: "✎", label: "Edit" },
 ];
 
 export default function DrawingToolbar({
@@ -22,9 +22,11 @@ export default function DrawingToolbar({
   onExportGeoJSON,
   measurement,
 }) {
+  const isDrawing = drawMode && drawMode !== MODES.VIEW;
+
   return (
     <div className="draw-toolbar">
-      <div className="draw-toolbar-title">Draw</div>
+      <div className="draw-toolbar-title">Site Tools</div>
       <div className="draw-toolbar-tools">
         {TOOLS.map(t => (
           <button
@@ -34,6 +36,7 @@ export default function DrawingToolbar({
             title={t.title}
           >
             <span className="draw-tool-icon">{t.icon}</span>
+            <span className="draw-tool-label">{t.label}</span>
           </button>
         ))}
       </div>
@@ -43,17 +46,20 @@ export default function DrawingToolbar({
         <div className="draw-measurement">
           {measurement.distance != null && (
             <div className="draw-measure-row">
-              Dist: <strong>{formatDistance(measurement.distance)}</strong>
+              <span className="draw-measure-label">Distance</span>
+              <strong>{formatDistance(measurement.distance)}</strong>
             </div>
           )}
           {measurement.area != null && (
             <div className="draw-measure-row">
-              Area: <strong>{formatArea(measurement.area)}</strong>
+              <span className="draw-measure-label">Area</span>
+              <strong>{formatArea(measurement.area)}</strong>
             </div>
           )}
           {measurement.perimeter != null && (
             <div className="draw-measure-row">
-              Perim: <strong>{formatDistance(measurement.perimeter)}</strong>
+              <span className="draw-measure-label">Perimeter</span>
+              <strong>{formatDistance(measurement.perimeter)}</strong>
             </div>
           )}
         </div>
@@ -64,29 +70,29 @@ export default function DrawingToolbar({
         <div className="draw-features-info">
           <span className="draw-feat-count">{featureCount} feature{featureCount > 1 ? "s" : ""}</span>
           {selectedIndex >= 0 && (
-            <button className="draw-action-btn danger" onClick={() => onDeleteFeature(selectedIndex)} title="Delete selected feature">
+            <button className="draw-action-btn danger" onClick={() => onDeleteFeature(selectedIndex)} title="Delete selected">
               Del
             </button>
           )}
           <button className="draw-action-btn" onClick={onExportGeoJSON} title="Copy GeoJSON">
             JSON
           </button>
-          <button className="draw-action-btn danger" onClick={onClearAll} title="Clear all features">
+          <button className="draw-action-btn danger" onClick={onClearAll} title="Clear all">
             Clear
           </button>
         </div>
       )}
 
-      {/* Mode hint */}
+      {/* Contextual hint */}
       <div className="draw-hint">
-        {drawMode === MODES.VIEW && "Select a tool to start drawing"}
-        {drawMode === MODES.POINT && "Click to place point"}
-        {drawMode === MODES.LINE && "Click to add vertices, double-click to finish"}
-        {drawMode === MODES.POLYGON && "Click to add vertices, click first point or double-click to close"}
-        {drawMode === MODES.RECTANGLE && "Click corner, then opposite corner"}
-        {drawMode === MODES.CIRCLE && "Click center, then edge"}
-        {drawMode === MODES.MODIFY && "Click feature to select, drag vertices to edit"}
-        {drawMode === MODES.MEASURE && "Click to measure distance/area"}
+        {drawMode === MODES.VIEW && "Select a tool to draw on the map"}
+        {drawMode === MODES.POINT && "Click to mark a point of interest"}
+        {drawMode === MODES.LINE && "Click to add points — double-click to finish route"}
+        {drawMode === MODES.POLYGON && "Click to draw site boundary — click first point to close"}
+        {drawMode === MODES.RECTANGLE && "Click one corner, then the opposite corner"}
+        {drawMode === MODES.CIRCLE && "Click centre, then drag to set radius"}
+        {drawMode === MODES.MODIFY && "Click a feature to select — drag vertices to reshape"}
+        {drawMode === MODES.MEASURE && "Click points to measure distance and area"}
       </div>
     </div>
   );

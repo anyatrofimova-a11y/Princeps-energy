@@ -2,9 +2,13 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import mapboxgl from "mapbox-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { ColumnLayer, ArcLayer, ScatterplotLayer, TextLayer } from "@deck.gl/layers";
+import { Tile3DLayer } from "@deck.gl/geo-layers";
+import { Tiles3DLoader } from "@loaders.gl/3d-tiles";
 import api from "../services/api";
 import { createParticleLayer } from "./GridParticleFlow";
 import GridCameraChoreography from "./GridCameraChoreography";
+
+const GOOGLE_3D_TILES_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY || "";
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
@@ -74,6 +78,7 @@ export default function GridTwin({ onClose }) {
   const [choreographyActive, setChoreographyActive] = useState(false);
   const [particlesEnabled, setParticlesEnabled] = useState(true);
   const [constraintHeatmap, setConstraintHeatmap] = useState(false);
+  const [google3d, setGoogle3d] = useState(false);
 
   /* ── Animate flow arrows ── */
   useEffect(() => {
@@ -248,8 +253,32 @@ export default function GridTwin({ onClose }) {
       }));
     }
 
+    // Google Photorealistic 3D Tiles (requires VITE_GOOGLE_MAPS_KEY)
+    if (google3d && GOOGLE_3D_TILES_KEY) {
+      layers.unshift(new Tile3DLayer({
+        id: "gt-google-3d-tiles",
+        data: `https://tile.googleapis.com/v1/3dtiles/root.json?key=${GOOGLE_3D_TILES_KEY}`,
+        loader: Tiles3DLoader,
+        loadOptions: {
+          "3d-tiles": { loadGLTF: true },
+          fetch: { headers: {} },
+        },
+        onTilesetLoad: (tileset) => {
+          // Auto-fit view to loaded tileset
+          if (tileset.boundingVolume) {
+            const { center } = tileset.boundingVolume;
+            if (center) {
+              console.log("[GridTwin] Google 3D Tiles loaded, center:", center);
+            }
+          }
+        },
+        opacity: 0.9,
+        pickable: false,
+      }));
+    }
+
     return layers;
-  }, [gridState, twinLayers, animPhase, particlesEnabled]);
+  }, [gridState, twinLayers, animPhase, particlesEnabled, google3d]);
 
   /* ── Init Mapbox + deck.gl overlay ── */
   useEffect(() => {
@@ -469,6 +498,18 @@ export default function GridTwin({ onClose }) {
               <path d="M8 12l4 4 4-4"/>
             </svg>
           </button>
+
+          {/* Google 3D Tiles */}
+          {GOOGLE_3D_TILES_KEY && (
+            <button
+              className={`gt-layer-btn ${google3d ? "active" : ""}`}
+              onClick={() => setGoogle3d(!google3d)}
+              title="Google Photorealistic 3D"
+              style={google3d ? { background: "#4285f4", color: "#fff" } : {}}
+            >
+              3D
+            </button>
+          )}
 
           {/* AI Tour */}
           <button
