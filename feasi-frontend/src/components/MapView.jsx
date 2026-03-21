@@ -3881,6 +3881,13 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     if (!pickMode) {
       map.getCanvas().style.cursor = getCursor(drawState.mode);
     }
+
+    // Ensure draw layers are always on top of other map layers
+    ['draw-fill', 'draw-line', 'draw-points', 'draw-tentative-fill', 'draw-tentative-line', 'draw-tentative-point', 'draw-handles-circles'].forEach(id => {
+      if (map.getLayer(id)) {
+        try { map.moveLayer(id); } catch {}
+      }
+    });
   }, [drawState, pickMode, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex]);
 
   return (

@@ -70,13 +70,7 @@ export default function AssetBrowser() {
   const [searchQ, setSearchQ] = useState("");
 
   if (!browserOpen) {
-    return (
-      <button className="browser-toggle-btn collapsed" onClick={toggleBrowser} title="Open browser">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M9 18l6-6-6-6" />
-        </svg>
-      </button>
-    );
+    return null; // Hidden — toggle with Ctrl+B or via NavRail
   }
 
   const intents = WORKSPACE_INTENTS[activeWorkspace] || [];

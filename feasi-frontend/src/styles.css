@@ -520,7 +520,7 @@ html, body, #root { height: 100%; margin: 0; overflow: hidden; background: var(-
   overflow: hidden;
 }
 
-/* ── Asset Browser (left 280px) ── */
+/* ── Asset Browser (left panel — collapsible, hidden by default on map views) ── */
 .asset-browser {
   width: 280px;
   min-width: 280px;
@@ -532,11 +532,14 @@ html, body, #root { height: 100%; margin: 0; overflow: hidden; background: var(-
   z-index: 5;
   flex-shrink: 0;
   overflow: hidden;
-  animation: browser-slide-in 0.2s ease-out;
+  transition: width 0.2s ease, min-width 0.2s ease, opacity 0.2s ease;
 }
-@keyframes browser-slide-in {
-  from { width: 0; min-width: 0; opacity: 0; }
-  to { width: 280px; min-width: 280px; opacity: 1; }
+.asset-browser.collapsed {
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  border-right: none;
+  pointer-events: none;
 }
 .ab-header {
   display: flex;
@@ -3494,12 +3497,6 @@ input[type="range"] { accent-color: var(--accent); }
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-width: 48px; /* Compact: icons only */
-  overflow: hidden;
-}
-.draw-toolbar:hover {
-  max-width: 220px; /* Expand on hover to show labels */
-  transition: max-width 0.2s ease;
 }
 .draw-toolbar-title {
   font-size: 8px;

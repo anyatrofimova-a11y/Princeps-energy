@@ -147,6 +147,22 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "run_power_flow",
+        "description": "Run a Tier 2 pandapower Newton-Raphson power flow simulation. Analyses voltage impact, thermal loading, and N-1 contingency for connecting generation at a specific location. Returns voltage deviation, line loading, losses, and connection feasibility verdict.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Site latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Site longitude (WGS84)"},
+                "capacity_mw": {"type": "number", "description": "Proposed generation capacity in MW", "default": 50},
+                "technology": {"type": "string", "description": "Technology type: solar, wind, bess", "default": "solar"},
+                "substation_id": {"type": "string", "description": "Optional: specific substation ID to connect to"},
+                "contingency": {"type": "boolean", "description": "Run N-1 contingency analysis", "default": false},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
+    {
         "name": "run_financial_analysis",
         "description": "Run energy price forecast and revenue estimation for a solar system. Returns 24h price forecast and estimated annual revenue.",
         "input_schema": {
@@ -1040,6 +1056,51 @@ async def execute_tool(
                     "estimated_connection_cost": cost,
                     "site_lat": float(row["lat"]) if row["lat"] else None,
                     "site_lon": float(row["lon"]) if row["lon"] else None,
+                }
+
+        elif name == "run_power_flow":
+            from app.helpers import _run_grid_subprocess
+            lat, lon = args["lat"], args["lon"]
+            cap_mw = args.get("capacity_mw", 50)
+            tech = args.get("technology", "solar")
+            sub_id = args.get("substation_id")
+            contingency = args.get("contingency", False)
+            try:
+                result = await _run_grid_subprocess({
+                    "command": "power_flow",
+                    "lat": lat, "lon": lon,
+                    "capacity_mw": cap_mw,
+                    "technology": tech,
+                    "substation_id": sub_id,
+                    "contingency": contingency,
+                })
+                return result
+            except Exception as e:
+                # Fallback: return analytical estimate
+                async with pool.acquire() as conn:
+                    sub = await conn.fetchrow(
+                        """SELECT sub_id, name, capacity_kw,
+                                  ST_Distance(geometry, ST_Transform(ST_SetSRID(ST_MakePoint($1,$2),4326),27700))/1000.0 AS dist_km
+                           FROM dno_substations
+                           ORDER BY geometry <-> ST_Transform(ST_SetSRID(ST_MakePoint($1,$2),4326),27700)
+                           LIMIT 1""", lon, lat)
+                dist = float(sub["dist_km"]) if sub else 5.0
+                sub_cap = float(sub["capacity_kw"])/1000 if sub and sub["capacity_kw"] else 100
+                headroom = sub_cap - cap_mw
+                voltage_dev = min(5.5, cap_mw * 0.02 * dist)
+                loading = min(95, cap_mw / sub_cap * 100) if sub_cap > 0 else 50
+                return {
+                    "analysis_type": "analytical_estimate",
+                    "note": f"pandapower subprocess unavailable ({e}), returning analytical estimate",
+                    "substation": sub["name"] if sub else "Unknown",
+                    "distance_km": round(dist, 2),
+                    "capacity_mw": cap_mw,
+                    "headroom_mw": round(headroom, 1),
+                    "voltage_deviation_pct": round(voltage_dev, 2),
+                    "line_loading_pct": round(loading, 1),
+                    "losses_pct": round(dist * 0.3, 2),
+                    "verdict": "GO" if headroom > 0 and voltage_dev < 5 else "CAUTION" if headroom > -10 else "NO-GO",
+                    "recommendation": "Full pandapower Newton-Raphson simulation recommended for Tier 2 assessment" if headroom < cap_mw * 0.5 else "Site has sufficient headroom — Tier 1 assessment adequate",
                 }
 
         elif name == "run_financial_analysis":
