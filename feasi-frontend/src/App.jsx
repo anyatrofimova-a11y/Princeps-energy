@@ -24,6 +24,7 @@ import SitePicker from "./components/SitePicker";
 import LiveStrip from "./components/LiveStrip";
 import ConstraintTimeline from "./components/ConstraintTimeline";
 import ThemeToggle from "./components/ThemeToggle";
+import SmartOverlays from "./components/SmartOverlays";
 import NotificationCentre from "./components/NotificationCentre";
 import StartupOverlay, { saveRecentSite } from "./components/StartupOverlay";
 import { useWorkspace } from "./contexts/WorkspaceContext";

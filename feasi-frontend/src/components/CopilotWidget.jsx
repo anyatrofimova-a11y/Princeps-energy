@@ -264,6 +264,29 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Auto-open chat with welcome message on first visit (after 2s delay)
+  useEffect(() => {
+    const hasSeenWelcome = sessionStorage.getItem("princeps_chat_welcomed");
+    if (hasSeenWelcome) return;
+    const timer = setTimeout(() => {
+      setActiveTab("chat");
+      sessionStorage.setItem("princeps_chat_welcomed", "1");
+      // Add a welcome message with context-aware suggestions
+      setMessages([{
+        role: "assistant",
+        content: "Welcome to Princeps. I can help you assess sites, analyse grid connections, run financial models, and generate reports.\n\nWhat would you like to do?",
+        timestamp: Date.now(),
+        suggestions: [
+          "Find a 50MW solar site near Birmingham",
+          "Assess grid connection at 52.5N, -1.5W",
+          "Compare PPA offers for a 30MW wind farm",
+          "Show me the best BESS revenue strategy",
+        ],
+      }]);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
   // Listen for princeps-chat events
   useEffect(() => {
     const handler = (e) => {
@@ -609,6 +632,15 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
                 {msg.role === "assistant" && <div className="cpc-msg-avatar">P</div>}
                 <div className="cpc-msg-body">
                   {msg.content && <MessageText text={msg.content} />}
+                  {msg.suggestions && (
+                    <div className="cpc-suggestions">
+                      {msg.suggestions.map((s, si) => (
+                        <button key={si} className="cpc-suggestion-pill" onClick={() => { setInput(s); pendingRef.current = s; setActiveTab("chat"); }}>
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {msg.toolCalls?.map((tc, j) => {
                     const key = `${i}-${j}`;
                     const expanded = expandedTools[key];

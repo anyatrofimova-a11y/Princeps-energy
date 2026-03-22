@@ -404,6 +404,19 @@ const api = {
       get(`/api/tenders/energy?days_back=${daysBack}&limit=${limit}${keywords ? `&keywords=${enc(keywords)}` : ""}`),
   },
 
+  opportunities: {
+    scan: (opts = {}) => {
+      const q = new URLSearchParams();
+      if (opts.technology) q.set("technology", opts.technology);
+      if (opts.min_mw != null) q.set("min_mw", opts.min_mw);
+      if (opts.max_mw != null) q.set("max_mw", opts.max_mw);
+      if (opts.region) q.set("region", opts.region);
+      return get(`/api/opportunities/scan?${q}`);
+    },
+    actionPackage: (opportunity, capacityMw) =>
+      post(`/api/opportunities/action-package${capacityMw ? `?capacity_mw=${capacityMw}` : ""}`, opportunity),
+  },
+
   opt: {
     run: (load, gen) => post(`/opt/run?plan_name=ui_plan&load_mw=${load}&gen_mw=${gen}`),
   },

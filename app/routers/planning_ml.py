@@ -367,3 +367,40 @@ async def energy_tenders(
     from utils.bmrs_datasets import fetch_energy_tenders
     kw_list = keywords.split(",") if keywords else None
     return await fetch_energy_tenders(kw_list, days_back, limit)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Autonomous Prospector — proactive opportunity detection
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/api/opportunities/scan")
+async def scan_opportunities(
+    technology: str = Query(None),
+    min_mw: float = Query(5),
+    max_mw: float = Query(500),
+    region: str = Query(None),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Run autonomous opportunity scan across all data sources.
+
+    Detects: grid capacity releases, competitor exits, reinforcement plans.
+    Returns ranked opportunities with scores and action packages.
+    """
+    from utils.autonomous_prospector import run_full_scan
+    prefs = {"min_mw": min_mw, "max_mw": max_mw}
+    if technology:
+        prefs["technology"] = technology
+    if region:
+        prefs["regions"] = [region]
+    return await run_full_scan(pool, prefs)
+
+
+@router.post("/api/opportunities/action-package")
+async def opportunity_action_package(
+    opportunity: dict = {},
+    capacity_mw: float = Query(None),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Generate complete action package for a specific opportunity."""
+    from utils.autonomous_prospector import generate_action_package
+    return await generate_action_package(pool, opportunity, capacity_mw)
