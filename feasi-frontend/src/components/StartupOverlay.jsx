@@ -291,7 +291,7 @@ export default function StartupOverlay({ onReady, onIntent }) {
       <div className="startup-card">
         {/* Logo */}
         <div className="startup-logo-row">
-          <div className="startup-logo-mark">P</div>
+          <img src="/logo-princeps.png" alt="Princeps" width="40" height="40" style={{ objectFit: "contain" }} />
           <span className="startup-logo-text">PRINCEPS</span>
         </div>
 

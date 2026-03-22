@@ -755,10 +755,11 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           "symbol-placement": "line-center",
           "text-field": ["concat", ["get", "flow_mw"], " MW"],
           "text-font": ["Noto Sans Bold"],
-          "text-size": 11,
+          "text-size": 10,
+          "text-allow-overlap": false,
           visibility: "visible",
         },
-        minzoom: 5,
+        minzoom: 10,
       });
 
       // Live generation bubbles (glow)
@@ -913,7 +914,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         source: "demand-heatmap",
         paint: {
           "text-color": "#e040fb",
-          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-color": "rgba(255,255,255,0.9)",
           "text-halo-width": 1.2,
         },
         layout: {
@@ -1344,16 +1345,16 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         source: "gc-capacity-subs",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"],
-            5, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 3, 10, 6, 50, 10, 200, 16],
-            10, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 5, 10, 10, 50, 16, 200, 24],
-            14, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 7, 10, 14, 50, 22, 200, 32],
+            5, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 2, 10, 3, 50, 5, 200, 8],
+            8, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 3, 10, 6, 50, 10, 200, 16],
+            12, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 5, 10, 10, 50, 18, 200, 28],
           ],
           "circle-color": [
             "match", ["coalesce", ["get", "rag"], "gray"],
-            "green", "#24a148", "amber", "#f1c21b", "red", "#da1e28", "#8d8d8d"
+            "green", "#16A34A", "amber", "#E8A012", "red", "#DC2626", "#9CA3AF"
           ],
-          "circle-opacity": 0.75,
-          "circle-stroke-width": 1.5,
+          "circle-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.4, 8, 0.6, 12, 0.75],
+          "circle-stroke-width": 1,
           "circle-stroke-color": "rgba(255,255,255,0.6)",
         },
         layout: { visibility: "none" },
@@ -1363,19 +1364,20 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         type: "symbol",
         source: "gc-capacity-subs",
         paint: {
-          "text-color": "#f4f4f4",
-          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-color": "#1A1D23",
+          "text-halo-color": "rgba(255,255,255,0.9)",
           "text-halo-width": 1.5,
         },
         layout: {
           visibility: "none",
-          "text-field": ["concat", ["get", "name"], "\n", ["to-string", ["round", ["coalesce", ["get", "gen_headroom_mw"], 0]]], " MW"],
+          "text-field": ["concat", ["get", "name"], "\n", ["to-string", ["round", ["coalesce", ["get", "gen_headroom_mw"], 0]]], "MW"],
           "text-size": 10,
           "text-offset": [0, 1.8],
           "text-anchor": "top",
           "text-optional": true,
+          "text-allow-overlap": false,
         },
-        minzoom: 9,
+        minzoom: 10,
       });
 
       // Verdict badges — GO/CAUTION/NO-GO above substations
@@ -1403,7 +1405,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
             [">=", ["coalesce", ["get", "gen_headroom_mw"], 0], 10], "#f1c21b",
             "#da1e28"
           ],
-          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-color": "rgba(255,255,255,0.9)",
           "text-halo-width": 1.5,
         },
         minzoom: 9,
@@ -1705,8 +1707,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         type: "symbol",
         source: "land-parcels",
         paint: {
-          "text-color": "#f4f4f4",
-          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-color": "#1A1D23",
+          "text-halo-color": "rgba(255,255,255,0.9)",
           "text-halo-width": 1.2,
         },
         layout: {
@@ -1853,8 +1855,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         type: "symbol",
         source: "planning-density",
         paint: {
-          "text-color": "#f4f4f4",
-          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-color": "#1A1D23",
+          "text-halo-color": "rgba(255,255,255,0.9)",
           "text-halo-width": 1.2,
         },
         layout: {
@@ -1916,8 +1918,8 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         type: "symbol",
         source: "queue-depth",
         paint: {
-          "text-color": "#f4f4f4",
-          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-color": "#1A1D23",
+          "text-halo-color": "rgba(255,255,255,0.9)",
           "text-halo-width": 1.5,
         },
         layout: {
@@ -1973,7 +1975,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         id: "dc-capacity-labels",
         type: "symbol",
         source: "dc-capacity",
-        paint: { "text-color": "#f4f4f4", "text-halo-color": "rgba(0,0,0,0.8)", "text-halo-width": 1.5 },
+        paint: { "text-color": "#1A1D23", "text-halo-color": "rgba(255,255,255,0.9)", "text-halo-width": 1.5 },
         layout: {
           visibility: "none",
           "text-field": ["concat", ["get", "name"], "\n", ["to-string", ["round", ["coalesce", ["get", "headroom_mw"], 0]]], " MW"],
@@ -2024,7 +2026,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         id: "dc-ixp-labels",
         type: "symbol",
         source: "dc-ixp",
-        paint: { "text-color": "#93c5fd", "text-halo-color": "rgba(0,0,0,0.8)", "text-halo-width": 1.5 },
+        paint: { "text-color": "#93c5fd", "text-halo-color": "rgba(255,255,255,0.9)", "text-halo-width": 1.5 },
         layout: {
           visibility: "none",
           "text-field": ["get", "name"],
@@ -2657,7 +2659,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         },
         paint: {
           "text-color": "#fff",
-          "text-halo-color": "rgba(0,0,0,0.8)",
+          "text-halo-color": "rgba(255,255,255,0.9)",
           "text-halo-width": 1.5,
         },
       });

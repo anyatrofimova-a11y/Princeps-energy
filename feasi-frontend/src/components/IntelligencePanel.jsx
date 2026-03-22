@@ -4,7 +4,7 @@ import api from "../services/api";
 
 const SOURCES = ["All", "Ofgem", "NESO", "DNO"];
 const RELEVANCE_OPTS = ["ALL", "HIGH", "MEDIUM"];
-const TABS = ["Alerts", "Opportunities", "Market Timing", "G99 App", "Tenders", "BESS Pipeline", "RIIO", "Market"];
+const TABS = ["Alerts", "Opportunities", "G99 App", "Market"];
 
 const RELEVANCE_COLOR = { HIGH: "#C0392B", MEDIUM: "#D4A017", LOW: "#6B7280" };
 
@@ -185,7 +185,7 @@ export default function IntelligencePanel({ onClose }) {
               })
         )}
 
-        {/* ── Opportunities tab ── */}
+        {/* ── Opportunities tab (index 1) ── */}
         {tab === 1 && (
           <div className="intel-data-section">
             {opportunities?.summary && (
@@ -253,8 +253,8 @@ export default function IntelligencePanel({ onClose }) {
           </div>
         )}
 
-        {/* ── G99 Application tab ── */}
-        {tab === 3 && (
+        {/* ── G99 Application tab (index 2) ── */}
+        {tab === 2 && (
           <div className="intel-data-section">
             <div style={{ fontSize: 11, color: "var(--cds-text-helper)", marginBottom: 12 }}>
               Auto-generates a pre-filled ENA G99 grid connection application from your site data.
@@ -377,8 +377,8 @@ export default function IntelligencePanel({ onClose }) {
           ) : <div className="intel-empty">RIIO data unavailable.</div>
         )}
 
-        {/* ── Market tab ── */}
-        {!loading && tab === 7 && (
+        {/* ── Market tab (index 3) ── */}
+        {!loading && tab === 3 && (
           market ? (
             <div className="intel-data-section">
               <div className="intel-data-grid">

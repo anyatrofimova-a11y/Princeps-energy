@@ -690,7 +690,7 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
 
             {messages.map((msg, i) => (
               <div key={i} className={`cpc-msg cpc-msg-${msg.role}`}>
-                {msg.role === "assistant" && <div className="cpc-msg-avatar">P</div>}
+                {msg.role === "assistant" && <div className="cpc-msg-avatar"><img src="/logo-princeps.png" alt="" width="18" height="18" style={{ objectFit: "contain" }} /></div>}
                 <div className="cpc-msg-body">
                   {msg.content && <MessageText text={msg.content} />}
                   {msg.suggestions && (

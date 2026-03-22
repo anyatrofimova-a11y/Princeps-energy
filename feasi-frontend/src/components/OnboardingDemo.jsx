@@ -211,7 +211,7 @@ export default function OnboardingDemo({ onClose, autoRun = false }) {
         {/* Step 0: Welcome */}
         {step === 0 && (
           <div className="demo-welcome">
-            <div className="demo-logo">P</div>
+            <div className="demo-logo"><img src="/logo-princeps.png" alt="Princeps" width="48" height="48" style={{ objectFit: "contain" }} /></div>
             <h1 className="demo-title">PRINCEPS</h1>
             <p className="demo-subtitle" style={{ fontSize: 16, maxWidth: 600 }}>
               <span style={{ color: "#D4A018", fontWeight: 700 }}>700 GW</span> stuck in the grid queue.

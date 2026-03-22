@@ -26,6 +26,7 @@ import ConstraintTimeline from "./components/ConstraintTimeline";
 import ThemeToggle from "./components/ThemeToggle";
 // SmartOverlays removed — replaced by copilot auto-suggestions
 import ActionSidebar from "./components/ActionSidebar";
+import AIOrb from "./components/AIOrb";
 import NotificationCentre from "./components/NotificationCentre";
 import StartupOverlay, { saveRecentSite } from "./components/StartupOverlay";
 import { useWorkspace } from "./contexts/WorkspaceContext";
@@ -667,6 +668,12 @@ export default function App() {
       <ErrorBoundary name="CopilotWidget" fallback={null}>
         <CopilotWidget onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} onAction={handleCmdAction} />
       </ErrorBoundary>
+
+      {/* Siri-style AI Orb — draggable, proactive suggestions */}
+      <AIOrb
+        onOpenChat={() => handleCmdAction("chat")}
+        chatOpen={false}
+      />
 
       {/* Palantir-style Action Sidebar (context-aware) */}
       <ActionSidebar />

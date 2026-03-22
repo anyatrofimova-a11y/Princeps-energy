@@ -559,11 +559,7 @@ function PortfolioDashboard({ onWorkspaceClick, onCapabilityClick }) {
         {/* Compact header */}
         <div className="pd-header">
           <div className="pd-brand-row">
-            <svg width="28" height="28" viewBox="0 0 32 32" fill="none" style={{ flexShrink: 0 }}>
-              <path d="M8 6h16L20 12H12L8 6z" fill="#D4A018"/>
-              <path d="M12 12h8l4 8H8l4-8z" fill="#D4A018" opacity="0.7"/>
-              <path d="M8 20h16l-4 6H12l-4-6z" fill="#D4A018" opacity="0.5"/>
-            </svg>
+            <img src="/logo-princeps.png" alt="Princeps" width="36" height="36" style={{ flexShrink: 0, objectFit: "contain" }} />
             <div>
               <h1 className="pd-title">PRINCEPS</h1>
               <p className="pd-subtitle">Energy Infrastructure Intelligence</p>
