@@ -508,6 +508,7 @@ export default function App() {
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
       {chatLayers.length > 0 && <MapLegend chatLayers={chatLayers} />}
       {layers.gridConstraints && <ConstraintTimeline map={mapInstance} visible />}
+      <SmartOverlays />
 
       <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
 
