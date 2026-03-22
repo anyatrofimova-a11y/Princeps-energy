@@ -51,6 +51,18 @@ export default function IntelligencePanel({ onClose }) {
       setMarket(m.status === "fulfilled" ? m.value : null);
       setLoading(false);
     });
+    // Load generational capabilities in parallel
+    Promise.allSettled([
+      api.opportunities.scan({ min_mw: 5 }),
+      api.marketTiming.analyse((site?.samCapacity || 100) / 1000, "solar"),
+      api.tenderSearch.energy(30, 20),
+    ]).then(([opp, mt, td]) => {
+      if (cancelled) return;
+      setOpportunities(opp.status === "fulfilled" ? opp.value : null);
+      setMarketTiming(mt.status === "fulfilled" ? mt.value : null);
+      setTenders(td.status === "fulfilled" && Array.isArray(td.value) ? td.value : []);
+    });
+
     return () => { cancelled = true; };
   }, []);
 
@@ -174,7 +186,7 @@ export default function IntelligencePanel({ onClose }) {
         )}
 
         {/* ── BESS Pipeline tab ── */}
-        {!loading && tab === 1 && (
+        {!loading && tab === 5 && (
           bess ? (
             <div className="intel-data-section">
               <div className="intel-data-grid">
@@ -204,7 +216,7 @@ export default function IntelligencePanel({ onClose }) {
         )}
 
         {/* ── RIIO tab ── */}
-        {!loading && tab === 2 && (
+        {!loading && tab === 6 && (
           riio ? (
             <div className="intel-data-section">
               {riio.totals && (
@@ -232,7 +244,7 @@ export default function IntelligencePanel({ onClose }) {
         )}
 
         {/* ── Market tab ── */}
-        {!loading && tab === 3 && (
+        {!loading && tab === 7 && (
           market ? (
             <div className="intel-data-section">
               <div className="intel-data-grid">

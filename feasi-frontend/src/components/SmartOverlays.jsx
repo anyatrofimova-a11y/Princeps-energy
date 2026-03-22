@@ -16,14 +16,14 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSite } from "../SiteContext";
 
 const INSIGHT_ICONS = {
-  grid: "⚡", environmental: "🌿", financial: "💰", planning: "📋",
-  market: "📊", constraint: "🔴", opportunity: "✨", warning: "⚠️",
-  land: "🗺️", carbon: "🍃", bess: "🔋", queue: "⏳",
+  grid: "G", environmental: "E", financial: "£", planning: "P",
+  market: "M", constraint: "C", opportunity: "O", warning: "!",
+  land: "L", carbon: "CO", bess: "B", queue: "Q",
 };
 
 const SEVERITY_COLORS = {
   opportunity: "#16A34A",
-  info: "#F5B731",
+  info: "#E8A012",
   warning: "#E8A012",
   critical: "#DC2626",
 };
@@ -56,7 +56,7 @@ function InsightCard({ insight, onDismiss, onAction }) {
       )}
       {insight.metric && (
         <div className="so-card-metric">
-          <span className="so-metric-value" style={{ color: SEVERITY_COLORS[insight.severity] }}>
+          <span className="so-metric-value">
             {insight.metric.value}
           </span>
           <span className="so-metric-unit">{insight.metric.unit}</span>
