@@ -3516,14 +3516,13 @@ input[type="range"] { accent-color: var(--accent); }
 /* ── Drawing Toolbar (nebula.gl-style) ── */
 .draw-toolbar {
   position: absolute;
-  top: 54px;
-  left: 52px;
+  bottom: 48px; /* Above copilot dock, not overlapping layer rail */
+  left: 8px;
   z-index: 16;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
+  background: var(--cds-layer-01);
+  border: 1px solid var(--cds-border-subtle);
   border-radius: 10px;
-  box-shadow: var(--shadow);
-  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
   padding: 4px;
   display: flex;
   flex-direction: column;
