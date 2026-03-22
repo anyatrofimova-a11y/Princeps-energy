@@ -8,12 +8,9 @@ import ThemeToggle from "../ThemeToggle";
 import NotificationCentre from "../NotificationCentre";
 
 const STEPS = [
-  { id: "site",    label: "Discover", sub: "Find site",        num: "1" },
-  { id: "study",   label: "Assess",   sub: "Feasibility",      num: "2", gate: "pickedLocation" },
-  { id: "connect", label: "Connect",  sub: "Grid connection",   num: "3", gate: "pickedLocation" },
-  { id: "plan",    label: "Design",   sub: "Layout & sizing",   num: "4", gate: "agentResult" },
-  { id: "impact",  label: "Plan",     sub: "Planning prep",     num: "5", gate: "agentResult" },
-  { id: "act",     label: "Build",    sub: "Export & procure",  num: "6", gate: "agentResult" },
+  { id: "site",    label: "Discover", sub: "Find & select",     num: "1" },
+  { id: "study",   label: "Assess",   sub: "Feasibility",       num: "2", gate: "pickedLocation" },
+  { id: "plan",    label: "Design",   sub: "Layout & build",    num: "3", gate: "pickedLocation" },
 ];
 
 function WorkflowSteps() {

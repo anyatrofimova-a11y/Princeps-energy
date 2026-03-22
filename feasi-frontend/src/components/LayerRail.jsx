@@ -1,51 +1,29 @@
 import React, { useState } from "react";
 import { useSite } from "../SiteContext";
 
-/* ── Functional layer groups (not by data source) ── */
+/* ── 3 clean layer groups — no duplicates ── */
 const SECTIONS = [
   {
-    id: "ai",
-    label: "AI Analysis",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
-      </svg>
-    ),
-    layers: [
-      { id: "gridCapacity", label: "Site Suitability", color: "#D4A018" },
-      { id: "geeflowOpportunities", label: "Grid Opportunities", color: "#ff6f00" },
-      { id: "queueDepth", label: "Queue Depth", color: "#e040fb" },
-      { id: "gridConstraints", label: "Grid Constraints", color: "#f44336" },
-      { id: "envConstraints", label: "Env. Constraints", color: "#e53935" },
-    ],
-  },
-  {
     id: "grid",
-    label: "Grid & Power",
+    label: "Grid",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
       </svg>
     ),
     layers: [
-      { id: "gridCapacity", label: "Grid Capacity (RAG)", color: "#D4A018" },
-      { id: "gridConstraints", label: "Constraint Zones", color: "#f44336" },
+      { id: "gridCapacity", label: "Capacity (RAG)", color: "#D4A018" },
+      { id: "gridConstraints", label: "Constraints", color: "#f44336" },
       { id: "queueDepth", label: "Queue Depth", color: "#e040fb" },
       { id: "gridFlow", label: "Substations", color: "#24a148" },
-      { id: "osmPower", label: "Transmission Lines", color: "#B54EB2" },
-      { id: "ngedSubs", label: "NGED Substations", color: "#1b5e20" },
-      { id: "tecPipeline", label: "TEC Pipeline", color: "#0277bd" },
-      { id: "repdProjects", label: "REPD Projects", color: "#ff6f00" },
-      { id: "demandGsps", label: "Demand GSPs", color: "#fa8c16" },
-      { id: "agilePricing", label: "Agile Pricing", color: "#f1c21b" },
-      { id: "demandOverlay", label: "Smart Meter", color: "#a56eff" },
-      { id: "flowFocus", label: "Flow Focus", color: "#08bdba" },
-      { id: "electricityZones", label: "Elec. Zones", color: "#24a148" },
+      { id: "osmPower", label: "Lines", color: "#B54EB2" },
+      { id: "tecPipeline", label: "TEC Queue", color: "#0277bd" },
+      { id: "repdProjects", label: "REPD", color: "#ff6f00" },
     ],
   },
   {
     id: "environment",
-    label: "Environment & Land",
+    label: "Land",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M12 22c-4.97 0-9-2.69-9-6v-2c0-3.31 4.03-6 9-6s9 2.69 9 6v2c0 3.31-4.03 6-9 6z" />
@@ -53,34 +31,16 @@ const SECTIONS = [
       </svg>
     ),
     layers: [
-      { id: "envConstraints", label: "Constraints (SSSI/AONB/Flood)", color: "#ef4444" },
-      { id: "geeflowLandUse", label: "Land Use (GEE)", color: "#D4A018" },
-      { id: "environment", label: "Energy Assets", color: "#f1c21b" },
-      { id: "carbon", label: "Carbon (PBCC)", color: "#da1e28" },
-      { id: "ndvi", label: "NDVI Vegetation", color: "#24a148" },
-      { id: "landParcels", label: "HMLR Parcels", color: "#2563eb" },
-      { id: "planningDensity", label: "Planning Density", color: "#f59e0b" },
-    ],
-  },
-  {
-    id: "infra",
-    label: "Infrastructure",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9 4v16" /><path d="M4 9h16" />
-      </svg>
-    ),
-    layers: [
-      { id: "transport", label: "Transport", color: "#08bdba" },
-      { id: "la", label: "Local Authority", color: "#f1c21b" },
-      { id: "dcCapacity", label: "DC Capacity", color: "#D4A018" },
-      { id: "dcFibre", label: "Fibre POPs", color: "#a855f7" },
-      { id: "dcIxp", label: "IXP Nodes", color: "#3b82f6" },
+      { id: "envConstraints", label: "SSSI / AONB / Flood", color: "#ef4444" },
+      { id: "landParcels", label: "Ownership (HMLR)", color: "#2563eb" },
+      { id: "planningDensity", label: "Planning Apps", color: "#f59e0b" },
+      { id: "geeflowLandUse", label: "Land Use", color: "#D4A018" },
+      { id: "ndvi", label: "Vegetation", color: "#24a148" },
     ],
   },
   {
     id: "terrain",
-    label: "Terrain & Imagery",
+    label: "Map",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M8 21l4-10 4 10" /><path d="M2 21l6-14 4 8 4-12 6 18" />
@@ -90,28 +50,9 @@ const SECTIONS = [
       { id: "hillshade", label: "Hillshade", color: "#8d6e63" },
       { id: "slope", label: "Slope", color: "#D4A018", hasOpacity: true },
       { id: "contours", label: "Contours", color: "#24a148" },
-      { id: "lidarDtm", label: "LIDAR DTM", color: "#ef6c00" },
-      { id: "lidarDsm", label: "LIDAR DSM", color: "#d84315" },
-      { id: "aerial", label: "Aerial (ESRI)", color: "#a56eff" },
-      { id: "satellite", label: "Sentinel-2", color: "#D4A018" },
-      { id: "landsat", label: "Landsat 30m", color: "#1b5e20" },
-      { id: "viirs", label: "VIIRS Night", color: "#0043ce" },
+      { id: "aerial", label: "Aerial", color: "#a56eff" },
       { id: "google3d", label: "Google 3D", color: "#4285f4" },
-    ],
-  },
-  {
-    id: "epc",
-    label: "EPC / Retrofit",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-      </svg>
-    ),
-    layers: [
-      { id: "epcZones", label: "Neighbourhoods", color: "#24a148", hasSelect: "epcZonesField" },
-      { id: "epcDom", label: "Domestic EPC", color: "#0e7e58", hasSelect: "epcDomField" },
-      { id: "epcNondom", label: "Non-Dom EPC", color: "#f1c21b", hasSelect: "epcNondomField" },
-      { id: "postcodes", label: "Postcodes Energy", color: "#D4A018", hasSelect: "postcodesField" },
+      { id: "satellite", label: "Sentinel-2", color: "#D4A018" },
     ],
   },
 ];

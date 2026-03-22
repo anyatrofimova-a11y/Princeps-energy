@@ -24,7 +24,7 @@ import SitePicker from "./components/SitePicker";
 import LiveStrip from "./components/LiveStrip";
 import ConstraintTimeline from "./components/ConstraintTimeline";
 import ThemeToggle from "./components/ThemeToggle";
-import SmartOverlays from "./components/SmartOverlays";
+// SmartOverlays removed — replaced by copilot auto-suggestions
 import ActionSidebar from "./components/ActionSidebar";
 import NotificationCentre from "./components/NotificationCentre";
 import StartupOverlay, { saveRecentSite } from "./components/StartupOverlay";
@@ -535,13 +535,13 @@ export default function App() {
         />
       </ErrorBoundary>
 
-      {/* Layer controls — only show when map has active overlays */}
+      {/* Layer controls */}
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
       {chatLayers.length > 0 && <MapLegend chatLayers={chatLayers} />}
       {layers.gridConstraints && <ConstraintTimeline map={mapInstance} visible />}
-      <SmartOverlays />
 
-      <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
+      {/* Camera toolbar — only when a site is selected */}
+      {pickedLocation && <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />}
 
       <Suspense fallback={null}>
         <DrawingToolbar

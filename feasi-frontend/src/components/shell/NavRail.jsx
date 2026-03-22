@@ -40,11 +40,15 @@ export default function NavRail() {
   return (
     <nav className="nav-rail">
       <div className="nav-rail-brand" title="Princeps">
-        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="nav-rail-logo">
-          <polygon points="4,4 36,4 28,16 12,16" fill="#F5B731"/>
-          <polygon points="12,20 28,20 36,32 4,32" fill="#F5B731"/>
-          <rect x="28" y="14" width="16" height="8" fill="#F5B731"/>
-          <rect x="4" y="36" width="24" height="8" fill="#F5B731"/>
+        <svg viewBox="0 0 48 52" fill="none" xmlns="http://www.w3.org/2000/svg" className="nav-rail-logo">
+          {/* Top trapezoid — wider at top */}
+          <polygon points="2,2 38,2 30,15 10,15" fill="#D4A018"/>
+          {/* Middle rectangle — offset right */}
+          <rect x="26" y="18" width="18" height="7" fill="#D4A018"/>
+          {/* Middle trapezoid — wider at bottom */}
+          <polygon points="10,18 28,18 36,31 2,31" fill="#D4A018"/>
+          {/* Bottom rectangle */}
+          <rect x="6" y="38" width="22" height="8" rx="1" fill="#D4A018"/>
         </svg>
       </div>
       <div className="nav-rail-items">

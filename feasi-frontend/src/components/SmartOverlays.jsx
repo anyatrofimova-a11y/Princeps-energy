@@ -16,9 +16,9 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useSite } from "../SiteContext";
 
 const INSIGHT_ICONS = {
-  grid: "G", environmental: "E", financial: "£", planning: "P",
-  market: "M", constraint: "C", opportunity: "O", warning: "!",
-  land: "L", carbon: "CO", bess: "B", queue: "Q",
+  grid: "GRD", environmental: "ENV", financial: "FIN", planning: "PLN",
+  market: "MKT", constraint: "CST", opportunity: "OPP", warning: "WRN",
+  land: "LND", carbon: "CO2", bess: "BES", queue: "QUE",
 };
 
 const SEVERITY_COLORS = {
