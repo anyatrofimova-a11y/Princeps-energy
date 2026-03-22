@@ -266,6 +266,38 @@ async def comparable_projects_v2(
 
 
 # ═══════════════════════════════════════════════════════════════
+#  Site Benchmarking — compare against 14K real REPD projects
+# ═══════════════════════════════════════════════════════════════
+
+class BenchmarkSiteRequest(BaseModel):
+    lat: float = Field(..., ge=49, le=61, description="Latitude (WGS84)")
+    lon: float = Field(..., ge=-8, le=2, description="Longitude (WGS84)")
+    capacity_mw: float = Field(50, ge=0.1, le=5000, description="Proposed capacity in MW")
+    technology: str = Field("solar", description="Technology: solar, wind, bess, battery")
+
+
+@router.post("/api/planning/benchmark-site")
+async def benchmark_site_endpoint(
+    req: BenchmarkSiteRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Benchmark a proposed site against 13,995 real REPD projects.
+
+    For each metric (grid headroom, grid distance, local density,
+    approval rate, capacity), shows the site's percentile rank
+    among all operational UK projects of the same technology.
+
+    Returns overall percentile, verdict (EXCELLENT / ABOVE AVERAGE /
+    AVERAGE / BELOW AVERAGE / POOR), metric breakdowns, comparable
+    approved and refused projects, and summary narrative.
+    """
+    from utils.site_benchmarker import benchmark_site
+    return await benchmark_site(
+        pool, req.lat, req.lon, req.capacity_mw, req.technology,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
 #  BMRS Datasets — live grid intelligence
 # ═══════════════════════════════════════════════════════════════
 

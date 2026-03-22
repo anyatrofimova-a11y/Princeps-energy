@@ -67,7 +67,7 @@ async def live_snapshot():
         if records:
             latest = records[-1] if isinstance(records[-1], dict) else {}
             snapshot["demand"] = {
-                "current_mw": latest.get("demand") or latest.get("initialTransmissionSystemDemand"),
+                "current_mw": latest.get("initialTransmissionSystemDemandOutturn") or latest.get("initialDemandOutturn") or latest.get("demand"),
                 "settlement_period": latest.get("settlementPeriod"),
                 "settlement_date": latest.get("settlementDate"),
             }

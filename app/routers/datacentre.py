@@ -638,3 +638,60 @@ async def api_dc_water_stress_enhanced(
     return await water_stress_assessment(
         lat=lat, lon=lon, cooling_type=cooling_type, it_load_mw=capacity_mw,
     )
+
+
+# ---------------------------------------------------------------------------
+# DCIM Integrations — Schneider EcoStruxure + Siemens Building X
+# ---------------------------------------------------------------------------
+
+@router.get("/api/dcim/telemetry")
+async def dcim_telemetry(
+    platform: str = Query("auto", description="Platform: auto, ecostruxure, siemens, demo"),
+):
+    """Get normalised DC telemetry from connected DCIM platform.
+    Returns total power, IT load, cooling, PUE, device list, and alarms.
+    Set ECOSTRUXURE_API_KEY or SIEMENS_BX_CLIENT_ID env vars to connect live."""
+    from utils.dcim_integrations import get_dcim_telemetry
+    return await get_dcim_telemetry(platform)
+
+
+@router.get("/api/dcim/ecostruxure/locations")
+async def ecostruxure_locations():
+    """List monitored DC locations from Schneider EcoStruxure IT Expert."""
+    from utils.dcim_integrations import ecostruxure_get_locations
+    return await ecostruxure_get_locations()
+
+
+@router.get("/api/dcim/ecostruxure/devices")
+async def ecostruxure_devices(location_id: str = Query(None)):
+    """Get DC devices (UPS, PDU, CRAC, sensors) from EcoStruxure IT."""
+    from utils.dcim_integrations import ecostruxure_get_devices
+    return await ecostruxure_get_devices(location_id)
+
+
+@router.get("/api/dcim/ecostruxure/alarms")
+async def ecostruxure_alarms(severity: str = Query(None)):
+    """Get active alarms from EcoStruxure IT Expert."""
+    from utils.dcim_integrations import ecostruxure_get_alarms
+    return await ecostruxure_get_alarms(severity)
+
+
+@router.get("/api/dcim/siemens/devices")
+async def siemens_devices():
+    """Get BMS devices from Siemens Building X (HVAC, power meters, chillers)."""
+    from utils.dcim_integrations import siemens_get_devices
+    return await siemens_get_devices()
+
+
+@router.get("/api/dcim/siemens/points/{device_id}")
+async def siemens_points(device_id: str):
+    """Get data points for a Siemens BMS device."""
+    from utils.dcim_integrations import siemens_get_points
+    return await siemens_get_points(device_id)
+
+
+@router.get("/api/dcim/siemens/values/{point_id}")
+async def siemens_values(point_id: str, from_ts: str = Query(None), to_ts: str = Query(None)):
+    """Get time-series values for a Siemens BMS data point."""
+    from utils.dcim_integrations import siemens_get_point_values
+    return await siemens_get_point_values(point_id, from_ts, to_ts)

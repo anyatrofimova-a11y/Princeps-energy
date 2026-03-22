@@ -27,9 +27,11 @@ export default function GridCanvas({ className = "", style = {}, dark = false })
 
     function initGrid() {
       const dpr = window.devicePixelRatio || 1;
-      const rect = canvas.parentElement?.getBoundingClientRect() || { width: window.innerWidth, height: window.innerHeight };
+      const parent = canvas.parentElement;
+      const rect = parent?.getBoundingClientRect() || { width: window.innerWidth, height: window.innerHeight };
       const w = rect.width;
-      const h = rect.height;
+      // Use scrollHeight to cover full scrollable content, not just viewport
+      const h = Math.max(rect.height, parent?.scrollHeight || 0, window.innerHeight);
       canvas.width = w * dpr;
       canvas.height = h * dpr;
       canvas.style.width = w + "px";
@@ -208,9 +210,17 @@ export default function GridCanvas({ className = "", style = {}, dark = false })
     };
     window.addEventListener("resize", handleResize);
 
+    // Watch parent for content size changes (scrollHeight)
+    let resizeObs;
+    if (canvas.parentElement && typeof ResizeObserver !== "undefined") {
+      resizeObs = new ResizeObserver(handleResize);
+      resizeObs.observe(canvas.parentElement);
+    }
+
     return () => {
       cancelAnimationFrame(animRef.current);
       window.removeEventListener("resize", handleResize);
+      resizeObs?.disconnect();
     };
   }, [dark]);
 

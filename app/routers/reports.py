@@ -18,6 +18,7 @@ from utils.xlsx_export import generate_xlsx
 from utils.g99_pack_generator import generate_g99_pack
 from utils.report_grid_connection import generate_grid_connection_report
 from utils.report_financial import generate_financial_report
+from utils.constraint_report_generator import generate_constraint_report
 from utils.sld_generator import generate_sld
 from utils.loss_budget import calculate_loss_budget, calculate_lifetime_profile
 
@@ -250,6 +251,71 @@ async def financial_report(
         )
 
     filename = f"princeps-financial-viability-{_safe_filename(site_name)}.pdf"
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Planning Constraint Report
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/reports/constraint-report")
+async def constraint_report(
+    lat: float = Query(..., description="Latitude (WGS84)"),
+    lon: float = Query(..., description="Longitude (WGS84)"),
+    capacity_mw: float = Query(50.0, ge=0.1, le=5000, description="Proposed capacity in MW"),
+    technology: str = Query("solar", description="Technology: solar, wind, bess, solar+bess"),
+    site_name: str = Query("Site", description="Site name for report title"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Generate a professional planning constraint report PDF.
+
+    Produces a comprehensive constraint screening covering:
+    - Environmental designations (SSSI, AONB, SAC, SPA, Ramsar, Green Belt)
+    - Flood risk assessment (EA flood zones and areas)
+    - Heritage constraints (listed buildings, conservation areas, scheduled monuments)
+    - Agricultural land classification (BMV screening)
+    - Planning risk score (ML-predicted from REPD data)
+    - Grid connection feasibility forecast
+    - Shadow flicker, noise, and landscape/visual impact summaries
+    - Actionable recommendations
+
+    This replaces manual constraint screening that planning consultants
+    typically charge GBP 5-20K for.
+
+    Returns a branded Princeps PDF via Playwright Chromium.
+    """
+    valid_technologies = {"solar", "wind", "bess", "solar+bess", "onshore_wind", "offshore_wind"}
+    if technology not in valid_technologies:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid technology '{technology}'. Must be one of: {', '.join(sorted(valid_technologies))}",
+        )
+
+    try:
+        pdf_bytes = await generate_constraint_report(
+            pool,
+            lat=lat,
+            lon=lon,
+            capacity_mw=capacity_mw,
+            technology=technology,
+            site_name=site_name,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        log.exception("Constraint report generation failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Constraint report generation failed: {e}",
+        )
+
+    filename = f"princeps-constraint-report-{_safe_filename(site_name)}.pdf"
 
     return StreamingResponse(
         iter([pdf_bytes]),

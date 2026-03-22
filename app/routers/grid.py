@@ -95,6 +95,30 @@ async def grid_connection_cost(
     return connection_cost_estimate(distance_km, capacity_kw, voltage_kv)
 
 
+# ─── Real-Time System Prices (BMRS DETSYSPRICES) ────────────────────────────
+
+@router.get("/api/grid/system-prices")
+async def api_system_prices():
+    """Return current real-time wholesale system buy/sell prices from BMRS.
+
+    These are the ACTUAL prices generators receive under the Balancing
+    Mechanism (DETSYSPRICES), not retail tariffs. Returns:
+    - sell_price_gbp_mwh: System Sell Price (what generators receive)
+    - buy_price_gbp_mwh: System Buy Price (imbalance cost)
+    - spread_gbp_mwh: Buy-Sell spread
+    - settlement_period / date / timestamp
+    """
+    from utils.live_grid_status import get_system_prices
+
+    result = await get_system_prices()
+    if result.get("sell_price_gbp_mwh") is None:
+        raise HTTPException(
+            status_code=503,
+            detail="BMRS system prices temporarily unavailable",
+        )
+    return result
+
+
 # ─── Grid Connection & Capacity Module ────────────────────────────────────────
 
 @router.post("/api/grid/assess")
@@ -196,6 +220,46 @@ async def api_batch_connection_forecast(
         raise HTTPException(400, "Maximum 50 sites per batch")
     result = await batch_connection_forecast_fn(pool, body)
     record_metric("batch_connection_forecast", len(body))
+    return result
+
+
+@router.get("/api/grid/tec-timelines")
+async def api_tec_timelines(
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Analyse connection timelines from real ESO TEC gate data.
+
+    Returns statistical breakdown by gate, technology, capacity band,
+    and host TO region — modelled from 2,563 real TEC projects.
+    """
+    from utils.tec_timeline_model import analyse_tec_timelines
+    result = await analyse_tec_timelines(pool)
+    record_metric("tec_timelines", 1)
+    return result
+
+
+@router.post("/api/grid/predict-timeline")
+async def api_predict_timeline(
+    capacity_mw: float = Query(50, ge=0.1, le=5000),
+    technology: str = Query("solar"),
+    host_to: str = Query(None),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Predict connection timeline for a proposed project.
+
+    Uses real TEC gate data to estimate P10/P50/P90 timelines.
+    """
+    from utils.tec_timeline_model import predict_connection_timeline
+    result = await predict_connection_timeline(
+        pool,
+        capacity_mw=capacity_mw,
+        technology=technology,
+        host_to=host_to,
+    )
+    record_metric("predict_timeline", capacity_mw,
+                  labels={"technology": technology})
     return result
 
 
@@ -628,6 +692,124 @@ async def api_dc_thermal_field(
     from utils.dc_advanced_design import thermal_field_model
     return thermal_field_model(rack_count, rack_kw, rows, cooling_type,
                                 crac_count, containment, supply_temp_c)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  COMPETITIVE INTELLIGENCE INTEGRATIONS (LandGate/Halcyon/Searchland/PVcase/Transect-class)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@router.post("/api/planning/extract")
+async def api_planning_extract(
+    text: str = Query(None, description="Raw planning decision text"),
+    file_path: str = Query(None, description="Path to PDF file"),
+):
+    """Extract structured data from UK planning application documents using NLP."""
+    from utils.planning_nlp import extract_planning_decision, extract_from_pdf
+    if file_path:
+        return extract_from_pdf(file_path)
+    if text:
+        return extract_planning_decision(text)
+    raise HTTPException(400, "Provide text or file_path")
+
+
+@router.post("/api/planning/classify")
+async def api_planning_classify(text: str = Query(...)):
+    """Classify a document as planning_decision, connection_offer, etc."""
+    from utils.planning_nlp import classify_document
+    return {"document_type": classify_document(text)}
+
+
+@router.get("/api/landowner/lookup")
+async def api_landowner_lookup(
+    lat: float = Query(...), lon: float = Query(...),
+):
+    """Identify landowner from HMLR + Companies House public records."""
+    from utils.landowner_lookup import lookup_landowner
+    return await lookup_landowner(lat, lon)
+
+
+@router.get("/api/landowner/transactions")
+async def api_landowner_transactions(
+    lat: float = Query(...), lon: float = Query(...),
+    radius_km: float = Query(2.0),
+):
+    """Recent land transactions near a location from HMLR Price Paid data."""
+    from utils.landowner_lookup import nearby_land_transactions
+    return await nearby_land_transactions(lat, lon, radius_km)
+
+
+@router.get("/api/landowner/company")
+async def api_landowner_company(name: str = Query(...)):
+    """Search Companies House for a corporate landowner."""
+    from utils.landowner_lookup import search_companies_house
+    return await search_companies_house(name)
+
+
+@router.get("/api/landowner/land-value")
+async def api_landowner_land_value(
+    lat: float = Query(...), lon: float = Query(...),
+    area_ha: float = Query(5.0),
+    land_type: str = Query("agricultural"),
+):
+    """Estimate land value based on nearby transactions and type benchmarks."""
+    from utils.landowner_lookup import estimate_land_value
+    return await estimate_land_value(lat, lon, area_ha, land_type)
+
+
+@router.get("/api/pricing/regional")
+async def api_pricing_regional():
+    """Current Agile electricity prices for all 14 UK DNO regions as GeoJSON."""
+    from utils.wholesale_price_heatmap import price_heatmap_geojson
+    return await price_heatmap_geojson()
+
+
+@router.get("/api/pricing/timeseries")
+async def api_pricing_timeseries(
+    region: str = Query("C"),
+    hours: int = Query(48, ge=1, le=168),
+):
+    """Historical half-hourly wholesale prices for a region."""
+    from utils.wholesale_price_heatmap import fetch_price_timeseries
+    return await fetch_price_timeseries(region, hours)
+
+
+@router.get("/api/pricing/dispatch-window")
+async def api_pricing_dispatch_window(
+    hours_ahead: int = Query(24, ge=1, le=168),
+):
+    """Find cheapest and most expensive time windows for BESS dispatch."""
+    from utils.wholesale_price_heatmap import optimal_dispatch_window
+    return await optimal_dispatch_window(hours_ahead)
+
+
+@router.post("/api/esa/auto-scope")
+async def api_esa_auto_scope(
+    lat: float = Query(...), lon: float = Query(...),
+    site_area_ha: float = Query(5.0),
+    proposed_use: str = Query("solar_farm"),
+):
+    """Auto-generate Phase 1 ESA scope from Princeps constraint data."""
+    from utils.esa_auto_scoping import auto_scope_phase1
+    return await auto_scope_phase1(lat, lon, site_area_ha, proposed_use)
+
+
+@router.post("/api/esa/contamination")
+async def api_esa_contamination(
+    lat: float = Query(...), lon: float = Query(...),
+):
+    """Historical land use contamination risk assessment."""
+    from utils.esa_auto_scoping import contamination_risk
+    return await contamination_risk(lat, lon)
+
+
+@router.post("/api/esa/flood-risk")
+async def api_esa_flood_risk(
+    lat: float = Query(...), lon: float = Query(...),
+):
+    """EA flood zone check with climate projections."""
+    from utils.esa_auto_scoping import flood_risk_assessment
+    return await flood_risk_assessment(lat, lon)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

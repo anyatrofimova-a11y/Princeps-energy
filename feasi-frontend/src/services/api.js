@@ -134,6 +134,13 @@ const api = {
       post(`/api/grid/connection-forecast?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(tech)}`),
     batchConnectionForecast: (sites) =>
       post("/api/grid/batch-connection-forecast", sites),
+    // TEC Timeline prediction
+    tecTimelines: () => get("/api/grid/tec-timelines"),
+    predictTimeline: (mw = 50, tech = "solar", hostTo) => {
+      const q = new URLSearchParams({ capacity_mw: mw, technology: tech });
+      if (hostTo) q.set("host_to", hostTo);
+      return post(`/api/grid/predict-timeline?${q}`);
+    },
     // GridFinder — unmapped grid detection
     unmappedGrid: (lat, lon, km = 10) => get(`/api/grid/unmapped?lat=${lat}&lon=${lon}&radius_km=${km}`),
     // Grid connection capacity endpoints
@@ -377,6 +384,9 @@ const api = {
     comparableProjects: (lat, lon, mw, tech, limit = 10) =>
       get(`/api/planning/comparable-projects?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(tech)}&limit=${limit}`),
     retrainModel: () => post("/api/planning/retrain-v2", {}),
+    // Site benchmarking against 14K REPD projects
+    benchmarkSite: (lat, lon, mw = 50, tech = "solar") =>
+      post("/api/planning/benchmark-site", { lat, lon, capacity_mw: mw, technology: tech }),
   },
 
   bmrs: {
@@ -1009,6 +1019,26 @@ const api = {
     },
   },
 
+  yieldIntel: {
+    shadeAnalysis: (rowPitchM, panelHeightM = 1.134, tiltDeg = 25, latitude) =>
+      get(`/api/yield-intel/shade-analysis?row_pitch_m=${rowPitchM}&panel_height_m=${panelHeightM}&tilt_deg=${tiltDeg}&latitude=${latitude}`),
+    compareLayouts: (latitude, siteAreaHa, panelWatts = 600, panelWidthM = 2.278, panelHeightM = 1.134) =>
+      get(`/api/yield-intel/compare-layouts?latitude=${latitude}&site_area_ha=${siteAreaHa}&panel_watts=${panelWatts}&panel_width_m=${panelWidthM}&panel_height_m=${panelHeightM}`),
+    hourlyProfile: (capacityMwp, latitude, tiltDeg = 25, tracking = "fixed", month = 6) =>
+      get(`/api/yield-intel/hourly-profile?capacity_mwp=${capacityMwp}&latitude=${latitude}&tilt_deg=${tiltDeg}&tracking=${enc(tracking)}&month=${month}`),
+  },
+
+  solarLayout: {
+    generate: (data) => post("/api/solar-layout/generate", data),
+    presets: () => get("/api/solar-layout/presets"),
+    quick: (lat, lon, areaHa = 50, capacityMwp, tracking = "fixed", gcrTarget = 0.40, tiltDeg, setbackM = 5) => {
+      const q = new URLSearchParams({ lat, lon, area_ha: areaHa, tracking, gcr_target: gcrTarget, setback_m: setbackM });
+      if (capacityMwp != null) q.set("capacity_mwp", capacityMwp);
+      if (tiltDeg != null) q.set("tilt_deg", tiltDeg);
+      return get(`/api/solar-layout/quick?${q}`);
+    },
+  },
+
   /**
    * Health check — GET /health (no retry, fast fail).
    * Returns { status, checks: { database, sam, claude, pool } } or null.
@@ -1041,6 +1071,31 @@ const api = {
     };
     poll();
   }),
+};
+
+// ── Competitive intelligence integrations ──
+api.planning = {
+  extract:   (text) => post("/api/planning/extract", null, { params: { text } }),
+  classify:  (text) => get(`/api/planning/classify?text=${encodeURIComponent(text)}`),
+};
+
+api.landowner = {
+  lookup:        (lat, lon) => get(`/api/landowner/lookup?lat=${lat}&lon=${lon}`),
+  transactions:  (lat, lon, radiusKm = 2) => get(`/api/landowner/transactions?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
+  company:       (name) => get(`/api/landowner/company?name=${encodeURIComponent(name)}`),
+  landValue:     (lat, lon, areaHa, landType) => get(`/api/landowner/land-value?lat=${lat}&lon=${lon}&area_ha=${areaHa}&land_type=${landType}`),
+};
+
+api.pricing = {
+  regional:       () => get("/api/pricing/regional"),
+  timeseries:     (region = "C", hours = 48) => get(`/api/pricing/timeseries?region=${region}&hours=${hours}`),
+  dispatchWindow: (hours = 24) => get(`/api/pricing/dispatch-window?hours_ahead=${hours}`),
+};
+
+api.esa = {
+  autoScope:     (lat, lon, areaHa = 5, use = "solar_farm") => post(`/api/esa/auto-scope?lat=${lat}&lon=${lon}&site_area_ha=${areaHa}&proposed_use=${use}`),
+  contamination: (lat, lon) => post(`/api/esa/contamination?lat=${lat}&lon=${lon}`),
+  floodRisk:     (lat, lon) => post(`/api/esa/flood-risk?lat=${lat}&lon=${lon}`),
 };
 
 export default api;

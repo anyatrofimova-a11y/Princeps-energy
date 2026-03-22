@@ -1007,6 +1007,33 @@ TOOLS: list[dict] = [
             "required": ["lat", "lon"],
         },
     },
+    {
+        "name": "predict_connection_timeline",
+        "description": "Predict grid connection timeline using real ESO TEC gate data from 2,563 transmission projects. Returns P10/P50/P90 month estimates, gate-by-gate breakdown, DNO region comparison, and benchmark against similar projects. Use when developers ask 'how long will grid connection take?' or about connection timelines.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "capacity_mw": {"type": "number", "description": "Proposed capacity in MW", "default": 50},
+                "technology": {"type": "string", "description": "Technology type: solar, wind, bess, gas, nuclear", "default": "solar"},
+                "host_to": {"type": "string", "description": "Host Transmission Owner / DNO region (e.g. NGET, SHET, SPT)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "benchmark_site",
+        "description": "Benchmark a proposed site against 13,995 real UK REPD projects. Shows percentile ranking for grid headroom, grid distance, local project density, approval rate, and capacity. Returns overall percentile, verdict (EXCELLENT/ABOVE AVERAGE/AVERAGE/BELOW AVERAGE/POOR), comparable approved and refused projects, and narrative summary. Use when developers ask 'is this a good site?' or want to compare their site against the UK average.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "capacity_mw": {"type": "number", "description": "Proposed capacity in MW", "default": 50},
+                "technology": {"type": "string", "description": "Technology: solar, wind, bess, battery", "default": "solar"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
 ]
 
 
@@ -1926,6 +1953,50 @@ async def execute_tool(
                 args["lat"], args["lon"],
                 radius_m=args.get("radius_m", 500),
             )
+
+        elif name == "predict_connection_timeline":
+            from utils.tec_timeline_model import predict_connection_timeline as _predict_timeline
+            result = await _predict_timeline(
+                pool,
+                capacity_mw=args.get("capacity_mw", 50),
+                technology=args.get("technology", "solar"),
+                host_to=args.get("host_to"),
+            )
+            return {
+                "predicted_months": result.get("predicted_months"),
+                "benchmark": result.get("benchmark"),
+                "by_gate": result.get("by_gate", [])[:6],  # Keep compact
+                "dno_comparison": result.get("dno_comparison"),
+                "source": result.get("source"),
+            }
+
+        elif name == "benchmark_site":
+            from utils.site_benchmarker import benchmark_site as _benchmark
+            result = await _benchmark(
+                pool,
+                lat=args["lat"],
+                lon=args["lon"],
+                capacity_mw=args.get("capacity_mw", 50),
+                technology=args.get("technology", "solar"),
+            )
+            # Compact for chat context
+            metrics_compact = {}
+            for k, m in result.get("metrics", {}).items():
+                metrics_compact[k] = {
+                    "value": m.get("value"),
+                    "unit": m.get("unit"),
+                    "percentile": m.get("percentile"),
+                    "median": m.get("median"),
+                }
+            return {
+                "overall_percentile": result.get("overall_percentile"),
+                "verdict": result.get("verdict"),
+                "metrics": metrics_compact,
+                "comparable_approved": result.get("comparable_approved", [])[:3],
+                "comparable_refused": result.get("comparable_refused", [])[:3],
+                "summary": result.get("summary"),
+                "source": result.get("source"),
+            }
 
         elif name == "predict_planning_approval":
             from utils.repd_ml_model import predict_approval as _predict_approval
