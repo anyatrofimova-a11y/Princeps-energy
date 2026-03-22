@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#E8C44A"/>
+      <stop offset="100%" stop-color="#C49B1A"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect width="40" height="40" rx="9" fill="url(#g)"/>
+  <!-- Grid/energy motif: stylised lightning bolt + network nodes -->
+  <path d="M20 6L12 22h6l-2 12 10-16h-6l2-12z" fill="#1a1a2e" opacity="0.9"/>
+  <!-- Corner network dots -->
+  <circle cx="9" cy="9" r="1.5" fill="#1a1a2e" opacity="0.25"/>
+  <circle cx="31" cy="9" r="1.5" fill="#1a1a2e" opacity="0.25"/>
+  <circle cx="9" cy="31" r="1.5" fill="#1a1a2e" opacity="0.25"/>
+  <circle cx="31" cy="31" r="1.5" fill="#1a1a2e" opacity="0.25"/>
+  <!-- Subtle grid lines connecting dots -->
+  <line x1="9" y1="9" x2="31" y2="9" stroke="#1a1a2e" stroke-width="0.5" opacity="0.12"/>
+  <line x1="9" y1="31" x2="31" y2="31" stroke="#1a1a2e" stroke-width="0.5" opacity="0.12"/>
+  <line x1="9" y1="9" x2="9" y2="31" stroke="#1a1a2e" stroke-width="0.5" opacity="0.12"/>
+  <line x1="31" y1="9" x2="31" y2="31" stroke="#1a1a2e" stroke-width="0.5" opacity="0.12"/>
+</svg>
