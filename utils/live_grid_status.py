@@ -147,3 +147,68 @@ async def get_live_status() -> dict:
     _cache = result
     _cache_ts = now
     return result
+
+
+# ─── System Buy/Sell Prices (DETSYSPRICES) ──────────────────────────────────
+
+_price_cache: dict[str, Any] = {}
+_price_cache_ts: float = 0
+PRICE_CACHE_TTL = 30  # 30 seconds — settlement period is 30 min
+
+
+async def get_system_prices() -> dict:
+    """Fetch real-time system buy/sell prices from BMRS DETSYSPRICES.
+
+    These are the ACTUAL wholesale prices generators receive — not retail
+    tariffs like Octopus Agile. System Buy Price (SBP) is what the system
+    pays generators; System Sell Price (SSP) is what generators pay the
+    system when short.
+
+    Returns:
+        Dict with sell_price_gbp_mwh, buy_price_gbp_mwh, spread_gbp_mwh,
+        settlement_period, settlement_date, timestamp.
+    """
+    global _price_cache, _price_cache_ts
+
+    now = time.time()
+    if _price_cache and (now - _price_cache_ts) < PRICE_CACHE_TTL:
+        return _price_cache
+
+    result: dict[str, Any] = {
+        "sell_price_gbp_mwh": None,
+        "buy_price_gbp_mwh": None,
+        "spread_gbp_mwh": None,
+        "settlement_period": None,
+        "settlement_date": None,
+        "timestamp": None,
+        "source": None,
+    }
+
+    async with httpx.AsyncClient(timeout=10) as client:
+        try:
+            resp = await client.get(
+                "https://data.elexon.co.uk/bmrs/api/v1/datasets/DETSYSPRICES",
+                params={"format": "json"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                records = data if isinstance(data, list) else data.get("data", [])
+                if records:
+                    # Take the most recent record
+                    latest = records[-1] if isinstance(records, list) else records
+                    sell = latest.get("systemSellPrice")
+                    buy = latest.get("systemBuyPrice")
+                    result["sell_price_gbp_mwh"] = round(float(sell), 2) if sell is not None else None
+                    result["buy_price_gbp_mwh"] = round(float(buy), 2) if buy is not None else None
+                    if sell is not None and buy is not None:
+                        result["spread_gbp_mwh"] = round(float(buy) - float(sell), 2)
+                    result["settlement_period"] = latest.get("settlementPeriod")
+                    result["settlement_date"] = latest.get("settlementDate")
+                    result["timestamp"] = latest.get("createdDateTime") or latest.get("settlementDate")
+                    result["source"] = "bmrs_detsysprices"
+        except Exception as e:
+            log.debug("DETSYSPRICES fetch failed: %s", e)
+
+    _price_cache = result
+    _price_cache_ts = now
+    return result

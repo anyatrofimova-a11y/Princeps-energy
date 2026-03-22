@@ -130,6 +130,40 @@ async def _identify_dno_zone(pool, lat: float | None, lon: float | None) -> str:
     return "default"
 
 
+# ─── System Price Analysis (BMRS DETSYSPRICES) ─────────────────────────────
+
+async def _fetch_system_price_stats() -> dict:
+    """Fetch real BMRS system buy/sell prices and derive stats for revenue modelling.
+
+    Converts system prices (GBP/MWh) into the same pence/kWh format used by
+    the Agile price path, so revenue calculations are interchangeable.
+    """
+    try:
+        from utils.live_grid_status import get_system_prices
+        sp = await get_system_prices()
+        sell = sp.get("sell_price_gbp_mwh")
+        buy = sp.get("buy_price_gbp_mwh")
+        if sell is not None and buy is not None:
+            # Convert GBP/MWh to p/kWh: ÷10
+            avg_pence = (sell + buy) / 2.0 / 10.0
+            spread_pence = abs(buy - sell) / 10.0
+            return {
+                "avg_price_pence": round(avg_pence, 2),
+                "min_price_pence": round(min(sell, buy) / 10.0, 2),
+                "max_price_pence": round(max(sell, buy) / 10.0, 2),
+                "spread_pence": round(spread_pence, 2),
+                "cheapest_4h_avg_pence": round(min(sell, buy) / 10.0, 2),
+                "peak_4h_avg_pence": round(max(sell, buy) / 10.0, 2),
+                "source": "bmrs_system_price",
+                "sell_price_gbp_mwh": sell,
+                "buy_price_gbp_mwh": buy,
+                "periods": 1,
+            }
+    except Exception as e:
+        log.debug("System price fetch failed, will use Agile: %s", e)
+    return {"source": "fallback"}
+
+
 # ─── Agile Price Analysis ───────────────────────────────────────────────────
 
 async def _fetch_agile_price_stats(region: str = "C") -> dict:
@@ -403,8 +437,14 @@ async def stack_revenue(
         else:
             agile_region = "H"   # Southern England
 
-    # Fetch real Agile prices
-    price_stats = await _fetch_agile_price_stats(region=agile_region)
+    # Fetch real system prices first, fall back to Agile
+    system_price_data = await _fetch_system_price_stats()
+    if system_price_data["source"] == "bmrs_system_price":
+        price_stats = system_price_data
+        price_source = "bmrs_system_price"
+    else:
+        price_stats = await _fetch_agile_price_stats(region=agile_region)
+        price_source = "octopus_agile"
 
     # ── Revenue Streams ─────────────────────────────────────────────────
 
@@ -532,7 +572,8 @@ async def stack_revenue(
             "spread_gbp_mwh": round(price_stats["spread_pence"] * 10, 1),
             "cheapest_4h_gbp_mwh": round(price_stats["cheapest_4h_avg_pence"] * 10, 1),
             "peak_4h_gbp_mwh": round(price_stats["peak_4h_avg_pence"] * 10, 1),
-            "source": price_stats["source"],
+            "source": price_source,
+            "source_detail": price_stats["source"],
         },
         "assumptions": {
             "capacity_factor": cf,

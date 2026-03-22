@@ -226,6 +226,8 @@ from app.routers import (  # noqa: E402
     grid_queue as grid_queue_router,
     documents as documents_router,
     dc_layout as dc_layout_router,
+    electrical as electrical_router,
+    yield_intel as yield_intel_router,
 )
 
 _routers = [
@@ -264,6 +266,7 @@ _routers = [
     grid_queue_router.router,
     documents_router.router,
     dc_layout_router.router,
+    electrical_router.router,
 ]
 
 app.include_router(graph_router)

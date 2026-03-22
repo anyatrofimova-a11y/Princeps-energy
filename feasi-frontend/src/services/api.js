@@ -980,6 +980,24 @@ const api = {
     summary: () => get("/api/grid-queue/summary"),
   },
 
+  electrical: {
+    design: (layoutSummary, opts = {}) =>
+      post("/api/electrical/design", {
+        layout_summary: layoutSummary,
+        panel_watts: opts.panelWatts,
+        panel_voc: opts.panelVoc,
+        panel_isc: opts.panelIsc,
+        modules_per_string: opts.modulesPerString,
+        inverter_type: opts.inverterType,
+        transformer_voltage_kv: opts.transformerVoltageKv,
+        poc_lat: opts.pocLat,
+        poc_lon: opts.pocLon,
+      }),
+    inverters: () => get("/api/electrical/inverters"),
+    transformers: () => get("/api/electrical/transformers"),
+    cables: () => get("/api/electrical/cables"),
+  },
+
   dcLayout: {
     generate: (data) => post("/api/dc-layout/generate", data),
     modules: () => get("/api/dc-layout/modules"),
