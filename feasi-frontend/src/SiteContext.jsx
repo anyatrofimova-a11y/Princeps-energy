@@ -136,6 +136,11 @@ export function SiteProvider({ children }) {
   // ── Thermal Model (TEASER) ──
   const [thermalModelOpen, setThermalModelOpen] = useState(false);
 
+  // ── Palantir-style shared entity selection (cross-view linking) ──
+  const [selectedEntity, setSelectedEntity] = useState(null);
+  // Shape: { type: "substation"|"project"|"constraint"|"ecr"|"site", id, data, source }
+  const [actionSidebarOpen, setActionSidebarOpen] = useState(false);
+
   // ── Real Site Context (REPD, OSM, grid, TEC) ──
   const [realSiteContext, setRealSiteContext] = useState(null);
 
@@ -567,6 +572,9 @@ export function SiteProvider({ children }) {
     hwConfigOpen, setHwConfigOpen,
     // Gemini 3D Asset Modeller
     asset3dOpen, setAsset3dOpen,
+    // Palantir-style shared selection
+    selectedEntity, setSelectedEntity,
+    actionSidebarOpen, setActionSidebarOpen,
     // Thermal Model (TEASER)
     thermalModelOpen, setThermalModelOpen,
     // GeeFlow

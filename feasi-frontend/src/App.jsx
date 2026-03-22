@@ -25,6 +25,7 @@ import LiveStrip from "./components/LiveStrip";
 import ConstraintTimeline from "./components/ConstraintTimeline";
 import ThemeToggle from "./components/ThemeToggle";
 import SmartOverlays from "./components/SmartOverlays";
+import ActionSidebar from "./components/ActionSidebar";
 import NotificationCentre from "./components/NotificationCentre";
 import StartupOverlay, { saveRecentSite } from "./components/StartupOverlay";
 import { useWorkspace } from "./contexts/WorkspaceContext";
@@ -93,6 +94,7 @@ export default function App() {
     bessFacilityOpen, setBessFacilityOpen,
     hwConfigOpen, setHwConfigOpen,
     asset3dOpen, setAsset3dOpen,
+    setSelectedEntity,
     thermalModelOpen, setThermalModelOpen,
     dcTwinOpen, setDcTwinOpen,
     dcLandingOpen, setDcLandingOpen,
@@ -119,6 +121,35 @@ export default function App() {
   const [demoOpen, setDemoOpen] = useState(() => !localStorage.getItem("princeps_onboarded"));
   const [backendReady, setBackendReady] = useState(false);
   const handleBackendReady = useCallback(() => setBackendReady(true), []);
+
+  // ── Linked Views: bridge map entity clicks to ActionSidebar ──
+  useEffect(() => {
+    const handler = (e) => {
+      const d = e.detail;
+      if (d) {
+        setSelectedEntity({
+          type: d.voltage_kv ? "substation" : "site",
+          id: d.id || d.name,
+          data: d,
+          source: "map",
+        });
+      }
+    };
+    window.addEventListener("princeps-node-click", handler);
+    return () => window.removeEventListener("princeps-node-click", handler);
+  }, [setSelectedEntity]);
+
+  // ── Linked Views: bridge intent triggers from SmartOverlays ──
+  useEffect(() => {
+    const handler = (e) => {
+      const { intent } = e.detail || {};
+      if (intent && parcelId) {
+        runAgent(parcelId, intent, samCapacity, samDay);
+      }
+    };
+    window.addEventListener("princeps-run-intent", handler);
+    return () => window.removeEventListener("princeps-run-intent", handler);
+  }, [parcelId, samCapacity, samDay]);
 
   // Handle intent selection from StartupOverlay
   const handleStartupIntent = useCallback((intentId, siteData) => {
@@ -508,7 +539,6 @@ export default function App() {
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
       {chatLayers.length > 0 && <MapLegend chatLayers={chatLayers} />}
       {layers.gridConstraints && <ConstraintTimeline map={mapInstance} visible />}
-      <SmartOverlays />
 
       <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
 

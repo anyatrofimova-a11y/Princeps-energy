@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { MODES, formatArea, formatDistance } from "../lib/draw-modes";
 
 const TOOLS = [
@@ -23,11 +23,34 @@ export default function DrawingToolbar({
   measurement,
   onAnalyseArea,
 }) {
+  const [expanded, setExpanded] = useState(false);
   const isDrawing = drawMode && drawMode !== MODES.VIEW;
+
+  // Collapsed: just a small pencil button
+  if (!expanded && !isDrawing) {
+    return (
+      <button
+        className="draw-toolbar-toggle"
+        onClick={() => setExpanded(true)}
+        title="Drawing Tools"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+        </svg>
+      </button>
+    );
+  }
 
   return (
     <div className="draw-toolbar">
-      <div className="draw-toolbar-title">Site Tools</div>
+      <div className="draw-toolbar-header">
+        <span className="draw-toolbar-title">Draw</span>
+        <button className="draw-toolbar-close" onClick={() => { setExpanded(false); onModeChange(MODES.VIEW); }}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
       <div className="draw-toolbar-tools">
         {TOOLS.map(t => (
           <button
@@ -42,7 +65,6 @@ export default function DrawingToolbar({
         ))}
       </div>
 
-      {/* Measurement display */}
       {measurement && (
         <div className="draw-measurement">
           {measurement.distance != null && (
@@ -66,46 +88,22 @@ export default function DrawingToolbar({
         </div>
       )}
 
-      {/* Analyse drawn area */}
       {measurement?.area != null && onAnalyseArea && (
-        <button
-          className="draw-analyse-btn"
-          onClick={onAnalyseArea}
-          title="Run feasibility on drawn area"
-        >
+        <button className="draw-analyse-btn" onClick={onAnalyseArea} title="Run feasibility on drawn area">
           Analyse
         </button>
       )}
 
-      {/* Feature management */}
       {featureCount > 0 && (
         <div className="draw-features-info">
           <span className="draw-feat-count">{featureCount} feature{featureCount > 1 ? "s" : ""}</span>
           {selectedIndex >= 0 && (
-            <button className="draw-action-btn danger" onClick={() => onDeleteFeature(selectedIndex)} title="Delete selected">
-              Del
-            </button>
+            <button className="draw-action-btn danger" onClick={() => onDeleteFeature(selectedIndex)} title="Delete selected">Del</button>
           )}
-          <button className="draw-action-btn" onClick={onExportGeoJSON} title="Copy GeoJSON">
-            JSON
-          </button>
-          <button className="draw-action-btn danger" onClick={onClearAll} title="Clear all">
-            Clear
-          </button>
+          <button className="draw-action-btn" onClick={onExportGeoJSON} title="Copy GeoJSON">JSON</button>
+          <button className="draw-action-btn danger" onClick={onClearAll} title="Clear all">Clear</button>
         </div>
       )}
-
-      {/* Contextual hint */}
-      <div className="draw-hint">
-        {drawMode === MODES.VIEW && "Select a tool to draw on the map"}
-        {drawMode === MODES.POINT && "Click to mark a point of interest"}
-        {drawMode === MODES.LINE && "Click to add points — double-click to finish route"}
-        {drawMode === MODES.POLYGON && "Click to draw site boundary — click first point to close"}
-        {drawMode === MODES.RECTANGLE && "Click one corner, then the opposite corner"}
-        {drawMode === MODES.CIRCLE && "Click centre, then drag to set radius"}
-        {drawMode === MODES.MODIFY && "Click a feature to select — drag vertices to reshape"}
-        {drawMode === MODES.MEASURE && "Click points to measure distance and area"}
-      </div>
     </div>
   );
 }

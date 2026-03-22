@@ -672,7 +672,7 @@ async def reverse_geocode(lat: float, lon: float) -> dict:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT) as client:
             resp = await client.get(
                 f"{POSTCODES_IO_BASE}/postcodes",
-                params={"lon": lon, "lat": lat},
+                params={"lon": lon, "lat": lat, "radius": 2000, "limit": 1},
             )
             if resp.status_code != 200:
                 return {"postcode": None, "error": f"postcodes.io returned {resp.status_code}"}

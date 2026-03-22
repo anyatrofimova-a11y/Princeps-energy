@@ -423,8 +423,16 @@ const api = {
     check: () => get("/api/alerts/check"),
   },
   g99: {
-    generate: (project, gridContext, siteContext) =>
-      post("/api/g99/generate", { project, grid_context: gridContext, site_context: siteContext }),
+    generate: (project) =>
+      post("/api/g99/generate", {
+        name: project.name || "Site",
+        capacity_mw: project.capacity_mw || 50,
+        technology: project.technology || "solar",
+        lat: project.lat, lon: project.lon,
+        developer: project.developer,
+        nearest_substation: project.nearest_substation,
+        headroom_mw: project.headroom_mw,
+      }),
   },
   landOwnership: {
     lookup: (lat, lon, radius = 500) =>
