@@ -3,6 +3,7 @@ import { useWorkspace, WORKSPACES, WORKSPACE_VIEWS } from "../../contexts/Worksp
 import NavRail from "./NavRail";
 import TopStatusBar from "./TopStatusBar";
 import LiveDataStrip from "./LiveDataStrip";
+import GridCanvas from "../GridCanvas";
 
 export default function AppShell({ children, onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence }) {
   const { toggleBrowser, toggleDetail, setActiveWorkspace, activeWorkspace, setActiveViewMode } = useWorkspace();
@@ -55,6 +56,9 @@ export default function AppShell({ children, onGridTwin, onBems, onAssetInspect,
 
   return (
     <div className="app-shell">
+      <div className="app-shell-bg">
+        <GridCanvas dark />
+      </div>
       <NavRail />
       <div className="app-shell-main">
         <TopStatusBar
