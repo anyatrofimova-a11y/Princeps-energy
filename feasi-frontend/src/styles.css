@@ -17068,3 +17068,14 @@ input[type="range"] { accent-color: var(--accent); }
   max-height: 200px;
   overflow-y: auto;
 }
+
+/* ── Intelligence Panel — generational capabilities UI ── */
+.intel-action-btn {
+  display: block; width: 100%; padding: 10px;
+  border: none; border-radius: 8px;
+  background: var(--cds-interactive); color: #0F0E0A;
+  font-size: 12px; font-weight: 900; cursor: pointer;
+  letter-spacing: 0.03em; transition: all 0.15s;
+}
+.intel-action-btn:hover { background: #E8C44A; }
+.intel-action-btn:disabled { opacity: 0.5; cursor: wait; }

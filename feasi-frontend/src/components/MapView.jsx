@@ -123,17 +123,17 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       style: {
         version: 8,
         glyphs: "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
-        sprite: "mapbox://sprites/mapbox/dark-v11",
+        sprite: "mapbox://sprites/mapbox/light-v11",
         sources: {
           "carto-dark": {
             type: "raster",
-            tiles: ["https://basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}@2x.png"],
+            tiles: ["https://basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}@2x.png"],
             tileSize: 256, maxzoom: 20,
             attribution: "© CartoDB",
           },
           "carto-labels": {
             type: "raster",
-            tiles: ["https://basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}@2x.png"],
+            tiles: ["https://basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}@2x.png"],
             tileSize: 256, maxzoom: 20,
           },
         },
