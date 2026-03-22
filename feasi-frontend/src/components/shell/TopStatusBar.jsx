@@ -335,6 +335,12 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
       </div>
 
       <div className="tsb-right">
+        <button className="btn-topbar-intel" onClick={onIntelligence} title="Regulatory Intelligence Feed">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+          </svg>
+          Intel
+        </button>
         <button className="btn-topbar-icon" onClick={onCommandPalette} title="Commands (Cmd+K)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M18 3a3 3 0 00-3 3v12a3 3 0 003 3 3 3 0 003-3 3 3 0 00-3-3H6a3 3 0 00-3 3 3 3 0 003 3 3 3 0 003-3V6a3 3 0 00-3-3 3 3 0 00-3 3 3 3 0 003 3h12a3 3 0 003-3 3 3 0 00-3-3z" />

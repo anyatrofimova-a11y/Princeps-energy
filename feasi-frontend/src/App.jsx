@@ -539,6 +539,7 @@ export default function App() {
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
       {chatLayers.length > 0 && <MapLegend chatLayers={chatLayers} />}
       {layers.gridConstraints && <ConstraintTimeline map={mapInstance} visible />}
+      <SmartOverlays />
 
       <CameraToolbar map={mapInstance} pickedLocation={pickedLocation} />
 
@@ -666,6 +667,9 @@ export default function App() {
       <ErrorBoundary name="CopilotWidget" fallback={null}>
         <CopilotWidget onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} onAction={handleCmdAction} />
       </ErrorBoundary>
+
+      {/* Palantir-style Action Sidebar (context-aware) */}
+      <ActionSidebar />
 
       {/* Command Palette */}
       <Suspense fallback={null}>
