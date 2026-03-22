@@ -185,6 +185,140 @@ export default function IntelligencePanel({ onClose }) {
               })
         )}
 
+        {/* ── Opportunities tab ── */}
+        {tab === 1 && (
+          <div className="intel-data-section">
+            {opportunities?.summary && (
+              <div className="intel-data-grid">
+                <div className="intel-data-cell"><span className="intel-data-value">{opportunities.summary.total}</span><span className="intel-data-label">Total Found</span></div>
+                <div className="intel-data-cell"><span className="intel-data-value" style={{color:"#8B3A3A"}}>{opportunities.summary.high_priority}</span><span className="intel-data-label">High Priority</span></div>
+                <div className="intel-data-cell"><span className="intel-data-value" style={{color:"#D4A018"}}>{opportunities.summary.capacity_releases}</span><span className="intel-data-label">Capacity Released</span></div>
+                <div className="intel-data-cell"><span className="intel-data-value">{opportunities.summary.total_released_mw?.toFixed(0) || 0} MW</span><span className="intel-data-label">MW Available</span></div>
+              </div>
+            )}
+            {(opportunities?.opportunities || []).slice(0, 10).map((opp, i) => (
+              <div key={i} className="intel-card" style={{ cursor: "pointer" }} onClick={() => {
+                if (opp.lat && opp.lon) site.setPickedLocation({ lat: opp.lat, lon: opp.lon });
+              }}>
+                <div className="intel-card-row">
+                  <span className="intel-card-badge" style={{ background: opp.type === "capacity_release" ? "#D4A018" : opp.type === "reinforcement" ? "#16a34a" : "#3b82f6", color: "#fff" }}>
+                    {opp.type === "capacity_release" ? "CAPACITY" : opp.type === "reinforcement" ? "UPGRADE" : "EXIT"}
+                  </span>
+                  <span className="intel-card-badge" style={{ background: opp.priority === "HIGH" ? "#8B3A3A22" : "#D4A01822", color: opp.priority === "HIGH" ? "#8B3A3A" : "#D4A018" }}>
+                    {opp.priority}
+                  </span>
+                </div>
+                <div className="intel-card-title" style={{ marginTop: 4 }}>{opp.headline}</div>
+                <div className="intel-card-body">{opp.detail}</div>
+              </div>
+            ))}
+            {(!opportunities?.opportunities?.length) && (
+              <div className="intel-empty">No opportunities detected yet. Import REPD projects and run nightly scan.</div>
+            )}
+          </div>
+        )}
+
+        {/* ── Market Timing tab ── */}
+        {tab === 2 && (
+          <div className="intel-data-section">
+            {marketTiming?.recommended_timeline && (
+              <>
+                <div className="intel-section-label">Recommended Timeline</div>
+                {Object.entries(marketTiming.recommended_timeline).map(([key, step], i) => (
+                  <div key={key} className="intel-row" style={{ alignItems: "flex-start", gap: 8 }}>
+                    <span style={{ width: 20, height: 20, borderRadius: "50%", background: i < 3 ? "#D4A018" : "#16a34a", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--cds-text-primary)" }}>{step.when} — {key.replace(/_/g, " ")}</div>
+                      <div style={{ fontSize: 10, color: "var(--cds-text-helper)", marginTop: 2 }}>{step.reason}</div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+            {marketTiming?.market_signals?.length > 0 && (
+              <>
+                <div className="intel-section-label" style={{ marginTop: 12 }}>Market Signals</div>
+                {marketTiming.market_signals.map((s, i) => (
+                  <div key={i} className="intel-row">
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: s.impact === "positive" ? "#16a34a" : "#8B3A3A", flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 600, color: "var(--cds-text-primary)" }}>{s.signal}</div>
+                      <div style={{ fontSize: 10, color: "var(--cds-text-helper)" }}>{s.detail}</div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+            {!marketTiming && <div className="intel-empty">Market timing analysis loading...</div>}
+          </div>
+        )}
+
+        {/* ── G99 Application tab ── */}
+        {tab === 3 && (
+          <div className="intel-data-section">
+            <div style={{ fontSize: 11, color: "var(--cds-text-helper)", marginBottom: 12 }}>
+              Auto-generates a pre-filled ENA G99 grid connection application from your site data.
+            </div>
+            {site.pickedLocation?.lat ? (
+              <>
+                <button className="intel-action-btn" disabled={g99Loading} onClick={async () => {
+                  setG99Loading(true);
+                  const d = await api.g99.generate({
+                    name: site.explain?.name || "Solar Farm",
+                    capacity_mw: (site.samCapacity || 100) / 1000,
+                    technology: "solar",
+                    lat: site.pickedLocation.lat, lon: site.pickedLocation.lon,
+                    nearest_substation: site.gridContext?.nearest_substation?.name,
+                    headroom_mw: site.gridContext?.nearest_substation?.headroom_mw,
+                  });
+                  if (d) setG99Result(d);
+                  setG99Loading(false);
+                }}>
+                  {g99Loading ? "Generating..." : g99Result ? "Regenerate G99" : "Generate G99 Application"}
+                </button>
+                {g99Result && (
+                  <div style={{ marginTop: 12 }}>
+                    {[
+                      ["Form", g99Result.form_type || g99Result.ena_reference],
+                      ["Technology", g99Result.generation?.technology],
+                      ["Capacity", `${g99Result.generation?.capacity_kw?.toLocaleString()} kW`],
+                      ["Phases", g99Result.generation?.phases],
+                      ["Connection", g99Result.connection?.voltage_requested],
+                      ["Annual Gen", `${g99Result.generation?.expected_annual_mwh?.toLocaleString()} MWh`],
+                    ].map(([label, value]) => (
+                      <div key={label} className="intel-row"><span>{label}</span><span style={{ fontWeight: 600 }}>{value || "—"}</span></div>
+                    ))}
+                    <div style={{ marginTop: 8, fontSize: 10, color: "var(--cds-text-helper)" }}>
+                      {Object.keys(g99Result).length} sections pre-filled. Review before submitting to your DNO.
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="intel-empty">Select a site first to generate a G99 application.</div>
+            )}
+          </div>
+        )}
+
+        {/* ── Tenders tab ── */}
+        {tab === 4 && (
+          <div className="intel-data-section">
+            <div className="intel-section-label">Energy Tenders (last 30 days)</div>
+            {tenders?.length > 0 ? tenders.slice(0, 15).map((t, i) => (
+              <a key={i} className="intel-card" href={t.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block" }}>
+                <div className="intel-card-title">{t.title}</div>
+                <div className="intel-card-body" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {t.buyer && <span>{t.buyer}</span>}
+                  {t.value_gbp && <span style={{ color: "var(--cds-interactive)", fontWeight: 600 }}>£{(t.value_gbp / 1e6).toFixed(1)}M</span>}
+                  {t.deadline && <span>Due: {formatDate(t.deadline)}</span>}
+                </div>
+              </a>
+            )) : (
+              <div className="intel-empty">No energy tenders found in the last 30 days.</div>
+            )}
+          </div>
+        )}
+
         {/* ── BESS Pipeline tab ── */}
         {!loading && tab === 5 && (
           bess ? (
