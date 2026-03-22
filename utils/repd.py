@@ -81,20 +81,33 @@ async def download_repd() -> str | None:
             log.info("Using cached REPD (%d days old)", int(age_d))
             return cache_path.read_text(encoding="utf-8-sig")
 
+    # Fallback cache path — survives URL changes / gov.uk outages
+    fallback_cache = Path(os.path.dirname(__file__), "..", "data", "repd_cache.csv").resolve()
+
     try:
         async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
             resp = await client.get(REPD_CSV_URL)
             resp.raise_for_status()
             text = resp.text
             cache_path.write_text(text, encoding="utf-8")
+            # Also update the stable fallback cache
+            try:
+                fallback_cache.parent.mkdir(parents=True, exist_ok=True)
+                fallback_cache.write_text(text, encoding="utf-8")
+            except Exception:
+                pass
             log.info("REPD downloaded: %d bytes", len(text))
             return text
     except Exception as e:
         log.error("REPD download failed: %s", e)
-        # Try cache even if stale
+        # Try the quarterly cache first
         if cache_path.exists():
-            log.info("Using stale REPD cache")
+            log.info("Using stale REPD cache (data/repd/)")
             return cache_path.read_text(encoding="utf-8-sig")
+        # Then try the stable fallback (data/repd_cache.csv)
+        if fallback_cache.exists():
+            log.info("Using fallback REPD cache (data/repd_cache.csv)")
+            return fallback_cache.read_text(encoding="utf-8-sig")
         return None
 
 

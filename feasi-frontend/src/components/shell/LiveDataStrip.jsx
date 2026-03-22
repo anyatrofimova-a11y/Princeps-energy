@@ -27,6 +27,9 @@ export default function LiveDataStrip() {
 
   const demand = data.demand?.current_mw ? (data.demand.current_mw / 1000).toFixed(1) : null;
   const wind = data.wind?.current_mw ? (data.wind.current_mw / 1000).toFixed(1) : null;
+  const solarEntry = data.generation_mix?.find(g => g.fuel === 'solar');
+  const solarGW = solarEntry && data.demand?.current_mw
+    ? (solarEntry.perc * data.demand.current_mw / 100 / 1000).toFixed(1) : null;
   const carbon = data.carbon?.forecast_gco2_kwh || data.carbon?.actual_gco2_kwh;
   const carbonIndex = data.carbon?.index;
   const freq = data.frequency?.hz;
@@ -44,16 +47,14 @@ export default function LiveDataStrip() {
 
       {demand && <MetricPill label="Demand" value={`${demand} GW`} />}
       {wind && <MetricPill label="Wind" value={`${wind} GW`} color="#3b82f6" />}
-      {data.generation_mix && (() => {
-        const solar = data.generation_mix.find(g => g.fuel === 'solar');
-        return solar ? <MetricPill label="Solar" value={`${solar.perc}%`} color="#f59e0b" /> : null;
-      })()}
-      {carbon && <MetricPill label="Carbon" value={`${Math.round(carbon)} g`} badge={carbonIndex} badgeColor={carbonColor} />}
+      {solarGW ? <MetricPill label="Solar" value={`${solarGW} GW`} color="#f59e0b" /> :
+        solarEntry ? <MetricPill label="Solar" value={`${solarEntry.perc}%`} color="#f59e0b" /> : null}
+      {carbon && <MetricPill label="Carbon" value={`${Math.round(carbon)} gCO\u2082`} badge={carbonIndex} badgeColor={carbonColor} />}
       {freq && <MetricPill label="Freq" value={`${freq.toFixed(2)} Hz`} color={freq < 49.95 || freq > 50.05 ? '#ef4444' : '#16a34a'} />}
-      {price != null && <MetricPill label="SMP" value={`\u00a3${Number(price).toFixed(0)}`} />}
+      {price != null && <MetricPill label="Price" value={`\u00a3${Number(price).toFixed(0)}/MWh`} color="#22c55e" />}
       {renewPct != null && <MetricPill label="Renewables" value={`${renewPct}%`} color="#16a34a" />}
 
-      <span className="live-timestamp">{new Date(data.timestamp).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'})}</span>
+      <span className="live-timestamp">{new Date(data.timestamp).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'})}</span>
     </div>
   );
 }

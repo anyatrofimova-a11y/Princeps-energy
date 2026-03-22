@@ -80,6 +80,167 @@ const COST_CATEGORIES = [
   { label: "Contingency", planned: 1800, actual: 600, color: "var(--cds-text-helper)" },
 ];
 
+/* ── Live Market Terminal Strip ─────────────────────────────────────────── */
+
+function LiveMarketStrip() {
+  const [data, setData] = useState(null);
+  const [prevData, setPrevData] = useState(null);
+  const [pulse, setPulse] = useState(false);
+
+  useEffect(() => {
+    const fetchLive = async () => {
+      try {
+        const snapshot = await api.liveGrid.snapshot();
+        if (snapshot) {
+          setPrevData(data);
+          setData(snapshot);
+          setPulse(true);
+          setTimeout(() => setPulse(false), 600);
+        }
+      } catch { /* will show fallback */ }
+    };
+    fetchLive();
+    const iv = setInterval(fetchLive, 30000);
+    return () => clearInterval(iv);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const demand = data?.demand?.current_mw ? (data.demand.current_mw / 1000).toFixed(1) : null;
+  const wind = data?.wind?.current_mw ? (data.wind.current_mw / 1000).toFixed(1) : null;
+  const windPct = data?.generation_mix?.find(g => g.fuel === "wind")?.perc;
+  const solarEntry = data?.generation_mix?.find(g => g.fuel === "solar");
+  const solar = solarEntry ? (solarEntry.perc * (data?.demand?.current_mw || 30000) / 100 / 1000).toFixed(1) : null;
+  const solarPct = solarEntry?.perc;
+  const carbon = data?.carbon?.forecast_gco2_kwh || data?.carbon?.actual_gco2_kwh;
+  const carbonIdx = data?.carbon?.index;
+  const freq = data?.frequency?.hz;
+  const price = data?.price?.market_index_gbp_mwh;
+
+  const carbonColor = !carbon ? "#555" : carbon < 150 ? "#16a34a" : carbon < 300 ? "#D4A018" : "#ef4444";
+  const freqColor = !freq ? "#555" : (freq >= 49.95 && freq <= 50.05) ? "#16a34a" : "#ef4444";
+
+  const trendArrow = (cur, prev, key) => {
+    if (!prev || !cur) return "";
+    const c = typeof cur === "string" ? parseFloat(cur) : cur;
+    const p = typeof prev === "string" ? parseFloat(prev) : prev;
+    if (isNaN(c) || isNaN(p) || c === p) return "";
+    return c > p ? " \u2191" : " \u2193";
+  };
+
+  const prevDemand = prevData?.demand?.current_mw ? (prevData.demand.current_mw / 1000).toFixed(1) : null;
+
+  return (
+    <div className="lm-strip">
+      <div className="lm-strip-header">
+        <div className="lm-live-indicator">
+          <span className="lm-live-dot" />
+          <span className="lm-live-text">LIVE MARKET</span>
+        </div>
+        {data && (
+          <span className="lm-timestamp">
+            {new Date(data.timestamp).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+          </span>
+        )}
+      </div>
+      <div className="lm-cards-row">
+        <LiveStatCard
+          label="GB Demand" value={demand || "--"} unit="GW"
+          color="#3b82f6" pulse={pulse}
+          sub={demand ? `${trendArrow(demand, prevDemand)}` : "Connecting..."}
+        />
+        <LiveStatCard
+          label="Wind Gen" value={wind || "--"} unit="GW"
+          color="#5b8def" pulse={pulse}
+          sub={windPct != null ? `${windPct}% of mix` : "Connecting..."}
+        />
+        <LiveStatCard
+          label="Solar Gen" value={solar || "--"} unit="GW"
+          color="#f59e0b" pulse={pulse}
+          sub={solarPct != null ? `${solarPct}% of mix` : "Connecting..."}
+        />
+        <LiveStatCard
+          label="Carbon Intensity" value={carbon ? Math.round(carbon) : "--"} unit="gCO\u2082"
+          color={carbonColor} pulse={pulse}
+          sub={carbonIdx || "Connecting..."} badge={carbonIdx} badgeColor={carbonColor}
+        />
+        <LiveStatCard
+          label="System Freq" value={freq ? freq.toFixed(2) : "--"} unit="Hz"
+          color={freqColor} pulse={pulse}
+          sub={freq ? (freq >= 49.95 && freq <= 50.05 ? "Normal" : "Warning") : "Connecting..."}
+        />
+        <LiveStatCard
+          label="Wholesale Price" value={price != null ? `\u00a3${Number(price).toFixed(0)}` : "--"} unit={price != null ? "/MWh" : ""}
+          color="#22c55e" pulse={pulse}
+          sub={price != null ? "Day-ahead" : "Connecting..."}
+        />
+      </div>
+    </div>
+  );
+}
+
+function LiveStatCard({ label, value, unit, color, pulse, sub, badge, badgeColor }) {
+  return (
+    <div className={`lm-stat-card${pulse ? " lm-pulse" : ""}`}>
+      <div className="lm-stat-label">{label}</div>
+      <div className="lm-stat-value" style={{ color }}>
+        {value}<span className="lm-stat-unit">{unit}</span>
+      </div>
+      <div className="lm-stat-sub">
+        {badge && <span className="lm-badge" style={{ background: badgeColor }}>{badge}</span>}
+        {sub}
+      </div>
+    </div>
+  );
+}
+
+/* ── Recent Sites Strip ────────────────────────────────────────────────── */
+
+function RecentSitesStrip({ onSiteClick }) {
+  const [sites, setSites] = useState(DEMO_PORTFOLIO.slice(0, 5));
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await api.projects?.list?.({ limit: 5 });
+        if (result?.length) setSites(result.slice(0, 5));
+      } catch { /* keep demo data */ }
+    })();
+  }, []);
+
+  const TECH_ICONS = {
+    wind: "M14 8V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2h7",
+    solar: "M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707",
+    bess: "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581",
+    datacentre: "M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2",
+    thermal: "M17 8l4 4m0-4l-4 4",
+  };
+
+  return (
+    <div className="rs-strip">
+      <div className="rs-header">
+        <span className="rs-label">RECENT SITES</span>
+        <span className="rs-count">{sites.length} projects</span>
+      </div>
+      <div className="rs-cards-row">
+        {sites.map((s, i) => (
+          <button key={i} className="rs-card" onClick={() => onSiteClick?.(s)}>
+            <div className="rs-card-top">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke={TECH_COLORS[s.technology] || "#888"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d={TECH_ICONS[s.technology] || TECH_ICONS.solar} />
+              </svg>
+              <span className={`rs-verdict rs-verdict-${(s.verdict || "").toLowerCase().replace("-","")}`}>
+                {s.verdict}
+              </span>
+            </div>
+            <div className="rs-card-name">{s.name}</div>
+            <div className="rs-card-capacity">{s.capacity_mw} MW <span style={{ color: TECH_COLORS[s.technology] || "#888", textTransform: "capitalize" }}>{s.technology}</span></div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ── Inline chart components ─────────────────────────────────────────────── */
 
 function KPICard({ label, value, unit, delta, deltaLabel, color, icon }) {
@@ -304,7 +465,7 @@ function RiskMatrix({ risks }) {
             {[1, 2, 3].map(s => (
               <div key={s} style={{
                 flex: 1, height: 3, borderRadius: 2,
-                background: s <= r.severity ? r.color : "#1a1f2e",
+                background: s <= r.severity ? r.color : "#EBEDF0",
               }} />
             ))}
           </div>
@@ -408,6 +569,14 @@ function PortfolioDashboard({ onWorkspaceClick, onCapabilityClick }) {
             <span className="pd-date">{new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
           </div>
         </div>
+
+        {/* Live Market Terminal */}
+        <LiveMarketStrip />
+
+        {/* Recent Sites */}
+        <RecentSitesStrip onSiteClick={(site) => {
+          if (site.name) onCapabilityClick("feasibility");
+        }} />
 
         {/* KPI Strip */}
         <div className="pd-kpi-strip">

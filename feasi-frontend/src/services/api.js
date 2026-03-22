@@ -185,6 +185,7 @@ const api = {
   land: {
     parcels:  (bbox) => get(`/api/land/parcels?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
     alc:      (lat, lon) => get(`/api/land/alc?lat=${lat}&lon=${lon}`),
+    alcDetailed: (lat, lon) => get(`/api/land/alc-detailed?lat=${lat}&lon=${lon}`),
     listings: (lat, lon, radiusKm = 10) => get(`/api/land/listings?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
     pricePaid: (postcode) => get(`/api/land/price-paid?postcode=${enc(postcode)}`),
     planningDensity: (lat, lon, radiusKm = 10) => get(`/api/land/planning-density?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
@@ -368,7 +369,14 @@ const api = {
       get(`/api/planning/authority-profile?name=${enc(name)}&technology=${enc(technology)}`),
     comparable: (lat, lon, mw = 50, technology = "solar", radiusKm = 20) =>
       get(`/api/planning/comparable-decisions?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(technology)}&radius_km=${radiusKm}`),
-    modelStatus: () => get("/api/planning/model-status"),
+    modelStatus: () => get("/api/planning/model-stats"),
+    // REPD ML v2 — trained on 13,995 real UK planning outcomes
+    predictApproval: (lat, lon, mw, tech) =>
+      post("/api/planning/predict-approval", { lat, lon, capacity_mw: mw, technology: tech }),
+    repdModelStats: () => get("/api/planning/model-stats"),
+    comparableProjects: (lat, lon, mw, tech, limit = 10) =>
+      get(`/api/planning/comparable-projects?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(tech)}&limit=${limit}`),
+    retrainModel: () => post("/api/planning/retrain-v2", {}),
   },
 
   bmrs: {
@@ -970,6 +978,17 @@ const api = {
       return get(`/api/grid-queue/opportunities?${q}`);
     },
     summary: () => get("/api/grid-queue/summary"),
+  },
+
+  dcLayout: {
+    generate: (data) => post("/api/dc-layout/generate", data),
+    modules: () => get("/api/dc-layout/modules"),
+    tiers: () => get("/api/dc-layout/tiers"),
+    quick: (params = {}) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, v);
+      return get(`/api/dc-layout/quick?${q}`);
+    },
   },
 
   /**

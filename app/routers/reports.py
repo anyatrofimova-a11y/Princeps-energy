@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.deps import get_pool
 from utils.ml_site_classifier import predict_site, train_and_save, ensemble_score, FEATURE_NAMES
+from utils.ml_real_training import run_full_retrain
 from utils.report_renderer import generate_report
 from utils.xlsx_export import generate_xlsx
 from utils.g99_pack_generator import generate_g99_pack
@@ -325,6 +326,30 @@ async def ml_train(n_samples: int = Query(1000, ge=100, le=10000)):
     except Exception as e:
         log.exception("ML training failed")
         raise HTTPException(status_code=500, detail=f"Training failed: {e}")
+
+
+@router.post("/api/ml/retrain-real")
+async def ml_retrain_real(pool: asyncpg.Pool = Depends(get_pool)):
+    """Retrain ML models on REAL UK REPD data instead of synthetic samples.
+
+    Extracts training data from the repd_projects table (~14,000 real UK
+    renewable energy projects with planning outcomes), then trains:
+    1. Site viability classifier (GO / CAUTION / NO-GO) + regressor (0-100)
+    2. Planning risk model (APPROVED / CONDITIONAL / REFUSED)
+
+    Returns metrics for both models plus a comparison with the synthetic
+    baseline. If the real-trained model performs well, it is automatically
+    promoted to the primary model used by /api/ml/site-score.
+
+    Falls back to hybrid training (real + synthetic augmentation) if fewer
+    than 500 REPD projects are available.
+    """
+    try:
+        result = await run_full_retrain(pool)
+        return result
+    except Exception as e:
+        log.exception("Real-data ML retraining failed")
+        raise HTTPException(status_code=500, detail=f"Real-data retraining failed: {e}")
 
 
 # ---------------------------------------------------------------------------

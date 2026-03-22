@@ -23,9 +23,23 @@ async def land_parcels(
 
 @router.get("/api/land/alc")
 async def land_alc(lat: float = Query(...), lon: float = Query(...)):
-    """Agricultural Land Classification grade at a point."""
-    from utils.land_registry import get_agricultural_land_class
-    return await get_agricultural_land_class(lat, lon)
+    """Agricultural Land Classification grade at a point (uses real NE data with fallback)."""
+    from utils.alc_lookup import lookup_alc
+    return await lookup_alc(lat, lon)
+
+
+@router.get("/api/land/alc-detailed")
+async def land_alc_detailed(
+    lat: float = Query(..., description="Latitude (WGS84)"),
+    lon: float = Query(..., description="Longitude (WGS84)"),
+):
+    """Detailed Agricultural Land Classification from Natural England + planning.data.gov.uk.
+
+    Returns full ALC data with BMV status, developability, planning implications,
+    and data source/confidence. Queries planning.data.gov.uk and Natural England
+    ArcGIS REST services with latitude-based fallback."""
+    from utils.alc_lookup import lookup_alc
+    return await lookup_alc(lat, lon)
 
 
 @router.get("/api/land/listings")

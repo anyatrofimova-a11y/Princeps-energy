@@ -44,6 +44,7 @@ def build_uk_synthetic_weather(lat: float, lon: float) -> dict:
     This uses simplified UK-average irradiance patterns.
     """
     import math
+    import datetime
 
     hours_per_year = 8760
     dn = []  # DNI
@@ -57,9 +58,35 @@ def build_uk_synthetic_weather(lat: float, lon: float) -> dict:
     hour = []
     minute = []
 
+    # Monthly UK clearness index (Met Office / PVGIS-derived averages)
+    # Low in winter (overcast), higher in summer (longer clearer days)
+    MONTHLY_CLEARNESS = {
+        1: 0.30,  2: 0.33,  3: 0.38,  4: 0.43,
+        5: 0.47,  6: 0.50,  7: 0.50,  8: 0.47,
+        9: 0.42, 10: 0.36, 11: 0.31, 12: 0.28,
+    }
+
+    # Monthly mean temperature (degC) — UK central England average
+    MONTHLY_TEMP_MEAN = {
+        1: 4.0,  2: 4.3,  3: 6.2,  4: 8.5,
+        5: 11.5, 6: 14.5, 7: 16.8, 8: 16.5,
+        9: 14.0, 10: 10.5, 11: 7.0, 12: 4.5,
+    }
+
+    # Monthly wind speed (m/s) — UK average, higher in winter
+    MONTHLY_WIND = {
+        1: 5.5,  2: 5.3,  3: 5.0,  4: 4.5,
+        5: 4.0,  6: 3.8,  7: 3.7,  8: 3.8,
+        9: 4.2, 10: 4.8, 11: 5.2, 12: 5.5,
+    }
+
     for h in range(hours_per_year):
         day_of_year = h // 24 + 1
         hour_of_day = h % 24
+
+        # Date components
+        dt = datetime.datetime(2023, 1, 1) + datetime.timedelta(hours=h)
+        mo = dt.month
 
         # Simple solar elevation model
         decl = 23.45 * math.sin(math.radians(360 / 365 * (day_of_year - 81)))
@@ -72,8 +99,8 @@ def build_uk_synthetic_weather(lat: float, lon: float) -> dict:
         )
         elev = max(0, math.degrees(math.asin(max(-1, min(1, sin_elev)))))
 
-        # UK clearness index ~0.45 average
-        clearness = 0.45
+        # Seasonal clearness index (varies by month)
+        clearness = MONTHLY_CLEARNESS[mo]
         # Extra-terrestrial irradiance
         ghi_ext = max(0, 1361 * sin_elev)
         ghi_val = ghi_ext * clearness if elev > 2 else 0
@@ -96,15 +123,12 @@ def build_uk_synthetic_weather(lat: float, lon: float) -> dict:
         df.append(max(0, dhi_val))
         gh.append(max(0, ghi_val))
 
-        # UK temperature: ~5-20C seasonal variation
-        seasonal_t = 10 + 7 * math.sin(math.radians(360 / 365 * (day_of_year - 100)))
-        diurnal_t = 3 * math.sin(math.radians(360 / 24 * (hour_of_day - 6)))
-        tdry.append(seasonal_t + diurnal_t)
-        wspd.append(4.5)  # UK average ~4.5 m/s
+        # UK temperature: monthly mean + diurnal swing (~5K amplitude)
+        mean_t = MONTHLY_TEMP_MEAN[mo]
+        diurnal_t = 2.5 * math.sin(math.radians(360 / 24 * (hour_of_day - 6)))
+        tdry.append(mean_t + diurnal_t)
+        wspd.append(MONTHLY_WIND[mo])
 
-        # Date components
-        import datetime
-        dt = datetime.datetime(2023, 1, 1) + datetime.timedelta(hours=h)
         year.append(dt.year)
         month.append(dt.month)
         day.append(dt.day)

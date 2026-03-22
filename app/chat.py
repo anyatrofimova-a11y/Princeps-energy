@@ -993,6 +993,20 @@ TOOLS: list[dict] = [
             "required": ["lat", "lon"],
         },
     },
+    {
+        "name": "predict_planning_approval",
+        "description": "Predict planning approval probability using an ML model trained on 14,000 real UK renewable energy planning outcomes (REPD database). Uses GradientBoosting with spatial features: nearby project density, local authority approval rate, technology, capacity, region. Returns approval probability (0-1), verdict (LIKELY APPROVED / UNCERTAIN / LIKELY REFUSED), risk factors, comparable projects, and model accuracy stats.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number", "description": "Latitude (WGS84)"},
+                "lon": {"type": "number", "description": "Longitude (WGS84)"},
+                "capacity_mw": {"type": "number", "description": "Proposed capacity in MW", "default": 50},
+                "technology": {"type": "string", "description": "Technology type: solar, wind, bess, battery, biomass, hydrogen", "default": "solar"},
+            },
+            "required": ["lat", "lon"],
+        },
+    },
 ]
 
 
@@ -1912,6 +1926,41 @@ async def execute_tool(
                 args["lat"], args["lon"],
                 radius_m=args.get("radius_m", 500),
             )
+
+        elif name == "predict_planning_approval":
+            from utils.repd_ml_model import predict_approval as _predict_approval
+            result = await _predict_approval(
+                pool,
+                args["lat"], args["lon"],
+                args.get("capacity_mw", 50),
+                args.get("technology", "solar"),
+            )
+            # Compact for chat context — keep key fields
+            comparables = result.get("comparable_projects", {})
+            approved_examples = comparables.get("approved", [])[:3]
+            refused_examples = comparables.get("refused", [])[:3]
+            return {
+                "approval_probability": result["approval_probability"],
+                "verdict": result["verdict"],
+                "confidence": result["confidence"],
+                "planning_authority": result.get("planning_authority"),
+                "authority_approval_rate": result.get("authority_approval_rate"),
+                "region": result.get("region"),
+                "risk_factors": result.get("risk_factors", []),
+                "nearby_projects": result.get("nearby_projects"),
+                "comparable_approved": [
+                    {"name": p.get("site_name"), "mw": p.get("capacity_mw"),
+                     "distance_km": p.get("distance_km")}
+                    for p in approved_examples
+                ],
+                "comparable_refused": [
+                    {"name": p.get("site_name"), "mw": p.get("capacity_mw"),
+                     "distance_km": p.get("distance_km")}
+                    for p in refused_examples
+                ],
+                "model_accuracy": result.get("model_stats", {}).get("accuracy"),
+                "training_samples": result.get("model_stats", {}).get("training_samples"),
+            }
 
         else:
             return {"error": f"Unknown tool: {name}"}

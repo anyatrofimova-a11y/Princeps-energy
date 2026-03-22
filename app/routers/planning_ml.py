@@ -196,6 +196,76 @@ async def retrain_repd_model(
 
 
 # ═══════════════════════════════════════════════════════════════
+#  REPD ML v2 — GradientBoosting on 13,995 real repd_project rows
+#  Uses utils/repd_ml_model.py with real PostGIS spatial features
+# ═══════════════════════════════════════════════════════════════
+
+class PredictApprovalRequest(BaseModel):
+    lat: float = Field(..., ge=49, le=61, description="Latitude (WGS84)")
+    lon: float = Field(..., ge=-8, le=2, description="Longitude (WGS84)")
+    capacity_mw: float = Field(50, ge=0.1, le=5000, description="Proposed capacity in MW")
+    technology: str = Field("solar", description="Technology: solar, wind, bess, battery, biomass, hydrogen")
+
+
+@router.post("/api/planning/predict-approval")
+async def predict_approval_v2(
+    req: PredictApprovalRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """ML-predicted planning approval probability based on 14K real REPD outcomes.
+
+    Trains a GradientBoostingClassifier on first call (~30s), then cached.
+    Features include nearby project density, local authority approval rate,
+    technology, capacity, region — all from real PostGIS spatial queries.
+
+    Returns approval_probability (0-1), verdict, confidence, risk_factors,
+    feature_contributions, comparable_projects, and model_stats.
+    """
+    from utils.repd_ml_model import predict_approval
+    return await predict_approval(pool, req.lat, req.lon, req.capacity_mw, req.technology)
+
+
+@router.get("/api/planning/model-stats")
+async def model_stats_v2(
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Model accuracy, feature importances, confusion matrix, training info.
+
+    Returns the performance metrics of the REPD GradientBoosting model
+    trained on 13,995 real UK planning outcomes.
+    """
+    from utils.repd_ml_model import get_model_stats
+    return await get_model_stats(pool)
+
+
+@router.post("/api/planning/retrain-v2")
+async def retrain_model_v2(
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Force retrain the REPD ML model on latest data."""
+    from utils.repd_ml_model import train_model
+    # Clear the cached model
+    import utils.repd_ml_model as _mod
+    _mod._model_data = None
+    result = await train_model(pool)
+    return {"status": "retrained", **result}
+
+
+@router.get("/api/planning/comparable-projects")
+async def comparable_projects_v2(
+    lat: float = Query(..., ge=49, le=61),
+    lon: float = Query(..., ge=-8, le=2),
+    capacity_mw: float = Query(50, ge=0.1, le=5000),
+    technology: str = Query("solar"),
+    limit: int = Query(10, ge=1, le=50),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Find most similar REPD projects by technology, capacity, and location."""
+    from utils.repd_ml_model import get_comparable_projects
+    return await get_comparable_projects(pool, lat, lon, capacity_mw, technology, limit)
+
+
+# ═══════════════════════════════════════════════════════════════
 #  BMRS Datasets — live grid intelligence
 # ═══════════════════════════════════════════════════════════════
 

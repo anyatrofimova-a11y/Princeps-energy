@@ -23,6 +23,7 @@ from utils.repd_tracker import ingest_repd
 from utils.eso_tec_register import ingest_tec_register
 from utils.grid_upgrade_tracker import ingest_nged_upgrades
 from utils.grid_data_ingester import ingest_all_dnos
+from utils.grid_seed_data import seed_real_substations
 from utils.dc_infra_ingester import ingest_dc_infrastructure
 from utils.alert_engine import run_daily_alert_check
 from app.readiness import mark_ready, mark_loading, mark_failed, update_progress
@@ -85,6 +86,9 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
     asyncio.create_task(_safe_bg("repd_ingest", ingest_repd, pool, subsystem="demand_data"))
     asyncio.create_task(_safe_bg("tec_ingest", ingest_tec_register, pool))
     asyncio.create_task(_safe_bg("grid_upgrade_ingest", ingest_nged_upgrades, pool))
+
+    # ── Grid GSP seed — reliable baseline BEFORE DNO API ingestion ────
+    await _safe_bg("grid_gsp_seed", seed_real_substations, pool)
 
     # ── Grid Connection module — ingest all DNO data ──────────────────
     asyncio.create_task(_safe_bg("grid_connection_ingest", ingest_all_dnos, pool, subsystem="grid_data"))
