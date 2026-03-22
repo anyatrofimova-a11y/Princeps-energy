@@ -44,11 +44,21 @@ export default function IntelligencePanel({ onClose }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Derive alert list (may come as {alerts:[...]} or as [...])
-  const alertList = Array.isArray(alerts) ? alerts : (alerts?.alerts || []);
+  // Derive alert list — filter out junk nav links (Cookie policy, Privacy, etc.)
+  const rawAlerts = Array.isArray(alerts) ? alerts : (alerts?.alerts || []);
+  const alertList = rawAlerts.filter(a => {
+    const t = (a.title || "").toLowerCase();
+    return !t.includes("cookie") && !t.includes("privacy") && !t.includes("accessibility")
+      && !t.includes("terms and conditions") && !t.includes("contact us") && !t.includes("careers")
+      && !t.includes("subscribe") && !t.includes("modern slavery") && !t.includes("freedom of information")
+      && !t.includes("responsible disclosure") && !t.includes("security") && !t.includes("help centre")
+      && !t.includes("suppliers") && !t.includes("corporate information") && !t.includes(": home")
+      && !t.includes("our people") && !t.includes("media centre") && !t.includes("about")
+      && t.length > 10;
+  });
 
   const filtered = alertList.filter(a => {
-    if (source !== "All" && a.source !== source) return false;
+    if (source !== "All" && !(a.source || "").toLowerCase().includes(source.toLowerCase())) return false;
     if (relevance !== "ALL" && a.relevance !== relevance) return false;
     if (search && !(a.title || "").toLowerCase().includes(search.toLowerCase()) &&
         !(a.summary || "").toLowerCase().includes(search.toLowerCase())) return false;
@@ -158,13 +168,27 @@ export default function IntelligencePanel({ onClose }) {
           bess ? (
             <div className="intel-data-section">
               <div className="intel-data-grid">
-                {Object.entries(bess).map(([k, v]) => (
-                  <div key={k} className="intel-data-cell">
-                    <span className="intel-data-value">{typeof v === "number" ? v.toLocaleString() : typeof v === "object" ? (Array.isArray(v) ? v.length + " items" : Object.keys(v).length + " fields") : String(v).slice(0, 80)}</span>
-                    <span className="intel-data-label">{k.replace(/_/g, " ")}</span>
-                  </div>
-                ))}
+                <div className="intel-data-cell"><span className="intel-data-value">{bess.total_projects?.toLocaleString() || "—"}</span><span className="intel-data-label">Total Projects</span></div>
+                <div className="intel-data-cell"><span className="intel-data-value" style={{color:"#22c55e"}}>{bess.operational_mw?.toLocaleString() || "—"} MW</span><span className="intel-data-label">Operational</span></div>
+                <div className="intel-data-cell"><span className="intel-data-value" style={{color:"#3b82f6"}}>{bess.total_pipeline_mw?.toLocaleString() || "—"} MW</span><span className="intel-data-label">Total Pipeline</span></div>
+                <div className="intel-data-cell"><span className="intel-data-value">{bess.operational_count || "—"}</span><span className="intel-data-label">Operational Sites</span></div>
               </div>
+              {bess.by_region?.length > 0 && (
+                <>
+                  <div className="intel-section-label">Top Regions</div>
+                  {bess.by_region.slice(0, 8).map((r, i) => (
+                    <div key={i} className="intel-row"><span>{r.region}</span><span>{r.mw} MW ({r.count} projects)</span></div>
+                  ))}
+                </>
+              )}
+              {bess.top_developers?.length > 0 && (
+                <>
+                  <div className="intel-section-label">Top Developers</div>
+                  {bess.top_developers.slice(0, 6).map((d, i) => (
+                    <div key={i} className="intel-row"><span>{d.operator}</span><span>{d.mw} MW</span></div>
+                  ))}
+                </>
+              )}
             </div>
           ) : <div className="intel-empty">BESS pipeline data unavailable.</div>
         )}
@@ -173,21 +197,26 @@ export default function IntelligencePanel({ onClose }) {
         {!loading && tab === 2 && (
           riio ? (
             <div className="intel-data-section">
-              {Array.isArray(riio) ? riio.map((item, i) => (
-                <div key={i} className="intel-card">
-                  <div className="intel-card-title">{item.title || item.name || `Item ${i + 1}`}</div>
-                  <div className="intel-card-summary">{item.summary || item.description || JSON.stringify(item)}</div>
-                </div>
-              )) : (
+              {riio.totals && (
                 <div className="intel-data-grid">
-                  {Object.entries(riio).map(([k, v]) => (
-                    <div key={k} className="intel-data-cell">
-                      <span className="intel-data-value">{typeof v === "number" ? v.toLocaleString() : typeof v === "object" ? (Array.isArray(v) ? v.length + " items" : Object.keys(v).length + " fields") : String(v).slice(0, 80)}</span>
-                      <span className="intel-data-label">{k.replace(/_/g, " ")}</span>
-                    </div>
-                  ))}
+                  <div className="intel-data-cell"><span className="intel-data-value">£{riio.totals.total_totex_bn}bn</span><span className="intel-data-label">Total RIIO-ED2 Allowance</span></div>
+                  <div className="intel-data-cell"><span className="intel-data-value">{riio.totals.total_solar_pipeline_gw} GW</span><span className="intel-data-label">Solar Pipeline</span></div>
+                  <div className="intel-data-cell"><span className="intel-data-value">{riio.totals.total_bess_pipeline_gw} GW</span><span className="intel-data-label">BESS Pipeline</span></div>
+                  <div className="intel-data-cell"><span className="intel-data-value">£{riio.totals.total_flexibility_spend_m}m</span><span className="intel-data-label">Flexibility Spend</span></div>
                 </div>
               )}
+              <div className="intel-section-label">DNO Comparison ({riio.period || "2023-2028"})</div>
+              {(riio.dnos || []).map((d, i) => (
+                <div key={i} className="intel-card" style={{padding:"8px 12px",marginBottom:4}}>
+                  <div className="intel-card-title" style={{fontSize:12}}>{d.full_name || d.dno}</div>
+                  <div style={{display:"flex",gap:12,fontSize:10,color:"#9ca3af",marginTop:2}}>
+                    <span>Totex: £{d.totex_bn}bn</span>
+                    <span>Solar: {d.solar_pipeline_gw}GW</span>
+                    <span>BESS: {d.bess_pipeline_gw}GW</span>
+                    <span>DSO: {d.dso_maturity}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : <div className="intel-empty">RIIO data unavailable.</div>
         )}
@@ -197,13 +226,34 @@ export default function IntelligencePanel({ onClose }) {
           market ? (
             <div className="intel-data-section">
               <div className="intel-data-grid">
-                {Object.entries(market).map(([k, v]) => (
-                  <div key={k} className="intel-data-cell">
-                    <span className="intel-data-value">{typeof v === "number" ? v.toLocaleString() : typeof v === "object" ? (Array.isArray(v) ? v.length + " items" : Object.keys(v).length + " fields") : String(v).slice(0, 80)}</span>
-                    <span className="intel-data-label">{k.replace(/_/g, " ")}</span>
-                  </div>
-                ))}
+                <div className="intel-data-cell"><span className="intel-data-value" style={{color:"#f59e0b"}}>{market.current_gw || "—"} GW</span><span className="intel-data-label">Current UK DC Demand</span></div>
+                <div className="intel-data-cell"><span className="intel-data-value" style={{color:"#3b82f6"}}>{market.projected_2030_gw || "—"} GW</span><span className="intel-data-label">Projected 2030</span></div>
+                <div className="intel-data-cell"><span className="intel-data-value" style={{color:"#22c55e"}}>{market.growth_rate_pct_yr || "—"}%/yr</span><span className="intel-data-label">Growth Rate</span></div>
               </div>
+              {market.drivers?.length > 0 && (
+                <>
+                  <div className="intel-section-label">Demand Drivers</div>
+                  {market.drivers.map((d, i) => (
+                    <div key={i} className="intel-row"><span>{d}</span></div>
+                  ))}
+                </>
+              )}
+              {market.grid_implications?.length > 0 && (
+                <>
+                  <div className="intel-section-label">Grid Implications</div>
+                  {market.grid_implications.map((g, i) => (
+                    <div key={i} className="intel-row" style={{color:"#C0392B"}}><span>{g}</span></div>
+                  ))}
+                </>
+              )}
+              {market.forecast && (
+                <>
+                  <div className="intel-section-label">Demand Forecast</div>
+                  {Object.entries(market.forecast).map(([year, data]) => (
+                    <div key={year} className="intel-row"><span>{year}</span><span>{data.total_gw} GW</span></div>
+                  ))}
+                </>
+              )}
             </div>
           ) : <div className="intel-empty">Market intelligence unavailable.</div>
         )}
