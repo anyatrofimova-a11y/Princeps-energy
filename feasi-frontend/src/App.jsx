@@ -250,13 +250,13 @@ export default function App() {
 
   // Fetch solar catalogue on mount
   useEffect(() => {
-    api.inventory.catalogue().then(d => { if (d) setSolarCatalogue(d); });
+    api.inventory.catalogue().then(d => { if (d) setSolarCatalogue(d); }).catch(err => console.warn("[App] catalogue fetch failed:", err));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch demand forecast + Agile pricing on mount
   useEffect(() => {
-    api.grid.demandForecast().then(d => { if (d) setDemandForecast(d); });
-    api.grid.agilePricing("C").then(d => { if (d && !d.error) setAgilePricing(d); });
+    api.grid.demandForecast().then(d => { if (d) setDemandForecast(d); }).catch(err => console.warn("[App] demand forecast fetch failed:", err));
+    api.grid.agilePricing("C").then(d => { if (d && !d.error) setAgilePricing(d); }).catch(err => console.warn("[App] agile pricing fetch failed:", err));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced custom BOM recalculation
@@ -476,22 +476,32 @@ export default function App() {
         />
       </ErrorBoundary>
 
-      <MapAssetLayer map={mapInstance} />
-      <DCMapOverlay mapInstance={mapInstance} dcAssets={placedAssets.filter(a => a.assetType === "data_centre")} />
-      <Asset3DOverlay mapInstance={mapInstance} assets={placedAssets} validations={assetValidations} />
-      <Google3DTilesOverlay mapInstance={mapInstance} enabled={!!layers.google3d} />
+      <ErrorBoundary name="MapAssetLayer" fallback={null}>
+        <MapAssetLayer map={mapInstance} />
+      </ErrorBoundary>
+      <ErrorBoundary name="DCMapOverlay" fallback={null}>
+        <DCMapOverlay mapInstance={mapInstance} dcAssets={placedAssets.filter(a => a.assetType === "data_centre")} />
+      </ErrorBoundary>
+      <ErrorBoundary name="Asset3DOverlay" fallback={null}>
+        <Asset3DOverlay mapInstance={mapInstance} assets={placedAssets} validations={assetValidations} />
+      </ErrorBoundary>
+      <ErrorBoundary name="Google3DTilesOverlay" fallback={null}>
+        <Google3DTilesOverlay mapInstance={mapInstance} enabled={!!layers.google3d} />
+      </ErrorBoundary>
 
       {/* Portfolio pins — all pipeline projects on map */}
-      <PortfolioMapOverlay
-        map={mapInstance}
-        visible={workflowStage === "site" || !parcelId}
-        onSelectProject={(p) => {
-          if (p.lat && p.lon) {
-            setPickedLocation({ lat: p.lat, lon: p.lon });
-            mapInstance?.flyTo({ center: [p.lon, p.lat], zoom: 13, duration: 1500 });
-          }
-        }}
-      />
+      <ErrorBoundary name="PortfolioMapOverlay" fallback={null}>
+        <PortfolioMapOverlay
+          map={mapInstance}
+          visible={workflowStage === "site" || !parcelId}
+          onSelectProject={(p) => {
+            if (p.lat && p.lon) {
+              setPickedLocation({ lat: p.lat, lon: p.lon });
+              mapInstance?.flyTo({ center: [p.lon, p.lat], zoom: 13, duration: 1500 });
+            }
+          }}
+        />
+      </ErrorBoundary>
 
       {/* Layer controls — only show when map has active overlays */}
       <LayerRail chatLayers={chatLayers} onRemoveChatLayer={removeChatLayer} />
@@ -541,11 +551,13 @@ export default function App() {
 
         {/* Asset Dock — only visible in Design workspace or Plan stage */}
         {(activeWorkspace === "design" || workflowStage === "plan") && (
-          <AssetDock
-            placedAssets={placedAssets}
-            mapInstance={mapInstance}
-            onAssetPlaced={addPlacedAsset}
-          />
+          <ErrorBoundary name="AssetDock" fallback={null}>
+            <AssetDock
+              placedAssets={placedAssets}
+              mapInstance={mapInstance}
+              onAssetPlaced={addPlacedAsset}
+            />
+          </ErrorBoundary>
         )}
 
         {/* Energy Flow Panel — right side Sankey */}
@@ -619,7 +631,9 @@ export default function App() {
         <WorkspaceRouter mapContent={mapContent} />
       </div>
 
-      <CopilotWidget onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} onAction={handleCmdAction} />
+      <ErrorBoundary name="CopilotWidget" fallback={null}>
+        <CopilotWidget onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} onAction={handleCmdAction} />
+      </ErrorBoundary>
 
       {/* Command Palette */}
       <Suspense fallback={null}>

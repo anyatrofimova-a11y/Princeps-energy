@@ -42,7 +42,7 @@ export default function FinancialStrip() {
   const assetCount = placedAssets?.length || 0;
   useEffect(() => {
     if (capacityMw <= 0) return;
-    api.energy.npv(capacityMw, tech).then(d => { if (d) setData(d); });
+    api.energy.npv(capacityMw, tech).then(d => { if (d) setData(d); }).catch(err => console.warn("[FinancialStrip] NPV fetch failed:", err));
   }, [capacityMw, tech, assetCount]);
 
   if (!parcelId && !placedAssets?.length) return null;

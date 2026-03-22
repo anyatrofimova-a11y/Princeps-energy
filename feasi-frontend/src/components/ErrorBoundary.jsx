@@ -16,6 +16,9 @@ export default class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      // If fallback is explicitly null, render nothing (silent failure)
+      if (this.props.fallback === null) return null;
+      if (this.props.fallback !== undefined) return this.props.fallback;
       return (
         <div className="error-boundary-fallback">
           <div className="error-boundary-icon">!</div>

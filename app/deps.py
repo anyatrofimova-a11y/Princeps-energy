@@ -2,8 +2,28 @@
 
 from __future__ import annotations
 
+import os
+from datetime import datetime
+
 from fastapi import Query, Request, HTTPException
 import asyncpg
+
+# ---------------------------------------------------------------------------
+# Demo mode — bypass JWT validation for demos / local dev
+# Set PRINCEPS_DEMO_MODE=false in production
+# ---------------------------------------------------------------------------
+DEMO_MODE = os.getenv("PRINCEPS_DEMO_MODE", "true").lower() == "true"
+
+_DEMO_USER = {
+    "user_id": "00000000-0000-0000-0000-000000000000",
+    "email": "demo@princeps.energy",
+    "name": "Demo User",
+    "org_name": "Princeps Demo",
+    "role": "admin",
+    "api_key": None,
+    "created_at": datetime(2024, 1, 1),
+    "last_login": None,
+}
 
 
 async def get_pool(request: Request) -> asyncpg.Pool:
@@ -21,7 +41,11 @@ async def get_optional_user(request: Request):
 
     Used during transition period — existing endpoints keep working
     without auth while new /api/v1/ endpoints can require it.
+    In demo mode, always returns the demo user.
     """
+    if DEMO_MODE:
+        return dict(_DEMO_USER)
+
     token = request.headers.get("Authorization", "").removeprefix("Bearer ")
     api_key = request.headers.get("X-API-Key")
 
@@ -52,7 +76,13 @@ async def get_optional_user(request: Request):
 
 
 async def get_current_user(request: Request):
-    """Require and return the authenticated user. Raises 401 if not authenticated."""
+    """Require and return the authenticated user. Raises 401 if not authenticated.
+
+    In demo mode, returns a default demo user without requiring any credentials.
+    """
+    if DEMO_MODE:
+        return dict(_DEMO_USER)
+
     user = await get_optional_user(request)
     if not user:
         raise HTTPException(status_code=401, detail="Not authenticated")
