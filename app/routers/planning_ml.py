@@ -138,7 +138,7 @@ async def model_status():
 #  REPD ML Predictor — GradientBoosting on 13,995 real projects
 # ═══════════════════════════════════════════════════════════════
 
-@router.get("/api/planning/predict")
+@router.get("/api/planning/predict-repd")
 async def predict_approval_ml(
     lat: float = Query(..., ge=49, le=61, description="Latitude (WGS84)"),
     lon: float = Query(..., ge=-8, le=2, description="Longitude (WGS84)"),
@@ -156,7 +156,7 @@ async def predict_approval_ml(
     return await predictor.predict(pool, lat, lon, technology, capacity_mw)
 
 
-@router.get("/api/planning/comparable")
+@router.get("/api/planning/comparable-repd")
 async def comparable_projects_ml(
     lat: float = Query(..., ge=49, le=61),
     lon: float = Query(..., ge=-8, le=2),

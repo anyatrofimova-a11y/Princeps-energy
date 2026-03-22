@@ -230,8 +230,8 @@ html, body, #root { height: 100%; margin: 0; overflow: hidden; background: var(-
   align-items: center;
   width: 60px;
   height: 100vh;
-  background: #0F0E0A;
-  border-right: none;
+  background: #ffffff;
+  border-right: 1px solid #E5E7EB;
   padding: 0;
   z-index: 30;
   flex-shrink: 0;
@@ -282,19 +282,19 @@ html, body, #root { height: 100%; margin: 0; overflow: hidden; background: var(-
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: #94a3b8;
+  color: #71717a;
   cursor: pointer;
   transition: all 0.15s ease;
   gap: 3px;
   position: relative;
 }
 .nav-rail-btn:hover {
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.08);
+  color: #09090b;
+  background: rgba(245, 183, 49, 0.08);
 }
 .nav-rail-btn.active {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
+  color: #09090b;
+  background: rgba(245, 183, 49, 0.12);
 }
 .nav-rail-btn.active::before {
   content: "";
