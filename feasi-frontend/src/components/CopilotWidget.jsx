@@ -225,8 +225,57 @@ function NodeInspector({ node, onClose, onZoomTo }) {
   );
 }
 
+/* ── Auto-suggestions based on context ── */
+function _getFollowUpSuggestions(stage, toolsUsed, hasSite, hasGrid) {
+  const suggestions = [];
+
+  // Based on tools that were just called
+  if (toolsUsed.includes("get_site_context") || toolsUsed.includes("create_site_parcel")) {
+    suggestions.push("Run feasibility assessment");
+    suggestions.push("Check environmental constraints");
+  }
+  if (toolsUsed.includes("run_solar_yield")) {
+    suggestions.push("Estimate grid connection cost");
+    suggestions.push("Run financial analysis");
+  }
+  if (toolsUsed.includes("get_grid_connection") || toolsUsed.includes("forecast_grid_connection")) {
+    suggestions.push("Predict planning approval probability");
+    suggestions.push("Generate connection report PDF");
+  }
+  if (toolsUsed.includes("run_financial_analysis")) {
+    suggestions.push("Stack revenue across markets");
+    suggestions.push("Compare with similar REPD projects");
+  }
+  if (toolsUsed.includes("predict_planning_approval") || toolsUsed.includes("score_planning_risk")) {
+    suggestions.push("Run shadow flicker assessment");
+    suggestions.push("Calculate noise contours");
+  }
+
+  // If no tool-specific suggestions, use stage-based
+  if (suggestions.length === 0) {
+    if (!hasSite) {
+      suggestions.push("Find a site near Bristol with good grid headroom");
+      suggestions.push("Show me brownfield land available for solar");
+    } else if (!hasGrid) {
+      suggestions.push("Assess grid connection options");
+      suggestions.push("What is the planning risk here?");
+    } else if (stage === "study" || stage === "connect") {
+      suggestions.push("Benchmark this site vs all UK solar projects");
+      suggestions.push("Predict time to energisation");
+    } else if (stage === "plan" || stage === "impact") {
+      suggestions.push("Generate constraint report PDF");
+      suggestions.push("Open 3D site twin");
+    } else {
+      suggestions.push("Generate full site assessment report");
+      suggestions.push("Create construction schedule");
+    }
+  }
+
+  return suggestions.slice(0, 3);
+}
+
 /* ══════════════════════════════════════════════════════════
-   CopilotWidget — Full-width bottom bar (matches ViewTabs)
+   CopilotWidget
    ══════════════════════════════════════════════════════════ */
 export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
   const site = useSite();
@@ -520,8 +569,20 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
     } finally {
       setStreaming(false);
       abortRef.current = null;
+
+      // Auto-generate follow-up suggestions based on what just happened
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (!last || last.role !== "assistant" || last.suggestions) return prev;
+        const tools = (last.toolCalls || []).map((t) => t.name);
+        const suggestions = _getFollowUpSuggestions(workflowStage, tools, !!pickedLocation, !!gridContext);
+        if (suggestions.length === 0) return prev;
+        const copy = [...prev];
+        copy[copy.length - 1] = { ...copy[copy.length - 1], suggestions };
+        return copy;
+      });
     }
-  }, [input, streaming, ensureSession, buildContext, onMapLayer, onZoomTo, onAction, parcelId]);
+  }, [input, streaming, ensureSession, buildContext, onMapLayer, onZoomTo, onAction, parcelId, workflowStage, pickedLocation, gridContext]);
 
   const handleFileUpload = useCallback(async (e) => {
     const file = e.target.files?.[0];

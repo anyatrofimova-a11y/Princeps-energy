@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useSite } from "../SiteContext";
+import api from "../services/api";
 
 const SOURCES = ["All", "Ofgem", "NESO", "DNO"];
 const RELEVANCE_OPTS = ["ALL", "HIGH", "MEDIUM"];
-const TABS = ["Alerts", "BESS Pipeline", "RIIO", "Market"];
+const TABS = ["Alerts", "Opportunities", "Market Timing", "G99 App", "Tenders", "BESS Pipeline", "RIIO", "Market"];
 
 const RELEVANCE_COLOR = { HIGH: "#C0392B", MEDIUM: "#D4A017", LOW: "#6B7280" };
 
@@ -24,6 +26,14 @@ export default function IntelligencePanel({ onClose }) {
   const [riio, setRiio] = useState(null);
   const [market, setMarket] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Generational capabilities state
+  const [opportunities, setOpportunities] = useState(null);
+  const [marketTiming, setMarketTiming] = useState(null);
+  const [g99Result, setG99Result] = useState(null);
+  const [tenders, setTenders] = useState(null);
+  const [g99Loading, setG99Loading] = useState(false);
+  const site = useSite();
 
   useEffect(() => {
     let cancelled = false;
