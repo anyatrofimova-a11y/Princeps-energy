@@ -231,7 +231,9 @@ export default function GridCanvas({ className = "", style = {}, dark = false })
         className={className}
         style={{
           position: "absolute",
-          inset: 0,
+          top: 0,
+          left: 0,
+          width: "100%",
           zIndex: 0,
           pointerEvents: "none",
           ...style,
@@ -241,12 +243,15 @@ export default function GridCanvas({ className = "", style = {}, dark = false })
       <div
         style={{
           position: "absolute",
-          inset: 0,
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
           zIndex: 1,
           pointerEvents: "none",
           background: dark
-            ? "radial-gradient(ellipse at center, transparent 20%, rgba(15,19,24,0.45) 100%)"
-            : "radial-gradient(ellipse at center, transparent 20%, rgba(242,243,245,0.45) 100%)",
+            ? "radial-gradient(ellipse at center, transparent 30%, rgba(15,19,24,0.35) 100%)"
+            : "radial-gradient(ellipse at center, transparent 40%, rgba(242,243,245,0.3) 100%)",
         }}
       />
     </>

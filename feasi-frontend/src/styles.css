@@ -1015,11 +1015,12 @@ html, body, #root { height: 100%; margin: 0; overflow: hidden; background: var(-
   overflow-y: auto;
   scrollbar-width: thin;
   background: var(--cds-background);
+  position: relative;
 }
 .wh-hub {
-  max-width: 720px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 48px 32px 64px;
+  padding: 32px 32px 64px;
 }
 
 /* ── Hero ── */
