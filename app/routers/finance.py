@@ -33,6 +33,7 @@ _FLEXIBLE = str(_UTILS / "flexible_connection.py")
 _REINFORCEMENT = str(_UTILS / "reinforcement_cost.py")
 _DD = str(_UTILS / "due_diligence.py")
 _DISPATCH = str(_UTILS / "dispatch_scheduler.py")
+_PROJECT_FINANCE = str(_UTILS / "project_finance.py")
 
 
 # ── Subprocess runner ─────────────────────────────────────────────────────
@@ -272,6 +273,73 @@ class DispatchRequest(BaseModel):
     power_mw: float = Field(25, gt=0, description="BESS rated power for bess_schedule")
     energy_mwh: float = Field(50, gt=0, description="BESS energy capacity for bess_schedule")
     soc_pct: float = Field(50, ge=0, le=100, description="Initial state of charge for bess_schedule")
+
+
+class SubsidyType(str, Enum):
+    none = "none"
+    roc = "roc"
+    cfd = "cfd"
+
+
+class ProjectModelCommand(str, Enum):
+    project_model = "project_model"
+    sensitivity = "sensitivity"
+    summary = "summary"
+
+
+class ProjectModelRequest(BaseModel):
+    """Comprehensive project finance DCF model — replaces Excel lender models.
+
+    All CAPEX/OPEX fields are optional; UK benchmarks are used as defaults.
+    Provide grid_connection_cost in absolute £ (from Princeps grid assessment).
+    """
+    command: ProjectModelCommand = ProjectModelCommand.project_model
+    capacity_kwp: float = Field(50000, gt=0, description="Installed capacity in kWp (50000 = 50 MW)")
+    technology: Technology = Technology.solar
+
+    # ── Revenue ──
+    ppa_price_mwh: float = Field(55.0, gt=0, description="PPA strike price £/MWh")
+    ppa_term_years: int = Field(15, ge=1, le=30, description="PPA contract term")
+    merchant_price_mwh: float = Field(45.0, gt=0, description="Post-PPA merchant price £/MWh")
+    merchant_escalation: float = Field(0.02, ge=0, le=0.10, description="Annual merchant price escalation")
+    subsidy_type: SubsidyType = SubsidyType.none
+    subsidy_value: float = Field(0.0, ge=0, description="ROC buyout or CfD strike £/MWh")
+    capacity_market_rev: float = Field(0.0, ge=0, description="Capacity market revenue £/MW/yr (BESS)")
+    ancillary_rev: float = Field(0.0, ge=0, description="Ancillary services revenue £/MW/yr (BESS)")
+
+    # ── Financial structure ──
+    discount_rate: float = Field(0.08, ge=0.01, le=0.25, description="Nominal WACC / discount rate")
+    gearing: float = Field(0.70, ge=0.0, le=0.95, description="Debt-to-total-capital ratio")
+    senior_interest: float = Field(0.055, ge=0.01, le=0.15, description="Senior debt interest rate")
+    debt_term_years: int = Field(18, ge=5, le=30, description="Senior debt tenor")
+    target_dscr: float = Field(1.30, ge=1.0, le=3.0, description="Target DSCR for sculpted repayment")
+    corporation_tax: float = Field(0.25, ge=0, le=0.5, description="Corporation tax rate")
+    project_life_years: int = Field(25, ge=10, le=40, description="Total project operating life")
+    construction_months: Optional[int] = Field(None, ge=3, le=60, description="Construction period (months)")
+    degradation_rate: float = Field(0.005, ge=0, le=0.03, description="Annual output degradation")
+    cpi_escalation: float = Field(0.025, ge=0, le=0.10, description="CPI escalation rate")
+
+    # ── CAPEX overrides (£/kW or kWp) ──
+    capex_modules_per_kw: Optional[float] = Field(None, ge=0, description="Module cost £/kWp override")
+    capex_inverters_per_kw: Optional[float] = Field(None, ge=0, description="Inverter cost £/kW override")
+    capex_mounting_per_kw: Optional[float] = Field(None, ge=0, description="Mounting/racking £/kWp override")
+    capex_electrical_per_kw: Optional[float] = Field(None, ge=0, description="Electrical BOS £/kWp override")
+    capex_civil_per_kw: Optional[float] = Field(None, ge=0, description="Civil works £/kWp override")
+    capex_development_per_kw: Optional[float] = Field(None, ge=0, description="Development costs £/kWp override")
+    grid_connection_cost: float = Field(0, ge=0, description="Grid connection cost in absolute £")
+    contingency_pct: Optional[float] = Field(None, ge=0, le=25, description="Contingency % override")
+
+    # ── OPEX overrides ──
+    opex_om_per_kw: Optional[float] = Field(None, ge=0, description="O&M contract £/kW/yr override")
+    opex_land_rent_per_ha: Optional[float] = Field(None, ge=0, description="Land rent £/ha/yr override")
+    opex_insurance_pct: Optional[float] = Field(None, ge=0, le=2.0, description="Insurance % of CAPEX override")
+    opex_business_rates_per_mw: Optional[float] = Field(None, ge=0, description="Business rates £/MW/yr override")
+    opex_grid_charges_per_mw: Optional[float] = Field(None, ge=0, description="Grid charges £/MW/yr override")
+    opex_management_per_mw: Optional[float] = Field(None, ge=0, description="Management/admin £/MW/yr override")
+
+    # ── Tax depreciation ──
+    tax_depreciation_rate: float = Field(0.18, ge=0, le=1.0, description="Capital allowance rate")
+    tax_depreciation_type: str = Field("reducing_balance", description="reducing_balance or straight_line")
 
 
 # ── Router ────────────────────────────────────────────────────────────────
@@ -545,3 +613,33 @@ async def api_dispatch(req: DispatchRequest):
             "month": req.month,
         }
     return await _run_subprocess(_DISPATCH, payload)
+
+
+# ── 9. Project Finance Engine (comprehensive DCF) ────────────────────────
+
+@router.post("/api/finance/project-model")
+async def api_project_model(req: ProjectModelRequest):
+    """Comprehensive 25-year DCF project finance model — DNV GL / lender standard.
+
+    Replaces Excel-based financial models with full CAPEX breakdown, itemised OPEX,
+    multi-stream revenue (PPA + merchant tail + subsidy + BESS), sculpted debt
+    repayment, tax shield with capital allowances, and sensitivity/tornado analysis.
+
+    Commands:
+    - project_model: full 25-year cashflow with CAPEX/OPEX/debt/returns
+    - sensitivity: tornado analysis varying PPA ±20%, CAPEX ±15%, yield ±10%, etc.
+    - summary: condensed output with GO/CAUTION/NO-GO verdict
+    """
+    # Build payload — strip None values so subprocess uses its own defaults
+    payload = {"command": req.command.value}
+    for field_name, field_val in req.model_dump().items():
+        if field_name == "command":
+            continue
+        if field_val is not None:
+            # Convert enums to their string value
+            if isinstance(field_val, str):
+                payload[field_name] = field_val
+            else:
+                payload[field_name] = field_val
+
+    return await _run_subprocess(_PROJECT_FINANCE, payload, timeout=180)

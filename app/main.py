@@ -230,6 +230,7 @@ from app.routers import (  # noqa: E402
     yield_intel as yield_intel_router,
     solar_layout as solar_layout_router,
     export_usd as export_usd_router,
+    design as design_router,
 )
 
 _routers = [
@@ -272,6 +273,7 @@ _routers = [
     yield_intel_router.router,
     solar_layout_router.router,
     export_usd_router.router,
+    design_router.router,
 ]
 
 app.include_router(graph_router)

@@ -16,10 +16,28 @@ for (let i = 0; i < 48; i++) {
   HOUR_LABELS.push(h === 0 ? "00" : h < 10 ? `0${h}` : `${h}`);
 }
 
+// Human-readable boundary names
+const BOUNDARY_NAMES = {
+  B0: "Scotland–England",
+  B1: "North England",
+  B2: "Midlands Corridor",
+  B4: "South Wales",
+  B6: "Scottish Highlands",
+  B7: "East Coast",
+  B8: "West Coast",
+  B9: "South East",
+};
+
 function riskColor(prob) {
-  if (prob > 0.6) return "#f44336";
-  if (prob > 0.3) return "#ff9800";
-  return "#4caf50";
+  if (prob > 0.6) return "#8B3A3A";
+  if (prob > 0.3) return "#D4A018";
+  return "#16a34a";
+}
+
+function riskExplanation(risk) {
+  if (risk === "HIGH") return "Grid is congested — connection delays likely, curtailment risk";
+  if (risk === "MEDIUM") return "Moderate loading — connection possible with conditions";
+  return "Uncongested — good conditions for connection";
 }
 
 export default function ConstraintTimeline({ map, visible }) {
@@ -127,18 +145,33 @@ export default function ConstraintTimeline({ map, visible }) {
   const bIds = Object.keys(ts);
   const currentEntry = bIds.length > 0 && ts[bIds[0]] ? ts[bIds[0]][hour] : null;
 
+  // Find highest risk boundary for the selected site
+  const highRiskCount = bIds.filter(b => {
+    const e = ts[b]?.[hour];
+    return e && e.risk === "HIGH";
+  }).length;
+
   return (
-    <div className="constraint-timeline">
+    <div className="constraint-timeline" style={{
+      background: "var(--glass-bg)", backdropFilter: "var(--glass-blur)",
+      border: "1px solid var(--glass-border)", borderRadius: 12,
+      boxShadow: "var(--shadow-lg)",
+    }}>
       <div className="constraint-timeline-header">
-        <span className="constraint-timeline-title">
-          Constraint Forecast
+        <span className="constraint-timeline-title" style={{ color: "var(--cds-text-primary)", fontWeight: 900, letterSpacing: "0.02em" }}>
+          Grid Congestion
         </span>
-        <span className="constraint-timeline-time">
+        <span className="constraint-timeline-time" style={{ color: "var(--cds-text-helper)" }}>
           {currentEntry ? currentEntry.dt : `+${hour}h`}
         </span>
-        <span className="constraint-timeline-summary">
-          {data.summary?.boundaries_at_risk ?? 0} boundaries at risk
+        <span className="constraint-timeline-summary" style={{ color: highRiskCount > 0 ? "#8B3A3A" : "#16a34a", fontWeight: 700 }}>
+          {highRiskCount > 0 ? `${highRiskCount} congested` : "No congestion"}
         </span>
+      </div>
+
+      {/* Explanation */}
+      <div style={{ padding: "0 12px 6px", fontSize: 10, color: "var(--cds-text-helper)", lineHeight: 1.4 }}>
+        Transmission boundary loading forecast. High loading means grid connection in that area faces delays and potential curtailment.
       </div>
 
       {/* Mini heatmap — rows = boundaries, cols = hours */}
@@ -190,12 +223,15 @@ export default function ConstraintTimeline({ map, visible }) {
           const entry = ts[bId]?.[hour];
           if (!entry) return null;
           return (
-            <div key={bId} className="constraint-timeline-row">
+            <div key={bId} className="constraint-timeline-row" title={riskExplanation(entry.risk)}>
               <span
                 className="constraint-timeline-dot"
                 style={{ background: riskColor(entry.prob) }}
               />
-              <span className="constraint-timeline-bid">{bId}</span>
+              <span className="constraint-timeline-bid" style={{ minWidth: 28 }}>{bId}</span>
+              <span className="constraint-timeline-bid-name" style={{ fontSize: 9, color: "var(--cds-text-helper)", minWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {BOUNDARY_NAMES[bId] || bId}
+              </span>
               <span className="constraint-timeline-load">
                 {entry.load.toFixed(0)}%
               </span>
@@ -210,7 +246,7 @@ export default function ConstraintTimeline({ map, visible }) {
               </div>
               <span
                 className="constraint-timeline-risk"
-                style={{ color: riskColor(entry.prob) }}
+                style={{ color: riskColor(entry.prob), fontWeight: 700 }}
               >
                 {entry.risk}
               </span>

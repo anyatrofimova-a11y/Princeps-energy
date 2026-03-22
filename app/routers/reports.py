@@ -21,6 +21,8 @@ from utils.report_financial import generate_financial_report
 from utils.constraint_report_generator import generate_constraint_report
 from utils.sld_generator import generate_sld
 from utils.loss_budget import calculate_loss_budget, calculate_lifetime_profile
+from utils.multi_tech_optimizer import optimize_site
+from utils.one_click_report import generate_one_click_report
 
 log = logging.getLogger("princeps.reports")
 router = APIRouter(tags=["reports"])
@@ -693,6 +695,261 @@ async def api_loss_budget(req: LossBudgetRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Loss budget calculation failed: {e}",
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Multi-Technology Site Optimization
+# ---------------------------------------------------------------------------
+
+
+class OptimizeSiteRequest(BaseModel):
+    """Input parameters for multi-technology site optimization."""
+    lat: float = 52.0
+    lon: float = -1.0
+    area_ha: float = 40.0
+    grid_headroom_mw: float = 30.0
+    ghi: float = 1000.0
+    wind_speed: float = 5.5
+    grid_distance_km: float = 3.0
+    objective: str = "maximize_irr"
+    ppa_price: float = 55.0
+    bess_revenue_per_mw: float = 90000.0
+    discount_rate: float = 0.07
+    project_life: int = 30
+    degradation: float = 0.005
+    cpi: float = 0.025
+
+
+@router.post("/api/design/optimize-site")
+async def api_optimize_site(req: OptimizeSiteRequest):
+    """Multi-technology site optimization engine.
+
+    Evaluates 8 technology scenarios for a single site and ranks them by
+    configurable objective. No competitor offers single-call comparison of
+    ALL technology options with full financial appraisal.
+
+    Scenarios evaluated:
+    1. Solar PV (fixed tilt)
+    2. Solar PV (single-axis tracker)
+    3. Solar + BESS (co-located)
+    4. BESS only (standalone)
+    5. Wind only (if wind speed > 5 m/s)
+    6. Solar + Wind hybrid
+    7. Solar + Wind + BESS
+    8. Data Centre + Solar + BESS
+
+    Each scenario returns: optimal capacity, annual yield, capacity factor,
+    LCOE, IRR, NPV, CAPEX, annual revenue, carbon displacement,
+    grid curtailment risk, and planning risk.
+
+    Ranking objectives: maximize_irr (default), minimize_lcoe,
+    maximize_carbon, maximize_revenue.
+
+    Returns ranked scenarios with winner, runner-up, and recommendation narrative.
+    """
+    valid_objectives = {"maximize_irr", "minimize_lcoe", "maximize_carbon", "maximize_revenue"}
+    if req.objective not in valid_objectives:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid objective '{req.objective}'. Must be one of: {', '.join(sorted(valid_objectives))}",
+        )
+    if req.area_ha <= 0:
+        raise HTTPException(status_code=422, detail="area_ha must be positive")
+    if req.grid_headroom_mw <= 0:
+        raise HTTPException(status_code=422, detail="grid_headroom_mw must be positive")
+
+    try:
+        result = optimize_site(
+            lat=req.lat,
+            lon=req.lon,
+            area_ha=req.area_ha,
+            grid_headroom_mw=req.grid_headroom_mw,
+            ghi=req.ghi,
+            wind_speed=req.wind_speed,
+            grid_distance_km=req.grid_distance_km,
+            objective=req.objective,
+            ppa_price=req.ppa_price,
+            bess_revenue_per_mw=req.bess_revenue_per_mw,
+            discount_rate=req.discount_rate,
+            project_life=req.project_life,
+            degradation=req.degradation,
+            cpi=req.cpi,
+        )
+    except Exception as e:
+        log.exception("Site optimization failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Site optimization failed: {e}",
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# One-Click Comprehensive Feasibility Report
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/reports/one-click")
+async def one_click_report(
+    lat: float = Query(..., description="Site latitude (WGS84)"),
+    lon: float = Query(..., description="Site longitude (WGS84)"),
+    capacity_mw: float = Query(50.0, ge=0.1, le=5000, description="Proposed capacity in MW"),
+    technology: str = Query("solar", description="Technology: solar, wind, bess, solar+bess"),
+    site_name: str = Query("Site", description="Site name for report branding"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Generate a one-click comprehensive feasibility report.
+
+    Drop a pin on the map, click one button, get a 30-page institutional-grade
+    PDF covering everything -- in 60 seconds.
+
+    Orchestrates ALL Princeps modules in parallel:
+    - Site data aggregation (PostGIS: substations, GeeFlow, parcels, demand)
+    - Solar yield via NREL PvWattsv8 (SAM subprocess)
+    - Grid connection assessment (Tier 1 data-driven + P10/P50/P90 cost)
+    - Environmental constraints (SSSI, SAC, AONB, Green Belt, flood, ALC)
+    - ML site viability (XGBoost + SHAP explainability)
+    - DNV GL 16-category loss budget waterfall
+    - 25-year DCF financial model (IRR, NPV, LCOE, payback, debt sizing)
+    - Multi-technology comparison (solar, wind, BESS, solar+BESS)
+    - BNG biodiversity net gain baseline estimate
+    - Planning risk prediction (ML from REPD data)
+    - Demand forecast (nearest GSP)
+    - Carbon intensity (National Grid ESO)
+
+    Returns a branded Princeps PDF with:
+    - Cover page + legal disclaimer + document control
+    - Executive summary with GO/CAUTION/NO-GO verdict
+    - P50/P75/P90/P95/P99 energy exceedance table
+    - 11 detailed sections with charts
+    - Appendices: SHAP factors, financial sensitivity, loss waterfall
+    """
+    valid_technologies = {"solar", "wind", "bess", "solar+bess"}
+    if technology not in valid_technologies:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid technology '{technology}'. Must be one of: {', '.join(sorted(valid_technologies))}",
+        )
+
+    try:
+        pdf_bytes = await generate_one_click_report(
+            pool=pool,
+            lat=lat,
+            lon=lon,
+            capacity_mw=capacity_mw,
+            technology=technology,
+            site_name=site_name,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        log.exception("One-click report generation failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"One-click report generation failed: {e}",
+        )
+
+    filename = f"princeps-feasibility-{_safe_filename(site_name)}.pdf"
+
+    return StreamingResponse(
+        iter([pdf_bytes]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# PV Auto-Layout Engine
+# ---------------------------------------------------------------------------
+
+
+class AutoLayoutRequest(BaseModel):
+    """Input parameters for automated PV layout generation."""
+    lat: float = 52.0
+    lon: float = -1.0
+    capacity_mw: float = 50.0
+    area_ha: float | None = None
+    boundary_coords: list[list[float]] | None = None
+    technology: str = "fixed_tilt"
+    tilt_deg: float | None = None
+    gcr_target: float | None = None
+    module_watts: int = 580
+    module_width_m: float = 1.05
+    module_height_m: float = 2.10
+    setback_m: float = 10.0
+    dc_ac_ratio: float = 1.25
+    modules_per_string: int = 28
+    terrain: dict | None = None
+    constraints: dict | None = None
+    grid_connection_point: list[float] | None = None
+
+
+@router.post("/api/design/auto-layout")
+async def api_auto_layout(req: AutoLayoutRequest):
+    """Generate an optimised PV layout for a utility-scale solar site.
+
+    RatedPower / PVcase-class automated layout engine that produces:
+    - Panel row placement with optimal row spacing (winter solstice shading)
+    - Block decomposition with 4 m access roads every 500 m
+    - Terrain-aware exclusions: slope >15 deg, north-facing, flood, buildings + 50 m buffer
+    - Infrastructure: inverter stations (1/5MW), combiner boxes (1/1MW),
+      transformers (1/10MW), substation at perimeter
+    - Full BOM with cable lengths, mounting structures, fencing
+    - CAPEX/OPEX financial inputs with UK cost benchmarks
+    - GeoJSON FeatureCollection for map visualisation
+
+    Module spec: 2.1 m x 1.05 m, 580 W bifacial (configurable).
+    Technologies: fixed_tilt (GCR 0.35-0.45) or single_axis_tracker (GCR 0.25-0.35).
+
+    Returns layout, BOM, financial_inputs, buildable_area_ha,
+    total_site_area_ha, utilization_pct, geojson, statistics.
+    """
+    from utils.pv_layout_engine import generate_pv_layout
+
+    valid_technologies = {"fixed_tilt", "single_axis_tracker"}
+    if req.technology not in valid_technologies:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid technology '{req.technology}'. Must be one of: {', '.join(sorted(valid_technologies))}",
+        )
+    if req.capacity_mw <= 0:
+        raise HTTPException(status_code=422, detail="capacity_mw must be positive")
+    if not (-90 <= req.lat <= 90):
+        raise HTTPException(status_code=422, detail="lat must be between -90 and 90")
+    if not (-180 <= req.lon <= 180):
+        raise HTTPException(status_code=422, detail="lon must be between -180 and 180")
+
+    try:
+        result = generate_pv_layout(
+            lat=req.lat,
+            lon=req.lon,
+            capacity_mw=req.capacity_mw,
+            area_ha=req.area_ha,
+            boundary_coords=req.boundary_coords,
+            technology=req.technology,
+            tilt_deg=req.tilt_deg,
+            gcr_target=req.gcr_target,
+            module_watts=req.module_watts,
+            module_width_m=req.module_width_m,
+            module_height_m=req.module_height_m,
+            setback_m=req.setback_m,
+            terrain=req.terrain,
+            constraints=req.constraints,
+            grid_connection_point=req.grid_connection_point,
+            dc_ac_ratio=req.dc_ac_ratio,
+            modules_per_string=req.modules_per_string,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        log.exception("PV auto-layout generation failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"PV auto-layout generation failed: {e}",
         )
 
     return result
