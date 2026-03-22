@@ -28,6 +28,17 @@ from typing import Any
 
 log = logging.getLogger("princeps.pv_layout_engine")
 
+
+def list_modules() -> list[dict]:
+    """Return available PV module specifications."""
+    return [
+        {"model": "LONGi Hi-MO 7 580W", "watts": 580, "width_m": 1.05, "height_m": 2.1, "technology": "mono-PERC bifacial", "efficiency": 22.5},
+        {"model": "JinkoSolar Tiger Neo 585W", "watts": 585, "width_m": 1.05, "height_m": 2.12, "technology": "n-type TOPCon", "efficiency": 22.8},
+        {"model": "Trina Vertex S+ 445W", "watts": 445, "width_m": 1.04, "height_m": 1.76, "technology": "mono-PERC", "efficiency": 21.8},
+        {"model": "Canadian Solar HiKu7 670W", "watts": 670, "width_m": 1.13, "height_m": 2.38, "technology": "n-type TOPCon bifacial", "efficiency": 22.5},
+        {"model": "First Solar Series 7 540W", "watts": 540, "width_m": 1.20, "height_m": 2.01, "technology": "CdTe thin-film", "efficiency": 22.1},
+    ]
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
