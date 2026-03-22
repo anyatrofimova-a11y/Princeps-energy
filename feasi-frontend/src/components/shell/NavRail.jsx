@@ -39,8 +39,13 @@ export default function NavRail() {
 
   return (
     <nav className="nav-rail">
-      <div className="nav-rail-brand">
-        <div className="nav-rail-brand-letter">P</div>
+      <div className="nav-rail-brand" title="Princeps">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="nav-rail-logo">
+          <polygon points="4,4 36,4 28,16 12,16" fill="#F5B731"/>
+          <polygon points="12,20 28,20 36,32 4,32" fill="#F5B731"/>
+          <rect x="28" y="14" width="16" height="8" fill="#F5B731"/>
+          <rect x="4" y="36" width="24" height="8" fill="#F5B731"/>
+        </svg>
       </div>
       <div className="nav-rail-items">
         {WORKSPACES.map((ws) => (

@@ -9,6 +9,12 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from fastapi import APIRouter, Query
 
+from utils.bmrs_wholesale import (
+    fetch_system_prices,
+    fetch_day_ahead_prices,
+    current_wholesale_price,
+)
+
 log = logging.getLogger("princeps.live_grid")
 router = APIRouter(prefix="/api/live", tags=["live-grid"])
 
@@ -335,3 +341,24 @@ async def live_carbon_regional():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "regions": sorted(regions, key=lambda r: r.get("intensity_forecast") or 999),
     }
+
+
+# ── Wholesale price endpoints (real BMRS data) ──────────────────────
+
+
+@router.get("/wholesale-prices")
+async def live_wholesale_prices(days: int = Query(7, ge=1, le=30)):
+    """Historical system buy/sell prices from BMRS DETSYSPRICES."""
+    return await fetch_system_prices(days_back=days)
+
+
+@router.get("/day-ahead-prices")
+async def live_day_ahead_prices(date: str = Query(None)):
+    """Today's (or specified date's) day-ahead market index prices."""
+    return await fetch_day_ahead_prices(date=date)
+
+
+@router.get("/current-price")
+async def live_current_price():
+    """Single latest wholesale price for revenue calculations."""
+    return await current_wholesale_price()

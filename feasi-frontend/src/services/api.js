@@ -177,6 +177,9 @@ const api = {
     generationMix: () => get("/api/live/generation-mix"),
     systemPrice: () => get("/api/live/system-price"),
     carbonRegional: () => get("/api/live/carbon-regional"),
+    wholesalePrices: (days = 7) => get(`/api/live/wholesale-prices?days=${days}`),
+    dayAheadPrices: (date) => get(`/api/live/day-ahead-prices${date ? `?date=${enc(date)}` : ""}`),
+    currentPrice: () => get("/api/live/current-price"),
   },
 
   land: {

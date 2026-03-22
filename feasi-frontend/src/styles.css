@@ -264,24 +264,16 @@ html, body, #root { height: 100%; margin: 0; overflow: hidden; background: var(-
   flex-shrink: 0;
   cursor: pointer;
 }
-.nav-rail-brand-letter {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #D4A018 0%, #E8C44A 100%);
-  color: #0F0E0A;
-  font-weight: 900;
-  font-size: 11px;
-  font-family: "Roboto", sans-serif;
-  letter-spacing: 0.02em;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+.nav-rail-logo {
+  width: 28px;
+  height: 28px;
+  transition: transform 0.15s ease;
 }
-.nav-rail-brand:hover .nav-rail-brand-letter {
-  transform: scale(1.05);
-  box-shadow: 0 0 16px rgba(var(--accent-rgb), 0.35);
+.nav-rail-brand:hover .nav-rail-logo {
+  transform: scale(1.08);
+}
+.nav-rail-brand-letter {
+  display: none; /* Replaced by SVG logo */
 }
 .nav-rail-items {
   display: flex;
@@ -12435,16 +12427,16 @@ input[type="range"] { accent-color: var(--accent); }
 }
 
 .pd-kpi-card {
-  background: rgba(15, 19, 24, 0.65);
+  background: white;
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(245, 183, 49, 0.08);
+  border: 1px solid var(--cds-border-subtle);
   border-radius: 12px;
   padding: 12px 14px;
   transition: border-color 0.2s, background 0.2s;
 }
 .pd-kpi-card:hover {
-  border-color: rgba(245, 183, 49, 0.2);
-  background: rgba(15, 19, 24, 0.75);
+  border-color: var(--cds-interactive);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .pd-kpi-header {
@@ -12456,7 +12448,7 @@ input[type="range"] { accent-color: var(--accent); }
 
 .pd-kpi-label {
   font-size: 10px;
-  color: #8b8fa3;
+  color: var(--cds-text-helper);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -12470,7 +12462,7 @@ input[type="range"] { accent-color: var(--accent); }
 .pd-kpi-unit {
   font-size: 10px;
   font-weight: 400;
-  color: #8b8fa3;
+  color: var(--cds-text-helper);
   margin-left: 3px;
 }
 
@@ -12498,9 +12490,9 @@ input[type="range"] { accent-color: var(--accent); }
 }
 
 .pd-card {
-  background: rgba(15, 19, 24, 0.65);
+  background: white;
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(245, 183, 49, 0.08);
+  border: 1px solid var(--cds-border-subtle);
   border-radius: 12px;
   padding: 14px 16px;
   transition: border-color 0.2s;

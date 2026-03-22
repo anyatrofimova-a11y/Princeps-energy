@@ -77,7 +77,7 @@ const COST_CATEGORIES = [
   { label: "Civil Works", planned: 6800, actual: 7100, color: "#f59e0b" },
   { label: "Permits & Legal", planned: 1200, actual: 950, color: "#22c55e" },
   { label: "O&M Reserve", planned: 2400, actual: 2400, color: "#a78bfa" },
-  { label: "Contingency", planned: 1800, actual: 600, color: "#8b8fa3" },
+  { label: "Contingency", planned: 1800, actual: 600, color: "var(--cds-text-helper)" },
 ];
 
 /* ── Inline chart components ─────────────────────────────────────────────── */
@@ -98,7 +98,7 @@ function KPICard({ label, value, unit, delta, deltaLabel, color, icon }) {
       </div>
       {delta != null && (
         <div className="pd-kpi-delta" style={{ color: delta >= 0 ? "#24a148" : "#da1e28" }}>
-          {delta >= 0 ? "+" : ""}{delta}% <span style={{ color: "#666", fontSize: 9 }}>{deltaLabel}</span>
+          {delta >= 0 ? "+" : ""}{delta}% <span style={{ color: "var(--cds-text-helper, #697077)", fontSize: 9 }}>{deltaLabel}</span>
         </div>
       )}
     </div>
@@ -138,15 +138,15 @@ function TechMixDonut({ portfolio, apiTechMix, size = 140 }) {
     <div style={{ textAlign: "center" }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         {arcs.map(a => <path key={a.tech} d={a.d} fill={a.color} opacity={0.85} />)}
-        <text x={cx} y={cy - 6} textAnchor="middle" fill="#e8e8e8" fontSize={18} fontWeight={700}>{total}</text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fill="#8b8fa3" fontSize={9}>MW Total</text>
+        <text x={cx} y={cy - 6} textAnchor="middle" fill="var(--cds-text-primary, #1A1D23)" fontSize={18} fontWeight={700}>{total}</text>
+        <text x={cx} y={cy + 10} textAnchor="middle" fill="var(--cds-text-helper, #697077)" fontSize={9}>MW Total</text>
       </svg>
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 12px", marginTop: 4 }}>
         {entries.map(([tech, val]) => (
           <div key={tech} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
             <div style={{ width: 8, height: 8, borderRadius: 2, background: TECH_COLORS[tech] || "#888" }} />
-            <span style={{ color: "#ccc", textTransform: "capitalize" }}>{tech}</span>
-            <span style={{ color: "#888" }}>{val} MW</span>
+            <span style={{ color: "var(--cds-text-secondary, #525252)", textTransform: "capitalize" }}>{tech}</span>
+            <span style={{ color: "var(--cds-text-helper, #697077)" }}>{val} MW</span>
           </div>
         ))}
       </div>
@@ -167,10 +167,10 @@ function VerdictPills({ portfolio }) {
       ].map(v => (
         <div key={v.key} style={{ textAlign: "center" }}>
           <div style={{ fontSize: 24, fontWeight: 700, color: v.color }}>{counts[v.key]}</div>
-          <div style={{ fontSize: 9, color: "#888" }}>{v.key}</div>
+          <div style={{ fontSize: 9, color: "var(--cds-text-helper, #697077)" }}>{v.key}</div>
           <div style={{
             height: 3, borderRadius: 2, marginTop: 3,
-            width: 40, background: "#1a1f2e",
+            width: 40, background: "var(--cds-layer-03)",
           }}>
             <div style={{
               width: `${total ? (counts[v.key] / total) * 100 : 0}%`,
@@ -189,12 +189,12 @@ function ProjectPipeline({ portfolio }) {
       <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
-            <th style={{ textAlign: "left", padding: "6px 8px", color: "#8b8fa3", fontWeight: 500 }}>Project</th>
-            <th style={{ textAlign: "center", padding: "6px 4px", color: "#8b8fa3", fontWeight: 500 }}>Type</th>
-            <th style={{ textAlign: "right", padding: "6px 4px", color: "#8b8fa3", fontWeight: 500 }}>MW</th>
-            <th style={{ textAlign: "left", padding: "6px 4px", color: "#8b8fa3", fontWeight: 500 }}>Phase</th>
-            <th style={{ textAlign: "center", padding: "6px 4px", color: "#8b8fa3", fontWeight: 500 }}>Score</th>
-            <th style={{ textAlign: "center", padding: "6px 4px", color: "#8b8fa3", fontWeight: 500 }}>Verdict</th>
+            <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Project</th>
+            <th style={{ textAlign: "center", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Type</th>
+            <th style={{ textAlign: "right", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>MW</th>
+            <th style={{ textAlign: "left", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Phase</th>
+            <th style={{ textAlign: "center", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Score</th>
+            <th style={{ textAlign: "center", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Verdict</th>
           </tr>
         </thead>
         <tbody>
@@ -202,8 +202,8 @@ function ProjectPipeline({ portfolio }) {
             const phaseIdx = PHASES.indexOf(p.phase);
             const phasePct = phaseIdx >= 0 ? ((phaseIdx + 1) / PHASES.length) * 100 : 0;
             return (
-              <tr key={i} style={{ borderBottom: "1px solid #1a1f2e" }}>
-                <td style={{ padding: "6px 8px", color: "#e8e8e8", fontWeight: 500 }}>{p.name}</td>
+              <tr key={i} style={{ borderBottom: "1px solid var(--cds-border-subtle)" }}>
+                <td style={{ padding: "6px 8px", color: "var(--cds-text-primary, #1A1D23)", fontWeight: 500 }}>{p.name}</td>
                 <td style={{ padding: "6px 4px", textAlign: "center" }}>
                   <span style={{
                     display: "inline-block", width: 8, height: 8, borderRadius: 2,
@@ -211,16 +211,16 @@ function ProjectPipeline({ portfolio }) {
                   }} />
                   <span style={{ color: "#aaa", fontSize: 10, textTransform: "capitalize" }}>{p.technology}</span>
                 </td>
-                <td style={{ padding: "6px 4px", color: "#e8e8e8", textAlign: "right" }}>{p.capacity_mw}</td>
+                <td style={{ padding: "6px 4px", color: "var(--cds-text-primary, #1A1D23)", textAlign: "right" }}>{p.capacity_mw}</td>
                 <td style={{ padding: "6px 4px", width: 120 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ flex: 1, height: 4, background: "#1a1f2e", borderRadius: 2 }}>
+                    <div style={{ flex: 1, height: 4, background: "var(--cds-layer-03)", borderRadius: 2 }}>
                       <div style={{
                         width: `${phasePct}%`, height: "100%", borderRadius: 2,
                         background: STATUS_COLORS[p.status] || "#888",
                       }} />
                     </div>
-                    <span style={{ fontSize: 9, color: "#888", whiteSpace: "nowrap" }}>{p.phase.replace("_", " ")}</span>
+                    <span style={{ fontSize: 9, color: "var(--cds-text-helper, #697077)", whiteSpace: "nowrap" }}>{p.phase.replace("_", " ")}</span>
                   </div>
                 </td>
                 <td style={{ padding: "6px 4px", textAlign: "center" }}>
@@ -269,17 +269,17 @@ function CostVarianceChart({ costs, width = 320, height = 150 }) {
                 fill={variance > 0 ? "#da1e28" : "#24a148"} />
             )}
             {/* Label */}
-            <text x={x + barW / 2 - gap / 2} y={height + 14} textAnchor="middle" fill="#888" fontSize={8}>
+            <text x={x + barW / 2 - gap / 2} y={height + 14} textAnchor="middle" fill="var(--cds-text-helper, #697077)" fontSize={8}>
               {c.label.length > 8 ? c.label.slice(0, 8) + ".." : c.label}
             </text>
           </g>
         );
       })}
       {/* Legend */}
-      <rect x={0} y={height + 22} width={8} height={4} fill="#888" opacity={0.3} rx={1} />
-      <text x={12} y={height + 27} fill="#888" fontSize={8}>Planned</text>
-      <rect x={55} y={height + 22} width={8} height={4} fill="#888" opacity={0.85} rx={1} />
-      <text x={67} y={height + 27} fill="#888" fontSize={8}>Actual</text>
+      <rect x={0} y={height + 22} width={8} height={4} fill="var(--cds-text-helper, #697077)" opacity={0.3} rx={1} />
+      <text x={12} y={height + 27} fill="var(--cds-text-helper, #697077)" fontSize={8}>Planned</text>
+      <rect x={55} y={height + 22} width={8} height={4} fill="var(--cds-text-helper, #697077)" opacity={0.85} rx={1} />
+      <text x={67} y={height + 27} fill="var(--cds-text-helper, #697077)" fontSize={8}>Actual</text>
     </svg>
   );
 }
@@ -294,7 +294,7 @@ function RiskMatrix({ risks }) {
           border: `1px solid ${r.severity >= 3 ? "rgba(218,30,40,0.2)" : r.severity >= 2 ? "rgba(245,158,11,0.2)" : "rgba(36,161,72,0.2)"}`,
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 10, color: "#ccc", fontWeight: 500 }}>{r.label}</span>
+            <span style={{ fontSize: 10, color: "var(--cds-text-secondary, #525252)", fontWeight: 500 }}>{r.label}</span>
             <span style={{
               fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 6,
               background: r.color, color: "#fff",
@@ -340,7 +340,7 @@ function EnergyPerformance({ portfolio }) {
             <rect x={x} y={h - wH - sH - bH} width={bW} height={wH} fill="#5b8def" opacity={0.8} rx={1} />
             <rect x={x} y={h - sH - bH} width={bW} height={sH} fill="#f59e0b" opacity={0.8} rx={1} />
             <rect x={x} y={h - bH} width={bW} height={bH} fill="#a78bfa" opacity={0.8} rx={1} />
-            <text x={x + bW / 2} y={h + 12} textAnchor="middle" fill="#888" fontSize={8}>{g.month}</text>
+            <text x={x + bW / 2} y={h + 12} textAnchor="middle" fill="var(--cds-text-helper, #697077)" fontSize={8}>{g.month}</text>
           </g>
         );
       })}
@@ -393,13 +393,16 @@ function PortfolioDashboard({ onWorkspaceClick, onCapabilityClick }) {
 
   return (
     <div className="workspace-home" style={{ position: "relative" }}>
-      <GridCanvas dark />
+      <GridCanvas />
       <div className="wh-hub pd-dashboard" style={{ position: "relative", zIndex: 2 }}>
         {/* Compact header */}
         <div className="pd-header">
-          <div>
-            <h1 className="pd-title">Princeps</h1>
-            <p className="pd-subtitle">Portfolio Analytics Dashboard</p>
+          <div className="pd-brand-row">
+            <div className="pd-logo-mark">P</div>
+            <div>
+              <h1 className="pd-title">PRINCEPS</h1>
+              <p className="pd-subtitle">Portfolio Analytics Dashboard</p>
+            </div>
           </div>
           <div className="pd-header-right">
             <span className="pd-date">{new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</span>
@@ -461,15 +464,15 @@ function PortfolioDashboard({ onWorkspaceClick, onCapabilityClick }) {
               <div style={{ display: "flex", gap: 12, justifyContent: "center", marginTop: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
                   <div style={{ width: 8, height: 8, borderRadius: 2, background: "#5b8def" }} />
-                  <span style={{ color: "#888" }}>Wind</span>
+                  <span style={{ color: "var(--cds-text-helper, #697077)" }}>Wind</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
                   <div style={{ width: 8, height: 8, borderRadius: 2, background: "#f59e0b" }} />
-                  <span style={{ color: "#888" }}>Solar</span>
+                  <span style={{ color: "var(--cds-text-helper, #697077)" }}>Solar</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10 }}>
                   <div style={{ width: 8, height: 8, borderRadius: 2, background: "#a78bfa" }} />
-                  <span style={{ color: "#888" }}>BESS</span>
+                  <span style={{ color: "var(--cds-text-helper, #697077)" }}>BESS</span>
                 </div>
               </div>
             </div>
