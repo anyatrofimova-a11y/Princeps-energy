@@ -417,6 +417,32 @@ const api = {
       post(`/api/opportunities/action-package${capacityMw ? `?capacity_mw=${capacityMw}` : ""}`, opportunity),
   },
 
+  // Generational capabilities
+  alerts: {
+    subscribe: (config) => post("/api/alerts/subscribe", config),
+    check: () => get("/api/alerts/check"),
+  },
+  g99: {
+    generate: (project, gridContext, siteContext) =>
+      post("/api/g99/generate", { project, grid_context: gridContext, site_context: siteContext }),
+  },
+  landOwnership: {
+    lookup: (lat, lon, radius = 500) =>
+      get(`/api/land/ownership?lat=${lat}&lon=${lon}&radius_m=${radius}`),
+  },
+  competitive: {
+    heatmap: (technology, bbox) => {
+      const q = new URLSearchParams();
+      if (technology) q.set("technology", technology);
+      if (bbox) { q.set("west", bbox[0]); q.set("south", bbox[1]); q.set("east", bbox[2]); q.set("north", bbox[3]); }
+      return get(`/api/competitive/heatmap?${q}`);
+    },
+  },
+  marketTiming: {
+    analyse: (mw = 50, technology = "solar", region = "England") =>
+      get(`/api/market/timing?capacity_mw=${mw}&technology=${enc(technology)}&region=${enc(region)}`),
+  },
+
   opt: {
     run: (load, gen) => post(`/opt/run?plan_name=ui_plan&load_mw=${load}&gen_mw=${gen}`),
   },

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 import asyncpg
 
-from app.deps import get_pool
+from app.deps import get_pool, get_current_user
 
 router = APIRouter(tags=["planning-ml"])
 
@@ -404,3 +404,177 @@ async def opportunity_action_package(
     """Generate complete action package for a specific opportunity."""
     from utils.autonomous_prospector import generate_action_package
     return await generate_action_package(pool, opportunity, capacity_mw)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Market Intelligence — generational capabilities
+# ═══════════════════════════════════════════════════════════════
+
+class AlertSubscribeRequest(BaseModel):
+    technology: str = Field("any", description="Technology filter: solar, wind, bess, any")
+    min_mw: float = Field(5, ge=0.1, le=5000)
+    max_mw: float = Field(500, ge=0.1, le=5000)
+    regions: list[str] = Field(default_factory=list, description="UK regions to monitor")
+    irr_hurdle: float = Field(8.0, ge=0, le=50, description="Minimum IRR threshold (%)")
+    email: str = Field(None, description="Email address for alerts")
+    webhook_url: str = Field(None, description="Webhook URL for JSON alert delivery")
+    frequency: str = Field("daily", pattern="^(daily|instant)$")
+
+
+@router.post("/api/alerts/subscribe")
+async def subscribe_to_alerts(
+    req: AlertSubscribeRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+    user: dict = Depends(get_current_user),
+):
+    """Subscribe to opportunity alerts via email or webhook.
+
+    Princeps continuously monitors grid capacity releases, competitor
+    withdrawals, and reinforcement plans. When opportunities matching
+    your criteria are detected, you'll be notified immediately or daily.
+    """
+    from utils.market_intelligence import create_alert_subscription
+    return await create_alert_subscription(pool, user["user_id"], req.model_dump())
+
+
+@router.get("/api/alerts/check")
+async def check_alerts(
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Manually trigger alert check for all active subscribers.
+
+    Runs the full opportunity scan for each subscriber and dispatches
+    alerts via email/webhook. Normally called by the nightly refresh job.
+    Returns {sent, skipped, errors}.
+    """
+    from utils.market_intelligence import check_and_send_alerts
+    return await check_and_send_alerts(pool)
+
+
+class G99GenerateRequest(BaseModel):
+    name: str = Field(..., description="Project name")
+    capacity_mw: float = Field(..., ge=0.001, le=5000, description="Proposed capacity in MW")
+    technology: str = Field("solar", description="Technology: solar, wind, bess, hybrid")
+    lat: float = Field(..., ge=49, le=61, description="Site latitude (WGS84)")
+    lon: float = Field(..., ge=-8, le=2, description="Site longitude (WGS84)")
+    developer: str = Field(None, description="Developer / applicant company name")
+    contact_name: str = Field(None, description="Contact person")
+    email: str = Field(None, description="Contact email")
+    phone: str = Field(None, description="Contact phone")
+    company_number: str = Field(None, description="Companies House number")
+    company_address: str = Field(None, description="Registered address")
+    mpan: str = Field(None, description="MPAN if existing connection")
+    land_area_ha: float = Field(None, ge=0, description="Site area in hectares")
+    nearest_substation: str = Field(None, description="Nearest grid substation name")
+    nearest_substation_distance_km: float = Field(3.0, ge=0, description="Distance to nearest substation (km)")
+    headroom_mw: float = Field(None, ge=0, description="Available generation headroom (MW)")
+    land_use: str = Field(None, description="Land classification (e.g. agricultural, brownfield)")
+    format: str = Field("json", pattern="^(json|html)$", description="Output format: json or html (for PDF)")
+
+
+@router.post("/api/g99/generate")
+async def generate_g99(req: G99GenerateRequest):
+    """Auto-generate a pre-filled G99/G100 grid connection application.
+
+    Uses ENA Engineering Recommendation G99 Issue 2 (2023) format.
+    All fields are pre-filled from Princeps site assessment data.
+    Returns JSON with all form sections, or HTML suitable for PDF rendering.
+    """
+    from utils.market_intelligence import generate_g99_application, g99_to_pdf_html
+
+    project = {
+        "name": req.name,
+        "capacity_mw": req.capacity_mw,
+        "technology": req.technology,
+        "lat": req.lat,
+        "lon": req.lon,
+        "developer": req.developer,
+        "contact_name": req.contact_name,
+        "email": req.email,
+        "phone": req.phone,
+        "company_number": req.company_number,
+        "company_address": req.company_address,
+        "mpan": req.mpan,
+        "land_area_ha": req.land_area_ha,
+    }
+    grid_context = {
+        "nearest_substation": req.nearest_substation or "",
+        "nearest_substation_distance_km": req.nearest_substation_distance_km,
+        "headroom_mw": req.headroom_mw,
+    }
+    site_context = {
+        "site_name": req.name,
+        "land_area_ha": req.land_area_ha,
+        "land_use": req.land_use,
+    }
+
+    application = generate_g99_application(project, grid_context, site_context)
+
+    if req.format == "html":
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(content=g99_to_pdf_html(application))
+
+    return application
+
+
+@router.get("/api/land/ownership")
+async def land_ownership(
+    lat: float = Query(..., ge=49, le=61, description="Latitude (WGS84)"),
+    lon: float = Query(..., ge=-8, le=2, description="Longitude (WGS84)"),
+    radius_m: int = Query(500, ge=100, le=5000, description="Search radius in metres"),
+):
+    """Look up land ownership near coordinates using Companies House API.
+
+    Reverse geocodes the location to a postcode, then searches Companies House
+    for active companies registered nearby. Filters by SIC codes to identify
+    probable landowners (agriculture, real estate) and energy competitors.
+
+    Requires COMPANIES_HOUSE_API_KEY env var for live data; returns mock
+    structure otherwise.
+    """
+    from utils.market_intelligence import lookup_land_ownership
+    return await lookup_land_ownership(lat, lon, radius_m)
+
+
+@router.get("/api/competitive/heatmap")
+async def competitive_heatmap(
+    technology: str = Query(None, description="Filter by technology (solar, wind, bess)"),
+    min_lon: float = Query(None, ge=-10, le=5),
+    min_lat: float = Query(None, ge=49, le=62),
+    max_lon: float = Query(None, ge=-10, le=5),
+    max_lat: float = Query(None, ge=49, le=62),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Generate competitive density heat map from REPD pipeline data.
+
+    Returns GeoJSON FeatureCollection of ~10km grid cells with:
+    project_count, total_mw, developer_count, competitive_pressure
+    (LOW/MEDIUM/HIGH/VERY_HIGH).
+
+    Use this to identify underserved areas with grid capacity but
+    low developer competition.
+    """
+    from utils.market_intelligence import competitive_heat_map
+    bbox = None
+    if all(v is not None for v in [min_lon, min_lat, max_lon, max_lat]):
+        bbox = [min_lon, min_lat, max_lon, max_lat]
+    return await competitive_heat_map(pool, technology, bbox)
+
+
+@router.get("/api/market/timing")
+async def market_timing(
+    capacity_mw: float = Query(..., ge=0.1, le=5000, description="Proposed capacity in MW"),
+    technology: str = Query("solar", description="Technology: solar, onshore_wind, bess"),
+    region: str = Query("England", description="UK region"),
+):
+    """Market timing analysis — optimal dates for grid, planning, PPA, and CfD.
+
+    Analyses CfD allocation round timing, PPA forward curve seasonality,
+    grid queue merit-based scoring, planning authority seasonality, and
+    construction material price trends to recommend an optimal development
+    timeline.
+
+    Returns recommended_timeline, irr_sensitivity, market_signals.
+    """
+    from utils.market_intelligence import market_timing_analysis
+    return market_timing_analysis(capacity_mw, technology, region)

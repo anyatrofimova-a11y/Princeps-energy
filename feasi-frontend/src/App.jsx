@@ -562,8 +562,8 @@ export default function App() {
           </ErrorBoundary>
         )}
 
-        {/* Energy Flow Panel — right side Sankey */}
-        {energyFlowOpen && (
+        {/* Energy Flow Panel — only shows when assets are actually placed */}
+        {energyFlowOpen && placedAssets.length > 0 && (
           <EnergyFlowPanel
             placedAssets={placedAssets}
             solarYield={solarYield}

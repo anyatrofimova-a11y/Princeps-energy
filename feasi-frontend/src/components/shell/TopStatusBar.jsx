@@ -335,71 +335,13 @@ export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGri
       </div>
 
       <div className="tsb-right">
-        <span className="header-v2-param">
-          <input
-            type="number"
-            value={samCapacity}
-            onChange={(e) => setSamCapacity(Number(e.target.value))}
-            style={{ width: 48 }}
-            min={1}
-          />
-          <span>kW</span>
-        </span>
-        <button
-          className="btn-topbar-action"
-          onClick={downloadPdf}
-          disabled={pdfLoading}
-          title="Download PDF site report"
-        >
-          {pdfLoading ? "..." : "PDF"}
-        </button>
-        <button className="btn-topbar-intel" onClick={onIntelligence} title="Regulatory Intelligence Feed">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+        <button className="btn-topbar-icon" onClick={onCommandPalette} title="Commands (Cmd+K)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M18 3a3 3 0 00-3 3v12a3 3 0 003 3 3 3 0 003-3 3 3 0 00-3-3H6a3 3 0 00-3 3 3 3 0 003 3 3 3 0 003-3V6a3 3 0 00-3-3 3 3 0 00-3 3 3 3 0 003 3h12a3 3 0 003-3 3 3 0 00-3-3z" />
           </svg>
-          Intel
         </button>
-        <button className="btn-topbar-action" onClick={onPipeline} title="Project Pipeline" style={{ fontWeight: 900, letterSpacing: "0.04em" }}>Pipeline</button>
-        <MoreMenu
-          items={[
-            { label: "Grid Digital Twin", action: onGridTwin },
-            { label: "Data Centre Twin", action: onDcTwin },
-            { label: "BESS Facility Twin", action: onBessFacility },
-            { label: "Grid Connection Report", action: async () => {
-              const lat = explain?.lat ?? pickedLocation?.lat;
-              const lon = explain?.lon ?? pickedLocation?.lon;
-              if (!lat || !lon) { alert("Select a site first"); return; }
-              const name = explain?.name || parcelId || "Site";
-              try {
-                const blob = await api.reports.gridConnection(lat, lon, name, samCapacity / 1000 || 50);
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a"); a.href = url; a.download = `princeps-grid-${name.replace(/[^\w-]/g, "-")}.pdf`; a.click(); URL.revokeObjectURL(url);
-              } catch (e) { alert("Grid report generation failed"); }
-            }},
-            { label: "Financial Report", action: async () => {
-              const lat = explain?.lat ?? pickedLocation?.lat;
-              const lon = explain?.lon ?? pickedLocation?.lon;
-              if (!lat || !lon) { alert("Select a site first"); return; }
-              const name = explain?.name || parcelId || "Site";
-              try {
-                const blob = await api.reports.financial(lat, lon, name, samCapacity / 1000 || 50);
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a"); a.href = url; a.download = `princeps-financial-${name.replace(/[^\w-]/g, "-")}.pdf`; a.click(); URL.revokeObjectURL(url);
-              } catch (e) { alert("Financial report generation failed"); }
-            }},
-            { label: "BEMS Twin", action: onBems },
-            { label: "Asset Inspector", action: onAssetInspect },
-            { label: "Grid Graph", action: onGridGraph },
-            { label: "Hardware Config", action: onHardware },
-            { label: "Thermal Model", action: onThermal },
-            { label: "Pitch Deck", action: onPitch },
-            { label: "NOM Explorer", action: onNomExplorer },
-          ]}
-        />
-        <NotificationCentre />
-        <ThemeToggle compact />
         <button className="btn-topbar-icon" onClick={onSettings} title="Settings">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
