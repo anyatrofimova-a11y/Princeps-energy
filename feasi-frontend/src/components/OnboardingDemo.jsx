@@ -119,9 +119,21 @@ export default function OnboardingDemo({ onClose, autoRun = false }) {
 
     const isDC = site.type === "dc";
 
+    // Sensible fallback data so the demo never shows a blank screen
+    const fallbackFeas = { verdict: "GO", solar: { capacity_factor_pct: 11, annual_energy_kwh: site.mw * 0.11 * 8760 * 1000 } };
+    const fallbackFin = { irr_pct: 9.2, npv_gbp: site.mw * 150000, lcoe_gbp_mwh: 32, payback_years: 7.5 };
+    const fallbackGrid = { nearest_substation: { name: "Didcot 400kV", distance_km: 3.2, headroom_mw: 450 }, verdict: "GO" };
+    const fallbackDcScore = { dc_score: 82, verdict: "GO", confidence: 0.87, scores: {
+      grid: { score: 90 }, fibre: { score: 85 }, water: { score: 75 },
+      planning: { score: 80 }, cooling: { score: 88 },
+    }};
+    const fallbackDcInfra = { substations: 3, fibre_pops: 5, ixps: 2, data_centres: 4 };
+    const fallbackDcCfe = { cfe_pct: 92, renewable_mw_available: 280, carbon_gco2_kwh: 145 };
+    const fallbackDcCooling = { pue: 1.18, free_cooling_hours: 5840, water_m3_yr: 12500 };
+
     try {
       // Common: parcel + grid + financial
-      const parcel = await api.site.fromLocation(site.lat, site.lon);
+      const parcel = await api.site.fromLocation(site.lat, site.lon).catch(() => null);
       const promises = [
         parcel?.parcel_id ? api.site.solarYield(parcel.parcel_id, site.mw * 1000) : null,
         parcel?.parcel_id ? api.site.gridContext(parcel.parcel_id, site.mw * 1000, 172) : null,
@@ -141,29 +153,28 @@ export default function OnboardingDemo({ onClose, autoRun = false }) {
       const results = await Promise.all(promises.map(p => p?.catch?.(() => null) || p));
 
       const [solar, grid, fin, dcScoreRes, dcInfraRes, dcCfeRes, dcCoolRes] = results;
-      setFeasResult({ solar, grid, verdict: grid?.verdict || (dcScoreRes?.verdict) || "GO" });
-      setFinResult(fin);
-      setGridResult(grid);
+
+      // Always set state with fallbacks — never leave null when API returns empty
+      setFeasResult({ solar: solar || fallbackFeas.solar, grid: grid || fallbackGrid, verdict: grid?.verdict || dcScoreRes?.verdict || "GO" });
+      setFinResult(fin || fallbackFin);
+      setGridResult(grid || fallbackGrid);
 
       if (isDC) {
-        setDcScore(dcScoreRes);
-        setDcInfra(dcInfraRes);
-        setDcCfe(dcCfeRes);
-        setDcCooling(dcCoolRes);
+        setDcScore(dcScoreRes || fallbackDcScore);
+        setDcInfra(dcInfraRes || fallbackDcInfra);
+        setDcCfe(dcCfeRes || fallbackDcCfe);
+        setDcCooling(dcCoolRes || fallbackDcCooling);
       }
     } catch (e) {
       console.error("Demo fetch failed:", e);
-      setFeasResult({ verdict: "GO", solar: { capacity_factor_pct: 11, annual_energy_kwh: site.mw * 0.11 * 8760 * 1000 } });
-      setFinResult({ irr_pct: 9.2, npv_gbp: site.mw * 150000, lcoe_gbp_mwh: 32, payback_years: 7.5 });
-      setGridResult({ nearest_substation: { name: "Didcot 400kV", distance_km: 3.2, headroom_mw: 450 } });
+      setFeasResult(fallbackFeas);
+      setFinResult(fallbackFin);
+      setGridResult(fallbackGrid);
       if (isDC) {
-        setDcScore({ dc_score: 82, verdict: "GO", confidence: 0.87, scores: {
-          grid: { score: 90 }, fibre: { score: 85 }, water: { score: 75 },
-          planning: { score: 80 }, cooling: { score: 88 },
-        }});
-        setDcInfra({ substations: 3, fibre_pops: 5, ixps: 2, data_centres: 4 });
-        setDcCfe({ cfe_pct: 92, renewable_mw_available: 280, carbon_gco2_kwh: 145 });
-        setDcCooling({ pue: 1.18, free_cooling_hours: 5840, water_m3_yr: 12500 });
+        setDcScore(fallbackDcScore);
+        setDcInfra(fallbackDcInfra);
+        setDcCfe(fallbackDcCfe);
+        setDcCooling(fallbackDcCooling);
       }
     }
     setLoading(false);
@@ -177,9 +188,14 @@ export default function OnboardingDemo({ onClose, autoRun = false }) {
     }
   }, [step, loading, feasResult]);
 
+  const [reportError, setReportError] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+
   const downloadReport = useCallback(async () => {
     if (!selectedSite) return;
     setReportReady(false);
+    setReportError(false);
+    setReportLoading(true);
     try {
       const blob = await api.reports.siteAssessment(selectedSite.lat, selectedSite.lon, selectedSite.name, selectedSite.mw);
       const url = URL.createObjectURL(blob);
@@ -189,7 +205,12 @@ export default function OnboardingDemo({ onClose, autoRun = false }) {
       a.click();
       URL.revokeObjectURL(url);
       setReportReady(true);
-    } catch { setReportReady(false); }
+    } catch {
+      setReportError(true);
+      setReportReady(false);
+    } finally {
+      setReportLoading(false);
+    }
   }, [selectedSite]);
 
   const currentStep = STEPS[step];
@@ -520,11 +541,12 @@ export default function OnboardingDemo({ onClose, autoRun = false }) {
               <br />A consultant would charge £15-50k and take 3-6 months for the same analysis.
             </p>
             <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
-              <button className="demo-cta" onClick={downloadReport}>
-                Download Site Report (PDF)
+              <button className="demo-cta" onClick={downloadReport} disabled={reportLoading}>
+                {reportLoading ? "Generating..." : "Download Site Report (PDF)"}
               </button>
             </div>
             {reportReady && <p className="demo-text" style={{ color: "#16a34a", marginTop: 8 }}>Report downloaded.</p>}
+            {reportError && <p className="demo-text" style={{ color: "#888", marginTop: 8 }}>Report generation unavailable — you can generate reports from the main platform.</p>}
             <button className="demo-cta" style={{ marginTop: 12, background: "#16a34a" }} onClick={() => setStep(6)}>
               Finish Demo →
             </button>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useWorkspace, WORKSPACES, WORKSPACE_INTENTS } from "../../contexts/WorkspaceContext";
 import { useSite } from "../../SiteContext";
 import api from "../../services/api";
-import GridCanvas from "../GridCanvas";
+
 
 /* ── Capability cards (unchanged) ─────────────────────────────────────────── */
 const CAPABILITY_CARDS = {
@@ -53,7 +53,7 @@ const TECH_COLORS = {
 };
 
 const STATUS_COLORS = {
-  operational: "#24a148", construction: "#1890ff", permitting: "#f59e0b", planning: "#818cf8", feasibility: "#8b8fa3",
+  operational: "#059669", construction: "#2563EB", permitting: "#D97706", planning: "#6366F1", feasibility: "#9CA3AF",
 };
 
 const PHASES = [
@@ -61,14 +61,14 @@ const PHASES = [
 ];
 
 const RISK_CATEGORIES = [
-  { id: "grid", label: "Grid Capacity", severity: 3, count: 2, color: "#da1e28" },
-  { id: "planning", label: "Planning/Permitting", severity: 2, count: 3, color: "#f59e0b" },
-  { id: "environmental", label: "Environmental", severity: 1, count: 1, color: "#22c55e" },
-  { id: "supply", label: "Supply Chain", severity: 2, count: 2, color: "#f59e0b" },
-  { id: "financial", label: "Financial", severity: 1, count: 1, color: "#22c55e" },
-  { id: "technical", label: "Technical", severity: 2, count: 1, color: "#f59e0b" },
-  { id: "regulatory", label: "Regulatory", severity: 3, count: 1, color: "#da1e28" },
-  { id: "cyber", label: "Cybersecurity", severity: 1, count: 0, color: "#22c55e" },
+  { id: "grid", label: "Grid Capacity", severity: 3, count: 2, color: "#DC2626" },
+  { id: "planning", label: "Planning/Permitting", severity: 2, count: 3, color: "#D97706" },
+  { id: "environmental", label: "Environmental", severity: 1, count: 1, color: "#059669" },
+  { id: "supply", label: "Supply Chain", severity: 2, count: 2, color: "#D97706" },
+  { id: "financial", label: "Financial", severity: 1, count: 1, color: "#059669" },
+  { id: "technical", label: "Technical", severity: 2, count: 1, color: "#D97706" },
+  { id: "regulatory", label: "Regulatory", severity: 3, count: 1, color: "#DC2626" },
+  { id: "cyber", label: "Cybersecurity", severity: 1, count: 0, color: "#059669" },
 ];
 
 const COST_CATEGORIES = [
@@ -133,7 +133,7 @@ function LiveMarketStrip() {
       <div className="lm-strip-header">
         <div className="lm-live-indicator">
           <span className="lm-live-dot" />
-          <span className="lm-live-text">LIVE MARKET</span>
+          <span className="lm-live-text">Live Market</span>
         </div>
         {data && (
           <span className="lm-timestamp">
@@ -217,7 +217,7 @@ function RecentSitesStrip({ onSiteClick }) {
   return (
     <div className="rs-strip">
       <div className="rs-header">
-        <span className="rs-label">RECENT SITES</span>
+        <span className="rs-label">Recent Sites</span>
         <span className="rs-count">{sites.length} projects</span>
       </div>
       <div className="rs-cards-row">
@@ -243,23 +243,18 @@ function RecentSitesStrip({ onSiteClick }) {
 
 /* ── Inline chart components ─────────────────────────────────────────────── */
 
-function KPICard({ label, value, unit, delta, deltaLabel, color, icon }) {
+function KPICard({ label, value, unit, delta, deltaLabel }) {
   return (
     <div className="pd-kpi-card">
       <div className="pd-kpi-header">
         <span className="pd-kpi-label">{label}</span>
-        {icon && (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color || "#8b8fa3"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d={icon} />
-          </svg>
-        )}
       </div>
-      <div className="pd-kpi-value" style={{ color: color || "#e8e8e8" }}>
+      <div className="pd-kpi-value">
         {value}<span className="pd-kpi-unit">{unit}</span>
       </div>
       {delta != null && (
-        <div className="pd-kpi-delta" style={{ color: delta >= 0 ? "#24a148" : "#da1e28" }}>
-          {delta >= 0 ? "+" : ""}{delta}% <span style={{ color: "var(--cds-text-helper, #697077)", fontSize: 9 }}>{deltaLabel}</span>
+        <div className="pd-kpi-delta" style={{ color: delta >= 0 ? "#059669" : "#DC2626" }}>
+          {delta >= 0 ? "+" : ""}{delta}% <span style={{ color: "#6B7280", fontSize: 10 }}>{deltaLabel}</span>
         </div>
       )}
     </div>
@@ -322,9 +317,9 @@ function VerdictPills({ portfolio }) {
   return (
     <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
       {[
-        { key: "GO", color: "#24a148" },
-        { key: "CAUTION", color: "#f1c21b" },
-        { key: "NO-GO", color: "#da1e28" },
+        { key: "GO", color: "#059669" },
+        { key: "CAUTION", color: "#D97706" },
+        { key: "NO-GO", color: "#DC2626" },
       ].map(v => (
         <div key={v.key} style={{ textAlign: "center" }}>
           <div style={{ fontSize: 24, fontWeight: 700, color: v.color }}>{counts[v.key]}</div>
@@ -350,12 +345,12 @@ function ProjectPipeline({ portfolio }) {
       <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse", fontFamily: "'DM Sans', sans-serif" }}>
         <thead>
           <tr style={{ borderBottom: "1px solid #E8EAED" }}>
-            <th style={{ textAlign: "left", padding: "8px 10px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Project</th>
-            <th style={{ textAlign: "center", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Type</th>
-            <th style={{ textAlign: "right", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>MW</th>
-            <th style={{ textAlign: "left", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Phase</th>
-            <th style={{ textAlign: "center", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Score</th>
-            <th style={{ textAlign: "center", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Verdict</th>
+            <th style={{ textAlign: "left", padding: "8px 10px", color: "#6B7280", fontWeight: 500, fontSize: 11, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0", textTransform: "none" }}>Project</th>
+            <th style={{ textAlign: "center", padding: "8px 6px", color: "#6B7280", fontWeight: 500, fontSize: 11, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0", textTransform: "none" }}>Type</th>
+            <th style={{ textAlign: "right", padding: "8px 6px", color: "#6B7280", fontWeight: 500, fontSize: 11, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0", textTransform: "none" }}>MW</th>
+            <th style={{ textAlign: "left", padding: "8px 6px", color: "#6B7280", fontWeight: 500, fontSize: 11, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0", textTransform: "none" }}>Phase</th>
+            <th style={{ textAlign: "center", padding: "8px 6px", color: "#6B7280", fontWeight: 500, fontSize: 11, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0", textTransform: "none" }}>Score</th>
+            <th style={{ textAlign: "center", padding: "8px 6px", color: "#6B7280", fontWeight: 500, fontSize: 11, fontFamily: "'DM Sans', sans-serif", letterSpacing: "0", textTransform: "none" }}>Verdict</th>
           </tr>
         </thead>
         <tbody>
@@ -364,7 +359,7 @@ function ProjectPipeline({ portfolio }) {
             const phasePct = phaseIdx >= 0 ? ((phaseIdx + 1) / PHASES.length) * 100 : 0;
             return (
               <tr key={i} style={{ borderBottom: "1px solid #F2F3F5" }}>
-                <td style={{ padding: "10px 10px", color: "#0F1318", fontWeight: 600, fontSize: 12 }}>{p.name}</td>
+                <td style={{ padding: "10px 10px", color: "#111827", fontWeight: 600, fontSize: 12 }}>{p.name}</td>
                 <td style={{ padding: "10px 6px", textAlign: "center" }}>
                   <span style={{
                     display: "inline-block", width: 8, height: 8, borderRadius: 2,
@@ -372,7 +367,7 @@ function ProjectPipeline({ portfolio }) {
                   }} />
                   <span style={{ color: "#6B7280", fontSize: 11, textTransform: "capitalize" }}>{p.technology}</span>
                 </td>
-                <td style={{ padding: "10px 6px", color: "#0F1318", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{p.capacity_mw}</td>
+                <td style={{ padding: "10px 6px", color: "#111827", textAlign: "right", fontFamily: "'DM Sans', sans-serif", fontWeight: 700 }}>{p.capacity_mw}</td>
                 <td style={{ padding: "10px 6px", width: 130 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <div style={{ flex: 1, height: 3, background: "#EBEDF0", borderRadius: 2 }}>
@@ -386,16 +381,16 @@ function ProjectPipeline({ portfolio }) {
                 </td>
                 <td style={{ padding: "10px 6px", textAlign: "center" }}>
                   <span style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    color: p.score >= 70 ? "#15803D" : p.score >= 50 ? "#854D0E" : "#B91C1C",
+                    fontFamily: "'DM Sans', sans-serif",
+                    color: p.score >= 70 ? "#059669" : p.score >= 50 ? "#D97706" : "#DC2626",
                     fontWeight: 700, fontSize: 12,
                   }}>{p.score}</span>
                 </td>
                 <td style={{ padding: "8px 6px", textAlign: "center" }}>
                   <span style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 700,
-                    color: p.verdict === "GO" ? "#15803D" : p.verdict === "CAUTION" ? "#854D0E" : "#B91C1C",
+                    fontFamily: "'DM Sans', sans-serif",
+                    padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                    color: p.verdict === "GO" ? "#059669" : p.verdict === "CAUTION" ? "#D97706" : "#DC2626",
                     background: p.verdict === "GO" ? "#DCFCE7" : p.verdict === "CAUTION" ? "#FEF9C3" : "#FEE2E2",
                   }}>{p.verdict}</span>
                 </td>
@@ -430,7 +425,7 @@ function CostVarianceChart({ costs, width = 320, height = 150 }) {
             {/* Variance dot */}
             {variance !== 0 && (
               <circle cx={x + barW / 2 - gap / 2} cy={height - aH - 8} r={3}
-                fill={variance > 0 ? "#da1e28" : "#24a148"} />
+                fill={variance > 0 ? "#DC2626" : "#059669"} />
             )}
             {/* Label */}
             <text x={x + barW / 2 - gap / 2} y={height + 14} textAnchor="middle" fill="var(--cds-text-helper, #697077)" fontSize={8}>
@@ -556,15 +551,14 @@ function PortfolioDashboard({ onWorkspaceClick, onCapabilityClick }) {
   const divBenefit = diversification?.diversification_benefit_pct;
 
   return (
-    <div className="workspace-home" style={{ position: "relative" }}>
-      <GridCanvas />
-      <div className="wh-hub pd-dashboard" style={{ position: "relative", zIndex: 2 }}>
+    <div className="workspace-home" style={{ position: "relative", background: "#F9FAFB" }}>
+      <div className="wh-hub pd-dashboard" style={{ position: "relative" }}>
         {/* Compact header */}
         <div className="pd-header">
           <div className="pd-brand-row">
             <img src="/logo-princeps.png" alt="Princeps" width="36" height="36" style={{ flexShrink: 0, objectFit: "contain" }} />
             <div>
-              <h1 className="pd-title">PRINCEPS</h1>
+              <h1 className="pd-title">Princeps</h1>
               <p className="pd-subtitle">Energy Infrastructure Intelligence</p>
             </div>
           </div>
@@ -583,19 +577,13 @@ function PortfolioDashboard({ onWorkspaceClick, onCapabilityClick }) {
 
         {/* KPI Strip */}
         <div className="pd-kpi-strip">
-          <KPICard label="Total Capacity" value={totalCapacity} unit="MW" delta={12} deltaLabel="vs last quarter"
-            color="#F5B731" icon="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-          <KPICard label="Portfolio Score" value={avgScore} unit="/100" delta={3} deltaLabel="avg improvement"
-            color={avgScore >= 70 ? "#24a148" : "#f1c21b"} icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          <KPICard label="Annual Generation" value={annualGwh} unit="GWh" delta={8} deltaLabel="forecast"
-            color="#f59e0b" icon="M12 3v1m0 16v1m9-9h-1M4 12H3" />
-          <KPICard label="Annual Revenue" value={`£${annualRevenue}k`} unit="" delta={5} deltaLabel="vs budget"
-            color="#22c55e" icon="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2" />
-          <KPICard label={weightedCF ? "Capacity Factor" : "Operational"} value={weightedCF ? `${(weightedCF * 100).toFixed(1)}` : operationalMw} unit={weightedCF ? "%" : "MW"} color="#1890ff"
-            icon="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6" />
-          <KPICard label={irr ? "Portfolio IRR" : "Projects"} value={irr ? `${irr.toFixed(1)}` : portfolio.length} unit={irr ? "%" : "active"} color="#a78bfa"
-            delta={divBenefit ? +divBenefit.toFixed(0) : undefined} deltaLabel={divBenefit ? "diversification" : undefined}
-            icon="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6z" />
+          <KPICard label="Total Capacity" value={totalCapacity} unit="MW" delta={12} deltaLabel="vs last quarter" />
+          <KPICard label="Portfolio Score" value={avgScore} unit="/100" delta={3} deltaLabel="avg improvement" />
+          <KPICard label="Annual Generation" value={annualGwh} unit="GWh" delta={8} deltaLabel="forecast" />
+          <KPICard label="Annual Revenue" value={`\u00a3${annualRevenue}k`} unit="" delta={5} deltaLabel="vs budget" />
+          <KPICard label={weightedCF ? "Capacity Factor" : "Operational"} value={weightedCF ? `${(weightedCF * 100).toFixed(1)}` : operationalMw} unit={weightedCF ? "%" : "MW"} />
+          <KPICard label={irr ? "Portfolio IRR" : "Projects"} value={irr ? `${irr.toFixed(1)}` : portfolio.length} unit={irr ? "%" : "active"}
+            delta={divBenefit ? +divBenefit.toFixed(0) : undefined} deltaLabel={divBenefit ? "diversification" : undefined} />
         </div>
 
         {/* Main grid */}
@@ -659,7 +647,7 @@ function PortfolioDashboard({ onWorkspaceClick, onCapabilityClick }) {
 
         {/* Workspace nav row */}
         <div className="wh-section" style={{ marginTop: 16 }}>
-          <div className="wh-section-label">WORKSPACES</div>
+          <div className="wh-section-label">Workspaces</div>
           <div className="wh-ws-grid">
             {WORKSPACES.filter(w => w.id !== "home").map(ws => {
               const wsMeta = WORKSPACE_META[ws.id];
@@ -686,7 +674,7 @@ function PortfolioDashboard({ onWorkspaceClick, onCapabilityClick }) {
 
         {/* Quick capabilities */}
         <div className="wh-section">
-          <div className="wh-section-label">CAPABILITIES</div>
+          <div className="wh-section-label">Capabilities</div>
           <div className="wh-cap-grid">
             {Object.entries(CAPABILITY_CARDS).slice(0, 8).map(([intent, card]) => (
               <button key={intent} className="wh-cap-card" onClick={() => onCapabilityClick(intent)}>
@@ -797,7 +785,7 @@ export default function WorkspaceHome() {
         {/* Quick Actions */}
         {quickActions.length > 0 && (
           <div className="wh-section" style={{ marginBottom: 28 }}>
-            <div className="wh-section-label">QUICK ACTIONS</div>
+            <div className="wh-section-label">Quick Actions</div>
             <div className="wh-qa-grid">
               {quickActions.map(action => {
                 const result = workflowResults[action.id];
@@ -826,7 +814,7 @@ export default function WorkspaceHome() {
 
         {/* All capabilities search */}
         <div className="wh-section">
-          <div className="wh-section-label">ALL CAPABILITIES</div>
+          <div className="wh-section-label">All Capabilities</div>
           <div className="wh-search-wrap">
             <div className="wh-search">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

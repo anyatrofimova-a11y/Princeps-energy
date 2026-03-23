@@ -580,7 +580,7 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
       {/* Header */}
       <div className="pp-header">
         <div className="pp-header-left">
-          <h2 className="pp-title">PROJECT PIPELINE</h2>
+          <h2 className="pp-title">Project Pipeline</h2>
           <span className="pp-subtitle">
             {loading ? "Loading..." : `${projects.length} sites across ${STAGES.length} stages`}
           </span>
@@ -610,13 +610,14 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
               className={`pp-type-filter ${filterType === null ? "active" : ""}`}
               onClick={() => setFilterType(null)}
             >All</button>
-            {Object.entries(TYPE_ICONS).map(([type, icon]) => (
+            {Object.entries(TYPE_LABELS).map(([type, label]) => (
               <button
                 key={type}
                 className={`pp-type-filter ${filterType === type ? "active" : ""}`}
                 onClick={() => setFilterType(filterType === type ? null : type)}
               >
-                {icon} {type.charAt(0).toUpperCase() + type.slice(1)}
+                <span className="pp-type-filter-dot" style={{ background: TYPE_COLORS[type] }} />
+                {label}
               </button>
             ))}
           </div>
@@ -746,7 +747,6 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
                     <th>MW</th>
                     <th>Stage</th>
                     <th>Verdict</th>
-                    <th>Days</th>
                     <th>Blocker</th>
                     <th>Source</th>
                   </tr>
@@ -754,11 +754,10 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
                 <tbody>
                   {filtered.map(p => {
                     const stage = STAGES.find(s => s.id === p.stage);
-                    const days = daysInStage(p.stage_entered_at);
                     return (
                       <tr key={p.project_id} onClick={() => handleProjectClick(p)} className="pp-table-row">
                         <td className="pp-table-name">{p.name}</td>
-                        <td>{TYPE_ICONS[p.technology]} {p.technology}</td>
+                        <td><span className="pp-card-dot" style={{ background: TYPE_COLORS[p.technology] || "#6B7280", display: "inline-block", verticalAlign: "middle", marginRight: 6 }} />{TYPE_LABELS[p.technology] || p.technology}</td>
                         <td className="pp-table-mw">{p.capacity_mw || "—"}</td>
                         <td>
                           <span className="pp-stage-badge" style={{ background: `${stage?.color}15`, color: stage?.color, borderColor: `${stage?.color}33` }}>
@@ -772,7 +771,6 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
                             </span>
                           )}
                         </td>
-                        <td className="pp-table-days">{days}d</td>
                         <td className="pp-table-blocker">{p.blocker || "\u2014"}</td>
                         <td>
                           {p.repd_id ? <span className="pp-card-source-badge">REPD</span>
@@ -835,7 +833,8 @@ export default function ProjectPipeline({ onClose, onSelectProject }) {
             <div>
               <div className="pp-detail-name">{selectedProject.name}</div>
               <div className="pp-detail-meta">
-                {TYPE_ICONS[selectedProject.technology]} {selectedProject.technology} · {selectedProject.capacity_mw || "—"} MW ·
+                <span className="pp-card-dot" style={{ background: TYPE_COLORS[selectedProject.technology] || "#6B7280", display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
+                {TYPE_LABELS[selectedProject.technology] || selectedProject.technology} · {selectedProject.capacity_mw || "—"} MW ·
                 {" "}{STAGES.find(s => s.id === selectedProject.stage)?.label}
                 {selectedProject.repd_id && <span className="pp-card-source-badge" style={{ marginLeft: 8 }}>REPD</span>}
               </div>

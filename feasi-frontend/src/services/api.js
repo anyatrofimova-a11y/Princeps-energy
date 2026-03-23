@@ -1121,10 +1121,9 @@ const api = {
 };
 
 // ── Competitive intelligence integrations ──
-api.planning = {
-  extract:   (text) => post("/api/planning/extract", null, { params: { text } }),
-  classify:  (text) => get(`/api/planning/classify?text=${encodeURIComponent(text)}`),
-};
+// Merge into existing api.planning (don't overwrite the full planning namespace)
+api.planning.extract = (text) => post("/api/planning/extract", null, { params: { text } });
+api.planning.classify = (text) => get(`/api/planning/classify?text=${encodeURIComponent(text)}`);
 
 api.landowner = {
   lookup:        (lat, lon) => get(`/api/landowner/lookup?lat=${lat}&lon=${lon}`),
