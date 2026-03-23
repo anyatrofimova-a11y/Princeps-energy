@@ -235,7 +235,7 @@ function WaterStressBadge({ waterData }) {
     available: "#24a148", moderate_stress: "#f1c21b", stress: "#ff6b35", serious_stress: "#da1e28",
   }[waterData.status] || "#888";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, padding: "6px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid var(--cds-border-subtle)" }}>
       <div style={{ width: 8, height: 8, borderRadius: 4, background: statusColor }} />
       <div>
         <div style={{ fontSize: 11, color: "#e0e0e0" }}>{waterData.catchment}: <span style={{ color: statusColor, fontWeight: 600 }}>{waterData.status?.replace(/_/g, " ")}</span></div>
@@ -587,7 +587,7 @@ export default function DataCentrePanel({ onClose, onOpenComparison }) {
 
           {/* Grid headroom */}
           {r.grid_connection && (
-            <div style={{ marginTop: 12, padding: 8, background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ marginTop: 12, padding: 8, background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid var(--cds-border-subtle)" }}>
               <div style={{ fontSize: 11, color: "#888", marginBottom: 6, fontWeight: 600 }}>Grid Headroom (REAL DATA)</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                 <div>
@@ -702,7 +702,7 @@ export default function DataCentrePanel({ onClose, onOpenComparison }) {
               <div style={{ maxHeight: 200, overflowY: "auto" }}>
                 <table style={{ width: "100%", fontSize: 10, borderCollapse: "collapse" }}>
                   <thead>
-                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", position: "sticky", top: 0, background: "#1a1a2e" }}>
+                    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", position: "sticky", top: 0, background: "var(--cds-layer-02)" }}>
                       <th style={{ textAlign: "left", padding: "3px 4px", color: "#888" }}>#</th>
                       <th style={{ textAlign: "left", padding: "3px 4px", color: "#888" }}>Substation</th>
                       <th style={{ textAlign: "right", padding: "3px 4px", color: "#888" }}>Score</th>

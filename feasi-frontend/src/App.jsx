@@ -634,6 +634,25 @@ export default function App() {
       case "dc-twin": setDcTwinOpen(true); break;
       case "dc-landing": setDcLandingOpen(true); break;
       case "dc-compare": setDcComparisonOpen(true); break;
+      case "dc-score": {
+        // Score the current site for DC feasibility
+        const lat = pickedLocation?.lat;
+        const lon = pickedLocation?.lon;
+        if (!lat || !lon) { alert("Select a site first"); break; }
+        window.dispatchEvent(new CustomEvent("princeps-chat", {
+          detail: { text: `Score this location for data centre feasibility at ${lat.toFixed(4)}, ${lon.toFixed(4)}` },
+        }));
+        break;
+      }
+      case "dc-report": {
+        const lat = pickedLocation?.lat;
+        const lon = pickedLocation?.lon;
+        if (!lat || !lon) { alert("Select a site first"); break; }
+        window.dispatchEvent(new CustomEvent("princeps-chat", {
+          detail: { text: `Generate a data centre feasibility report for ${lat.toFixed(4)}, ${lon.toFixed(4)}` },
+        }));
+        break;
+      }
       case "pipeline": setActiveWorkspace("pipeline"); break;
       case "compare": setScenarioCompareOpen(true); break;
       case "demo": setDemoOpen(true); break;
@@ -743,7 +762,9 @@ export default function App() {
 
       {/* Data Centre Digital Twin overlay */}
       {dcTwinOpen && (
-        <DataCentreTwin onClose={() => setDcTwinOpen(false)} />
+        <ErrorBoundary name="DataCentreTwin" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>DC Twin failed to load</h2><button onClick={()=>setDcTwinOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
+          <DataCentreTwin onClose={() => setDcTwinOpen(false)} />
+        </ErrorBoundary>
       )}
 
       {/* DC Landing Page overlay */}
@@ -777,21 +798,22 @@ export default function App() {
 
       {/* Gemini 3D Asset Modeller */}
       {asset3dOpen && (
-        <Asset3DModeller
-          onClose={() => setAsset3dOpen(false)}
-          onPlaceOnMap={(spec) => {
-            setAsset3dOpen(false);
-            // Add placed asset via existing system
-            if (pickedLocation && spec) {
-              addPlacedAsset({
-                assetType: spec.name?.includes("Data Centre") ? "data_centre" : "generic",
-                lat: pickedLocation.lat,
-                lon: pickedLocation.lon,
-                spec,
-              });
-            }
-          }}
-        />
+        <ErrorBoundary name="Asset3DModeller" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>3D Modeller failed to load</h2><button onClick={()=>setAsset3dOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
+          <Asset3DModeller
+            onClose={() => setAsset3dOpen(false)}
+            onPlaceOnMap={(spec) => {
+              setAsset3dOpen(false);
+              if (pickedLocation && spec) {
+                addPlacedAsset({
+                  assetType: spec.name?.includes("Data Centre") ? "data_centre" : "generic",
+                  lat: pickedLocation.lat,
+                  lon: pickedLocation.lon,
+                  spec,
+                });
+              }
+            }}
+          />
+        </ErrorBoundary>
       )}
 
       {/* Live Dashboard Builder */}

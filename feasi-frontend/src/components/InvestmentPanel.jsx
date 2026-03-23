@@ -118,7 +118,7 @@ function RadarChart({ pillars, size = 160 }) {
 function RiskGrid({ grid }) {
   if (!grid) return null;
   const labels = ["Very Low", "Low", "Medium", "High", "Very High"];
-  const colors = ["#1e3a2f", "#2d4a1f", "#4a3a1f", "#5a2a1f", "#6a1a1f"];
+  const colors = ["#1e3a2f", "#2d4a1f", "#4a3a1f", "#5a2a1f", "rgba(139,58,58,0.2)"];
   return (
     <div className="inv-risk-grid">
       <div className="inv-risk-axis-y">Impact</div>
@@ -128,7 +128,7 @@ function RiskGrid({ grid }) {
           {[0, 1, 2, 3, 4].map(col => {
             const risks = grid[col]?.[row] || [];
             const score = (col + 1) * (row + 1);
-            const bg = score >= 15 ? "#6a1a1f" : score >= 9 ? "#5a3a1f" : score >= 4 ? "#2d3a2f" : "#1e293b";
+            const bg = score >= 15 ? "rgba(139,58,58,0.2)" : score >= 9 ? "rgba(212,160,24,0.2)" : score >= 4 ? "rgba(22,163,74,0.2)" : "var(--cds-layer-03)";
             return (
               <div key={col} className="inv-risk-cell" style={{ background: bg }} title={risks.join("\n")}>
                 {risks.length > 0 && <span className="inv-risk-count">{risks.length}</span>}
@@ -255,13 +255,13 @@ export default function InvestmentPanel({ onClose }) {
   return (
     <div className="inv-panel">
       {/* header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #1e293b" }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0" }}>Investment Readiness</span>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 18 }}>×</button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid var(--cds-border-subtle)" }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--cds-text-primary)" }}>Investment Readiness</span>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--cds-text-helper)", cursor: "pointer", fontSize: 18 }}>×</button>
       </div>
 
       {/* controls */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 14px", borderBottom: "1px solid #1e293b" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 14px", borderBottom: "1px solid var(--cds-border-subtle)" }}>
         <label className="inv-ctrl">
           <span>MW</span>
           <input type="number" value={mw} min={1} max={1000} onChange={e => setMw(+e.target.value)} />
@@ -281,7 +281,7 @@ export default function InvestmentPanel({ onClose }) {
         <label className="inv-ctrl">
           <span>Gear %</span>
           <input type="range" min={50} max={90} value={gearing} onChange={e => setGearing(+e.target.value)} />
-          <span style={{ fontSize: 9, color: "#94a3b8", width: 24 }}>{gearing}%</span>
+          <span style={{ fontSize: 9, color: "var(--cds-text-helper)", width: 24 }}>{gearing}%</span>
         </label>
         <label className="inv-ctrl">
           <span>PPA £</span>
@@ -297,12 +297,12 @@ export default function InvestmentPanel({ onClose }) {
       </div>
 
       {/* tabs */}
-      <div style={{ display: "flex", borderBottom: "1px solid #1e293b" }}>
+      <div style={{ display: "flex", borderBottom: "1px solid var(--cds-border-subtle)" }}>
         {TABS.map((t, i) => (
           <button key={t} onClick={() => setTab(i)}
-            style={{ flex: 1, padding: "6px 0", fontSize: 10, background: i === tab ? "#1e293b" : "transparent",
-              color: i === tab ? "#22d3ee" : "#64748b", border: "none", cursor: "pointer",
-              borderBottom: i === tab ? "2px solid #22d3ee" : "2px solid transparent" }}>
+            style={{ flex: 1, padding: "6px 0", fontSize: 10, background: i === tab ? "var(--cds-layer-03)" : "transparent",
+              color: i === tab ? "var(--cds-interactive)" : "#64748b", border: "none", cursor: "pointer",
+              borderBottom: i === tab ? "2px solid var(--cds-interactive)" : "2px solid transparent" }}>
             {t}
           </button>
         ))}
@@ -322,7 +322,7 @@ export default function InvestmentPanel({ onClose }) {
 /* ── Finance Tab ───────────────────────────────────────────── */
 
 function FinanceTab({ finance, debt, equity }) {
-  if (!finance) return <p style={{ color: "#64748b", fontSize: 11 }}>Click Run to generate project finance model.</p>;
+  if (!finance) return <p style={{ color: "var(--cds-text-secondary)", fontSize: 11 }}>Click Run to generate project finance model.</p>;
   return (
     <>
       <div className="inv-stats-row">
@@ -369,7 +369,7 @@ function FinanceTab({ finance, debt, equity }) {
 /* ── Scenarios Tab ──────────────────────────────────────────── */
 
 function ScenariosTab({ stress, mc, be }) {
-  if (!stress && !mc) return <p style={{ color: "#64748b", fontSize: 11 }}>Click Run to generate scenario analysis.</p>;
+  if (!stress && !mc) return <p style={{ color: "var(--cds-text-secondary)", fontSize: 11 }}>Click Run to generate scenario analysis.</p>;
   return (
     <>
       {stress && (
@@ -423,7 +423,7 @@ function ScenariosTab({ stress, mc, be }) {
 /* ── DD Tab ─────────────────────────────────────────────────── */
 
 function DDTab({ dd }) {
-  if (!dd) return <p style={{ color: "#64748b", fontSize: 11 }}>Click Run to generate due diligence assessment.</p>;
+  if (!dd) return <p style={{ color: "var(--cds-text-secondary)", fontSize: 11 }}>Click Run to generate due diligence assessment.</p>;
   return (
     <>
       <div style={{ display: "flex", gap: 16, alignItems: "center", marginBottom: 10 }}>
@@ -458,7 +458,7 @@ function DDTab({ dd }) {
 /* ── Report Tab ─────────────────────────────────────────────── */
 
 function ReportTab({ memo, risks, plan }) {
-  if (!memo) return <p style={{ color: "#64748b", fontSize: 11 }}>Click Run to generate investment report.</p>;
+  if (!memo) return <p style={{ color: "var(--cds-text-secondary)", fontSize: 11 }}>Click Run to generate investment report.</p>;
   const es = memo.executive_summary || {};
   const verdictClass = memo.verdict === "INVEST" ? "go" : memo.verdict === "CONDITIONAL" ? "caution" : "no-go";
   return (
