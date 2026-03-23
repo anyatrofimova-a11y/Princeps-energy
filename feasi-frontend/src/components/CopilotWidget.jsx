@@ -628,18 +628,23 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
         <div className="copilot-chat-panel">
           <div className="copilot-chat-header">
             <div className="copilot-chat-header-left">
-              <span className="copilot-chat-title">Princeps AI</span>
-              <span className="copilot-chat-ctx">
-                {activeWorkspace} / {workflowStage}
-                {activeIntent ? ` / ${activeIntent.replace(/_/g, " ")}` : ""}
-              </span>
+              <svg width="24" height="24" viewBox="0 0 48 52" fill="none" style={{ flexShrink: 0 }}>
+                <polygon points="2,2 38,2 30,15 10,15" fill="#D4A018"/>
+                <rect x="26" y="18" width="18" height="7" fill="#D4A018"/>
+                <polygon points="10,18 28,18 36,31 2,31" fill="#D4A018"/>
+                <rect x="6" y="38" width="22" height="8" rx="1" fill="#D4A018"/>
+              </svg>
+              <div>
+                <span className="copilot-chat-title">PRINCEPS</span>
+                <span className="copilot-chat-subtitle">CO-PILOT</span>
+              </div>
             </div>
             <div className="copilot-chat-header-actions">
               <button className="copilot-chat-hdr-btn" onClick={clearChat} title="New conversation">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14" /></svg>
               </button>
-              <button className="copilot-chat-hdr-btn" onClick={() => setActiveTab(null)} title="Close">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9" /></svg>
+              <button className="copilot-chat-hdr-btn" onClick={() => setActiveTab(null)} title="Collapse">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 15 12 9 18 15" /></svg>
               </button>
             </div>
           </div>

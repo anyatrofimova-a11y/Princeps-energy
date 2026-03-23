@@ -732,6 +732,7 @@ export default function App() {
       )}
 
       {/* 3D Grid Digital Twin overlay */}
+      <Suspense fallback={<LazyFallback />}>
       {gridTwinOpen && (
         <GridTwin onClose={() => setGridTwinOpen(false)} />
       )}
@@ -833,6 +834,7 @@ export default function App() {
       {thermalModelOpen && (
         <ThermalModelPanel onClose={() => setThermalModelOpen(false)} />
       )}
+      </Suspense>
 
       {/* Scenario Comparison overlay */}
       {scenarioCompareOpen && (

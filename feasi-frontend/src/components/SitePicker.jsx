@@ -105,6 +105,9 @@ export default function SitePicker({ map, onPick }) {
     <div className="site-picker" ref={wrapperRef}>
       <div className="sp-header">
         <span className="sp-title">Find a Site</span>
+        <button className="sp-close" onClick={() => wrapperRef.current?.classList.add("sp-collapsed")} title="Collapse">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 15 12 9 18 15" /></svg>
+        </button>
       </div>
 
       {/* Mode tabs */}

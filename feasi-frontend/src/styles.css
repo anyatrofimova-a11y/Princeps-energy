@@ -13890,11 +13890,12 @@ input[type="range"] { accent-color: var(--accent); }
   min-width: 0;
 }
 .copilot-chat-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 900;
-  color: var(--cds-text-primary);
+  color: #0F0E0A;
   letter-spacing: -0.02em;
   font-family: "Roboto", sans-serif;
+  line-height: 1;
 }
 .copilot-chat-ctx {
   font-size: 10px;
@@ -17231,3 +17232,133 @@ input[type="range"] { accent-color: var(--accent); }
   border-bottom: 1px solid #E8EAED;
   transform: rotate(45deg);
 }
+
+/* ── Copilot chat — popup design upgrades ── */
+.copilot-chat-subtitle {
+  display: block;
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: #D4A018;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.copilot-chat-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* ── Asset 3D Modeller overlay ── */
+.a3d-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--cds-background);
+  display: flex;
+  flex-direction: column;
+}
+.a3d-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer-01);
+  flex-shrink: 0;
+}
+.a3d-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.a3d-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cds-text-primary);
+}
+.a3d-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(var(--accent-rgb), 0.1);
+  color: var(--cds-interactive);
+  font-weight: 600;
+}
+.a3d-close {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; border-radius: 6px; background: transparent;
+  color: var(--cds-text-helper); cursor: pointer; font-size: 18px;
+}
+.a3d-close:hover { background: var(--cds-layer-hover-01); }
+.a3d-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+.a3d-sidebar {
+  width: 280px;
+  padding: 16px;
+  overflow-y: auto;
+  border-right: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer-01);
+}
+.a3d-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cds-text-helper);
+  margin-bottom: 8px;
+}
+.a3d-type-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.a3d-type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border: 1px solid var(--cds-border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  color: var(--cds-text-secondary);
+  transition: all 0.15s;
+}
+.a3d-type-btn:hover { border-color: var(--cds-interactive); }
+.a3d-type-btn.active {
+  border-color: var(--cds-interactive);
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--cds-text-primary);
+}
+.a3d-type-icon { font-size: 18px; }
+.a3d-type-label { font-weight: 600; }
+.a3d-canvas {
+  flex: 1;
+  position: relative;
+}
+.a3d-detail-panel {
+  width: 280px;
+  padding: 16px;
+  overflow-y: auto;
+  border-left: 1px solid var(--cds-border-subtle);
+  background: var(--cds-layer-01);
+}
+
+/* SitePicker collapse */
+.sp-close {
+  border: none; background: transparent; cursor: pointer;
+  color: var(--cds-text-helper); padding: 4px; border-radius: 4px;
+}
+.sp-close:hover { background: var(--cds-layer-03); color: var(--cds-text-primary); }
+.sp-header { display: flex; justify-content: space-between; align-items: center; }
+.site-picker.sp-collapsed { display: none; }
