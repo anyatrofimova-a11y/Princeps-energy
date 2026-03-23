@@ -397,6 +397,37 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
     return () => window.removeEventListener("princeps-asset-click", handler);
   }, []);
 
+  // Auto-analyse when user picks a new site location
+  const prevLocationRef = useRef(null);
+  useEffect(() => {
+    if (!pickedLocation?.lat || !pickedLocation?.lon) return;
+    const key = `${pickedLocation.lat.toFixed(4)},${pickedLocation.lon.toFixed(4)}`;
+    if (prevLocationRef.current === key) return;
+    prevLocationRef.current = key;
+
+    // Don't auto-send if user is already chatting or if streaming
+    if (streaming) return;
+
+    // Auto-open copilot and show quick context
+    setActiveTab("chat");
+    const lat = pickedLocation.lat.toFixed(4);
+    const lon = Math.abs(pickedLocation.lon).toFixed(4);
+    const lonDir = pickedLocation.lon < 0 ? "W" : "E";
+
+    setMessages(prev => [...prev, {
+      role: "system",
+      content: `Site selected: **${lat}°N, ${lon}°${lonDir}**. Analysing...`,
+      timestamp: Date.now(),
+    }]);
+
+    // Auto-send analysis request after a short delay
+    setTimeout(() => {
+      const autoPrompt = `Assess this site at ${pickedLocation.lat}, ${pickedLocation.lon}. Give me: grid connection options (nearest substation, headroom, cost estimate), solar yield estimate, planning risk, and environmental constraints. Be concise.`;
+      setInput(autoPrompt);
+      pendingRef.current = autoPrompt;
+    }, 500);
+  }, [pickedLocation?.lat, pickedLocation?.lon]);
+
   // Ctrl+J to toggle chat tab
   useEffect(() => {
     const handler = (e) => {
@@ -733,6 +764,9 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
                   {msg.toolCalls?.map((tc, j) => {
                     const key = `${i}-${j}`;
                     const expanded = expandedTools[key];
+                    // Render as result card if we have structured data
+                    const hasResult = tc.status === "done" && tc.result;
+                    const resultObj = hasResult && typeof tc.result === "object" ? tc.result : null;
                     return (
                       <div key={j} className={`cpc-tool ${tc.status === "running" ? "running" : ""}`}>
                         <button className="cpc-tool-hdr" onClick={() => toggleTool(key)}>
@@ -744,9 +778,28 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
                           </svg>
                         </button>
                         {expanded && tc.result && (
+                          resultObj ? (
+                            <div className="cpc-result-card">
+                              {Object.entries(resultObj).filter(([k]) => !["raw","_meta","features","geometry","coordinates"].includes(k)).slice(0, 12).map(([k, v]) => {
+                                if (v == null || typeof v === "object") return null;
+                                const isNum = typeof v === "number";
+                                const isGreen = (k.includes("headroom") || k.includes("capacity") || k === "verdict" && v === "GO");
+                                const isGold = (k.includes("cost") || k.includes("price") || k.includes("irr"));
+                                return (
+                                  <div key={k} className="cpc-result-row">
+                                    <span className="cpc-result-label">{k.replace(/_/g, " ")}</span>
+                                    <span className={`cpc-result-value ${isGreen ? "green" : isGold ? "gold" : ""}`}>
+                                      {isNum ? (v >= 1e6 ? `${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `${(v/1e3).toFixed(1)}k` : typeof v === "number" ? v.toFixed?.(1) : v) : String(v)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : (
                           <pre className="cpc-tool-result">
                             {typeof tc.result === "string" ? tc.result : JSON.stringify(tc.result, null, 2)}
                           </pre>
+                          )
                         )}
                       </div>
                     );
@@ -763,6 +816,43 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
             <div ref={messagesEndRef} />
           </div>
           </div>
+
+          {/* Quick action buttons — context-aware */}
+          {!streaming && messages.length <= 2 && (
+            <div className="cpc-quick-actions">
+              {!pickedLocation ? (
+                <>
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Find me the best 50MW solar site near Birmingham with grid headroom >30MW")}>
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="6" r="5"/><path d="M11 11l4 4"/></svg>
+                    Find solar site
+                  </button>
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Search for co-location opportunities in the South East with >50MW grid headroom")}>
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2l6 4v8l-6-4-6 4V6l6-4z"/></svg>
+                    Co-location search
+                  </button>
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Show me all UK substations with >100MW headroom suitable for data centres")}>
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11 2L3 10h6l-2 6 8-8h-6l2-6z"/></svg>
+                    DC grid capacity
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button className="cpc-qa-btn primary" onClick={() => handlePromptFromTab("Generate a one-click feasibility report for this site as PDF")}>
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z"/></svg>
+                    Generate report
+                  </button>
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Compare solar, wind, BESS, and hybrid options for this site and recommend the best technology")}>
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12l3-5 3 3 2-4 4 6"/></svg>
+                    Compare technologies
+                  </button>
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Generate a G99 grid connection application pack for this site")}>
+                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 9l2 2 4-4"/><rect x="2" y="2" width="12" height="12" rx="2"/></svg>
+                    G99 application
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="copilot-chat-input">
             <button className="cpc-attach" onClick={() => fileInputRef.current?.click()} title="Upload file" disabled={streaming}>
