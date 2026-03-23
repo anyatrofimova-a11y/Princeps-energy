@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useSite } from "../SiteContext";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import api from "../services/api";
+import GridCanvas from "./GridCanvas";
 
 const TOOL_LABELS = {
   run_solar_yield: "Solar Simulation",
@@ -649,7 +650,9 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
             </div>
           </div>
 
-          <div className="copilot-chat-messages">
+          <div className="copilot-chat-messages-wrap">
+            <GridCanvas style={{ position: "absolute", inset: 0, zIndex: 0 }} />
+            <div className="copilot-chat-messages">
             {messages.length === 0 && (
               <div className="copilot-chat-welcome">
                 <div className="copilot-chat-welcome-title">Princeps Copilot</div>
@@ -738,6 +741,7 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
               </div>
             ))}
             <div ref={messagesEndRef} />
+          </div>
           </div>
 
           <div className="copilot-chat-input">
