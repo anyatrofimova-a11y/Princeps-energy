@@ -251,6 +251,21 @@ function _getFollowUpSuggestions(stage, toolsUsed, hasSite, hasGrid) {
     suggestions.push("What lease rate is fair for this land?");
     suggestions.push("Generate financial report PDF");
   }
+  if (toolsUsed.includes("check_environmental_constraints")) {
+    suggestions.push("Analyse terrain — slope, hydrology, viewshed");
+    suggestions.push("Calculate shadow flicker for nearest houses");
+    suggestions.push("What's the planning approval probability?");
+  }
+  if (toolsUsed.includes("fetch_lidar_terrain") || toolsUsed.includes("calculate_viewshed")) {
+    suggestions.push("Calculate noise contours for this site");
+    suggestions.push("Generate construction schedule and traffic estimate");
+    suggestions.push("Open 3D terrain twin");
+  }
+  if (toolsUsed.includes("predict_planning_approval") || toolsUsed.includes("score_planning_risk")) {
+    suggestions.push("Benchmark this site vs all UK solar projects");
+    suggestions.push("Predict time to grid connection");
+    suggestions.push("Generate constraint report PDF");
+  }
   if (toolsUsed.includes("search_colocation_opportunities")) {
     suggestions.push("Score the top opportunity");
     suggestions.push("Who owns the land near the best site?");
@@ -271,8 +286,8 @@ function _getFollowUpSuggestions(stage, toolsUsed, hasSite, hasGrid) {
       suggestions.push("What sites have stalled in REPD that I could acquire?");
     } else if (!hasGrid) {
       suggestions.push("Assess grid connection for this site");
-      suggestions.push("What's the planning risk here?");
-      suggestions.push("Check for SSSI, AONB, or flood zone constraints");
+      suggestions.push("Analyse terrain — slope, aspect, drainage risk");
+      suggestions.push("Check environmental constraints (SSSI, AONB, flood)");
     } else if (stage === "study") {
       suggestions.push("Generate a one-click feasibility report");
       suggestions.push("Compare all technology options for this site");
