@@ -425,20 +425,26 @@ function DCScene({ rackLayout, telemetry, selectedRack, onSelectRack, colorBy, c
 
   return (
     <>
-      <ambientLight intensity={0.35} />
-      <directionalLight position={[20, 30, 10]} intensity={0.65} castShadow
-        shadow-mapSize-width={1024} shadow-mapSize-height={1024} />
-      <pointLight position={[-10, 15, -10]} intensity={0.25} color="#D4A018" />
-      {/* Hemisphere fill light (Grafana pattern) */}
-      <hemisphereLight args={["#2a2f45", "#0a0e17", 0.4]} />
+      {/* Bright studio lighting for clean professional look */}
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[20, 30, 10]} intensity={1.2} castShadow
+        shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
+      <directionalLight position={[-15, 20, -10]} intensity={0.4} />
+      <pointLight position={[0, 20, 0]} intensity={0.3} color="#F5B731" />
+      <hemisphereLight args={["#87ceeb", "#d4e4d0", 0.5]} />
 
+      {/* Light ground plane with subtle grid */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]} receiveShadow>
+        <planeGeometry args={[120, 120]} />
+        <meshStandardMaterial color="#e8eaed" roughness={0.9} />
+      </mesh>
       <Grid
         args={[80, 80]}
         position={[0, -0.01, 0]}
         cellSize={1}
-        cellColor="#1a1f2e"
+        cellColor="#d0d3d8"
         sectionSize={5}
-        sectionColor="#252a3a"
+        sectionColor="#b8bcc2"
         fadeDistance={60}
         fadeStrength={1}
       />
@@ -1764,7 +1770,7 @@ export default function DataCentreTwin({ onClose }) {
               gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
               style={{ background: T.bg }}
               onCreated={({ gl }) => { gl.setClearColor(T.bg); }}
-              frameloop="demand"
+              frameloop="always"
             >
               <fog attach="fog" args={[T.bg, 30, 70]} />
               <DCScene
