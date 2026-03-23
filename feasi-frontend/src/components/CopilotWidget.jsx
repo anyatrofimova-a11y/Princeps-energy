@@ -397,35 +397,41 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
     return () => window.removeEventListener("princeps-asset-click", handler);
   }, []);
 
-  // Auto-analyse when user picks a new site location
+  // ── AUTO-ANALYSE: copilot drives all site analysis when pin is dropped ──
   const prevLocationRef = useRef(null);
   useEffect(() => {
     if (!pickedLocation?.lat || !pickedLocation?.lon) return;
     const key = `${pickedLocation.lat.toFixed(4)},${pickedLocation.lon.toFixed(4)}`;
     if (prevLocationRef.current === key) return;
     prevLocationRef.current = key;
-
-    // Don't auto-send if user is already chatting or if streaming
     if (streaming) return;
 
-    // Auto-open copilot and show quick context
-    setActiveTab("chat");
     const lat = pickedLocation.lat.toFixed(4);
     const lon = Math.abs(pickedLocation.lon).toFixed(4);
     const lonDir = pickedLocation.lon < 0 ? "W" : "E";
 
+    // Open copilot and show what's happening
+    setActiveTab("chat");
     setMessages(prev => [...prev, {
       role: "system",
-      content: `Site selected: **${lat}°N, ${lon}°${lonDir}**. Analysing...`,
+      content: `📍 **${lat}°N, ${lon}°${lonDir}** selected`,
       timestamp: Date.now(),
     }]);
 
-    // Auto-send analysis request after a short delay
+    // Send the auto-analysis prompt — this is the key: the COPILOT runs the analysis,
+    // not a hidden function. The user sees every tool call, every result.
     setTimeout(() => {
-      const autoPrompt = `Assess this site at ${pickedLocation.lat}, ${pickedLocation.lon}. Give me: grid connection options (nearest substation, headroom, cost estimate), solar yield estimate, planning risk, and environmental constraints. Be concise.`;
-      setInput(autoPrompt);
-      pendingRef.current = autoPrompt;
-    }, 500);
+      const prompt = `New site at ${pickedLocation.lat}, ${pickedLocation.lon}. Run a rapid feasibility check:
+1. Find the nearest grid substation and available headroom
+2. Estimate solar yield for a ground-mount array
+3. Check for environmental constraints (SSSI, AONB, flood zone)
+4. Assess planning risk based on nearby REPD projects
+5. Give me a GO / CAUTION / NO-GO verdict with confidence
+
+Be concise — bullet points, no long paragraphs.`;
+      setInput(prompt);
+      pendingRef.current = prompt;
+    }, 300);
   }, [pickedLocation?.lat, pickedLocation?.lon]);
 
   // Ctrl+J to toggle chat tab
@@ -817,37 +823,40 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
           </div>
           </div>
 
-          {/* Quick action buttons — context-aware */}
-          {!streaming && messages.length <= 2 && (
+          {/* Quick action buttons — always visible, context-aware */}
+          {!streaming && (
             <div className="cpc-quick-actions">
               {!pickedLocation ? (
                 <>
                   <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Find me the best 50MW solar site near Birmingham with grid headroom >30MW")}>
                     <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="6" cy="6" r="5"/><path d="M11 11l4 4"/></svg>
-                    Find solar site
+                    Find site
                   </button>
-                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Search for co-location opportunities in the South East with >50MW grid headroom")}>
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Search for co-location opportunities in South East England")}>
                     <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 2l6 4v8l-6-4-6 4V6l6-4z"/></svg>
-                    Co-location search
+                    Co-locate
                   </button>
-                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Show me all UK substations with >100MW headroom suitable for data centres")}>
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Show substations with >100MW headroom for data centres")}>
                     <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M11 2L3 10h6l-2 6 8-8h-6l2-6z"/></svg>
-                    DC grid capacity
+                    DC capacity
                   </button>
                 </>
               ) : (
                 <>
-                  <button className="cpc-qa-btn primary" onClick={() => handlePromptFromTab("Generate a one-click feasibility report for this site as PDF")}>
-                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 2h6l4 4v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z"/></svg>
-                    Generate report
+                  <button className="cpc-qa-btn primary" onClick={() => handlePromptFromTab("Generate a full feasibility report PDF for this site")}>
+                    PDF report
                   </button>
-                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Compare solar, wind, BESS, and hybrid options for this site and recommend the best technology")}>
-                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12l3-5 3 3 2-4 4 6"/></svg>
-                    Compare technologies
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Compare solar vs wind vs BESS vs hybrid for this site")}>
+                    Compare tech
                   </button>
-                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Generate a G99 grid connection application pack for this site")}>
-                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 9l2 2 4-4"/><rect x="2" y="2" width="12" height="12" rx="2"/></svg>
-                    G99 application
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Generate G99 grid connection application pack")}>
+                    G99 pack
+                  </button>
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("What's the IRR at £55/MWh PPA? Show me the financial model")}>
+                    Financials
+                  </button>
+                  <button className="cpc-qa-btn" onClick={() => handlePromptFromTab("Auto-generate the optimal PV panel layout for this site")}>
+                    Auto layout
                   </button>
                 </>
               )}
