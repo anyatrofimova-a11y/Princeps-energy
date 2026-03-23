@@ -230,42 +230,62 @@ function NodeInspector({ node, onClose, onZoomTo }) {
 function _getFollowUpSuggestions(stage, toolsUsed, hasSite, hasGrid) {
   const suggestions = [];
 
-  // Based on tools that were just called
+  // Tool-specific follow-ups — the next logical step
   if (toolsUsed.includes("get_site_context") || toolsUsed.includes("create_site_parcel")) {
-    suggestions.push("Run feasibility assessment");
-    suggestions.push("Check environmental constraints");
+    suggestions.push("Run full feasibility assessment on this site");
+    suggestions.push("What are the environmental constraints?");
+    suggestions.push("Show grid capacity within 10km");
   }
   if (toolsUsed.includes("run_solar_yield")) {
-    suggestions.push("Estimate grid connection cost");
-    suggestions.push("Run financial analysis");
+    suggestions.push("What will the grid connection cost?");
+    suggestions.push("Calculate IRR at £55/MWh PPA");
+    suggestions.push("Generate one-click report PDF");
   }
   if (toolsUsed.includes("get_grid_connection") || toolsUsed.includes("forecast_grid_connection")) {
-    suggestions.push("Predict planning approval probability");
-    suggestions.push("Generate connection report PDF");
+    suggestions.push("What's the planning approval probability?");
+    suggestions.push("Generate G99 application pack");
+    suggestions.push("Show me the connection offer timeline");
   }
   if (toolsUsed.includes("run_financial_analysis")) {
-    suggestions.push("Stack revenue across markets");
-    suggestions.push("Compare with similar REPD projects");
+    suggestions.push("Compare solar vs BESS vs hybrid on this site");
+    suggestions.push("What lease rate is fair for this land?");
+    suggestions.push("Generate financial report PDF");
   }
-  if (toolsUsed.includes("predict_planning_approval") || toolsUsed.includes("score_planning_risk")) {
-    suggestions.push("Run shadow flicker assessment");
-    suggestions.push("Calculate noise contours");
+  if (toolsUsed.includes("search_colocation_opportunities")) {
+    suggestions.push("Score the top opportunity");
+    suggestions.push("Who owns the land near the best site?");
+    suggestions.push("What's the BESS revenue stack here?");
+  }
+  if (toolsUsed.includes("assess_dc_colocation") || toolsUsed.includes("score_dc_site_extended")) {
+    suggestions.push("Run 24h physics simulation for this DC");
+    suggestions.push("What's the achievable CFE% with 50MW solar?");
+    suggestions.push("Compare Waltham Cross vs Slough vs Teesside");
   }
 
-  // If no tool-specific suggestions, use stage-based
+  // Stage-based fallbacks with actionable, specific prompts
   if (suggestions.length === 0) {
     if (!hasSite) {
-      suggestions.push("Find a site near Bristol with good grid headroom");
-      suggestions.push("Show me brownfield land available for solar");
+      suggestions.push("Find the best 50MW solar site near Birmingham");
+      suggestions.push("Search for co-location opportunities in the South East");
+      suggestions.push("Show me all substations with >30MW headroom");
+      suggestions.push("What sites have stalled in REPD that I could acquire?");
     } else if (!hasGrid) {
-      suggestions.push("Assess grid connection options");
-      suggestions.push("What is the planning risk here?");
-    } else if (stage === "study" || stage === "connect") {
-      suggestions.push("Benchmark this site vs all UK solar projects");
-      suggestions.push("Predict time to energisation");
-    } else if (stage === "plan" || stage === "impact") {
-      suggestions.push("Generate constraint report PDF");
-      suggestions.push("Open 3D site twin");
+      suggestions.push("Assess grid connection for this site");
+      suggestions.push("What's the planning risk here?");
+      suggestions.push("Check for SSSI, AONB, or flood zone constraints");
+    } else if (stage === "study") {
+      suggestions.push("Generate a one-click feasibility report");
+      suggestions.push("Compare all technology options for this site");
+      suggestions.push("Predict the connection offer timeline");
+      suggestions.push("What would a data centre look like here?");
+    } else if (stage === "plan") {
+      suggestions.push("Auto-generate the optimal PV layout");
+      suggestions.push("Calculate the 16-category loss budget");
+      suggestions.push("Generate construction timeline");
+    } else if (stage === "act") {
+      suggestions.push("Generate G99 application pack");
+      suggestions.push("Download XLSX financial model");
+      suggestions.push("Create planning application summary");
     } else {
       suggestions.push("Generate full site assessment report");
       suggestions.push("Create construction schedule");
@@ -324,13 +344,13 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
       // Add a welcome message with context-aware suggestions
       setMessages([{
         role: "assistant",
-        content: "Welcome to Princeps. I can help you assess sites, analyse grid connections, run financial models, and generate reports.\n\nWhat would you like to do?",
+        content: "I'm your energy development copilot. I have access to 50+ AI tools — grid analysis, solar simulation, planning intelligence, financial modelling, and document automation.\n\nDrop a pin on the map, or try one of these:",
         timestamp: Date.now(),
         suggestions: [
-          "Find a 50MW solar site near Birmingham",
-          "Assess grid connection at 52.5N, -1.5W",
-          "Compare PPA offers for a 30MW wind farm",
-          "Show me the best BESS revenue strategy",
+          "Find me a 50MW solar site with good grid headroom",
+          "Search for co-location opportunities near London",
+          "What substations have capacity for a data centre?",
+          "Generate a full feasibility report for 52.5N, -1.5W",
         ],
       }]);
     }, 2000);
