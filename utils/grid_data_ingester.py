@@ -2,8 +2,8 @@
 Grid Data Ingester — unified adapters for UK DNO capacity data.
 
 Adapters:
-  - OpenDataSoftAdapter: UKPN, NPG, SPEN, ENWL, SSEN (5 of 6 DNOs)
-  - CKANAdapter: NESO Data Portal, NGED Connected Data Portal
+  - OpenDataSoftAdapter: UKPN, NPG, SPEN, ENWL (4 DNOs — UKPN/SPEN/ENWL need API keys)
+  - CKANAdapter: NESO Data Portal (api.neso.energy), NGED, SSEN (data-api.ssen.co.uk)
   - OverpassAdapter: OpenStreetMap power infrastructure
 
 All adapters write to the grid_* PostGIS tables (SRID 27700).
@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from datetime import date, datetime, timezone
 from typing import Any
@@ -31,10 +32,14 @@ DNO_CONFIGS = {
         "name": "UK Power Networks",
         "platform": "opendatasoft",
         "base_url": "https://ukpowernetworks.opendatasoft.com",
+        # NOTE: UKPN now requires an API key for record access (data_visible=false).
+        # Set env var UKPN_ODS_APIKEY to enable. Without it, requests return 403.
         "datasets": {
-            "substations": "ukpn-grid-supply-points",
-            "headroom": "ukpn-grid-supply-point-capacity",
+            "substations": "ukpn-grid-supply-points-overview",
+            "headroom": "dfes-network-headroom-report",
+            "ecr": "ukpn-embedded-capacity-register",
         },
+        "api_key_env": "UKPN_ODS_APIKEY",
         "regions": ["Eastern (EPN)", "London (LPN)", "South East (SPN)"],
     },
     "npg": {
@@ -42,8 +47,10 @@ DNO_CONFIGS = {
         "platform": "opendatasoft",
         "base_url": "https://northernpowergrid.opendatasoft.com",
         "datasets": {
-            "demand_headroom": "thermal-demand-headroom",
-            "gen_headroom": "thermal-generation-headroom",
+            "substations": "heatmapdatatable",
+            "demand_headroom": "npg_ndp_demand_headroom",
+            "gen_headroom": "npg_ndp_generation_headroom",
+            "ecr": "embedded-capacity-register",
         },
         "regions": ["North East England", "Yorkshire"],
     },
@@ -51,27 +58,38 @@ DNO_CONFIGS = {
         "name": "SP Energy Networks",
         "platform": "opendatasoft",
         "base_url": "https://spenergynetworks.opendatasoft.com",
+        # NOTE: SPEN now requires an API key for record access (data_visible=false).
+        # Set env var SPEN_ODS_APIKEY to enable. Without it, requests return 403.
         "datasets": {
+            "substations": "gsp-overview",
+            "capacity": "capacity-management-system",
             "ecr": "embedded-capacity-register",
         },
+        "api_key_env": "SPEN_ODS_APIKEY",
         "regions": ["South Scotland", "Merseyside & North Wales"],
     },
     "enwl": {
         "name": "Electricity North West",
         "platform": "opendatasoft",
         "base_url": "https://electricitynorthwest.opendatasoft.com",
+        # NOTE: ENWL now requires an API key for record access (data_visible=false).
+        # Set env var ENWL_ODS_APIKEY to enable. Without it, requests return 403.
         "datasets": {
-            "capacity": "hv-network-capacity",
-            "ecr": "embedded-capacity-register",
+            "substations": "enwl-gsp-heatmap",
+            "capacity": "enwl-pry-heatmap",
+            "ecr": "enwl-embedded-capacity-register-2-1mw-and-above",
         },
+        "api_key_env": "ENWL_ODS_APIKEY",
         "regions": ["North West England"],
     },
     "ssen": {
         "name": "SSEN Distribution",
-        "platform": "opendatasoft",
-        "base_url": "https://data.ssen.co.uk",
+        "platform": "ckan",
+        # SSEN moved from OpenDataSoft to Datopian/CKAN portal in 2025
+        "base_url": "https://data-api.ssen.co.uk",
         "datasets": {
-            "capacity": "generation-availability-and-network-capacity",
+            "capacity": "52e9a305-ad90-4c81-9175-20a40ef57894",  # Headroom Dashboard Data (March 2026)
+            "ecr": "bbae6797-364a-4b2d-a01a-8395e21bee76",       # ECR Part 1 - 1MW (March 2026)
         },
         "regions": ["Southern Scotland", "North of Scotland", "Southern England"],
     },
@@ -79,20 +97,26 @@ DNO_CONFIGS = {
         "name": "National Grid Electricity Distribution",
         "platform": "ckan",
         "base_url": "https://connecteddata.nationalgrid.co.uk",
+        # NOTE: Network capacity resource requires auth. Set NGED_CKAN_APIKEY env var.
+        # ECR is publicly accessible.
         "datasets": {
-            "capacity": "network-capacity-map",
-            "ecr": "embedded-capacity-register",
+            "capacity": "d1895bd3-d9d2-4886-a0a3-b7eadd9ab6c2",  # Network Capacity Map CSV
+            "headroom": "d1963858-d451-4794-a6bf-123fad0f0b3a",   # Network Opportunity Map Headroom
+            "ecr": "82a4ae83-77a3-4e7b-9060-8072ed96de9d",        # ECR JAN 2026 CSV
         },
+        "api_key_env": "NGED_CKAN_APIKEY",
         "regions": ["West Midlands", "East Midlands", "South West", "South Wales"],
     },
 }
 
 NESO_CONFIG = {
-    "base_url": "https://data.nationalgrideso.com",
+    # data.nationalgrideso.com is defunct — migrated to api.neso.energy (NESO rebrand)
+    "base_url": "https://api.neso.energy",
     "api_path": "/api/3/action/datastore_search",
     "datasets": {
-        "demand_data": "17ef34e3-1a3b-4049-9aef-a8e01e415b7c",
-        "gen_mix": "f93d1835-75bc-43e5-84ad-12472b180a98",
+        "demand_data": "177f6fa4-ae49-4182-81ea-0c6b35f26ca6",    # Daily Demand Update
+        "gen_mix": "f93d1835-75bc-43e5-84ad-12472b180a98",         # Generation Mix (unchanged)
+        "tec_register": "17becbab-e3e8-473f-b303-3806f43a6a10",   # TEC Register
     },
 }
 
@@ -128,6 +152,9 @@ class OpenDataSoftAdapter(DataAdapter):
     def __init__(self, dno_code: str, config: dict):
         super().__init__(dno_code, config)
         self.base_url = config["base_url"]
+        # Support API key auth — many DNO portals now require it
+        api_key_env = config.get("api_key_env")
+        self.api_key = os.environ.get(api_key_env, "") if api_key_env else ""
 
     async def _fetch_records(
         self, dataset_id: str, limit: int = 100, offset: int = 0,
@@ -139,10 +166,14 @@ class OpenDataSoftAdapter(DataAdapter):
         if where:
             params["where"] = where
 
+        headers: dict[str, str] = {"User-Agent": _USER_AGENT}
+        if self.api_key:
+            headers["Authorization"] = f"Apikey {self.api_key}"
+
         all_records: list[dict] = []
         async with httpx.AsyncClient(
             timeout=_TIMEOUT,
-            headers={"User-Agent": _USER_AGENT},
+            headers=headers,
             follow_redirects=True,
         ) as client:
             while True:
@@ -262,6 +293,9 @@ class CKANAdapter(DataAdapter):
         super().__init__(dno_code, config)
         self.base_url = config["base_url"]
         self.api_path = "/api/3/action/datastore_search"
+        # Support API key auth for CKAN portals that require it
+        api_key_env = config.get("api_key_env")
+        self.api_key = os.environ.get(api_key_env, "") if api_key_env else ""
 
     async def _fetch_records(
         self, resource_id: str, page_size: int = 1000,
@@ -271,9 +305,13 @@ class CKANAdapter(DataAdapter):
         all_records: list[dict] = []
         offset = 0
 
+        headers: dict[str, str] = {"User-Agent": _USER_AGENT}
+        if self.api_key:
+            headers["Authorization"] = self.api_key
+
         async with httpx.AsyncClient(
             timeout=_TIMEOUT,
-            headers={"User-Agent": _USER_AGENT},
+            headers=headers,
             follow_redirects=True,
         ) as client:
             while True:
@@ -463,8 +501,8 @@ async def fetch_dno_boundaries() -> list[dict]:
     Fetch DNO licence area boundaries from NESO Data Portal.
     Returns GeoJSON features for each licence area.
     """
-    url = "https://data.nationalgrideso.com/api/3/action/package_show"
-    params = {"id": "gis-boundaries-gb-dno-license-areas"}
+    url = "https://api.neso.energy/api/3/action/package_show"
+    params = {"id": "gis-boundaries-for-gb-dno-license-areas"}
 
     async with httpx.AsyncClient(
         timeout=_TIMEOUT,

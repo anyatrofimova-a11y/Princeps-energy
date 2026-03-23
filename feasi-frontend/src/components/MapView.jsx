@@ -105,6 +105,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   const [mapReady, setMapReady] = React.useState(false);
 
   useEffect(() => {
+    if (!containerRef.current) return;
     if (!protocolAdded) {
       try {
         const protocol = new Protocol();

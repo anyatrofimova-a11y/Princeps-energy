@@ -24,10 +24,10 @@ const STAGE_COLORS = {
 };
 
 const TECH_ICONS = {
-  solar: "\u2600",
-  wind: "\uD83C\uDF2C",
-  bess: "\u26A1",
-  dc: "\uD83C\uDFE2",
+  solar: "PV",
+  wind: "WD",
+  bess: "BS",
+  dc: "DC",
   hybrid: "\u26A1",
 };
 
@@ -47,7 +47,7 @@ export default function PortfolioMapOverlay({ map, onSelectProject, visible = tr
 
   // Create/update markers
   useEffect(() => {
-    if (!map || !visible) return;
+    if (!map || !visible || !map.isStyleLoaded?.()) return;
 
     const currentIds = new Set(projects.map(p => p.project_id));
 

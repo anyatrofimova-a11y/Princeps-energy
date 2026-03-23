@@ -19,6 +19,8 @@ export default function Google3DTilesOverlay({ mapInstance, enabled = false }) {
   useEffect(() => {
     const map = mapInstance;
     if (!map || !enabled || !GOOGLE_KEY) return;
+    // Wait for style to load before adding overlay
+    if (!map.isStyleLoaded || !map.isStyleLoaded()) return;
 
     // Create deck.gl overlay with Tile3DLayer
     const overlay = new MapboxOverlay({
@@ -40,7 +42,7 @@ export default function Google3DTilesOverlay({ mapInstance, enabled = false }) {
     overlayRef.current = overlay;
 
     // Enable 3D terrain on the map for proper integration
-    if (!map.getTerrain()) {
+    if (map.getTerrain && !map.getTerrain()) {
       try {
         if (!map.getSource("mapbox-dem-3d")) {
           map.addSource("mapbox-dem-3d", {
