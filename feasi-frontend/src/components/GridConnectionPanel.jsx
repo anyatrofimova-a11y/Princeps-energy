@@ -65,19 +65,6 @@ export default function GridConnectionPanel({ onClose, onHighlightSubstation }) 
     }
   }, [samCapacity]);
 
-  // Auto-assess when panel opens if site is selected
-  const autoRanRef = React.useRef(false);
-  useEffect(() => {
-    if (autoRanRef.current) return;
-    const lat = explain?.lat ?? explain?.location?.lat;
-    if (lat && !result && !loading) {
-      autoRanRef.current = true;
-      // Small delay to let capacity state settle
-      const t = setTimeout(() => assess(), 300);
-      return () => clearTimeout(t);
-    }
-  }, [explain, result, loading, assess]);
-
   const assess = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -104,6 +91,18 @@ export default function GridConnectionPanel({ onClose, onHighlightSubstation }) 
       setLoading(false);
     }
   }, [explain, selectedParcel, capacityMw, technology, onHighlightSubstation]);
+
+  // Auto-assess when panel opens if site is selected
+  const autoRanRef = React.useRef(false);
+  useEffect(() => {
+    if (autoRanRef.current) return;
+    const lat = explain?.lat ?? explain?.location?.lat;
+    if (lat && !result && !loading) {
+      autoRanRef.current = true;
+      const t = setTimeout(() => assess(), 300);
+      return () => clearTimeout(t);
+    }
+  }, [explain, result, loading, assess]);
 
   const runPowerFlow = useCallback(async (substationId) => {
     setPfLoading(true);

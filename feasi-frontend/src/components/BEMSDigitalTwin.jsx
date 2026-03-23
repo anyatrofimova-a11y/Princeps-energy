@@ -394,7 +394,7 @@ function Scene({ zones, chillers, transformers, selectedEquipment, onSelectEquip
         position={[0, -0.5, 0]}
         cellSize={1}
         cellThickness={0.5}
-        cellColor="#1a1f2e"
+        cellColor="#d0d3d8"
         sectionSize={5}
         sectionThickness={1}
         sectionColor="#2a2f4e"

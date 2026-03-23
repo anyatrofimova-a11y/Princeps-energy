@@ -339,9 +339,9 @@ function BESSFacilityScene({ containers, systemState, selectedContainer, onSelec
       <Grid
         args={[40, 40]}
         cellSize={1}
-        cellColor="#1a1f2e"
+        cellColor="#d0d3d8"
         sectionSize={5}
-        sectionColor="#252a3a"
+        sectionColor="#b8bcc2"
         fadeDistance={30}
         position={[0, 0, 0]}
       />
