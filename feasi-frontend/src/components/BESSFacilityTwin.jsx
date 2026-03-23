@@ -3,7 +3,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid, Html } from "@react-three/drei";
 import * as THREE from "three";
 import api from "../services/api";
-import PostprocessingEffects from "./PostprocessingEffects";
+// import PostprocessingEffects from "./PostprocessingEffects";
 
 /* ── Design Tokens ────────────────────────────────────────────────────── */
 const T = {
@@ -1162,11 +1162,13 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
 
         {/* ─── CENTER PANEL (50%) — 3D Scene ─── */}
         <div style={{ flex: 1, position: "relative" }}>
+          <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#666", fontSize: 12 }}>Loading BESS 3D view...</div>}>
           <Canvas
             shadows
             camera={{ position: [0, 12, 16], fov: 45 }}
             style={{ background: T.bg }}
             gl={{ antialias: true, alpha: false }}
+            frameloop="demand"
           >
             <BESSFacilityScene
               containers={containers}
@@ -1176,8 +1178,9 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
               txLoadPct={txLoadPct}
               exportMw={exportMw}
             />
-            <PostprocessingEffects bloom={1.4} bloomThreshold={0.3} chromaticAberration={0.0015} vignette={0.5} />
+            {/* <PostprocessingEffects bloom={1.4} bloomThreshold={0.3} chromaticAberration={0.0015} vignette={0.55} /> */}
           </Canvas>
+          </React.Suspense>
           {/* State badge overlay */}
           <div style={{
             position: "absolute", top: 12, left: "50%", transform: "translateX(-50%)",

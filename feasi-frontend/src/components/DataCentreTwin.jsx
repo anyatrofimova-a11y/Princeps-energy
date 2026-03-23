@@ -3,7 +3,7 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, OrthographicCamera, Grid, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { useSite } from "../SiteContext";
-import PostprocessingEffects from "./PostprocessingEffects";
+// import PostprocessingEffects from "./PostprocessingEffects";
 
 /* ── Design Tokens ───────────────────────────────────────────────────────── */
 const T = {
@@ -1757,24 +1757,27 @@ export default function DataCentreTwin({ onClose }) {
 
         {/* 3D Canvas */}
         <div style={{ flex: 1, position: "relative" }}>
-          <Canvas
-            shadows
-            camera={{ position: [15, 15, 15], fov: 50 }}
-            gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
-            style={{ background: T.bg }}
-          >
-            <fog attach="fog" args={[T.bg, 30, 70]} />
-            <DCScene
-              rackLayout={rackLayout}
-              telemetry={telemetry}
-              selectedRack={selectedRack}
-              onSelectRack={setSelectedRack}
-              colorBy={colorBy}
-              cameraMode={cameraMode}
-              showHeatmap={showHeatmap}
-            />
-            <PostprocessingEffects bloom={1.2} bloomThreshold={0.35} chromaticAberration={0.001} vignette={0.4} />
-          </Canvas>
+          <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#666", fontSize: 12 }}>Loading 3D view...</div>}>
+            <Canvas
+              shadows
+              camera={{ position: [15, 15, 15], fov: 50 }}
+              gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
+              style={{ background: T.bg }}
+              onCreated={({ gl }) => { gl.setClearColor(T.bg); }}
+              frameloop="demand"
+            >
+              <fog attach="fog" args={[T.bg, 30, 70]} />
+              <DCScene
+                rackLayout={rackLayout}
+                telemetry={telemetry}
+                selectedRack={selectedRack}
+                onSelectRack={setSelectedRack}
+                colorBy={colorBy}
+                cameraMode={cameraMode}
+                showHeatmap={showHeatmap}
+              />
+            </Canvas>
+          </React.Suspense>
 
           {/* Metrics strip at bottom of canvas */}
           {viewMode === "monitor" && metrics && (
