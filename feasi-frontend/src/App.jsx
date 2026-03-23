@@ -731,41 +731,44 @@ export default function App() {
         </Suspense>
       )}
 
-      {/* 3D Grid Digital Twin overlay */}
-      <Suspense fallback={<LazyFallback />}>
+      {/* 3D Digital Twin overlays — each in own Suspense+ErrorBoundary */}
       {gridTwinOpen && (
-        <GridTwin onClose={() => setGridTwinOpen(false)} />
+        <Suspense fallback={<LazyFallback />}>
+          <ErrorBoundary name="GridTwin" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>Grid Twin failed to load</h2><button onClick={()=>setGridTwinOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
+            <GridTwin onClose={() => setGridTwinOpen(false)} />
+          </ErrorBoundary>
+        </Suspense>
       )}
-
-      {/* BEMS Digital Twin overlay */}
       {bemsOpen && (
-        <BEMSDigitalTwin onClose={() => setBemsOpen(false)} />
+        <Suspense fallback={<LazyFallback />}>
+          <ErrorBoundary name="BEMSTwin" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>BEMS Twin failed to load</h2><button onClick={()=>setBemsOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
+            <BEMSDigitalTwin onClose={() => setBemsOpen(false)} />
+          </ErrorBoundary>
+        </Suspense>
       )}
-
-      {/* Asset Inspector (LiDAR) overlay */}
       {assetInspectorOpen && (
-        <AssetInspector onClose={() => setAssetInspectorOpen(false)} />
+        <Suspense fallback={<LazyFallback />}>
+          <AssetInspector onClose={() => setAssetInspectorOpen(false)} />
+        </Suspense>
       )}
-
-      {/* Grid Graph Topology overlay */}
       {gridGraphOpen && (
-        <GridGraphView
-          lat={pickedLocation?.lat}
-          lon={pickedLocation?.lon}
-          onClose={() => setGridGraphOpen(false)}
-        />
+        <Suspense fallback={<LazyFallback />}>
+          <GridGraphView lat={pickedLocation?.lat} lon={pickedLocation?.lon} onClose={() => setGridGraphOpen(false)} />
+        </Suspense>
       )}
-
-      {/* BESS Facility Digital Twin overlay */}
       {bessFacilityOpen && (
-        <BESSFacilityTwin onClose={() => setBessFacilityOpen(false)} />
+        <Suspense fallback={<LazyFallback />}>
+          <ErrorBoundary name="BESSTwin" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>BESS Twin failed to load</h2><button onClick={()=>setBessFacilityOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
+            <BESSFacilityTwin onClose={() => setBessFacilityOpen(false)} />
+          </ErrorBoundary>
+        </Suspense>
       )}
-
-      {/* Data Centre Digital Twin overlay */}
       {dcTwinOpen && (
-        <ErrorBoundary name="DataCentreTwin" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>DC Twin failed to load</h2><button onClick={()=>setDcTwinOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
-          <DataCentreTwin onClose={() => setDcTwinOpen(false)} />
-        </ErrorBoundary>
+        <Suspense fallback={<LazyFallback />}>
+          <ErrorBoundary name="DCTwin" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>DC Twin failed to load</h2><button onClick={()=>setDcTwinOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
+            <DataCentreTwin onClose={() => setDcTwinOpen(false)} />
+          </ErrorBoundary>
+        </Suspense>
       )}
 
       {/* DC Landing Page overlay */}
@@ -863,7 +866,6 @@ export default function App() {
           }}
         />
       )}
-      </Suspense>
 
       {/* Intelligence Panel — regulatory alerts & market data */}
       {intelligenceOpen && (
