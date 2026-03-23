@@ -55,10 +55,28 @@ export default function GridConnectionPanel({ onClose, onHighlightSubstation }) 
   const [pfLoading, setPfLoading] = useState(false);
   const [pfError, setPfError] = useState(null);
 
-  // Sync capacity from samCapacity
+  // Sync capacity from samCapacity — use a sensible default for the MW input
   useEffect(() => {
-    if (samCapacity) setCapacityMw(samCapacity / 1000);
+    if (samCapacity && samCapacity > 100) {
+      setCapacityMw(samCapacity / 1000);
+    } else {
+      // Default to 50 MW if samCapacity is tiny (100W = 0.1 MW makes no sense for grid connection)
+      setCapacityMw(50);
+    }
   }, [samCapacity]);
+
+  // Auto-assess when panel opens if site is selected
+  const autoRanRef = React.useRef(false);
+  useEffect(() => {
+    if (autoRanRef.current) return;
+    const lat = explain?.lat ?? explain?.location?.lat;
+    if (lat && !result && !loading) {
+      autoRanRef.current = true;
+      // Small delay to let capacity state settle
+      const t = setTimeout(() => assess(), 300);
+      return () => clearTimeout(t);
+    }
+  }, [explain, result, loading, assess]);
 
   const assess = useCallback(async () => {
     setLoading(true);

@@ -606,7 +606,9 @@ export default function App() {
 
         {/* SiteDashboardV2 — auto-shows when site is selected, past discovery stage */}
         {pickedLocation && workflowStage !== "site" && !dashV2Closed && (
-          <SiteDashboardV2 onClose={() => setDashV2Closed(true)} />
+          <ErrorBoundary name="SiteDashboardV2" fallback={null}>
+            <SiteDashboardV2 onClose={() => setDashV2Closed(true)} />
+          </ErrorBoundary>
         )}
       </Suspense>
 

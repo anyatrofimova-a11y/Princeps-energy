@@ -94,6 +94,17 @@ const ASSET_COLOURS = {
   substation: "#78909c",     // blue-grey
 };
 
+
+// Safe source data update — catches race conditions with style reloads
+function safeSetData(map, sourceId, data) {
+  try {
+    const src = map.getSource(sourceId);
+    if (src) src.setData(data);
+  } catch (e) {
+    // Ignore getOwnSource errors during style transitions
+  }
+}
+
 const EMPTY_FC = { type: "FeatureCollection", features: [] };
 
 export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = false, onPick, pickedLocation, onZoneClick, epcFields = {},
