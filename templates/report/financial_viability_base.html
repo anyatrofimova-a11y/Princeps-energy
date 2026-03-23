@@ -342,7 +342,7 @@
   <div class="card">
     <div class="card-header">Project Metrics</div>
     <div class="stat-row"><span class="stat-label">Total CAPEX</span><span class="stat-value">{{ capex_display }}</span></div>
-    <div class="stat-row"><span class="stat-label">Annual Generation</span><span class="stat-value">{{ "{:,.0f}"|format(finance.annual_generation_mwh) }} MWh</span></div>
+    <div class="stat-row"><span class="stat-label">Annual Generation</span><span class="stat-value">{{ "{:,.0f}".format(finance.annual_generation_mwh) }} MWh</span></div>
     <div class="stat-row"><span class="stat-label">Construction Period</span><span class="stat-value">{{ finance.construction_years }} years</span></div>
     <div class="stat-row"><span class="stat-label">Project Life</span><span class="stat-value">{{ finance.project_life_years }} years</span></div>
   </div>
@@ -396,8 +396,8 @@
     {% for item in capex_breakdown %}
     <tr{% if item.is_total %} style="font-weight: 700; background: #f0f0f0;"{% endif %}>
       <td{% if item.is_total %} class="td-bold"{% endif %}>{{ item.component }}</td>
-      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}"|format(item.per_mw) }}</td>
-      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}"|format(item.total) }}</td>
+      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}".format(item.per_mw) }}</td>
+      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}".format(item.total) }}</td>
       <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "%.1f"|format(item.pct) }}%</td>
     </tr>
     {% endfor %}
@@ -433,8 +433,8 @@
     {% for item in opex_breakdown %}
     <tr{% if item.is_total %} style="font-weight: 700; background: #f0f0f0;"{% endif %}>
       <td{% if item.is_total %} class="td-bold"{% endif %}>{{ item.component }}</td>
-      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}"|format(item.annual) }}</td>
-      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}"|format(item.per_mw) }}</td>
+      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}".format(item.annual) }}</td>
+      <td class="td-right{% if item.is_total %} td-bold{% endif %}">{{ "{:,.0f}".format(item.per_mw) }}</td>
       <td class="text-muted text-sm">{{ item.notes }}</td>
     </tr>
     {% endfor %}
@@ -450,7 +450,7 @@
 <div class="two-col">
   <div class="card card-accent-green">
     <div class="card-header">Generation Profile</div>
-    <div class="stat-row"><span class="stat-label">Annual Generation (Yr 1)</span><span class="stat-value">{{ "{:,.0f}"|format(finance.annual_generation_mwh) }} MWh</span></div>
+    <div class="stat-row"><span class="stat-label">Annual Generation (Yr 1)</span><span class="stat-value">{{ "{:,.0f}".format(finance.annual_generation_mwh) }} MWh</span></div>
     <div class="stat-row"><span class="stat-label">Capacity Factor</span><span class="stat-value">{{ "%.1f"|format(capacity_factor_pct) }}%</span></div>
     <div class="stat-row"><span class="stat-label">Degradation Rate</span><span class="stat-value">0.5% p.a.</span></div>
     <div class="stat-row"><span class="stat-label">Performance Ratio</span><span class="stat-value">82%</span></div>
@@ -459,7 +459,7 @@
     <div class="card-header">Revenue Assumptions</div>
     <div class="stat-row"><span class="stat-label">PPA Price</span><span class="stat-value">{{ "%.0f"|format(ppa_price) }} £/MWh</span></div>
     <div class="stat-row"><span class="stat-label">PPA Escalation</span><span class="stat-value">CPI (2.5% p.a.)</span></div>
-    <div class="stat-row"><span class="stat-label">Year 1 Revenue</span><span class="stat-value">{{ "{:,.0f}"|format(year1_revenue) }} £</span></div>
+    <div class="stat-row"><span class="stat-label">Year 1 Revenue</span><span class="stat-value">{{ "{:,.0f}".format(year1_revenue) }} £</span></div>
     <div class="stat-row"><span class="stat-label">25-Year Total Revenue</span><span class="stat-value">{{ total_revenue_display }}</span></div>
   </div>
 </div>
@@ -504,12 +504,12 @@
     {% for row in cashflow_table %}
     <tr{% if row.is_payback %} style="background: #e8f5e9;"{% endif %}>
       <td class="td-bold">{{ row.year }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.revenue) }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.opex) }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.ebitda) }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.tax) }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.net_cashflow) }}</td>
-      <td class="td-right" style="color: {% if row.cumulative >= 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}"|format(row.cumulative) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.revenue) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.opex) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.ebitda) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.tax) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.net_cashflow) }}</td>
+      <td class="td-right" style="color: {% if row.cumulative >= 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}".format(row.cumulative) }}</td>
     </tr>
     {% endfor %}
   </table>
@@ -566,15 +566,15 @@
   <div class="card-header">NPV at Multiple Discount Rates</div>
   <div class="three-col">
     <div class="kpi-box">
-      <div class="kpi-value" style="color: {% if finance.npv_6pct > 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}"|format(finance.npv_6pct or 0) }}</div>
+      <div class="kpi-value" style="color: {% if finance.npv_6pct > 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}".format(finance.npv_6pct or 0) }}</div>
       <div class="kpi-label">NPV @ 6%</div>
     </div>
     <div class="kpi-box">
-      <div class="kpi-value" style="color: {% if finance.npv_8pct > 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}"|format(finance.npv_8pct or 0) }}</div>
+      <div class="kpi-value" style="color: {% if finance.npv_8pct > 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}".format(finance.npv_8pct or 0) }}</div>
       <div class="kpi-label">NPV @ 8%</div>
     </div>
     <div class="kpi-box">
-      <div class="kpi-value" style="color: {% if finance.npv_10pct > 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}"|format(finance.npv_10pct or 0) }}</div>
+      <div class="kpi-value" style="color: {% if finance.npv_10pct > 0 %}#24a148{% else %}#da1e28{% endif %};">{{ "{:,.0f}".format(finance.npv_10pct or 0) }}</div>
       <div class="kpi-label">NPV @ 10%</div>
     </div>
   </div>
@@ -597,8 +597,8 @@
   <div class="card card-accent">
     <div class="card-header">Capital Structure</div>
     <div class="stat-row"><span class="stat-label">Total CAPEX</span><span class="stat-value">{{ capex_display }}</span></div>
-    <div class="stat-row"><span class="stat-label">Senior Debt ({{ "%.0f"|format(debt.gearing_pct) }}%)</span><span class="stat-value">{{ "{:,.0f}"|format(debt.debt_amount) }} £</span></div>
-    <div class="stat-row"><span class="stat-label">Equity ({{ "%.0f"|format(100 - debt.gearing_pct) }}%)</span><span class="stat-value">{{ "{:,.0f}"|format(debt.equity_amount) }} £</span></div>
+    <div class="stat-row"><span class="stat-label">Senior Debt ({{ "%.0f"|format(debt.gearing_pct) }}%)</span><span class="stat-value">{{ "{:,.0f}".format(debt.debt_amount) }} £</span></div>
+    <div class="stat-row"><span class="stat-label">Equity ({{ "%.0f"|format(100 - debt.gearing_pct) }}%)</span><span class="stat-value">{{ "{:,.0f}".format(debt.equity_amount) }} £</span></div>
     <div class="stat-row"><span class="stat-label">Interest Rate</span><span class="stat-value">{{ "%.1f"|format(debt.interest_rate_pct) }}%</span></div>
     <div class="stat-row"><span class="stat-label">Debt Term</span><span class="stat-value">{{ debt.debt_term_years }} years</span></div>
   </div>
@@ -634,11 +634,11 @@
     {% for row in debt_schedule %}
     <tr>
       <td class="td-bold">{{ row.year }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.cfads) }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.debt_service) }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.principal) }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.interest) }}</td>
-      <td class="td-right">{{ "{:,.0f}"|format(row.outstanding) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.cfads) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.debt_service) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.principal) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.interest) }}</td>
+      <td class="td-right">{{ "{:,.0f}".format(row.outstanding) }}</td>
       <td class="td-right" style="color: {% if row.dscr >= 1.3 %}#24a148{% elif row.dscr >= 1.15 %}#f1c21b{% else %}#da1e28{% endif %};">{{ "%.2f"|format(row.dscr) }}x</td>
     </tr>
     {% endfor %}

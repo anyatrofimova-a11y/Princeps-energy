@@ -134,6 +134,22 @@ const TYPE_ICONS = {
   hybrid: "HY",
 };
 
+const TYPE_COLORS = {
+  solar: "#F59E0B",
+  wind: "#3B82F6",
+  bess: "#10B981",
+  dc: "#8B5CF6",
+  hybrid: "#6B7280",
+};
+
+const TYPE_LABELS = {
+  solar: "Solar",
+  wind: "Wind",
+  bess: "BESS",
+  dc: "Data Centre",
+  hybrid: "Hybrid",
+};
+
 function daysInStage(stageEnteredAt) {
   if (!stageEnteredAt) return 0;
   const entered = new Date(stageEnteredAt);
@@ -144,23 +160,22 @@ function daysInStage(stageEnteredAt) {
 function StageColumn({ stage, projects, onProjectClick, onDrop, dragOverStage, onDragOver, onDragLeave }) {
   const totalMW = projects.reduce((s, p) => s + (p.capacity_mw || 0), 0);
   const isOver = dragOverStage === stage.id;
+  const isEmpty = projects.length === 0;
 
   return (
     <div
-      className={`pp-column ${isOver ? "pp-column-drag-over" : ""}`}
+      className={`pp-column ${isOver ? "pp-column-drag-over" : ""} ${isEmpty ? "pp-column-empty" : ""}`}
       onDragOver={(e) => { e.preventDefault(); onDragOver(stage.id); }}
       onDragLeave={onDragLeave}
       onDrop={(e) => onDrop(e, stage.id)}
     >
-      <div className="pp-column-header" style={{ borderTopColor: stage.color }}>
+      <div className="pp-column-header">
         <div className="pp-column-title">
           <span className="pp-column-dot" style={{ background: stage.color }} />
           <span>{stage.label}</span>
-        </div>
-        <div className="pp-column-stats">
           <span className="pp-column-count">{projects.length}</span>
-          {totalMW > 0 && <span className="pp-column-mw">{Math.round(totalMW)} MW</span>}
         </div>
+        {totalMW > 0 && <span className="pp-column-mw">{totalMW >= 1000 ? `${(totalMW / 1000).toFixed(1)} GW` : `${Math.round(totalMW)} MW`}</span>}
       </div>
 
       <div className="pp-column-body">
@@ -172,9 +187,9 @@ function StageColumn({ stage, projects, onProjectClick, onDrop, dragOverStage, o
             onClick={() => onProjectClick(project)}
           />
         ))}
-        {projects.length === 0 && (
+        {isEmpty && (
           <div className="pp-empty">
-            <span className="pp-empty-text">{stage.description}</span>
+            <span className="pp-empty-text">No projects</span>
           </div>
         )}
       </div>
@@ -183,15 +198,18 @@ function StageColumn({ stage, projects, onProjectClick, onDrop, dragOverStage, o
 }
 
 function ProjectCard({ project, stageColor, onClick }) {
-  const verdictColor = project.verdict === "GO" ? "#16a34a"
-    : project.verdict === "CAUTION" ? "#D4A018"
-    : project.verdict === "NO-GO" ? "#8B3A3A"
-    : "#8A857D";
-  const days = daysInStage(project.stage_entered_at);
+  const verdictClass = project.verdict === "GO" ? "pp-verdict-go"
+    : project.verdict === "CAUTION" ? "pp-verdict-caution"
+    : project.verdict === "NO-GO" ? "pp-verdict-nogo"
+    : "";
+  const hasBlocker = !!project.blocker;
+  const techColor = TYPE_COLORS[project.technology] || "#6B7280";
+  const irr = project.metadata?.irr;
+  const connectionCost = project.metadata?.connection_cost;
 
   return (
     <div
-      className="pp-card"
+      className={`pp-card ${hasBlocker ? "pp-card-blocked" : ""}`}
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData("text/plain", project.project_id);
@@ -200,30 +218,37 @@ function ProjectCard({ project, stageColor, onClick }) {
       onClick={onClick}
     >
       <div className="pp-card-top">
-        <span className="pp-card-type">{TYPE_ICONS[project.technology] || ""}</span>
+        <span className="pp-card-dot" style={{ background: techColor }} />
         <span className="pp-card-name">{project.name}</span>
         {project.verdict && (
-          <span className="pp-card-verdict" style={{ color: verdictColor, background: `${verdictColor}15` }}>
+          <span className={`pp-card-verdict ${verdictClass}`}>
             {project.verdict}
           </span>
         )}
       </div>
 
-      <div className="pp-card-metrics">
+      <div className="pp-card-meta">
         <span className="pp-card-mw">{project.capacity_mw || "—"} MW</span>
-        <span className="pp-card-days">{days}d</span>
+        <span className="pp-card-sep">&middot;</span>
+        <span className="pp-card-tech">{TYPE_LABELS[project.technology] || project.technology}</span>
+        {project.repd_id && (
+          <>
+            <span className="pp-card-sep">&middot;</span>
+            <span className="pp-card-source-badge">REPD</span>
+          </>
+        )}
       </div>
 
-      {project.blocker && (
-        <div className="pp-card-blocker">
-          <span className="pp-card-blocker-icon">!</span>
-          <span>{project.blocker}</span>
+      {(irr || connectionCost) && (
+        <div className="pp-card-financials">
+          {irr && <span className="pp-card-fin-item">IRR {typeof irr === "number" ? `${irr.toFixed(1)}%` : irr}</span>}
+          {connectionCost && <span className="pp-card-fin-item">Connection {typeof connectionCost === "number" ? `£${(connectionCost / 1e6).toFixed(1)}m` : connectionCost}</span>}
         </div>
       )}
 
-      {project.repd_id && (
-        <div className="pp-card-source">
-          <span className="pp-card-source-badge">REPD</span>
+      {hasBlocker && (
+        <div className="pp-card-blocker">
+          <span>{project.blocker}</span>
         </div>
       )}
     </div>
@@ -231,28 +256,28 @@ function ProjectCard({ project, stageColor, onClick }) {
 }
 
 function PipelineSummaryBar({ summary }) {
+  const totalGW = summary.total_mw >= 1000
+    ? `${(summary.total_mw / 1000).toFixed(1)} GW`
+    : `${Math.round(summary.total_mw)} MW`;
+  const goCount = summary.by_verdict?.GO || 0;
+  const cautionCount = summary.by_verdict?.CAUTION || 0;
+  const nogoCount = summary.by_verdict?.["NO-GO"] || 0;
+
   return (
     <div className="pp-summary-bar">
-      <div className="pp-summary-item">
-        <span className="pp-summary-value">{summary.total_projects}</span>
-        <span className="pp-summary-label">Total Sites</span>
-      </div>
-      <div className="pp-summary-item">
-        <span className="pp-summary-value">{Math.round(summary.total_mw).toLocaleString()}</span>
-        <span className="pp-summary-label">Pipeline MW</span>
-      </div>
-      <div className="pp-summary-item">
-        <span className="pp-summary-value">{summary.in_progress}</span>
-        <span className="pp-summary-label">In Progress</span>
-      </div>
-      <div className="pp-summary-item">
-        <span className="pp-summary-value" style={{ color: "#16a34a" }}>{summary.by_verdict?.GO || 0}</span>
-        <span className="pp-summary-label">GO Verdict</span>
-      </div>
-      <div className="pp-summary-item">
-        <span className="pp-summary-value" style={{ color: summary.blocked > 0 ? "#8B3A3A" : "#8A857D" }}>{summary.blocked}</span>
-        <span className="pp-summary-label">Blocked</span>
-      </div>
+      <span className="pp-summary-text">
+        <strong>{summary.total_projects}</strong> sites
+        <span className="pp-summary-sep">&middot;</span>
+        <strong>{totalGW}</strong> pipeline
+        <span className="pp-summary-sep">&middot;</span>
+        <strong>{summary.in_progress}</strong> in progress
+      </span>
+      <span className="pp-summary-verdicts">
+        {goCount > 0 && <span className="pp-summary-pill pp-verdict-go">{goCount} GO</span>}
+        {cautionCount > 0 && <span className="pp-summary-pill pp-verdict-caution">{cautionCount} CAUTION</span>}
+        {nogoCount > 0 && <span className="pp-summary-pill pp-verdict-nogo">{nogoCount} NO-GO</span>}
+        {summary.blocked > 0 && <span className="pp-summary-pill pp-summary-blocked">{summary.blocked} blocked</span>}
+      </span>
     </div>
   );
 }

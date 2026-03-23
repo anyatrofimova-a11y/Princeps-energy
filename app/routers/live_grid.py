@@ -49,7 +49,10 @@ async def live_snapshot():
             _get(client, f"{_BMRS}/forecast/demand/day-ahead"),
             _get(client, f"{_BMRS}/forecast/generation/wind"),
             _get(client, f"{_BMRS}/system/frequency"),
-            _get(client, f"{_BMRS}/balancing/pricing/market-index"),
+            _get(client, f"{_BMRS}/balancing/pricing/market-index", {
+                "from": (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d"),
+                "to": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            }),
             _get(client, f"{_CARBON}/intensity"),
             _get(client, f"{_CARBON}/generation"),
             return_exceptions=True,

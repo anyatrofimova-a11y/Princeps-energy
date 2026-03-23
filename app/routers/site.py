@@ -74,9 +74,10 @@ log = logging.getLogger("princeps.site")
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
 MAPBOX_TOKEN = os.environ.get("VITE_MAPBOX_TOKEN", os.environ.get("MAPBOX_TOKEN", ""))
 
-_sam_default = str(Path(__file__).resolve().parent.parent / ".venv-sam" / "bin" / "python")
+_project_root = Path(__file__).resolve().parent.parent.parent  # feasibly/
+_sam_default = str(_project_root / ".venv-sam" / "bin" / "python")
 SAM_PYTHON = os.environ.get("SAM_PYTHON", _sam_default)
-SAM_RUNNER = str((Path(__file__).resolve().parent.parent / "utils" / "sam_runner.py").resolve())
+SAM_RUNNER = str((_project_root / "utils" / "sam_runner.py").resolve())
 _sam_path = Path(SAM_PYTHON).absolute()
 SAM_PYTHON = str(_sam_path)
 

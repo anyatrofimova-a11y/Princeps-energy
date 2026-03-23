@@ -19,8 +19,8 @@ _TIMEOUT = 30
 
 # CKAN datastore API on data.nationalgrideso.com
 # The resource ID may change when ESO republish — this is the TEC register resource.
-TEC_API_BASE = "https://data.nationalgrideso.com/api/3/action/datastore_search"
-TEC_RESOURCE_ID = "db2c8005-54df-4024-a7b7-62bcf2b7a4e3"
+TEC_API_BASE = "https://api.neso.energy/api/3/action/datastore_search"
+TEC_RESOURCE_ID = "17becbab-e3e8-473f-b303-3806f43a6a10"
 TEC_PAGE_SIZE = 5000
 
 FUEL_CATEGORY_MAP = {

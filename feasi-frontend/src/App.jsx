@@ -669,14 +669,16 @@ export default function App() {
         <CopilotWidget onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} onAction={handleCmdAction} />
       </ErrorBoundary>
 
-      {/* Siri-style AI Orb — draggable, proactive suggestions */}
+      {/* AI Orb — click to open copilot with context-aware suggestion */}
       <AIOrb
-        onOpenChat={() => handleCmdAction("chat")}
+        onOpenChat={(suggestion) => {
+          // Dispatch event to copilot to open and optionally send a message
+          window.dispatchEvent(new CustomEvent("princeps-chat", {
+            detail: { text: suggestion || "" },
+          }));
+        }}
         chatOpen={false}
       />
-
-      {/* Palantir-style Action Sidebar (context-aware) */}
-      <ActionSidebar />
 
       {/* Command Palette */}
       <Suspense fallback={null}>

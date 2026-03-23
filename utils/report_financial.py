@@ -997,10 +997,10 @@ async def generate_financial_report(
         raise RuntimeError(f"Investment appraisal failed: {finance['error']}")
 
     log.info(
-        "Appraisal complete: IRR=%.1f%%, NPV@8%%=£%s, LCOE=%.1f £/MWh",
-        finance.get("project_irr", 0) or 0,
-        _format_gbp(finance.get("npv_8pct", 0) or 0),
-        finance.get("lcoe", 0) or 0,
+        "Appraisal complete: IRR=%.1f%%, NPV@8%%=£%s, LCOE=%.1f",
+        float(finance.get("project_irr") or 0),
+        _format_gbp(float(finance.get("npv_8pct") or 0)),
+        float(finance.get("lcoe") or 0),
     )
 
     # 2. Run sensitivity analysis (CPU-bound, run in executor)

@@ -12482,22 +12482,21 @@ input[type="range"] { accent-color: var(--accent); }
 .pd-kpi-strip {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 12px;
+  margin-bottom: 24px;
 }
 
 .pd-kpi-card {
-  background: white;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--cds-border-subtle);
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  border: 1px solid #E5E7EB;
   border-radius: 12px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   transition: border-color 0.2s, background 0.2s;
 }
 .pd-kpi-card:hover {
-  border-color: var(--cds-interactive);
-  background: rgba(255, 255, 255, 0.95);
+  border-color: #D1D5DB;
+  background: #FAFAFA;
 }
 
 .pd-kpi-header {
@@ -12508,12 +12507,12 @@ input[type="range"] { accent-color: var(--accent); }
 }
 
 .pd-kpi-label {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 9px;
-  color: #9CA3AF;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 600;
+  font-family: "DM Sans", sans-serif;
+  font-size: 11px;
+  color: #6B7280;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
 }
 
 .pd-kpi-value {
@@ -12543,14 +12542,14 @@ input[type="range"] { accent-color: var(--accent); }
 .pd-grid {
   display: grid;
   grid-template-columns: 320px 1fr;
-  gap: 14px;
-  margin-bottom: 20px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .pd-col {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
 }
 
 .pd-col-wide {
@@ -12559,9 +12558,9 @@ input[type="range"] { accent-color: var(--accent); }
 
 .pd-card {
   background: #ffffff;
-  border: 1px solid #E8EAED;
-  border-radius: 14px;
-  padding: 18px 20px;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 20px;
   transition: all 0.2s;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
@@ -12571,13 +12570,13 @@ input[type="range"] { accent-color: var(--accent); }
 }
 
 .pd-card-title {
-  font-family: "JetBrains Mono", monospace;
-  font-size: 9.5px;
+  font-family: inherit;
+  font-size: 13px;
   font-weight: 600;
-  color: #9CA3AF;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 10px;
+  color: #374151;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 12px;
 }
 
 @media (max-width: 900px) {
