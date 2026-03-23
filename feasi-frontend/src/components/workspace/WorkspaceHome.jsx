@@ -347,15 +347,15 @@ function VerdictPills({ portfolio }) {
 function ProjectPipeline({ portfolio }) {
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ width: "100%", fontSize: 11, borderCollapse: "collapse" }}>
+      <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse", fontFamily: "'DM Sans', sans-serif" }}>
         <thead>
-          <tr style={{ borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
-            <th style={{ textAlign: "left", padding: "6px 8px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Project</th>
-            <th style={{ textAlign: "center", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Type</th>
-            <th style={{ textAlign: "right", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>MW</th>
-            <th style={{ textAlign: "left", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Phase</th>
-            <th style={{ textAlign: "center", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Score</th>
-            <th style={{ textAlign: "center", padding: "6px 4px", color: "var(--cds-text-helper)", fontWeight: 500 }}>Verdict</th>
+          <tr style={{ borderBottom: "1px solid #E8EAED" }}>
+            <th style={{ textAlign: "left", padding: "8px 10px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Project</th>
+            <th style={{ textAlign: "center", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Type</th>
+            <th style={{ textAlign: "right", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>MW</th>
+            <th style={{ textAlign: "left", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Phase</th>
+            <th style={{ textAlign: "center", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Score</th>
+            <th style={{ textAlign: "center", padding: "8px 6px", color: "#9CA3AF", fontWeight: 600, fontSize: 10, fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.06em", textTransform: "uppercase" }}>Verdict</th>
           </tr>
         </thead>
         <tbody>
@@ -363,37 +363,40 @@ function ProjectPipeline({ portfolio }) {
             const phaseIdx = PHASES.indexOf(p.phase);
             const phasePct = phaseIdx >= 0 ? ((phaseIdx + 1) / PHASES.length) * 100 : 0;
             return (
-              <tr key={i} style={{ borderBottom: "1px solid var(--cds-border-subtle)" }}>
-                <td style={{ padding: "6px 8px", color: "var(--cds-text-primary, #1A1D23)", fontWeight: 500 }}>{p.name}</td>
-                <td style={{ padding: "6px 4px", textAlign: "center" }}>
+              <tr key={i} style={{ borderBottom: "1px solid #F2F3F5" }}>
+                <td style={{ padding: "10px 10px", color: "#0F1318", fontWeight: 600, fontSize: 12 }}>{p.name}</td>
+                <td style={{ padding: "10px 6px", textAlign: "center" }}>
                   <span style={{
                     display: "inline-block", width: 8, height: 8, borderRadius: 2,
-                    background: TECH_COLORS[p.technology] || "#888", marginRight: 4,
+                    background: TECH_COLORS[p.technology] || "#9CA3AF", marginRight: 4,
                   }} />
-                  <span style={{ color: "#aaa", fontSize: 10, textTransform: "capitalize" }}>{p.technology}</span>
+                  <span style={{ color: "#6B7280", fontSize: 11, textTransform: "capitalize" }}>{p.technology}</span>
                 </td>
-                <td style={{ padding: "6px 4px", color: "var(--cds-text-primary, #1A1D23)", textAlign: "right" }}>{p.capacity_mw}</td>
-                <td style={{ padding: "6px 4px", width: 120 }}>
+                <td style={{ padding: "10px 6px", color: "#0F1318", textAlign: "right", fontFamily: "'JetBrains Mono', monospace", fontWeight: 600 }}>{p.capacity_mw}</td>
+                <td style={{ padding: "10px 6px", width: 130 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <div style={{ flex: 1, height: 4, background: "var(--cds-layer-03)", borderRadius: 2 }}>
+                    <div style={{ flex: 1, height: 3, background: "#EBEDF0", borderRadius: 2 }}>
                       <div style={{
                         width: `${phasePct}%`, height: "100%", borderRadius: 2,
-                        background: STATUS_COLORS[p.status] || "#888",
+                        background: STATUS_COLORS[p.status] || "#9CA3AF",
                       }} />
                     </div>
-                    <span style={{ fontSize: 9, color: "var(--cds-text-helper, #697077)", whiteSpace: "nowrap" }}>{p.phase.replace("_", " ")}</span>
+                    <span style={{ fontSize: 10, color: "#6B7280", whiteSpace: "nowrap" }}>{p.phase.replace("_", " ")}</span>
                   </div>
                 </td>
-                <td style={{ padding: "6px 4px", textAlign: "center" }}>
+                <td style={{ padding: "10px 6px", textAlign: "center" }}>
                   <span style={{
-                    color: p.score >= 70 ? "#24a148" : p.score >= 50 ? "#f1c21b" : "#da1e28",
-                    fontWeight: 700,
+                    fontFamily: "'JetBrains Mono', monospace",
+                    color: p.score >= 70 ? "#15803D" : p.score >= 50 ? "#854D0E" : "#B91C1C",
+                    fontWeight: 700, fontSize: 12,
                   }}>{p.score}</span>
                 </td>
-                <td style={{ padding: "6px 4px", textAlign: "center" }}>
+                <td style={{ padding: "8px 6px", textAlign: "center" }}>
                   <span style={{
-                    padding: "2px 8px", borderRadius: 8, fontSize: 9, fontWeight: 700, color: "#fff",
-                    background: p.verdict === "GO" ? "#24a148" : p.verdict === "CAUTION" ? "#f1c21b" : "#da1e28",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    padding: "2px 8px", borderRadius: 4, fontSize: 9, fontWeight: 700,
+                    color: p.verdict === "GO" ? "#15803D" : p.verdict === "CAUTION" ? "#854D0E" : "#B91C1C",
+                    background: p.verdict === "GO" ? "#DCFCE7" : p.verdict === "CAUTION" ? "#FEF9C3" : "#FEE2E2",
                   }}>{p.verdict}</span>
                 </td>
               </tr>
