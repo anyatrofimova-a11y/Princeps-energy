@@ -707,9 +707,7 @@ Be concise — bullet points, no long paragraphs.`;
             </div>
           </div>
 
-          <div className="copilot-chat-messages-wrap">
-            <GridCanvas style={{ position: "absolute", inset: 0, zIndex: 0 }} />
-            <div className="copilot-chat-messages">
+          <div className="copilot-chat-messages">
             {messages.length === 0 && (
               <div className="copilot-chat-welcome">
                 <div className="copilot-chat-welcome-title">Princeps Copilot</div>
@@ -755,7 +753,7 @@ Be concise — bullet points, no long paragraphs.`;
 
             {messages.map((msg, i) => (
               <div key={i} className={`cpc-msg cpc-msg-${msg.role}`}>
-                {msg.role === "assistant" && <div className="cpc-msg-avatar"><img src="/logo-princeps.png" alt="" width="18" height="18" style={{ objectFit: "contain" }} /></div>}
+                {false && null}
                 <div className="cpc-msg-body">
                   {msg.content && <MessageText text={msg.content} />}
                   {msg.suggestions && (
@@ -820,7 +818,6 @@ Be concise — bullet points, no long paragraphs.`;
               </div>
             ))}
             <div ref={messagesEndRef} />
-          </div>
           </div>
 
           {/* Quick action buttons — always visible, context-aware */}

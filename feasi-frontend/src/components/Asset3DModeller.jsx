@@ -11,7 +11,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid, Html, Environment } from "@react-three/drei";
 import * as THREE from "three";
-import PostprocessingEffects from "./PostprocessingEffects";
+// PostprocessingEffects removed — causes R3F crash on some setups
 
 /* ── Procedural component renderer ────────────────────────────────── */
 function AssetComponent({ comp, hovered, onClick }) {
@@ -137,51 +137,96 @@ function AssetScene({ spec, selectedComponent, onSelectComponent }) {
 
 /* ── Main panel ────────────────────────────────────────────────────── */
 const ASSET_ICONS = {
-  data_centre: "🏢",
-  substation: "⚡",
-  solar_farm: "☀️",
-  bess: "🔋",
-  wind_turbine: "🌬️",
+  data_centre: "DC",
+  substation: "SUB",
+  solar_farm: "PV",
+  bess: "BAT",
+  wind_turbine: "WND",
 };
 
+const DEFAULT_ASSET_TYPES = [
+  { id: "data_centre", label: "Data Centre", default_mw: 10 },
+  { id: "solar_farm", label: "Solar Farm", default_mw: 50 },
+  { id: "bess", label: "BESS", default_mw: 50 },
+  { id: "substation", label: "Substation", default_mw: null },
+  { id: "wind_turbine", label: "Wind Turbine", default_mw: 5 },
+];
+
+function generateLocalSpec(assetType, mw) {
+  const capacity = mw || 10;
+  const specs = {
+    data_centre: {
+      name: `${capacity}MW Data Centre`,
+      height_m: Math.min(25, 8 + capacity * 0.5),
+      components: [
+        { name: "Server Hall", color: "#333", dims: [20, 8, 30], position: [0, 4, 0] },
+        { name: "Cooling Plant", color: "#0891b2", dims: [10, 6, 8], position: [16, 3, 0] },
+        { name: "UPS Room", color: "#7c3aed", dims: [6, 5, 8], position: [-14, 2.5, 0] },
+        { name: "Transformer", color: "#f59e0b", dims: [4, 4, 4], position: [-14, 2, 10] },
+        { name: "Generator", color: "#ef4444", dims: [5, 3, 3], position: [16, 1.5, 10] },
+      ],
+    },
+    solar_farm: {
+      name: `${capacity}MW Solar Farm`,
+      height_m: 3,
+      components: Array.from({ length: Math.min(20, Math.ceil(capacity / 5)) }, (_, i) => ({
+        name: `Panel Row ${i + 1}`, color: "#1565c0", dims: [18, 0.1, 2],
+        position: [-15 + (i % 5) * 7, 2, -10 + Math.floor(i / 5) * 5],
+      })).concat([
+        { name: "Inverter", color: "#ff9800", dims: [2, 2, 1.5], position: [20, 1, 0] },
+        { name: "Transformer", color: "#607d8b", dims: [3, 3, 3], position: [24, 1.5, 0] },
+      ]),
+    },
+    bess: {
+      name: `${capacity}MW / ${capacity * 4}MWh BESS`,
+      height_m: 4,
+      components: Array.from({ length: Math.min(10, Math.ceil(capacity / 10)) }, (_, i) => ({
+        name: `Container ${i + 1}`, color: "#16a34a", dims: [12, 2.8, 2.4],
+        position: [-8 + (i % 5) * 4, 1.4, i < 5 ? -3 : 3],
+      })).concat([
+        { name: "PCS/Inverter", color: "#ff9800", dims: [3, 2.5, 2], position: [14, 1.25, 0] },
+        { name: "Transformer", color: "#607d8b", dims: [3, 3.5, 3], position: [18, 1.75, 0] },
+      ]),
+    },
+    substation: {
+      name: "33kV Substation",
+      height_m: 12,
+      components: [
+        { name: "Transformer", color: "#78909c", dims: [4, 5, 4], position: [0, 2.5, 0] },
+        { name: "Switchgear", color: "#455a64", dims: [6, 3, 2], position: [6, 1.5, 0] },
+        { name: "Control Room", color: "#90a4ae", dims: [5, 3, 4], position: [-6, 1.5, 0] },
+        { name: "Busbar", color: "#fdd835", dims: [15, 0.2, 0.2], position: [0, 8, 0] },
+      ],
+    },
+    wind_turbine: {
+      name: `${capacity}MW Wind Turbine`,
+      height_m: 80 + capacity * 5,
+      components: [
+        { name: "Tower", color: "#e0e0e0", dims: [2, 80, 2], position: [0, 40, 0] },
+        { name: "Nacelle", color: "#bdbdbd", dims: [6, 3, 3], position: [0, 81, 0] },
+        { name: "Blade 1", color: "#f5f5f5", dims: [0.5, 35, 1.5], position: [0, 81, 18] },
+        { name: "Blade 2", color: "#f5f5f5", dims: [0.5, 35, 1.5], position: [0, 81, -18] },
+        { name: "Foundation", color: "#9e9e9e", dims: [8, 1, 8], position: [0, 0.5, 0] },
+      ],
+    },
+  };
+  return specs[assetType] || specs.data_centre;
+}
+
 export default function Asset3DModeller({ onClose, onPlaceOnMap }) {
-  const [assetTypes, setAssetTypes] = useState([]);
+  const [assetTypes] = useState(DEFAULT_ASSET_TYPES);
   const [selectedType, setSelectedType] = useState("data_centre");
-  const [spec, setSpec] = useState(null);
+  const [spec, setSpec] = useState(() => generateLocalSpec("data_centre", 10));
   const [loading, setLoading] = useState(false);
   const [selectedComponent, setSelectedComponent] = useState(null);
   const [showProtocol, setShowProtocol] = useState(false);
-  const [capacityMw, setCapacityMw] = useState(null);
+  const [capacityMw, setCapacityMw] = useState(10);
 
-  // Fetch asset types
+  // Generate model locally — no API needed
   useEffect(() => {
-    fetch("/api/grid/asset-types")
-      .then(r => r.json())
-      .then(setAssetTypes)
-      .catch(() => {});
-  }, []);
-
-  // Generate model
-  const generateModel = async () => {
-    setLoading(true);
-    setSpec(null);
+    setSpec(generateLocalSpec(selectedType, capacityMw));
     setSelectedComponent(null);
-    try {
-      const params = new URLSearchParams({ asset_type: selectedType });
-      if (capacityMw) params.set("capacity_mw", capacityMw);
-      const r = await fetch(`/api/grid/asset-model?${params}`, { method: "POST" });
-      const data = await r.json();
-      if (!data.error) setSpec(data);
-    } catch (e) {
-      console.warn("Asset model generation failed:", e);
-    }
-    setLoading(false);
-  };
-
-  // Auto-generate on type change
-  useEffect(() => {
-    generateModel();
-  }, [selectedType]);
+  }, [selectedType, capacityMw]);
 
   const comp = spec?.components?.[selectedComponent];
 
@@ -305,12 +350,7 @@ export default function Asset3DModeller({ onClose, onPlaceOnMap }) {
               selectedComponent={selectedComponent}
               onSelectComponent={setSelectedComponent}
             />
-            <PostprocessingEffects
-              bloom={1.6}
-              bloomThreshold={0.25}
-              chromaticAberration={0.002}
-              vignette={0.55}
-            />
+            {/* PostprocessingEffects removed — bloom/glow effects caused crash */}
           </Canvas>
         </div>
 

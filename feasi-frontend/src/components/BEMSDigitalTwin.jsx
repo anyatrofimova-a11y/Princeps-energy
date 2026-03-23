@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid, Html } from "@react-three/drei";
 import * as THREE from "three";
-import PostprocessingEffects from "./PostprocessingEffects";
+// import PostprocessingEffects from "./PostprocessingEffects";
 
 /* ── Design Tokens ────────────────────────────────────────────────────── */
 const T = {
@@ -1143,7 +1143,7 @@ export default function BEMSDigitalTwin({ onClose }) {
               selectedEquipment={selectedEquipment}
               onSelectEquipment={setSelectedEquipment}
             />
-            <PostprocessingEffects bloom={1.0} bloomThreshold={0.45} chromaticAberration={0.001} vignette={0.35} />
+            {/* <PostprocessingEffects bloom={1.0} bloomThreshold={0.45} chromaticAberration={0.001} vignette={0.55} /> */}
           </Canvas>
           {/* 3D label overlay */}
           <div style={{
