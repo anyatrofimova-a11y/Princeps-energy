@@ -695,6 +695,104 @@ async def api_dc_thermal_field(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  G99/G100 COMPLIANCE AUTOMATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@router.post("/api/compliance/g99")
+async def api_g99_application(
+    lat: float = Query(...), lon: float = Query(...),
+    capacity_mw: float = Query(5), technology: str = Query("solar"),
+    voltage_kv: float = Query(33), dno: str = Query(None),
+):
+    """Generate G99/G100 compliance application data with protection settings."""
+    from utils.g99_compliance import generate_g99_application
+    return generate_g99_application(lat, lon, capacity_mw, technology, voltage_kv, dno)
+
+
+@router.get("/api/compliance/g99-check")
+async def api_g99_check(
+    capacity_mw: float = Query(5), voltage_kv: float = Query(33),
+    technology: str = Query("solar"),
+):
+    """Check which G99 category applies and what's required."""
+    from utils.g99_compliance import check_g99_compliance
+    return check_g99_compliance(capacity_mw, voltage_kv, technology)
+
+
+@router.get("/api/compliance/g99-protection")
+async def api_g99_protection(
+    capacity_mw: float = Query(5), voltage_kv: float = Query(33),
+    technology: str = Query("solar"),
+):
+    """Get required protection relay settings per G99."""
+    from utils.g99_compliance import g99_protection_settings
+    return g99_protection_settings(capacity_mw, voltage_kv, technology)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  EXPORT ENGINE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@router.post("/api/export/site-report")
+async def api_export_site_report(
+    lat: float = Query(...), lon: float = Query(...),
+    capacity_mw: float = Query(5), technology: str = Query("solar"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Generate branded HTML site report."""
+    from utils.export_engine import generate_site_report_html
+    # Gather data from existing endpoints
+    async with pool.acquire() as conn:
+        grid = await gc_assess(conn, lat=lat, lon=lon, capacity_mw=capacity_mw, technology=technology)
+    site_data = {
+        "lat": lat, "lon": lon, "capacity_mw": capacity_mw, "technology": technology,
+        "grid": grid,
+    }
+    html = generate_site_report_html(site_data)
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html)
+
+
+@router.post("/api/export/csv")
+async def api_export_csv(sites: list = []):
+    """Export sites comparison as CSV."""
+    from utils.export_engine import generate_csv_export
+    csv_str = generate_csv_export(sites)
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(content=csv_str, media_type="text/csv",
+                              headers={"Content-Disposition": "attachment; filename=princeps-export.csv"})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  USAGE TRACKING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+@router.get("/api/usage/check")
+async def api_usage_check(user_id: str = Query("default"), tier: str = Query("free")):
+    """Check usage quota for current user/tier."""
+    from utils.usage_tracker import check_quota
+    return check_quota(user_id, tier)
+
+
+@router.post("/api/usage/record")
+async def api_usage_record(user_id: str = Query("default"), endpoint: str = Query("assessment"), tier: str = Query("free")):
+    """Record an API usage event."""
+    from utils.usage_tracker import record_usage
+    record_usage(user_id, endpoint, tier)
+    return {"recorded": True}
+
+
+@router.get("/api/usage/summary")
+async def api_usage_summary(user_id: str = Query("default")):
+    """Get monthly usage breakdown."""
+    from utils.usage_tracker import get_usage_summary
+    return get_usage_summary(user_id)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  COMPETITIVE INTELLIGENCE INTEGRATIONS (LandGate/Halcyon/Searchland/PVcase/Transect-class)
 # ═══════════════════════════════════════════════════════════════════════════════
 

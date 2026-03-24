@@ -30,6 +30,12 @@ const COMMANDS = [
   { id: "act-dc-compare", label: "Compare DC Sites", section: "Data Centre", action: "dc-compare" },
   { id: "act-dc-report", label: "Generate DC Report", section: "Data Centre", action: "dc-report" },
   { id: "act-dc-landing", label: "Open DC Landing Page", section: "Data Centre", action: "dc-landing" },
+  { id: "act-gate", label: "Gate Readiness Dashboard", section: "Grid Connection", action: "gate-readiness" },
+  { id: "act-g99", label: "G99/G100 Compliance Check", section: "Grid Connection", action: "g99" },
+  { id: "act-compare", label: "Compare Sites (Bloomberg-style)", section: "Analysis", action: "site-compare" },
+  { id: "act-export-pdf", label: "Export Site Report (PDF)", section: "Export", action: "export-pdf" },
+  { id: "act-export-csv", label: "Export Sites (CSV/Excel)", section: "Export", action: "export-csv" },
+  { id: "act-intel", label: "Regulatory Intelligence Feed", section: "Intelligence", action: "intelligence" },
 ];
 
 export default function CommandPalette({ open, onClose, onAction }) {

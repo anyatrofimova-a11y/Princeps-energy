@@ -1144,4 +1144,28 @@ api.esa = {
   floodRisk:     (lat, lon) => post(`/api/esa/flood-risk?lat=${lat}&lon=${lon}`),
 };
 
+// ── G99/G100 Compliance ──
+api.compliance = {
+  g99Application: (lat, lon, mw, tech, kv, dno) =>
+    post(`/api/compliance/g99?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(tech)}&voltage_kv=${kv}${dno ? `&dno=${enc(dno)}` : ""}`),
+  g99Check: (mw, kv, tech) =>
+    get(`/api/compliance/g99-check?capacity_mw=${mw}&voltage_kv=${kv}&technology=${enc(tech)}`),
+  g99Protection: (mw, kv, tech) =>
+    get(`/api/compliance/g99-protection?capacity_mw=${mw}&voltage_kv=${kv}&technology=${enc(tech)}`),
+};
+
+// ── Export Engine ──
+api.exports = {
+  siteReport: (lat, lon, mw, tech) =>
+    post(`/api/export/site-report?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(tech)}`),
+  csv: (sites) => post("/api/export/csv", sites),
+};
+
+// ── Usage Tracking ──
+api.usage = {
+  check: (userId = "default", tier = "free") => get(`/api/usage/check?user_id=${enc(userId)}&tier=${enc(tier)}`),
+  record: (userId, endpoint, tier) => post(`/api/usage/record?user_id=${enc(userId)}&endpoint=${enc(endpoint)}&tier=${enc(tier)}`),
+  summary: (userId = "default") => get(`/api/usage/summary?user_id=${enc(userId)}`),
+};
+
 export default api;
