@@ -73,7 +73,7 @@ export default function CesiumMapOverlay({ enabled, layers = {}, onPick }) {
     }
 
     // Load energy assets
-    fetch("/api/analytics/energy-assets")
+    fetch("/analytics/energy-assets")
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data?.features || !assetDsRef.current) return;

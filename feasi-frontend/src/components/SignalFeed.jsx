@@ -1,18 +1,14 @@
 /**
- * SignalFeed — Real-time energy intelligence signal stream.
+ * SignalFeed — Site-contextual energy intelligence signal stream.
  *
- * Right-side panel showing live energy OSINT signals:
- *   - BMRS demand/generation updates
- *   - Grid frequency deviations
- *   - Constraint alerts (thermal, voltage)
- *   - Connection queue changes (ECR)
- *   - Weather/solar conditions
- *   - Planning alerts
- *
- * Each signal is clickable to fly the camera to the relevant location.
+ * Right-side panel showing live energy signals. When a site/entity is
+ * inspected, signals are filtered to that location. Real grid data
+ * (demand, generation, frequency, constraints, congestion) is shown
+ * separately from synthetic/simulated signals (weather, queue).
  *
  * Props:
  *   gridState       — current grid state
+ *   inspected       — currently inspected entity { type, data }
  *   onFlyTo(loc)    — callback to fly camera to {lon, lat, zoom}
  *   onDispatchAgent(intent, context) — trigger AI analysis
  */
@@ -20,16 +16,23 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 
 /* Signal types with icons and colors */
 const SIGNAL_TYPES = {
-  demand:     { icon: "D", color: "#D4A018", label: "Demand" },
-  generation: { icon: "G", color: "#52c41a", label: "Generation" },
-  frequency:  { icon: "F", color: "#1890ff", label: "Frequency" },
-  constraint: { icon: "!", color: "#f5222d", label: "Constraint" },
-  congestion: { icon: "C", color: "#fa8c16", label: "Congestion" },
-  queue:      { icon: "Q", color: "#e040fb", label: "Queue" },
-  weather:    { icon: "W", color: "#00b4d8", label: "Weather" },
-  planning:   { icon: "P", color: "#8c8c8c", label: "Planning" },
-  agent:      { icon: "A", color: "#D4A018", label: "AI Agent" },
+  demand:     { icon: "D", color: "#D4A018", label: "Demand", source: "grid" },
+  generation: { icon: "G", color: "#52c41a", label: "Generation", source: "grid" },
+  frequency:  { icon: "F", color: "#1890ff", label: "Frequency", source: "grid" },
+  constraint: { icon: "!", color: "#f5222d", label: "Constraint", source: "grid" },
+  congestion: { icon: "C", color: "#fa8c16", label: "Congestion", source: "grid" },
+  queue:      { icon: "Q", color: "#e040fb", label: "Queue", source: "sim" },
+  weather:    { icon: "W", color: "#00b4d8", label: "Weather", source: "sim" },
+  planning:   { icon: "P", color: "#8c8c8c", label: "Planning", source: "sim" },
+  agent:      { icon: "A", color: "#D4A018", label: "AI Agent", source: "grid" },
 };
+
+const SOURCE_TABS = [
+  { id: "all", label: "All" },
+  { id: "grid", label: "Grid Data" },
+  { id: "sim", label: "Simulated" },
+  { id: "site", label: "This Site" },
+];
 
 function fmtAgo(ms) {
   if (ms < 60000) return `${Math.floor(ms / 1000)}s ago`;
@@ -42,9 +45,23 @@ function fmtMw(v) {
   return v >= 1000 ? `${(v / 1000).toFixed(1)} GW` : `${Math.round(v)} MW`;
 }
 
-export default function SignalFeed({ gridState, onFlyTo, onDispatchAgent }) {
+/* Check if a signal is near an inspected entity */
+function isNearSite(signal, inspected) {
+  if (!inspected || !signal.location) return false;
+  const d = inspected.data;
+  if (!d) return false;
+  const sLat = d.lat ?? d.from_coords?.[1];
+  const sLon = d.lon ?? d.from_coords?.[0];
+  if (sLat == null || sLon == null) return false;
+  const dlat = Math.abs(signal.location.lat - sLat);
+  const dlon = Math.abs(signal.location.lon - sLon);
+  return dlat < 0.3 && dlon < 0.4; // ~30km radius
+}
+
+export default function SignalFeed({ gridState, inspected, onFlyTo, onDispatchAgent }) {
   const [signals, setSignals] = useState([]);
-  const [filter, setFilter] = useState("all");
+  const [sourceTab, setSourceTab] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [collapsed, setCollapsed] = useState(false);
   const prevStateRef = useRef(null);
   const signalIdRef = useRef(0);
@@ -100,7 +117,6 @@ export default function SignalFeed({ gridState, onFlyTo, onDispatchAgent }) {
     // Substation-level signals
     for (const s of gridState.substations || []) {
       if (s.utilisation >= 0.9) {
-        // Check if this is new/worsened
         const prevSub = prev?.substations?.find(ps => ps.id === s.id);
         if (!prevSub || prevSub.utilisation < 0.9) {
           newSignals.push({
@@ -126,7 +142,7 @@ export default function SignalFeed({ gridState, onFlyTo, onDispatchAgent }) {
             id: signalIdRef.current++,
             type: "congestion",
             severity: l.loading_pct > 90 ? "critical" : "warning",
-            title: `${l.from} → ${l.to} congested`,
+            title: `${l.from} \u2192 ${l.to} congested`,
             detail: `${l.loading_pct.toFixed(0)}% loading, ${fmtMw(Math.abs(l.flow_mw))} flow on ${l.voltage_kv} kV`,
             location: {
               lon: (l.from_coords[0] + l.to_coords[0]) / 2,
@@ -145,38 +161,60 @@ export default function SignalFeed({ gridState, onFlyTo, onDispatchAgent }) {
     prevStateRef.current = gridState;
   }, [gridState]);
 
-  /* ── Periodic synthetic signals (weather, queue) ── */
+  /* ── Periodic synthetic signals (weather, queue) — labelled as simulated ── */
   useEffect(() => {
     const interval = setInterval(() => {
       const ts = Date.now();
-      // Simulate weather update
       if (Math.random() < 0.3) {
         setSignals(prev => [{
           id: signalIdRef.current++,
           type: "weather",
           severity: "info",
-          title: `Solar irradiance ${(300 + Math.random() * 500).toFixed(0)} W/m²`,
+          title: `Solar irradiance ${(300 + Math.random() * 500).toFixed(0)} W/m\u00B2`,
           detail: `Cloud cover ${(Math.random() * 80).toFixed(0)}%, wind ${(3 + Math.random() * 12).toFixed(1)} m/s`,
           ts,
+          simulated: true,
         }, ...prev].slice(0, 100));
       }
-      // Simulate queue update
       if (Math.random() < 0.15) {
         const gsp = ["Bramley", "Beddington", "Manchester South", "Cambridge", "Norwich"][Math.floor(Math.random() * 5)];
+        const gspCoords = { Bramley: [-1.06,51.33], Beddington: [-0.14,51.37], "Manchester South": [-2.24,53.47], Cambridge: [0.14,52.19], Norwich: [1.30,52.62] };
+        const coords = gspCoords[gsp] || [0, 52];
         setSignals(prev => [{
           id: signalIdRef.current++,
           type: "queue",
           severity: "info",
           title: `ECR update: ${gsp}`,
           detail: `${Math.floor(2 + Math.random() * 8)} new applications, ${(10 + Math.random() * 50).toFixed(0)} MW queued`,
+          location: { lon: coords[0], lat: coords[1] },
           ts,
+          simulated: true,
         }, ...prev].slice(0, 100));
       }
     }, 8000);
     return () => clearInterval(interval);
   }, []);
 
-  const filtered = filter === "all" ? signals : signals.filter(s => s.type === filter);
+  /* ── Auto-switch to "This Site" when inspecting ── */
+  useEffect(() => {
+    if (inspected && sourceTab !== "site") {
+      setSourceTab("site");
+    }
+  }, [inspected]);
+
+  /* ── Filtering ── */
+  const filtered = signals.filter(sig => {
+    // Source tab filter
+    if (sourceTab === "grid" && sig.simulated) return false;
+    if (sourceTab === "sim" && !sig.simulated) return false;
+    if (sourceTab === "site") {
+      if (!inspected) return true; // show all if nothing inspected
+      return isNearSite(sig, inspected) || !sig.location; // system-level + nearby
+    }
+    // Type filter
+    if (typeFilter !== "all" && sig.type !== typeFilter) return false;
+    return true;
+  });
 
   if (collapsed) {
     return (
@@ -205,19 +243,40 @@ export default function SignalFeed({ gridState, onFlyTo, onDispatchAgent }) {
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
           <span className="sf-title">Signal Feed</span>
-          <span className="sf-count">{signals.length}</span>
+          <span className="sf-count">{filtered.length}</span>
+          {inspected && sourceTab === "site" && (
+            <span className="sf-site-indicator">
+              {inspected.data?.name || inspected.type}
+            </span>
+          )}
         </div>
         <button className="sf-collapse-btn" onClick={() => setCollapsed(true)}>&lsaquo;</button>
       </div>
 
-      {/* Filters */}
+      {/* Source tabs — Grid Data / Simulated / This Site */}
+      <div className="sf-source-tabs">
+        {SOURCE_TABS.map(tab => (
+          <button
+            key={tab.id}
+            className={`sf-source-tab ${sourceTab === tab.id ? "active" : ""}`}
+            onClick={() => setSourceTab(tab.id)}
+          >
+            {tab.label}
+            {tab.id === "site" && inspected && (
+              <span className="sf-source-dot" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Type filters */}
       <div className="sf-filters">
-        <button className={`sf-filter ${filter === "all" ? "active" : ""}`} onClick={() => setFilter("all")}>All</button>
+        <button className={`sf-filter ${typeFilter === "all" ? "active" : ""}`} onClick={() => setTypeFilter("all")}>All</button>
         {Object.entries(SIGNAL_TYPES).map(([key, t]) => (
           <button key={key}
-            className={`sf-filter ${filter === key ? "active" : ""}`}
-            onClick={() => setFilter(key)}
-            style={filter === key ? { borderColor: t.color } : {}}>
+            className={`sf-filter ${typeFilter === key ? "active" : ""}`}
+            onClick={() => setTypeFilter(key)}
+            style={typeFilter === key ? { borderColor: t.color } : {}}>
             {t.label}
           </button>
         ))}
@@ -226,14 +285,18 @@ export default function SignalFeed({ gridState, onFlyTo, onDispatchAgent }) {
       {/* Signal list */}
       <div className="sf-list">
         {filtered.length === 0 && (
-          <div className="sf-empty">No signals</div>
+          <div className="sf-empty">
+            {sourceTab === "site" && inspected
+              ? `No signals near ${inspected.data?.name || "selected site"}`
+              : "No signals"}
+          </div>
         )}
         {filtered.map(sig => {
           const typeInfo = SIGNAL_TYPES[sig.type] || SIGNAL_TYPES.demand;
           return (
             <div
               key={sig.id}
-              className={`sf-signal sf-signal-${sig.severity}`}
+              className={`sf-signal sf-signal-${sig.severity} ${sig.simulated ? "sf-signal-sim" : ""}`}
               onClick={() => {
                 if (sig.location) onFlyTo?.(sig.location);
               }}
@@ -242,7 +305,10 @@ export default function SignalFeed({ gridState, onFlyTo, onDispatchAgent }) {
                 {typeInfo.icon}
               </div>
               <div className="sf-signal-body">
-                <div className="sf-signal-title">{sig.title}</div>
+                <div className="sf-signal-title">
+                  {sig.title}
+                  {sig.simulated && <span className="sf-sim-tag">SIM</span>}
+                </div>
                 <div className="sf-signal-detail">{sig.detail}</div>
                 <div className="sf-signal-meta">
                   <span className="sf-signal-time">{fmtAgo(Date.now() - sig.ts)}</span>

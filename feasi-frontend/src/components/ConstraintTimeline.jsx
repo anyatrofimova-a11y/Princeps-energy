@@ -1,255 +1,223 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useMemo } from "react";
 
 /**
- * ConstraintTimeline — 48h time-slider for the constraint cost overlay.
+ * ConstraintTimeline — Area-by-area grid headroom analysis.
  *
- * When active, fetches the full constraint forecast once, then lets users
- * scrub hour-by-hour to see how boundary loading changes. Updates the
- * grid-constraints map source in real-time as the slider moves.
+ * Shows real substation data grouped by region/DNO with:
+ *   - Available headroom (MW) at each connection point
+ *   - Utilisation bar with RAG status
+ *   - Nearest connection points ranked by available capacity
+ *   - Regional summary (total capacity, demand, headroom)
  *
- * Also shows a mini heatmap strip of constraint probability across all boundaries.
+ * Props:
+ *   gridState  — live grid twin state with substations[]
+ *   visible    — whether panel is shown
+ *   onFlyTo    — callback to fly camera to { lon, lat }
  */
 
-const HOUR_LABELS = [];
-for (let i = 0; i < 48; i++) {
-  const h = i % 24;
-  HOUR_LABELS.push(h === 0 ? "00" : h < 10 ? `0${h}` : `${h}`);
-}
+/* ── Region definitions — group substations geographically ── */
+const REGIONS = [
+  { id: "london_se", label: "London & South East", latMin: 51.0, latMax: 51.8, lonMin: -1.5, lonMax: 1.5 },
+  { id: "south_west", label: "South West", latMin: 50.0, latMax: 51.5, lonMin: -6.0, lonMax: -2.0 },
+  { id: "east_anglia", label: "East Anglia", latMin: 51.8, latMax: 53.0, lonMin: 0.0, lonMax: 2.0 },
+  { id: "midlands", label: "Midlands", latMin: 52.0, latMax: 53.5, lonMin: -3.0, lonMax: 0.0 },
+  { id: "north_west", label: "North West", latMin: 53.0, latMax: 55.0, lonMin: -3.5, lonMax: -1.5 },
+  { id: "north_east", label: "North East & Yorkshire", latMin: 53.0, latMax: 56.0, lonMin: -1.5, lonMax: 0.5 },
+  { id: "wales", label: "Wales", latMin: 51.3, latMax: 53.5, lonMin: -5.5, lonMax: -2.5 },
+  { id: "scotland_central", label: "Central Scotland", latMin: 55.5, latMax: 57.0, lonMin: -5.5, lonMax: -2.0 },
+  { id: "scotland_north", label: "Northern Scotland", latMin: 57.0, latMax: 59.0, lonMin: -6.0, lonMax: -1.5 },
+];
 
-// Human-readable boundary names
-const BOUNDARY_NAMES = {
-  B0: "Scotland–England",
-  B1: "North England",
-  B2: "Midlands Corridor",
-  B4: "South Wales",
-  B6: "Scottish Highlands",
-  B7: "East Coast",
-  B8: "West Coast",
-  B9: "South East",
-};
-
-function riskColor(prob) {
-  if (prob > 0.6) return "#8B3A3A";
-  if (prob > 0.3) return "#D4A018";
-  return "#16a34a";
-}
-
-function riskExplanation(risk) {
-  if (risk === "HIGH") return "Grid is congested — connection delays likely, curtailment risk";
-  if (risk === "MEDIUM") return "Moderate loading — connection possible with conditions";
-  return "Uncongested — good conditions for connection";
-}
-
-export default function ConstraintTimeline({ map, visible }) {
-  const [data, setData] = useState(null);
-  const [hour, setHour] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const playRef = useRef(null);
-  const canvasRef = useRef(null);
-
-  // Fetch full forecast once when layer becomes visible
-  useEffect(() => {
-    if (!visible) {
-      setData(null);
-      setHour(0);
-      setPlaying(false);
-      return;
+function assignRegion(sub) {
+  for (const r of REGIONS) {
+    if (sub.lat >= r.latMin && sub.lat < r.latMax && sub.lon >= r.lonMin && sub.lon < r.lonMax) {
+      return r.id;
     }
-    fetch("/api/grid/constraints?hours_ahead=48")
-      .then((r) => r.ok ? r.json() : null)
-      .then((d) => {
-        if (d) setData(d);
-      })
-      .catch(() => {});
-  }, [visible]);
+  }
+  return "other";
+}
 
-  // Update map source when hour changes
-  const updateMapForHour = useCallback(
-    (h) => {
-      if (!data || !map) return;
-      const ts = data.timeseries || {};
-      const features = (data.features || []).map((f) => {
-        const bId = f.properties.boundary_id;
-        const hourly = ts[bId];
-        const entry = hourly && hourly[h];
-        if (!entry) return f;
-        return {
-          ...f,
-          properties: {
-            ...f.properties,
-            loading_pct: entry.load,
-            constraint_prob: entry.prob,
-            risk_level: entry.risk,
-            datetime: entry.dt,
-          },
-        };
-      });
-      const src = map.getSource("grid-constraints");
-      if (src) src.setData({ type: "FeatureCollection", features });
-    },
-    [data, map],
-  );
+function fmtMw(v) {
+  if (v == null) return "--";
+  return v >= 1000 ? `${(v / 1000).toFixed(1)} GW` : `${Math.round(v)} MW`;
+}
 
-  useEffect(() => {
-    updateMapForHour(hour);
-  }, [hour, updateMapForHour]);
+function ragColor(util) {
+  if (util >= 0.9) return "#e53935";
+  if (util >= 0.75) return "#fa8c16";
+  if (util >= 0.6) return "#D4A018";
+  return "#52c41a";
+}
 
-  // Play animation
-  useEffect(() => {
-    if (!playing) {
-      if (playRef.current) clearInterval(playRef.current);
-      return;
+function ragLabel(util) {
+  if (util >= 0.9) return "CONSTRAINED";
+  if (util >= 0.75) return "LIMITED";
+  if (util >= 0.6) return "MODERATE";
+  return "AVAILABLE";
+}
+
+export default function ConstraintTimeline({ gridState, visible, onFlyTo }) {
+  const [expandedRegion, setExpandedRegion] = useState(null);
+  const [sortBy, setSortBy] = useState("headroom"); // headroom | utilisation | capacity
+
+  const regionData = useMemo(() => {
+    if (!gridState?.substations) return [];
+
+    // Group substations by region
+    const groups = {};
+    for (const s of gridState.substations) {
+      const rId = assignRegion(s);
+      if (!groups[rId]) groups[rId] = [];
+      groups[rId].push(s);
     }
-    playRef.current = setInterval(() => {
-      setHour((h) => {
-        const next = h + 1;
-        if (next >= 48) {
-          setPlaying(false);
-          return 0;
-        }
-        return next;
+
+    // Build region summaries
+    return REGIONS.map(r => {
+      const subs = groups[r.id] || [];
+      if (subs.length === 0) return null;
+
+      const totalCapacity = subs.reduce((a, s) => a + (s.capacity_mw || 0), 0);
+      const totalDemand = subs.reduce((a, s) => a + (s.demand_mw || 0), 0);
+      const totalHeadroom = subs.reduce((a, s) => a + (s.headroom_mw || 0), 0);
+      const avgUtil = totalCapacity > 0 ? totalDemand / totalCapacity : 0;
+      const constrained = subs.filter(s => (s.utilisation || 0) >= 0.9).length;
+
+      // Sort substations
+      const sorted = [...subs].sort((a, b) => {
+        if (sortBy === "headroom") return (b.headroom_mw || 0) - (a.headroom_mw || 0);
+        if (sortBy === "utilisation") return (b.utilisation || 0) - (a.utilisation || 0);
+        return (b.capacity_mw || 0) - (a.capacity_mw || 0);
       });
-    }, 400);
-    return () => clearInterval(playRef.current);
-  }, [playing]);
 
-  // Draw heatmap strip
-  useEffect(() => {
-    if (!data || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    const ts = data.timeseries || {};
-    const bIds = Object.keys(ts);
-    const rowH = Math.max(4, Math.floor(canvas.height / bIds.length));
-    const colW = canvas.width / 48;
+      return {
+        ...r,
+        subs: sorted,
+        totalCapacity,
+        totalDemand,
+        totalHeadroom,
+        avgUtil,
+        constrained,
+        count: subs.length,
+      };
+    }).filter(Boolean).sort((a, b) => b.totalHeadroom - a.totalHeadroom);
+  }, [gridState, sortBy]);
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    bIds.forEach((bId, row) => {
-      const hours = ts[bId] || [];
-      hours.forEach((entry, col) => {
-        ctx.fillStyle = riskColor(entry.prob);
-        ctx.globalAlpha = 0.3 + entry.prob * 0.7;
-        ctx.fillRect(col * colW, row * rowH, colW + 0.5, rowH);
-      });
-    });
-    ctx.globalAlpha = 1;
+  if (!visible || !gridState) return null;
 
-    // Draw playhead
-    ctx.fillStyle = "#fff";
-    ctx.fillRect(hour * colW, 0, 1.5, canvas.height);
-  }, [data, hour]);
-
-  if (!visible || !data) return null;
-
-  const ts = data.timeseries || {};
-  const bIds = Object.keys(ts);
-  const currentEntry = bIds.length > 0 && ts[bIds[0]] ? ts[bIds[0]][hour] : null;
-
-  // Find highest risk boundary for the selected site
-  const highRiskCount = bIds.filter(b => {
-    const e = ts[b]?.[hour];
-    return e && e.risk === "HIGH";
-  }).length;
+  const totalSubs = regionData.reduce((a, r) => a + r.count, 0);
+  const totalConstrained = regionData.reduce((a, r) => a + r.constrained, 0);
+  const totalHeadroom = regionData.reduce((a, r) => a + r.totalHeadroom, 0);
 
   return (
-    <div className="constraint-timeline" style={{
-      background: "var(--glass-bg)", backdropFilter: "var(--glass-blur)",
-      border: "1px solid var(--glass-border)", borderRadius: 12,
-      boxShadow: "var(--shadow-lg)",
-    }}>
-      <div className="constraint-timeline-header">
-        <span className="constraint-timeline-title" style={{ color: "var(--cds-text-primary)", fontWeight: 900, letterSpacing: "0.02em" }}>
-          Grid Congestion
-        </span>
-        <span className="constraint-timeline-time" style={{ color: "var(--cds-text-helper)" }}>
-          {currentEntry ? currentEntry.dt : `+${hour}h`}
-        </span>
-        <span className="constraint-timeline-summary" style={{ color: highRiskCount > 0 ? "#8B3A3A" : "#16a34a", fontWeight: 700 }}>
-          {highRiskCount > 0 ? `${highRiskCount} congested` : "No congestion"}
-        </span>
+    <div className="ct2-panel">
+      {/* Header */}
+      <div className="ct2-header">
+        <div className="ct2-header-top">
+          <span className="ct2-title">Grid Headroom Analysis</span>
+          <span className="ct2-subtitle">{totalSubs} connection points</span>
+        </div>
+        <div className="ct2-summary">
+          <div className="ct2-summary-stat">
+            <span className="ct2-summary-value">{fmtMw(totalHeadroom)}</span>
+            <label>total headroom</label>
+          </div>
+          <div className="ct2-summary-stat">
+            <span className="ct2-summary-value" style={{ color: totalConstrained > 0 ? "#e53935" : "#52c41a" }}>
+              {totalConstrained}
+            </span>
+            <label>constrained</label>
+          </div>
+          <div className="ct2-summary-stat">
+            <span className="ct2-summary-value">{regionData.length}</span>
+            <label>regions</label>
+          </div>
+        </div>
       </div>
 
-      {/* Explanation */}
-      <div style={{ padding: "0 12px 6px", fontSize: 10, color: "var(--cds-text-helper)", lineHeight: 1.4 }}>
-        Transmission boundary loading forecast. High loading means grid connection in that area faces delays and potential curtailment.
+      {/* Sort controls */}
+      <div className="ct2-sort">
+        <span>Sort by</span>
+        {[
+          { id: "headroom", label: "Headroom" },
+          { id: "utilisation", label: "Utilisation" },
+          { id: "capacity", label: "Capacity" },
+        ].map(s => (
+          <button key={s.id} className={`ct2-sort-btn ${sortBy === s.id ? "active" : ""}`}
+            onClick={() => setSortBy(s.id)}>{s.label}</button>
+        ))}
       </div>
 
-      {/* Mini heatmap — rows = boundaries, cols = hours */}
-      <canvas
-        ref={canvasRef}
-        width={384}
-        height={bIds.length * 6}
-        className="constraint-timeline-heatmap"
-      />
-
-      <div className="constraint-timeline-controls">
-        <button
-          className="constraint-timeline-btn"
-          onClick={() => setPlaying(!playing)}
-          title={playing ? "Pause" : "Play"}
-        >
-          {playing ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="4" width="4" height="16" rx="1" />
-              <rect x="14" y="4" width="4" height="16" rx="1" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="5,3 19,12 5,21" />
-            </svg>
-          )}
-        </button>
-
-        <input
-          type="range"
-          min="0"
-          max="47"
-          value={hour}
-          onChange={(e) => {
-            setHour(parseInt(e.target.value, 10));
-            setPlaying(false);
-          }}
-          className="constraint-timeline-slider"
-        />
-
-        <span className="constraint-timeline-hour">
-          +{hour}h
-        </span>
-      </div>
-
-      {/* Per-boundary stats for current hour */}
-      <div className="constraint-timeline-boundaries">
-        {bIds.map((bId) => {
-          const entry = ts[bId]?.[hour];
-          if (!entry) return null;
+      {/* Region list */}
+      <div className="ct2-regions">
+        {regionData.map(r => {
+          const isExpanded = expandedRegion === r.id;
           return (
-            <div key={bId} className="constraint-timeline-row" title={riskExplanation(entry.risk)}>
-              <span
-                className="constraint-timeline-dot"
-                style={{ background: riskColor(entry.prob) }}
-              />
-              <span className="constraint-timeline-bid" style={{ minWidth: 28 }}>{bId}</span>
-              <span className="constraint-timeline-bid-name" style={{ fontSize: 9, color: "var(--cds-text-helper)", minWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {BOUNDARY_NAMES[bId] || bId}
-              </span>
-              <span className="constraint-timeline-load">
-                {entry.load.toFixed(0)}%
-              </span>
-              <div className="constraint-timeline-bar-bg">
-                <div
-                  className="constraint-timeline-bar"
-                  style={{
-                    width: `${Math.min(100, entry.load)}%`,
-                    background: riskColor(entry.prob),
-                  }}
-                />
-              </div>
-              <span
-                className="constraint-timeline-risk"
-                style={{ color: riskColor(entry.prob), fontWeight: 700 }}
-              >
-                {entry.risk}
-              </span>
+            <div key={r.id} className={`ct2-region ${isExpanded ? "expanded" : ""}`}>
+              {/* Region header — click to expand */}
+              <button className="ct2-region-header" onClick={() => setExpandedRegion(isExpanded ? null : r.id)}>
+                <div className="ct2-region-left">
+                  <span className="ct2-region-rag" style={{ background: ragColor(r.avgUtil) }} />
+                  <div>
+                    <div className="ct2-region-name">{r.label}</div>
+                    <div className="ct2-region-meta">{r.count} substations &middot; {ragLabel(r.avgUtil)}</div>
+                  </div>
+                </div>
+                <div className="ct2-region-right">
+                  <div className="ct2-region-headroom">
+                    <span className="ct2-region-hw-value">{fmtMw(r.totalHeadroom)}</span>
+                    <label>headroom</label>
+                  </div>
+                  <div className="ct2-region-util-bar">
+                    <div style={{ width: `${Math.min(r.avgUtil * 100, 100)}%`, background: ragColor(r.avgUtil) }} />
+                  </div>
+                  <span className="ct2-region-util-pct">{(r.avgUtil * 100).toFixed(0)}%</span>
+                  <svg className={`ct2-chevron ${isExpanded ? "open" : ""}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </div>
+              </button>
+
+              {/* Expanded: individual substations */}
+              {isExpanded && (
+                <div className="ct2-subs">
+                  <div className="ct2-subs-header">
+                    <span>Connection Point</span>
+                    <span>kV</span>
+                    <span>Demand</span>
+                    <span>Capacity</span>
+                    <span>Headroom</span>
+                    <span>Util</span>
+                  </div>
+                  {r.subs.map(s => (
+                    <button
+                      key={s.id}
+                      className="ct2-sub-row"
+                      onClick={() => onFlyTo?.({ lon: s.lon, lat: s.lat, height: 50000 })}
+                      title={`Click to fly to ${s.name}`}
+                    >
+                      <span className="ct2-sub-name">
+                        <span className="ct2-sub-dot" style={{ background: ragColor(s.utilisation || 0) }} />
+                        {s.name}
+                      </span>
+                      <span className="ct2-sub-kv">{s.voltage_kv}</span>
+                      <span className="ct2-sub-val">{fmtMw(s.demand_mw)}</span>
+                      <span className="ct2-sub-val">{fmtMw(s.capacity_mw)}</span>
+                      <span className="ct2-sub-val" style={{
+                        color: (s.headroom_mw || 0) < 10 ? "#e53935" : (s.headroom_mw || 0) < 30 ? "#fa8c16" : "#52c41a",
+                        fontWeight: 600,
+                      }}>
+                        {fmtMw(s.headroom_mw)}
+                      </span>
+                      <span className="ct2-sub-util">
+                        <div className="ct2-sub-util-bar">
+                          <div style={{ width: `${Math.min((s.utilisation || 0) * 100, 100)}%`, background: ragColor(s.utilisation || 0) }} />
+                        </div>
+                        <span style={{ color: ragColor(s.utilisation || 0) }}>{((s.utilisation || 0) * 100).toFixed(0)}%</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

@@ -27,7 +27,30 @@ import {
   utilisationColorCesium,
   ASSET_STYLES,
   createDEFRALidarHillshade,
+  createGIBSProvider,
 } from "../lib/cesium-config";
+
+/* ── Rendering / Vision Modes ──────────────────────────────────────────── */
+const VISION_MODES = [
+  { id: "normal", label: "Normal", icon: "N", color: "#fff" },
+  { id: "thermal", label: "Thermal", icon: "T", color: "#f5222d" },
+  { id: "grid_stress", label: "Grid Stress", icon: "S", color: "#fa8c16" },
+  { id: "queue_depth", label: "Queue Depth", icon: "Q", color: "#e040fb" },
+  { id: "planning_risk", label: "Planning Risk", icon: "P", color: "#1890ff" },
+  { id: "nightlights", label: "Night Lights", icon: "NL", color: "#ffd60a" },
+  { id: "god_mode", label: "God Mode", icon: "\u26A1", color: "#D4A018" },
+];
+
+/* CSS filter matrices for vision modes */
+const VISION_FILTERS = {
+  normal: null,
+  thermal: { hue: 0, saturation: 0.6, brightness: 0.8, contrast: 1.4, postClass: "gt-thermal" },
+  grid_stress: { hue: 0, saturation: 1.2, brightness: 1.0, contrast: 1.1, postClass: "gt-stress" },
+  queue_depth: null,
+  planning_risk: null,
+  nightlights: { hue: 0, saturation: 0.3, brightness: 0.5, contrast: 1.6, postClass: "gt-nightvision" },
+  god_mode: { hue: 0, saturation: 1.0, brightness: 1.0, contrast: 1.2, postClass: "gt-godmode" },
+};
 
 /* ── Constants ──────────────────────────────────────────────────────────── */
 const SCENARIOS = [
@@ -72,6 +95,7 @@ export default function GridTwinCesium({ onClose }) {
   const [scenarioYear, setScenarioYear] = useState(2024);
   const [liveMode, setLiveMode] = useState(true);
   const [inspected, setInspected] = useState(null);
+  const [hovered, setHovered] = useState(null);
   const [twinLayers, setTwinLayers] = useState({
     substations: true,
     lines: true,
@@ -95,8 +119,24 @@ export default function GridTwinCesium({ onClose }) {
   const [timelineMode, setTimelineMode] = useState("live");
   const [showLidar, setShowLidar] = useState(false);
   const [showAssets, setShowAssets] = useState(true);
+  const [showProjects, setShowProjects] = useState(true);
+  const [projects, setProjects] = useState([]);
+  const [visionMode, setVisionMode] = useState("normal");
+  const [visionMenuOpen, setVisionMenuOpen] = useState(false);
+  const [layerPanelOpen, setLayerPanelOpen] = useState(false);
+  const [gibsPanelOpen, setGibsPanelOpen] = useState(false);
+  const [overlayData, setOverlayData] = useState({
+    gridStress: null,    // substation utilisation zones
+    queueDepth: null,    // ECR queue data per GSP
+    planningRisk: null,  // planning probability data
+  });
   const lidarLayerRef = useRef(null);
   const assetDsRef = useRef(null);
+  const projectDsRef = useRef(null);
+  const hoverRef = useRef(null);
+  const tooltipPosRef = useRef({ x: 0, y: 0 });
+  const overlayDsRef = useRef(null);
+  const nightlightsLayerRef = useRef(null);
 
   /* ── Fetch initial state ── */
   useEffect(() => {
@@ -167,13 +207,44 @@ export default function GridTwinCesium({ onClose }) {
       }
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
+    // Hover handler — tooltip on mouse move
+    handler.setInputAction((movement) => {
+      const picked = viewer.scene.pick(movement.endPosition);
+      if (picked && picked.id && picked.id._princepsData) {
+        const d = picked.id._princepsData;
+        if (!hoverRef.current || hoverRef.current.data !== d.data) {
+          hoverRef.current = d;
+          tooltipPosRef.current = { x: movement.endPosition.x, y: movement.endPosition.y };
+          setHovered({ ...d, x: movement.endPosition.x, y: movement.endPosition.y });
+          viewer.scene.canvas.style.cursor = "pointer";
+        } else {
+          tooltipPosRef.current = { x: movement.endPosition.x, y: movement.endPosition.y };
+          setHovered(prev => prev ? { ...prev, x: movement.endPosition.x, y: movement.endPosition.y } : null);
+        }
+      } else if (hoverRef.current) {
+        hoverRef.current = null;
+        setHovered(null);
+        viewer.scene.canvas.style.cursor = "";
+      }
+    }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+    // Project data source
+    const projectDs = new Cesium.CustomDataSource("projects");
+    viewer.dataSources.add(projectDs);
+    projectDsRef.current = projectDs;
+
+    // Overlay data source (for vision mode entities)
+    const overlayDs = new Cesium.CustomDataSource("vision-overlays");
+    viewer.dataSources.add(overlayDs);
+    overlayDsRef.current = overlayDs;
+
     // Energy assets data source
     const assetDs = new Cesium.CustomDataSource("energy-assets");
     viewer.dataSources.add(assetDs);
     assetDsRef.current = assetDs;
 
     // Load ALL energy assets from backend
-    fetch("/api/analytics/energy-assets")
+    fetch("/analytics/energy-assets")
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data?.features || !assetDsRef.current) return;
@@ -454,7 +525,7 @@ export default function GridTwinCesium({ onClose }) {
     stops.push({
       type: "overview", label: "GB Transmission Grid — Live Overview",
       sublabel: `${(gridState.system?.total_demand_mw / 1000).toFixed(1)} GW demand`,
-      lon: -1.5, lat: 53.5, height: 1200000, heading: 350, pitch: -55,
+      lon: -0.12, lat: 51.5, height: 800000, heading: 0, pitch: -60,
       duration: 5, color: "#D4A018",
     });
 
@@ -545,6 +616,273 @@ export default function GridTwinCesium({ onClose }) {
     }
   }, [showAssets]);
 
+  /* ── Load pipeline projects ── */
+  useEffect(() => {
+    fetch("/api/v1/projects")
+      .then(r => r.ok ? r.json() : [])
+      .then(data => {
+        const list = Array.isArray(data) ? data : data.projects || [];
+        setProjects(list);
+      })
+      .catch(() => {});
+  }, []);
+
+  /* ── Render project entities ── */
+  useEffect(() => {
+    const ds = projectDsRef.current;
+    if (!ds) return;
+    ds.entities.removeAll();
+    if (!showProjects) return;
+
+    const STAGE_COLORS = {
+      prospect: "#8c8c8c", screened: "#D4A018", grid_applied: "#fa8c16",
+      grid_offer: "#1890ff", planning: "#e040fb", fid: "#52c41a",
+      construction: "#00b4d8", energised: "#52c41a",
+    };
+    const VERDICT_ICONS = { GO: "\u2714", CAUTION: "\u26A0", "NO-GO": "\u2718" };
+
+    for (const p of projects) {
+      if (!p.lat || !p.lon) continue;
+      const color = STAGE_COLORS[p.stage] || "#D4A018";
+
+      const entity = ds.entities.add({
+        position: Cesium.Cartesian3.fromDegrees(p.lon, p.lat, 100),
+        billboard: {
+          image: (() => {
+            const c = document.createElement("canvas");
+            c.width = 32; c.height = 40;
+            const ctx = c.getContext("2d");
+            // Pin shape
+            ctx.beginPath();
+            ctx.moveTo(16, 38);
+            ctx.bezierCurveTo(16, 38, 4, 24, 4, 14);
+            ctx.arc(16, 14, 12, Math.PI, 0, false);
+            ctx.bezierCurveTo(28, 24, 16, 38, 16, 38);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            // Inner dot
+            ctx.beginPath();
+            ctx.arc(16, 14, 5, 0, Math.PI * 2);
+            ctx.fillStyle = "#fff";
+            ctx.fill();
+            return c.toDataURL();
+          })(),
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          scale: 1.0,
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          scaleByDistance: new Cesium.NearFarScalar(5e3, 1.2, 1e6, 0.4),
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        },
+        label: {
+          text: `${p.name}\n${p.stage?.replace(/_/g, " ").toUpperCase() || ""} ${p.capacity_mw ? p.capacity_mw + " MW" : ""}`,
+          font: "11px 'DM Sans', sans-serif",
+          fillColor: Cesium.Color.fromCssColorString(color),
+          outlineColor: Cesium.Color.BLACK.withAlpha(0.8),
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.TOP,
+          pixelOffset: new Cesium.Cartesian2(0, 6),
+          scaleByDistance: new Cesium.NearFarScalar(1e4, 1.0, 5e5, 0),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        },
+      });
+      entity._princepsData = {
+        type: "project",
+        data: { ...p, color },
+      };
+    }
+  }, [projects, showProjects]);
+
+  /* ── Project visibility toggle ── */
+  useEffect(() => {
+    if (projectDsRef.current) {
+      projectDsRef.current.show = showProjects;
+    }
+  }, [showProjects]);
+
+  /* ── Vision mode rendering ── */
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    const ds = overlayDsRef.current;
+    if (!viewer || viewer.isDestroyed()) return;
+
+    // Remove nightlights layer if switching away
+    if (visionMode !== "nightlights" && visionMode !== "god_mode" && nightlightsLayerRef.current) {
+      viewer.imageryLayers.remove(nightlightsLayerRef.current, true);
+      nightlightsLayerRef.current = null;
+    }
+
+    // Clear overlay entities
+    if (ds) ds.entities.removeAll();
+
+    // Apply CSS filter to Cesium canvas for vision mode atmosphere
+    const canvas = viewer.scene.canvas;
+    const vf = VISION_FILTERS[visionMode];
+    if (vf) {
+      const filters = [];
+      if (vf.brightness !== 1.0) filters.push(`brightness(${vf.brightness})`);
+      if (vf.contrast !== 1.0) filters.push(`contrast(${vf.contrast})`);
+      if (vf.saturation !== 1.0) filters.push(`saturate(${vf.saturation})`);
+      if (vf.hue) filters.push(`hue-rotate(${vf.hue}deg)`);
+      canvas.style.filter = filters.join(" ");
+    } else {
+      canvas.style.filter = "";
+    }
+
+    // Add nightlights GIBS layer for nightlights + god mode
+    if ((visionMode === "nightlights" || visionMode === "god_mode") && !nightlightsLayerRef.current) {
+      const provider = createGIBSProvider("viirs_nightlights", gibsDate);
+      if (provider) {
+        nightlightsLayerRef.current = viewer.imageryLayers.addImageryProvider(provider);
+        nightlightsLayerRef.current.alpha = visionMode === "god_mode" ? 0.3 : 0.7;
+      }
+    }
+
+    // Grid stress mode: pulse rings around high-utilisation substations
+    if ((visionMode === "grid_stress" || visionMode === "god_mode") && gridState && ds) {
+      for (const s of gridState.substations || []) {
+        if (s.utilisation < 0.7) continue;
+        const severity = s.utilisation >= 0.9 ? 1.0 : s.utilisation >= 0.8 ? 0.6 : 0.3;
+        const pulseColor = s.utilisation >= 0.9
+          ? Cesium.Color.fromCssColorString("rgba(245,34,45,0.4)")
+          : s.utilisation >= 0.8
+            ? Cesium.Color.fromCssColorString("rgba(250,140,22,0.3)")
+            : Cesium.Color.fromCssColorString("rgba(250,200,22,0.15)");
+
+        ds.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(s.lon, s.lat),
+          ellipse: {
+            semiMajorAxis: 5000 + severity * 15000,
+            semiMinorAxis: 5000 + severity * 15000,
+            material: pulseColor,
+            outline: true,
+            outlineColor: pulseColor.withAlpha(0.8),
+            outlineWidth: 2,
+            height: 5,
+          },
+        });
+
+        // Outer warning ring
+        if (s.utilisation >= 0.85) {
+          ds.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(s.lon, s.lat),
+            ellipse: {
+              semiMajorAxis: 15000 + severity * 25000,
+              semiMinorAxis: 15000 + severity * 25000,
+              fill: false,
+              outline: true,
+              outlineColor: Cesium.Color.fromCssColorString("rgba(245,34,45,0.25)"),
+              outlineWidth: 1.5,
+              height: 5,
+            },
+          });
+        }
+      }
+    }
+
+    // Queue depth mode: show ECR queue as sized circles at substations
+    if ((visionMode === "queue_depth" || visionMode === "god_mode") && gridState && ds) {
+      for (const s of gridState.substations || []) {
+        const queued = s.ecr_queued || 0;
+        const queuedMw = s.ecr_mw || 0;
+        if (queued <= 0 && queuedMw <= 0) continue;
+        const radius = 3000 + Math.min(queuedMw, 500) * 20;
+        ds.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(s.lon, s.lat),
+          ellipse: {
+            semiMajorAxis: radius,
+            semiMinorAxis: radius,
+            material: Cesium.Color.fromCssColorString("rgba(224,64,251,0.2)"),
+            outline: true,
+            outlineColor: Cesium.Color.fromCssColorString("rgba(224,64,251,0.6)"),
+            outlineWidth: 2,
+            height: 5,
+          },
+          label: {
+            text: `${queued} apps\n${Math.round(queuedMw)} MW`,
+            font: "10px 'JetBrains Mono', monospace",
+            fillColor: Cesium.Color.fromCssColorString("#e040fb"),
+            outlineColor: Cesium.Color.BLACK.withAlpha(0.8),
+            outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            verticalOrigin: Cesium.VerticalOrigin.CENTER,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            scaleByDistance: new Cesium.NearFarScalar(1e4, 1.0, 1e6, 0.3),
+          },
+        });
+      }
+    }
+
+    // Planning risk mode: fetch and display planning probability data
+    if ((visionMode === "planning_risk" || visionMode === "god_mode") && ds) {
+      fetch("/api/planning/risk-map?region=UK")
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data?.zones || !overlayDsRef.current) return;
+          for (const z of data.zones) {
+            const risk = z.risk_score || 0.5;
+            const color = risk > 0.7
+              ? Cesium.Color.fromCssColorString("rgba(245,34,45,0.25)")
+              : risk > 0.4
+                ? Cesium.Color.fromCssColorString("rgba(250,140,22,0.2)")
+                : Cesium.Color.fromCssColorString("rgba(82,196,26,0.1)");
+            overlayDsRef.current.entities.add({
+              position: Cesium.Cartesian3.fromDegrees(z.lon, z.lat),
+              ellipse: {
+                semiMajorAxis: z.radius || 10000,
+                semiMinorAxis: z.radius || 10000,
+                material: color,
+                outline: true,
+                outlineColor: color.withAlpha(0.6),
+                outlineWidth: 1,
+                height: 5,
+              },
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Thermal mode: add land surface temp GIBS layer
+    if (visionMode === "thermal") {
+      const provider = createGIBSProvider("land_surface_temp", gibsDate);
+      if (provider) {
+        const layer = viewer.imageryLayers.addImageryProvider(provider);
+        layer.alpha = 0.5;
+        // Store so we can remove on mode change
+        return () => {
+          if (!viewer.isDestroyed()) viewer.imageryLayers.remove(layer, true);
+        };
+      }
+    }
+
+    // God mode: highlight every entity — make all assets glow
+    if (visionMode === "god_mode" && assetDsRef.current) {
+      const entities = assetDsRef.current.entities.values;
+      for (const e of entities) {
+        if (e.point) {
+          e.point.outlineWidth = 3;
+          e.point.outlineColor = Cesium.Color.fromCssColorString("#D4A018").withAlpha(0.9);
+          e.point.pixelSize = (e.point.pixelSize?.getValue?.() || 8) * 1.3;
+        }
+      }
+      // Restore on cleanup
+      return () => {
+        if (assetDsRef.current) {
+          for (const e of assetDsRef.current.entities.values) {
+            if (e.point) {
+              e.point.outlineWidth = 1.5;
+              e.point.outlineColor = Cesium.Color.WHITE.withAlpha(0.6);
+            }
+          }
+        }
+      };
+    }
+  }, [visionMode, gridState, gibsDate]);
+
   /* ── Fly camera to location (from signal feed / agent) ── */
   const handleFlyTo = useCallback((loc) => {
     const viewer = viewerRef.current;
@@ -574,144 +912,182 @@ export default function GridTwinCesium({ onClose }) {
   };
 
   return (
-    <div className="gt-overlay">
-      {/* ── Top toolbar ── */}
-      <div className="gt-toolbar">
-        <div className="gt-toolbar-left">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D4A018" strokeWidth="2">
-            <path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/>
-            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-            <line x1="12" y1="22.08" x2="12" y2="12"/>
-          </svg>
-          <span className="gt-title">Grid Digital Twin</span>
-          <span className="gt-title-engine">Cesium</span>
+    <div className={`gt-overlay ${VISION_FILTERS[visionMode]?.postClass || ""}`}>
+
+      {/* ═══ TOP BAR — slim, essential info only ═══ */}
+      <div className="gt2-topbar">
+        <div className="gt2-topbar-left">
+          <span className="gt2-logo">PRINCEPS</span>
+          <span className="gt2-badge">DIGITAL TWIN</span>
           {sys && (
-            <span className="gt-freq" style={{ color: Math.abs(sys.frequency_hz - 50) > 0.05 ? "#f5222d" : "#52c41a" }}>
+            <span className="gt2-freq" style={{ color: Math.abs(sys.frequency_hz - 50) > 0.05 ? "#f5222d" : "#52c41a" }}>
               {sys.frequency_hz.toFixed(3)} Hz
             </span>
           )}
         </div>
-
-        <div className="gt-toolbar-center">
-          <button className={`gt-pill ${liveMode ? "active" : ""}`} onClick={() => setLiveMode(!liveMode)}>
-            <span className={`gt-live-dot ${liveMode ? "pulsing" : ""}`} />
+        <div className="gt2-topbar-center">
+          <button className={`gt2-live ${liveMode ? "active" : ""}`} onClick={() => setLiveMode(!liveMode)}>
+            <span className={`gt2-live-dot ${liveMode ? "pulsing" : ""}`} />
             {liveMode ? "LIVE" : "STATIC"}
           </button>
-
-          <select className="gt-select" value={scenario}
+          {sys && <>
+            <div className="gt2-stat"><span>{fmtMw(sys.total_demand_mw)}</span><label>demand</label></div>
+            <div className="gt2-stat"><span style={{ color: "#52c41a" }}>{fmtMw(sys.total_generation_mw)}</span><label>gen</label></div>
+            <div className="gt2-stat"><span style={{
+              color: sys.system_utilisation >= 0.85 ? "#f5222d" : sys.system_utilisation >= 0.65 ? "#fa8c16" : "#52c41a"
+            }}>{(sys.system_utilisation * 100).toFixed(1)}%</span><label>util</label></div>
+          </>}
+        </div>
+        <div className="gt2-topbar-right">
+          <select className="gt2-scenario" value={scenario}
             onChange={e => { setScenario(e.target.value); setLiveMode(false); }}>
             {SCENARIOS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
-
           {!liveMode && (
-            <div className="gt-year-slider">
+            <div className="gt2-year">
               <input type="range" min={2024} max={2050} value={scenarioYear}
-                onChange={e => setScenarioYear(Number(e.target.value))} className="gt-slider" />
-              <span className="gt-year-label">{scenarioYear}</span>
+                onChange={e => setScenarioYear(Number(e.target.value))} />
+              <span>{scenarioYear}</span>
             </div>
           )}
-        </div>
-
-        <div className="gt-toolbar-right">
-          {/* Layer toggles — labelled */}
-          <button className={`gt-layer-btn-label ${twinLayers.substations ? "active" : ""}`}
-            onClick={() => setTwinLayers(prev => ({ ...prev, substations: !prev.substations }))}>Substations</button>
-          <button className={`gt-layer-btn-label ${twinLayers.lines ? "active" : ""}`}
-            onClick={() => setTwinLayers(prev => ({ ...prev, lines: !prev.lines }))}>Lines</button>
-          <button className={`gt-layer-btn-label ${twinLayers.labels ? "active" : ""}`}
-            onClick={() => setTwinLayers(prev => ({ ...prev, labels: !prev.labels }))}>Labels</button>
-          <button className={`gt-layer-btn-label ${twinLayers.particles ? "active" : ""}`}
-            onClick={() => setTwinLayers(prev => ({ ...prev, particles: !prev.particles }))}>Flow</button>
-
-          <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.12)" }} />
-
-          <button className={`gt-layer-btn-label ${showBuildings ? "active" : ""}`}
-            onClick={() => setShowBuildings(!showBuildings)}>Buildings</button>
-          <button className={`gt-layer-btn-label ${show3DTiles ? "active" : ""}`}
-            onClick={() => setShow3DTiles(!show3DTiles)}
-            style={show3DTiles ? { background: "#4285f4", color: "#fff" } : {}}>3D Tiles</button>
-          <button className={`gt-layer-btn-label ${showAssets ? "active" : ""}`}
-            onClick={() => setShowAssets(!showAssets)}>Assets</button>
-          <button className={`gt-layer-btn-label ${showLidar ? "active" : ""}`}
-            onClick={() => setShowLidar(!showLidar)}>LiDAR</button>
-          <button className={`gt-layer-btn-label ${constraintHeatmap ? "active" : ""}`}
-            onClick={() => setConstraintHeatmap(!constraintHeatmap)}>Constraints</button>
-          <button className={`gt-layer-btn-label ${choreographyActive ? "active" : ""}`}
-            onClick={() => setChoreographyActive(!choreographyActive)}
-            style={choreographyActive ? { background: "#D4A018", color: "#000" } : {}}>AI Tour</button>
-
-          <div style={{ width: 1, height: 16, background: "rgba(255,255,255,0.12)" }} />
-
-          {/* View presets */}
-          <button className="gt-layer-btn-label"
-            onClick={() => viewerRef.current?.camera.flyTo({
-              destination: Cesium.Cartesian3.fromDegrees(-1.5, 53.0, 1200000),
-              orientation: { heading: Cesium.Math.toRadians(350), pitch: Cesium.Math.toRadians(-55), roll: 0 },
-              duration: 1.5,
-            })}>UK View</button>
-          <button className="gt-layer-btn-label"
-            onClick={() => viewerRef.current?.camera.flyTo({
-              destination: Cesium.Cartesian3.fromDegrees(-1.5, 52.5, 200000),
-              orientation: { heading: Cesium.Math.toRadians(350), pitch: Cesium.Math.toRadians(-35), roll: 0 },
-              duration: 1.5,
-            })}>Close-up</button>
-
-          <button className="gt-close" onClick={onClose}>&times;</button>
+          <button className="gt2-close" onClick={onClose}>&times;</button>
         </div>
       </div>
 
-      {/* ── GIBS satellite layer panel ── */}
-      <div className="gt-gibs-panel">
-        <div className="gt-gibs-title">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#D4A018" strokeWidth="2">
+      {/* ═══ LEFT RAIL — vertical icon strip with flyout panels ═══ */}
+      <div className="gt2-rail">
+        {/* Layers */}
+        <button className={`gt2-rail-btn ${layerPanelOpen ? "active" : ""}`}
+          onClick={() => { setLayerPanelOpen(!layerPanelOpen); setGibsPanelOpen(false); setVisionMenuOpen(false); }}
+          title="Layers">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
+          </svg>
+        </button>
+        {/* Vision */}
+        <button className={`gt2-rail-btn ${visionMode !== "normal" ? "active" : ""}`}
+          onClick={() => { setVisionMenuOpen(!visionMenuOpen); setLayerPanelOpen(false); setGibsPanelOpen(false); }}
+          title="Vision Mode"
+          style={visionMode !== "normal" ? { color: VISION_MODES.find(m => m.id === visionMode)?.color } : {}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+        {/* Satellite / GIBS */}
+        <button className={`gt2-rail-btn ${gibsPanelOpen ? "active" : ""}`}
+          onClick={() => { setGibsPanelOpen(!gibsPanelOpen); setLayerPanelOpen(false); setVisionMenuOpen(false); }}
+          title="Satellite Imagery">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
           </svg>
-          NASA GIBS
-        </div>
-        <div className="gt-gibs-date">
-          <input type="date" value={gibsDate} onChange={e => setGibsDate(e.target.value)}
-            className="gt-gibs-date-input" />
-        </div>
-        {Object.entries(GIBS_LAYERS).map(([key, layer]) => (
-          <button key={key}
-            className={`gt-gibs-btn ${showGIBS.includes(key) ? "active" : ""}`}
-            onClick={() => toggleGIBS(key)}
-            title={layer.label}>
-            <span className={`gt-gibs-cat gt-gibs-cat-${layer.category}`} />
-            {layer.label}
-          </button>
-        ))}
+        </button>
+
+        <div className="gt2-rail-sep" />
+
+        {/* AI Tour */}
+        <button className={`gt2-rail-btn ${choreographyActive ? "active" : ""}`}
+          onClick={() => setChoreographyActive(!choreographyActive)}
+          title="AI Tour"
+          style={choreographyActive ? { color: "#D4A018" } : {}}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+        </button>
+        {/* UK View */}
+        <button className="gt2-rail-btn" title="UK Overview"
+          onClick={() => viewerRef.current?.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(-0.12, 51.5, 800000),
+            orientation: { heading: Cesium.Math.toRadians(0), pitch: Cesium.Math.toRadians(-60), roll: 0 },
+            duration: 1.5,
+          })}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>
+          </svg>
+        </button>
+        {/* Zoom close */}
+        <button className="gt2-rail-btn" title="Close-up"
+          onClick={() => viewerRef.current?.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(-1.5, 52.5, 200000),
+            orientation: { heading: Cesium.Math.toRadians(350), pitch: Cesium.Math.toRadians(-35), roll: 0 },
+            duration: 1.5,
+          })}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+          </svg>
+        </button>
       </div>
 
-      {/* ── System metrics strip ── */}
-      {sys && (
-        <div className="gt-metrics">
-          <div className="gt-metric">
-            <span className="gt-metric-label">Demand</span>
-            <span className="gt-metric-value">{fmtMw(sys.total_demand_mw)}</span>
-          </div>
-          <div className="gt-metric">
-            <span className="gt-metric-label">Generation</span>
-            <span className="gt-metric-value" style={{ color: "#52c41a" }}>{fmtMw(sys.total_generation_mw)}</span>
-          </div>
-          <div className="gt-metric">
-            <span className="gt-metric-label">Capacity</span>
-            <span className="gt-metric-value">{fmtMw(sys.total_capacity_mw)}</span>
-          </div>
-          <div className="gt-metric">
-            <span className="gt-metric-label">Utilisation</span>
-            <span className="gt-metric-value" style={{
-              color: sys.system_utilisation >= 0.85 ? "#f5222d" : sys.system_utilisation >= 0.65 ? "#fa8c16" : "#52c41a"
-            }}>
-              {(sys.system_utilisation * 100).toFixed(1)}%
-            </span>
-          </div>
-          {gridState.scenario && (
-            <div className="gt-metric gt-metric-scenario">
-              <span className="gt-metric-label">Scenario</span>
-              <span className="gt-metric-value">{gridState.scenario.name.replace(/_/g, " ")} {gridState.scenario.year}</span>
-            </div>
-          )}
+      {/* ═══ LAYER PANEL — flyout from left rail ═══ */}
+      {layerPanelOpen && (
+        <div className="gt2-flyout" style={{ top: 52 }}>
+          <div className="gt2-flyout-title">Layers</div>
+          <div className="gt2-flyout-section">Grid</div>
+          {[
+            { key: "substations", label: "Substations", active: twinLayers.substations, toggle: () => setTwinLayers(p => ({ ...p, substations: !p.substations })) },
+            { key: "lines", label: "Transmission Lines", active: twinLayers.lines, toggle: () => setTwinLayers(p => ({ ...p, lines: !p.lines })) },
+            { key: "labels", label: "Labels", active: twinLayers.labels, toggle: () => setTwinLayers(p => ({ ...p, labels: !p.labels })) },
+            { key: "particles", label: "Flow Particles", active: twinLayers.particles, toggle: () => setTwinLayers(p => ({ ...p, particles: !p.particles })) },
+            { key: "constraints", label: "Constraint Zones", active: constraintHeatmap, toggle: () => setConstraintHeatmap(!constraintHeatmap) },
+          ].map(l => (
+            <label key={l.key} className="gt2-layer-row">
+              <input type="checkbox" checked={l.active} onChange={l.toggle} />
+              <span>{l.label}</span>
+            </label>
+          ))}
+          <div className="gt2-flyout-section">Data</div>
+          {[
+            { key: "assets", label: "Energy Assets", active: showAssets, toggle: () => setShowAssets(!showAssets) },
+            { key: "projects", label: "Pipeline Projects", active: showProjects, toggle: () => setShowProjects(!showProjects), color: "#D4A018" },
+            { key: "lidar", label: "DEFRA LiDAR", active: showLidar, toggle: () => setShowLidar(!showLidar) },
+          ].map(l => (
+            <label key={l.key} className="gt2-layer-row">
+              <input type="checkbox" checked={l.active} onChange={l.toggle} />
+              <span style={l.color ? { color: l.color } : {}}>{l.label}</span>
+            </label>
+          ))}
+          <div className="gt2-flyout-section">Environment</div>
+          {[
+            { key: "buildings", label: "OSM Buildings", active: showBuildings, toggle: () => setShowBuildings(!showBuildings) },
+            { key: "3dtiles", label: "Google 3D Tiles", active: show3DTiles, toggle: () => setShow3DTiles(!show3DTiles) },
+          ].map(l => (
+            <label key={l.key} className="gt2-layer-row">
+              <input type="checkbox" checked={l.active} onChange={l.toggle} />
+              <span>{l.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+
+      {/* ═══ VISION MODE PANEL — flyout ═══ */}
+      {visionMenuOpen && (
+        <div className="gt2-flyout" style={{ top: 92 }}>
+          <div className="gt2-flyout-title">Vision Mode</div>
+          {VISION_MODES.map(m => (
+            <button
+              key={m.id}
+              className={`gt2-vision-row ${visionMode === m.id ? "active" : ""}`}
+              onClick={() => { setVisionMode(m.id); setVisionMenuOpen(false); }}
+            >
+              <span className="gt2-vision-dot" style={{ background: m.color }} />
+              <span>{m.label}</span>
+              {m.id === "god_mode" && <span className="gt2-vision-all">ALL</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ═══ GIBS PANEL — flyout ═══ */}
+      {gibsPanelOpen && (
+        <div className="gt2-flyout" style={{ top: 132 }}>
+          <div className="gt2-flyout-title">Satellite Imagery</div>
+          <input type="date" value={gibsDate} onChange={e => setGibsDate(e.target.value)}
+            className="gt2-date-input" />
+          {Object.entries(GIBS_LAYERS).map(([key, layer]) => (
+            <label key={key} className="gt2-layer-row">
+              <input type="checkbox" checked={showGIBS.includes(key)} onChange={() => toggleGIBS(key)} />
+              <span>{layer.label}</span>
+            </label>
+          ))}
         </div>
       )}
 
@@ -732,7 +1108,7 @@ export default function GridTwinCesium({ onClose }) {
         show3DTiles={show3DTiles}
         gibsLayers={showGIBS}
         gibsDate={gibsDate}
-        initialView={{ lon: -2.0, lat: 54.0, height: 1500000, heading: 350, pitch: -50 }}
+        initialView={{ lon: -0.12, lat: 51.5, height: 800000, heading: 0, pitch: -60 }}
         className="gt-map"
       />
 
@@ -744,12 +1120,67 @@ export default function GridTwinCesium({ onClose }) {
         </div>
       )}
 
+      {/* ── Hover tooltip ── */}
+      {hovered && !inspected && (
+        <div className="gt-hover-tooltip" style={{
+          left: Math.min(hovered.x + 16, window.innerWidth - 280),
+          top: Math.max(hovered.y - 10, 8),
+        }}>
+          {hovered.type === "substation" && (() => {
+            const s = hovered.data;
+            return (<>
+              <div className="gt-tt-name">{s.name}</div>
+              <div className="gt-tt-sub">{s.voltage_kv} kV {s.type} &middot; {s.dno || ""}</div>
+              <div className="gt-tt-row"><span>Demand</span><span>{fmtMw(s.demand_mw)}</span></div>
+              <div className="gt-tt-row"><span>Capacity</span><span>{fmtMw(s.capacity_mw)}</span></div>
+              <div className="gt-tt-row"><span>Headroom</span><span>{fmtMw(s.headroom_mw)}</span></div>
+              <div className="gt-tt-bar">
+                <div style={{ width: `${Math.min(s.utilisation * 100, 100)}%`, background: s.utilisation >= 0.9 ? "#f5222d" : s.utilisation >= 0.7 ? "#fa8c16" : "#52c41a" }} />
+              </div>
+              <div className="gt-tt-util">{(s.utilisation * 100).toFixed(1)}% utilisation</div>
+            </>);
+          })()}
+          {hovered.type === "line" && (() => {
+            const l = hovered.data;
+            return (<>
+              <div className="gt-tt-name">{l.from} &rarr; {l.to}</div>
+              <div className="gt-tt-sub">{l.voltage_kv} kV</div>
+              <div className="gt-tt-row"><span>Flow</span><span>{fmtMw(Math.abs(l.flow_mw))}</span></div>
+              <div className="gt-tt-row"><span>Loading</span><span style={{ color: l.congested ? "#f5222d" : "inherit" }}>{l.loading_pct?.toFixed(1)}%</span></div>
+              {l.congested && <div className="gt-tt-alert">Congested</div>}
+            </>);
+          })()}
+          {hovered.type === "asset" && (() => {
+            const a = hovered.data;
+            return (<>
+              <div className="gt-tt-name" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: a.color }} />
+                {a.name}
+              </div>
+              <div className="gt-tt-sub">{a.asset_type} &middot; {a.status}</div>
+              {a.capacity_mw > 0 && <div className="gt-tt-row"><span>Capacity</span><span>{fmtMw(a.capacity_mw)}</span></div>}
+              {a.operator && <div className="gt-tt-row"><span>Operator</span><span>{a.operator}</span></div>}
+            </>);
+          })()}
+          {hovered.type === "project" && (() => {
+            const p = hovered.data;
+            return (<>
+              <div className="gt-tt-name" style={{ color: p.color }}>{p.name}</div>
+              <div className="gt-tt-sub">{p.technology || "—"} &middot; {p.stage?.replace(/_/g, " ")}</div>
+              {p.capacity_mw && <div className="gt-tt-row"><span>Capacity</span><span>{p.capacity_mw} MW</span></div>}
+              {p.verdict && <div className="gt-tt-row"><span>Verdict</span><span style={{ color: p.verdict === "GO" ? "#52c41a" : p.verdict === "NO-GO" ? "#f5222d" : "#fa8c16" }}>{p.verdict}</span></div>}
+              {p.blocker && <div className="gt-tt-alert">{p.blocker}</div>}
+            </>);
+          })()}
+        </div>
+      )}
+
       {/* ── Inspector panel ── */}
       {inspected && (
         <div className="gt-inspector">
           <div className="gt-inspector-header">
             <span className="gt-inspector-type">
-              {inspected.type === "substation" ? "Substation" : inspected.type === "asset" ? "Energy Asset" : "Transmission Line"}
+              {inspected.type === "substation" ? "Substation" : inspected.type === "asset" ? "Energy Asset" : inspected.type === "project" ? "Pipeline Project" : "Transmission Line"}
             </span>
             <button className="gt-inspector-close" onClick={() => setInspected(null)}>&times;</button>
           </div>
@@ -815,6 +1246,29 @@ export default function GridTwinCesium({ onClose }) {
               </div>
             );
           })()}
+
+          {inspected.type === "project" && (() => {
+            const p = inspected.data;
+            return (
+              <div className="gt-inspector-body">
+                <div className="gt-inspector-name" style={{ color: p.color }}>{p.name}</div>
+                <div className="gt-inspector-id">
+                  {p.technology || "—"} &middot; {p.stage?.replace(/_/g, " ")} {p.verdict ? `&middot; ${p.verdict}` : ""}
+                </div>
+                <div className="gt-inspector-grid">
+                  {p.capacity_mw && <div><span className="gt-insp-label">Capacity</span><span className="gt-insp-value">{p.capacity_mw} MW</span></div>}
+                  <div><span className="gt-insp-label">Stage</span><span className="gt-insp-value">{p.stage?.replace(/_/g, " ")}</span></div>
+                  {p.verdict && (
+                    <div><span className="gt-insp-label">Verdict</span><span className="gt-insp-value" style={{
+                      color: p.verdict === "GO" ? "#52c41a" : p.verdict === "NO-GO" ? "#f5222d" : "#fa8c16"
+                    }}>{p.verdict}</span></div>
+                  )}
+                  {p.blocker && <div><span className="gt-insp-label">Blocker</span><span className="gt-insp-value" style={{ color: "#f5222d" }}>{p.blocker}</span></div>}
+                  {p.description && <div style={{ gridColumn: "1/-1" }}><span className="gt-insp-label">Notes</span><span className="gt-insp-value">{p.description}</span></div>}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -840,6 +1294,7 @@ export default function GridTwinCesium({ onClose }) {
       {/* ── Signal Feed (right panel) ── */}
       <SignalFeed
         gridState={gridState}
+        inspected={inspected}
         onFlyTo={handleFlyTo}
         onDispatchAgent={handleDispatchAgent}
       />

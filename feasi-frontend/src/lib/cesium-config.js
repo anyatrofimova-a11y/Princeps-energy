@@ -207,9 +207,9 @@ export const ASSET_STYLES = {
 };
 
 /* ── UK default view ──────────────────────────────────────────────────── */
-export const UK_CENTER = Cesium.Cartesian3.fromDegrees(-1.5, 53.0, 1200000);
+export const UK_CENTER = Cesium.Cartesian3.fromDegrees(-0.12, 51.5, 800000);
 export const UK_ORIENTATION = {
-  heading: Cesium.Math.toRadians(350),
-  pitch: Cesium.Math.toRadians(-55),
+  heading: Cesium.Math.toRadians(0),
+  pitch: Cesium.Math.toRadians(-60),
   roll: 0,
 };
