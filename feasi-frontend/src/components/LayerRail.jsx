@@ -52,7 +52,26 @@ const SECTIONS = [
       { id: "contours", label: "Contours", color: "#24a148" },
       { id: "aerial", label: "Aerial", color: "#a56eff" },
       { id: "google3d", label: "Google 3D", color: "#4285f4" },
+      { id: "cesiumGlobe", label: "Cesium Globe", color: "#00b4d8" },
       { id: "satellite", label: "Sentinel-2", color: "#D4A018" },
+    ],
+  },
+  {
+    id: "gibs",
+    label: "GIBS",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+      </svg>
+    ),
+    layers: [
+      { id: "gibsModis", label: "MODIS True Color", color: "#4285f4" },
+      { id: "gibsViirs", label: "VIIRS True Color", color: "#00b4d8" },
+      { id: "gibsNightlights", label: "Night Lights", color: "#ffd60a" },
+      { id: "gibsNdvi", label: "Vegetation (NDVI)", color: "#52c41a" },
+      { id: "gibsLandTemp", label: "Land Surface Temp", color: "#f5222d" },
+      { id: "gibsCloudFraction", label: "Cloud Fraction", color: "#adb5bd" },
+      { id: "gibsFire", label: "Fire / Thermal", color: "#ff6b35" },
     ],
   },
 ];

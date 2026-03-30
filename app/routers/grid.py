@@ -1208,9 +1208,13 @@ async def api_grid_twin_state(
             # ── Demand: scale by real national demand or fall back to simulated ──
             if real_demand_mw and total_db_demand > 0:
                 scale = real_demand_mw / total_db_demand
-                live_demand = round(base_demand * scale, 1)
+                # Cap scale factor to avoid inflated utilisation when DB coverage is sparse
+                scale = min(scale, 1.2)
+                live_demand = round(base_demand * scale * diurnal, 1)
             else:
                 live_demand = round(base_demand * diurnal * seasonal * (1 + random.gauss(0, 0.04)), 1)
+            # Ensure demand never exceeds capacity by more than 10% (data integrity guard)
+            live_demand = min(live_demand, capacity * 1.1)
 
             # ── Generation: use real wind+solar mix or fall back to solar-only ──
             if gen_mix and renewable_pct > 0:
@@ -1250,6 +1254,86 @@ async def api_grid_twin_state(
     except Exception as e:
         # Fallback to synthetic if DB unavailable
         substations = _fallback_substations(diurnal, seasonal, hour, day_of_year)
+
+    # ── Supplement with nationwide substations for areas not covered by DB ──
+    db_lats = [s["lat"] for s in substations]
+    db_coverage = {
+        "has_london": any(51.3 < lat < 51.7 for lat in db_lats) and any(-0.3 < s["lon"] < 0.2 for s in substations),
+        "has_scotland": any(lat > 55.0 for lat in db_lats),
+        "has_ne_england": any(54.0 < lat < 56.0 for lat in db_lats) and any(-2.0 < s["lon"] < 0.0 for s in substations),
+        "has_east_anglia": any(52.0 < lat < 53.0 for lat in db_lats) and any(s["lon"] > 0.5 for s in substations),
+        "has_south_east": any(50.5 < lat < 51.5 for lat in db_lats) and any(-1.5 < s["lon"] < 1.5 for s in substations),
+        "has_south_west": any(50.0 < lat < 51.0 for lat in db_lats) and any(s["lon"] < -3.0 for s in substations),
+    }
+    _nationwide = [
+        # London / SE
+        {"id": "BARK", "name": "Barking", "lat": 51.53, "lon": 0.08, "voltage_kv": 275, "capacity_mw": 720, "type": "GSP", "dno": "UKPN"},
+        {"id": "BEDD", "name": "Beddington", "lat": 51.37, "lon": -0.14, "voltage_kv": 275, "capacity_mw": 500, "type": "GSP", "dno": "UKPN"},
+        {"id": "WHAM", "name": "West Ham", "lat": 51.53, "lon": -0.01, "voltage_kv": 275, "capacity_mw": 550, "type": "GSP", "dno": "UKPN"},
+        {"id": "CITY", "name": "City Road", "lat": 51.53, "lon": -0.09, "voltage_kv": 132, "capacity_mw": 400, "type": "BSP", "dno": "UKPN"},
+        {"id": "WIMB", "name": "Wimbledon", "lat": 51.42, "lon": -0.21, "voltage_kv": 132, "capacity_mw": 320, "type": "BSP", "dno": "UKPN"},
+        {"id": "KEME", "name": "Kemsley", "lat": 51.36, "lon": 0.74, "voltage_kv": 275, "capacity_mw": 460, "type": "GSP", "dno": "UKPN"},
+        {"id": "SELL", "name": "Sellindge", "lat": 51.10, "lon": 1.03, "voltage_kv": 400, "capacity_mw": 800, "type": "GSP", "dno": "UKPN"},
+        {"id": "BRAM", "name": "Bramley", "lat": 51.33, "lon": -1.06, "voltage_kv": 400, "capacity_mw": 640, "type": "GSP", "dno": "SSEN"},
+        {"id": "LODR", "name": "Lovedean", "lat": 50.95, "lon": -1.07, "voltage_kv": 400, "capacity_mw": 600, "type": "GSP", "dno": "SSEN"},
+        {"id": "FAWL", "name": "Fawley", "lat": 50.82, "lon": -1.33, "voltage_kv": 400, "capacity_mw": 500, "type": "GSP", "dno": "SSEN"},
+        {"id": "BOLN", "name": "Bolney", "lat": 51.00, "lon": -0.20, "voltage_kv": 400, "capacity_mw": 550, "type": "GSP", "dno": "UKPN"},
+        # Scotland
+        {"id": "EDIN", "name": "Edinburgh South", "lat": 55.92, "lon": -3.19, "voltage_kv": 275, "capacity_mw": 420, "type": "GSP", "dno": "SPEN"},
+        {"id": "COCK", "name": "Cockenzie", "lat": 55.97, "lon": -2.97, "voltage_kv": 275, "capacity_mw": 380, "type": "GSP", "dno": "SPEN"},
+        {"id": "GLAS", "name": "Glasgow South", "lat": 55.83, "lon": -4.28, "voltage_kv": 275, "capacity_mw": 450, "type": "GSP", "dno": "SPEN"},
+        {"id": "HUNB", "name": "Hunterston B", "lat": 55.72, "lon": -4.89, "voltage_kv": 400, "capacity_mw": 600, "type": "GSP", "dno": "SPEN"},
+        {"id": "KEIT", "name": "Keith", "lat": 57.55, "lon": -2.95, "voltage_kv": 275, "capacity_mw": 320, "type": "GSP", "dno": "SSEN"},
+        {"id": "BEAU", "name": "Beauly", "lat": 57.47, "lon": -4.47, "voltage_kv": 275, "capacity_mw": 350, "type": "GSP", "dno": "SSEN"},
+        {"id": "DUNO", "name": "Dounreay", "lat": 58.58, "lon": -3.74, "voltage_kv": 275, "capacity_mw": 250, "type": "GSP", "dno": "SSEN"},
+        {"id": "PERT", "name": "Perth", "lat": 56.40, "lon": -3.44, "voltage_kv": 132, "capacity_mw": 200, "type": "BSP", "dno": "SSEN"},
+        # North East / Yorkshire
+        {"id": "KEAD", "name": "Keadby", "lat": 53.60, "lon": -0.75, "voltage_kv": 400, "capacity_mw": 500, "type": "GSP", "dno": "NPG"},
+        {"id": "DRAX", "name": "Drax", "lat": 53.74, "lon": -0.99, "voltage_kv": 400, "capacity_mw": 900, "type": "GSP", "dno": "NPG"},
+        {"id": "THON", "name": "Thornton", "lat": 53.89, "lon": -0.11, "voltage_kv": 275, "capacity_mw": 380, "type": "GSP", "dno": "NPG"},
+        {"id": "LEED", "name": "Leeds South", "lat": 53.78, "lon": -1.56, "voltage_kv": 275, "capacity_mw": 400, "type": "GSP", "dno": "NPG"},
+        {"id": "NEWC", "name": "Newcastle Benton", "lat": 55.01, "lon": -1.58, "voltage_kv": 275, "capacity_mw": 360, "type": "GSP", "dno": "NPG"},
+        {"id": "HART", "name": "Hartlepool", "lat": 54.68, "lon": -1.20, "voltage_kv": 275, "capacity_mw": 340, "type": "GSP", "dno": "NPG"},
+        {"id": "STEW", "name": "Stella West", "lat": 54.96, "lon": -1.71, "voltage_kv": 275, "capacity_mw": 380, "type": "GSP", "dno": "NPG"},
+        # East Anglia
+        {"id": "NORW", "name": "Norwich Main", "lat": 52.62, "lon": 1.30, "voltage_kv": 275, "capacity_mw": 280, "type": "GSP", "dno": "UKPN"},
+        {"id": "SIZW", "name": "Sizewell", "lat": 52.21, "lon": 1.62, "voltage_kv": 400, "capacity_mw": 700, "type": "GSP", "dno": "UKPN"},
+        {"id": "BRAI", "name": "Braintree", "lat": 51.88, "lon": 0.55, "voltage_kv": 132, "capacity_mw": 200, "type": "BSP", "dno": "UKPN"},
+        {"id": "CAMA", "name": "Cambridge", "lat": 52.19, "lon": 0.14, "voltage_kv": 132, "capacity_mw": 250, "type": "BSP", "dno": "UKPN"},
+        {"id": "IPWC", "name": "Ipswich", "lat": 52.06, "lon": 1.15, "voltage_kv": 132, "capacity_mw": 220, "type": "BSP", "dno": "UKPN"},
+        # South West
+        {"id": "EXET", "name": "Exeter Main", "lat": 50.72, "lon": -3.53, "voltage_kv": 132, "capacity_mw": 200, "type": "BSP", "dno": "NGED"},
+        {"id": "HINK", "name": "Hinkley Point", "lat": 51.21, "lon": -3.13, "voltage_kv": 400, "capacity_mw": 900, "type": "GSP", "dno": "NGED"},
+        {"id": "LAND", "name": "Landulph", "lat": 50.44, "lon": -4.23, "voltage_kv": 132, "capacity_mw": 180, "type": "BSP", "dno": "NGED"},
+        {"id": "INDN", "name": "Indian Queens", "lat": 50.39, "lon": -4.92, "voltage_kv": 132, "capacity_mw": 160, "type": "BSP", "dno": "NGED"},
+        # East Midlands
+        {"id": "RATT", "name": "Ratcliffe-on-Soar", "lat": 52.87, "lon": -1.26, "voltage_kv": 400, "capacity_mw": 700, "type": "GSP", "dno": "NGED"},
+        {"id": "NOTT", "name": "Nottingham East", "lat": 52.95, "lon": -1.12, "voltage_kv": 132, "capacity_mw": 280, "type": "BSP", "dno": "NGED"},
+        {"id": "LEIC", "name": "Leicester East", "lat": 52.63, "lon": -1.08, "voltage_kv": 132, "capacity_mw": 260, "type": "BSP", "dno": "NGED"},
+    ]
+    # Only add nationwide subs that are >20km from any existing DB substation
+    for ns in _nationwide:
+        too_close = False
+        for s in substations:
+            dlat = abs(s["lat"] - ns["lat"])
+            dlon = abs(s["lon"] - ns["lon"])
+            if dlat < 0.15 and dlon < 0.15:
+                too_close = True
+                break
+        if not too_close:
+            base = ns["capacity_mw"] * 0.55 * diurnal * seasonal
+            ns["demand_mw"] = round(min(base * (1 + random.gauss(0, 0.04)), ns["capacity_mw"] * 1.1), 1)
+            sf = max(0, math.sin(math.pi * max(0, min(1, (hour - 6) / 12))))
+            ss = max(0.1, math.sin(math.pi * (day_of_year - 80) / 365))
+            ns["generation_mw"] = round(ns["capacity_mw"] * 0.12 * sf * ss * (1 + random.gauss(0, 0.05)), 1)
+            ns["net_demand_mw"] = round(ns["demand_mw"] - ns["generation_mw"], 1)
+            ns["utilisation"] = round(ns["demand_mw"] / ns["capacity_mw"], 3)
+            ns["headroom_mw"] = round(ns["capacity_mw"] - ns["demand_mw"], 1)
+            ns["rag_demand"] = "green" if ns["utilisation"] < 0.6 else "amber" if ns["utilisation"] < 0.8 else "red"
+            ns["rag_generation"] = "green"
+            ns["ecr_queued"] = 0
+            ns["ecr_mw"] = 0.0
+            substations.append(ns)
 
     # Build lines by connecting nearby substations at same/adjacent voltage tiers
     lines = _build_twin_lines(substations)

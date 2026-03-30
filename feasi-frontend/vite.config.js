@@ -1,8 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import cesium from "vite-plugin-cesium";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), cesium()],
   test: {
     environment: "jsdom",
     globals: true,
@@ -16,6 +17,7 @@ export default defineConfig({
           "vendor-three": ["three"],
           "vendor-r3f": ["@react-three/fiber", "@react-three/drei"],
           "vendor-mapbox": ["mapbox-gl"],
+          "vendor-resium": ["resium"],
           "vendor-deck": ["@deck.gl/core", "@deck.gl/layers", "@deck.gl/mapbox"],
           "vendor-d3": ["d3-force"],
           // App chunks

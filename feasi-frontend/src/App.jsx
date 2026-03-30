@@ -19,6 +19,7 @@ import FinancialStrip from "./components/FinancialStrip";
 import IntelligencePanel from "./components/IntelligencePanel";
 import Asset3DOverlay from "./components/Asset3DOverlay";
 import Google3DTilesOverlay from "./components/Google3DTilesOverlay";
+const CesiumMapOverlay = lazy(() => import("./components/CesiumMapOverlay"));
 import CameraToolbar from "./components/CameraToolbar";
 import SitePicker from "./components/SitePicker";
 import LiveStrip from "./components/LiveStrip";
@@ -35,7 +36,7 @@ import { useWorkspace } from "./contexts/WorkspaceContext";
 const DigitalTwin = lazy(() => import("./components/DigitalTwin"));
 const TerrainTwin = lazy(() => import("./components/TerrainTwin"));
 const UnifiedTwin = lazy(() => import("./components/UnifiedTwin"));
-const GridTwin = lazy(() => import("./components/GridTwin"));
+const GridTwin = lazy(() => import("./components/GridTwinCesium"));
 const BEMSDigitalTwin = lazy(() => import("./components/BEMSDigitalTwin"));
 const BESSFacilityTwin = lazy(() => import("./components/BESSFacilityTwin"));
 const DataCentreTwin = lazy(() => import("./components/DataCentreTwin"));
@@ -521,6 +522,13 @@ export default function App() {
       <ErrorBoundary name="Google3DTilesOverlay" fallback={null}>
         <Google3DTilesOverlay mapInstance={mapInstance} enabled={!!layers.google3d} />
       </ErrorBoundary>
+      {layers.cesiumGlobe && (
+        <ErrorBoundary name="CesiumMapOverlay" fallback={null}>
+          <Suspense fallback={null}>
+            <CesiumMapOverlay enabled={!!layers.cesiumGlobe} layers={layers} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
 
       {/* Portfolio pins — all pipeline projects on map */}
       <ErrorBoundary name="PortfolioMapOverlay" fallback={null}>
