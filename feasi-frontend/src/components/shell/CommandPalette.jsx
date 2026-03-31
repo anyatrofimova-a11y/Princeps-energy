@@ -14,6 +14,7 @@ const COMMANDS = [
   { id: "act-graph", label: "Open Grid Graph Topology", section: "Actions", action: "graph" },
   { id: "act-bess-facility", label: "Open BESS Facility Twin", section: "Actions", action: "bess-facility" },
   { id: "act-dc-twin", label: "Open Data Centre Twin", section: "Actions", action: "dc-twin" },
+  { id: "act-site-designer", label: "Open 3D Site Designer", section: "Actions", action: "site-designer" },
   { id: "act-hardware", label: "Open Hardware Configurator", section: "Actions", action: "hardware" },
   { id: "act-thermal", label: "Open Thermal Model (TEASER)", section: "Actions", action: "thermal" },
   { id: "act-pitch", label: "Open Pitch Deck", section: "Actions", action: "pitch" },

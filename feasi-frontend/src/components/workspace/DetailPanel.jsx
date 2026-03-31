@@ -12,6 +12,25 @@ import RouteToMarketPanel from "../RouteToMarketPanel";
 import SustainabilityPanel from "../SustainabilityPanel";
 import InvestmentPanel from "../InvestmentPanel";
 import DataCentrePanel from "../DataCentrePanel";
+import CouncilSearchPanel from "../CouncilSearchPanel";
+import PlanningIntelligencePanel from "../PlanningIntelligencePanel";
+import BESSPanel from "../BESSPanel";
+import FinancialModelPanel from "../FinancialModelPanel";
+import SiteProspectorPanel from "../SiteProspectorPanel";
+import PPAOriginationPanel from "../PPAOriginationPanel";
+import PortfolioPanel from "../PortfolioPanel";
+import CableRoutingPanel from "../CableRoutingPanel";
+import YieldAssessmentPanel from "../YieldAssessmentPanel";
+import ConstructionPanel from "../ConstructionPanel";
+import WorkflowPanel from "../WorkflowPanel";
+import AssessmentSnapshotPanel from "../AssessmentSnapshotPanel";
+import ExportPanel from "../ExportPanel";
+import AlertRulesPanel from "../AlertRulesPanel";
+import ProspectorV2Panel from "../ProspectorV2Panel";
+import TerrainAnalysisPanel from "../TerrainAnalysisPanel";
+import ReportsHubPanel from "../ReportsHubPanel";
+import ElectricalDesignPanel from "../ElectricalDesignPanel";
+import DocumentsPanel from "../DocumentsPanel";
 
 const GridPropertyInspector = lazy(() => import("../grid/GridPropertyInspector"));
 
@@ -26,6 +45,25 @@ const DETAIL_TABS = [
   { id: "sustainability", label: "Sustain.", workspace: "design" },
   { id: "investment", label: "Invest", workspace: "comply" },
   { id: "datacentre", label: "DC", workspace: "analyse" },
+  { id: "planning", label: "Planning", workspace: "analyse" },
+  { id: "bess", label: "BESS", workspace: "analyse" },
+  { id: "financial", label: "Finance", workspace: "analyse" },
+  { id: "prospector", label: "Prospect", workspace: "analyse" },
+  { id: "council", label: "Council", workspace: "comply" },
+  { id: "ppa", label: "PPA", workspace: "design" },
+  { id: "workflow", label: "Workflow", workspace: "analyse" },
+  { id: "snapshot", label: "Snapshot", workspace: "analyse" },
+  { id: "export", label: "Export" },
+  { id: "alerts", label: "Alerts" },
+  { id: "prospector_v2", label: "Prospect V2", workspace: "analyse" },
+  { id: "terrain", label: "Terrain", workspace: "analyse" },
+  { id: "reports", label: "Reports", workspace: "design" },
+  { id: "electrical", label: "Electrical", workspace: "analyse" },
+  { id: "documents", label: "Documents", workspace: "design" },
+  { id: "portfolio", label: "Portfolio", workspace: "pipeline" },
+  { id: "cablerouting", label: "Cable", workspace: "analyse" },
+  { id: "yield", label: "Yield", workspace: "analyse" },
+  { id: "construction", label: "Build", workspace: "design" },
 ];
 
 export default function DetailPanel() {
@@ -42,6 +80,25 @@ export default function DetailPanel() {
     sustainabilityOpen, setSustainabilityOpen,
     investmentOpen, setInvestmentOpen,
     dcPanelOpen, setDcPanelOpen,
+    planningIntelOpen, setPlanningIntelOpen,
+    bessPanelOpen, setBessPanelOpen,
+    financialModelOpen, setFinancialModelOpen,
+    siteProspectorOpen, setSiteProspectorOpen,
+    councilSearchOpen, setCouncilSearchOpen,
+    ppaOriginationOpen, setPpaOriginationOpen,
+    workflowPanelOpen, setWorkflowPanelOpen,
+    assessmentSnapshotOpen, setAssessmentSnapshotOpen,
+    exportPanelOpen, setExportPanelOpen,
+    alertRulesOpen, setAlertRulesOpen,
+    prospectorV2Open, setProspectorV2Open,
+    terrainAnalysisOpen, setTerrainAnalysisOpen,
+    reportsHubOpen, setReportsHubOpen,
+    electricalDesignOpen, setElectricalDesignOpen,
+    documentsPanelOpen, setDocumentsPanelOpen,
+    portfolioPanelOpen, setPortfolioPanelOpen,
+    cableRoutingOpen, setCableRoutingOpen,
+    yieldAssessmentOpen, setYieldAssessmentOpen,
+    constructionPanelOpen, setConstructionPanelOpen,
     dashboardOpen,
     setLayers,
   } = useSite();
@@ -62,6 +119,25 @@ export default function DetailPanel() {
       if (section === "sustainability") setSustainabilityOpen(true);
       if (section === "investment") setInvestmentOpen(true);
       if (section === "datacentre") { setDcPanelOpen(true); setLayers(p => ({ ...p, dcCapacity: true })); }
+      if (section === "planning") setPlanningIntelOpen(true);
+      if (section === "bess") setBessPanelOpen(true);
+      if (section === "financial") setFinancialModelOpen(true);
+      if (section === "prospector") setSiteProspectorOpen(true);
+      if (section === "council") setCouncilSearchOpen(true);
+      if (section === "ppa") setPpaOriginationOpen(true);
+      if (section === "workflow") setWorkflowPanelOpen(true);
+      if (section === "snapshot") setAssessmentSnapshotOpen(true);
+      if (section === "export") setExportPanelOpen(true);
+      if (section === "alerts") setAlertRulesOpen(true);
+      if (section === "prospector_v2") setProspectorV2Open(true);
+      if (section === "terrain") setTerrainAnalysisOpen(true);
+      if (section === "reports") setReportsHubOpen(true);
+      if (section === "electrical") setElectricalDesignOpen(true);
+      if (section === "documents") setDocumentsPanelOpen(true);
+      if (section === "portfolio") setPortfolioPanelOpen(true);
+      if (section === "cablerouting") setCableRoutingOpen(true);
+      if (section === "yield") setYieldAssessmentOpen(true);
+      if (section === "construction") setConstructionPanelOpen(true);
     }
   }, [activeIntent]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -88,6 +164,25 @@ export default function DetailPanel() {
     : sustainabilityOpen ? "sustainability"
     : investmentOpen ? "investment"
     : dcPanelOpen ? "datacentre"
+    : planningIntelOpen ? "planning"
+    : bessPanelOpen ? "bess"
+    : financialModelOpen ? "financial"
+    : siteProspectorOpen ? "prospector"
+    : councilSearchOpen ? "council"
+    : ppaOriginationOpen ? "ppa"
+    : workflowPanelOpen ? "workflow"
+    : assessmentSnapshotOpen ? "snapshot"
+    : exportPanelOpen ? "export"
+    : alertRulesOpen ? "alerts"
+    : prospectorV2Open ? "prospector_v2"
+    : terrainAnalysisOpen ? "terrain"
+    : reportsHubOpen ? "reports"
+    : electricalDesignOpen ? "electrical"
+    : documentsPanelOpen ? "documents"
+    : portfolioPanelOpen ? "portfolio"
+    : cableRoutingOpen ? "cablerouting"
+    : yieldAssessmentOpen ? "yield"
+    : constructionPanelOpen ? "construction"
     : null;
 
   const effectiveSection = activeDeepDive || detailSection;
@@ -105,6 +200,25 @@ export default function DetailPanel() {
       setSustainabilityOpen(false);
       setInvestmentOpen(false);
       setDcPanelOpen(false);
+      setPlanningIntelOpen(false);
+      setBessPanelOpen(false);
+      setFinancialModelOpen(false);
+      setSiteProspectorOpen(false);
+      setCouncilSearchOpen(false);
+      setPpaOriginationOpen(false);
+      setWorkflowPanelOpen(false);
+      setAssessmentSnapshotOpen(false);
+      setExportPanelOpen(false);
+      setAlertRulesOpen(false);
+      setProspectorV2Open(false);
+      setTerrainAnalysisOpen(false);
+      setReportsHubOpen(false);
+      setElectricalDesignOpen(false);
+      setDocumentsPanelOpen(false);
+      setPortfolioPanelOpen(false);
+      setCableRoutingOpen(false);
+      setYieldAssessmentOpen(false);
+      setConstructionPanelOpen(false);
     }
     // Open the relevant panel
     if (tabId === "connection") setGridConnectionOpen(true);
@@ -116,6 +230,25 @@ export default function DetailPanel() {
     if (tabId === "sustainability") setSustainabilityOpen(true);
     if (tabId === "investment") setInvestmentOpen(true);
     if (tabId === "datacentre") setDcPanelOpen(true);
+    if (tabId === "planning") setPlanningIntelOpen(true);
+    if (tabId === "bess") setBessPanelOpen(true);
+    if (tabId === "financial") setFinancialModelOpen(true);
+    if (tabId === "prospector") setSiteProspectorOpen(true);
+    if (tabId === "council") setCouncilSearchOpen(true);
+    if (tabId === "ppa") setPpaOriginationOpen(true);
+    if (tabId === "workflow") setWorkflowPanelOpen(true);
+    if (tabId === "snapshot") setAssessmentSnapshotOpen(true);
+    if (tabId === "export") setExportPanelOpen(true);
+    if (tabId === "alerts") setAlertRulesOpen(true);
+    if (tabId === "prospector_v2") setProspectorV2Open(true);
+    if (tabId === "terrain") setTerrainAnalysisOpen(true);
+    if (tabId === "reports") setReportsHubOpen(true);
+    if (tabId === "electrical") setElectricalDesignOpen(true);
+    if (tabId === "documents") setDocumentsPanelOpen(true);
+    if (tabId === "portfolio") setPortfolioPanelOpen(true);
+    if (tabId === "cablerouting") setCableRoutingOpen(true);
+    if (tabId === "yield") setYieldAssessmentOpen(true);
+    if (tabId === "construction") setConstructionPanelOpen(true);
   };
 
   const closeDeepDive = () => {
@@ -129,6 +262,25 @@ export default function DetailPanel() {
     setSustainabilityOpen(false);
     setInvestmentOpen(false);
     setDcPanelOpen(false);
+    setPlanningIntelOpen(false);
+    setBessPanelOpen(false);
+    setFinancialModelOpen(false);
+    setSiteProspectorOpen(false);
+    setCouncilSearchOpen(false);
+    setPpaOriginationOpen(false);
+    setWorkflowPanelOpen(false);
+    setAssessmentSnapshotOpen(false);
+    setExportPanelOpen(false);
+    setAlertRulesOpen(false);
+    setProspectorV2Open(false);
+    setTerrainAnalysisOpen(false);
+    setReportsHubOpen(false);
+    setElectricalDesignOpen(false);
+    setDocumentsPanelOpen(false);
+    setPortfolioPanelOpen(false);
+    setCableRoutingOpen(false);
+    setYieldAssessmentOpen(false);
+    setConstructionPanelOpen(false);
   };
 
   return (
@@ -217,6 +369,120 @@ export default function DetailPanel() {
         {effectiveSection === "datacentre" && dcPanelOpen && (
           <ErrorBoundary name="DataCentrePanel">
             <DataCentrePanel onClose={closeDeepDive} />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "planning" && planningIntelOpen && (
+          <ErrorBoundary name="PlanningIntelligencePanel">
+            <PlanningIntelligencePanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "bess" && bessPanelOpen && (
+          <ErrorBoundary name="BESSPanel">
+            <BESSPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "financial" && financialModelOpen && (
+          <ErrorBoundary name="FinancialModelPanel">
+            <FinancialModelPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "prospector" && siteProspectorOpen && (
+          <ErrorBoundary name="SiteProspectorPanel">
+            <SiteProspectorPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "council" && councilSearchOpen && (
+          <ErrorBoundary name="CouncilSearchPanel">
+            <CouncilSearchPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "ppa" && ppaOriginationOpen && (
+          <ErrorBoundary name="PPAOriginationPanel">
+            <PPAOriginationPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "workflow" && workflowPanelOpen && (
+          <ErrorBoundary name="WorkflowPanel">
+            <WorkflowPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "snapshot" && assessmentSnapshotOpen && (
+          <ErrorBoundary name="AssessmentSnapshotPanel">
+            <AssessmentSnapshotPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "export" && exportPanelOpen && (
+          <ErrorBoundary name="ExportPanel">
+            <ExportPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "alerts" && alertRulesOpen && (
+          <ErrorBoundary name="AlertRulesPanel">
+            <AlertRulesPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "prospector_v2" && prospectorV2Open && (
+          <ErrorBoundary name="ProspectorV2Panel">
+            <ProspectorV2Panel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "portfolio" && portfolioPanelOpen && (
+          <ErrorBoundary name="PortfolioPanel">
+            <PortfolioPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "cablerouting" && cableRoutingOpen && (
+          <ErrorBoundary name="CableRoutingPanel">
+            <CableRoutingPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "yield" && yieldAssessmentOpen && (
+          <ErrorBoundary name="YieldAssessmentPanel">
+            <YieldAssessmentPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "construction" && constructionPanelOpen && (
+          <ErrorBoundary name="ConstructionPanel">
+            <ConstructionPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "terrain" && terrainAnalysisOpen && (
+          <ErrorBoundary name="TerrainAnalysisPanel">
+            <TerrainAnalysisPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "reports" && reportsHubOpen && (
+          <ErrorBoundary name="ReportsHubPanel">
+            <ReportsHubPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "electrical" && electricalDesignOpen && (
+          <ErrorBoundary name="ElectricalDesignPanel">
+            <ElectricalDesignPanel onClose={closeDeepDive} embedded />
+          </ErrorBoundary>
+        )}
+
+        {effectiveSection === "documents" && documentsPanelOpen && (
+          <ErrorBoundary name="DocumentsPanel">
+            <DocumentsPanel onClose={closeDeepDive} embedded />
           </ErrorBoundary>
         )}
       </div>

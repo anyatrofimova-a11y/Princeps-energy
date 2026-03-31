@@ -198,6 +198,27 @@ const api = {
     planningDensity: (lat, lon, radiusKm = 10) => get(`/api/land/planning-density?lat=${lat}&lon=${lon}&radius_km=${radiusKm}`),
     companies: (lat, lon, km = 5) => get(`/api/land/companies?lat=${lat}&lon=${lon}&radius_km=${km}`),
     companyDetail: (companyNumber) => get(`/api/land/company/${enc(companyNumber)}`),
+    classificationHeatmap: (params) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, v);
+      return get(`/api/land/classification-heatmap?${q}`);
+    },
+  },
+
+  parcels: {
+    getInBbox: (params) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, v);
+      return get(`/api/parcels?${q}`);
+    },
+    getDetail: (titleNumber) => get(`/api/parcels/${enc(titleNumber)}`),
+    search: (params) => {
+      const q = new URLSearchParams();
+      for (const [k, v] of Object.entries(params)) if (v != null) q.set(k, v);
+      return get(`/api/parcels/search?${q}`);
+    },
+    selectForProject: (data) => post("/api/parcels/select", data),
+    getProjectParcels: (projectName) => get(`/api/parcels/project/${enc(projectName)}`),
   },
 
   environment: {
@@ -1154,6 +1175,20 @@ api.compliance = {
     get(`/api/compliance/g99-protection?capacity_mw=${mw}&voltage_kv=${kv}&technology=${enc(tech)}`),
 };
 
+// ── Council Search — planning intelligence ──
+api.council = {
+  search: (q, authority, dateFrom, dateTo, limit = 50, offset = 0) => {
+    const p = new URLSearchParams({ q, limit, offset });
+    if (authority) p.set("authority", authority);
+    if (dateFrom) p.set("date_from", dateFrom);
+    if (dateTo) p.set("date_to", dateTo);
+    return get(`/api/council/search?${p}`);
+  },
+  authorities: () => get("/api/council/authorities"),
+  refresh:     (authorities) => post("/api/council/refresh", { authorities }),
+  energySummary: () => get("/api/council/energy-summary"),
+};
+
 // ── Export Engine ──
 api.exports = {
   siteReport: (lat, lon, mw, tech) =>
@@ -1166,6 +1201,212 @@ api.usage = {
   check: (userId = "default", tier = "free") => get(`/api/usage/check?user_id=${enc(userId)}&tier=${enc(tier)}`),
   record: (userId, endpoint, tier) => post(`/api/usage/record?user_id=${enc(userId)}&endpoint=${enc(endpoint)}&tier=${enc(tier)}`),
   summary: (userId = "default") => get(`/api/usage/summary?user_id=${enc(userId)}`),
+};
+
+// ── Energy Data APIs ──
+api.energyData = {
+  renewablesNinja: (lat, lon, type = "pv", opts = {}) => {
+    const p = new URLSearchParams({ lat, lon, type });
+    if (opts.date_from) p.set("date_from", opts.date_from);
+    if (opts.date_to) p.set("date_to", opts.date_to);
+    if (opts.capacity) p.set("capacity", opts.capacity);
+    if (opts.tilt != null) p.set("tilt", opts.tilt);
+    if (opts.azim != null) p.set("azim", opts.azim);
+    if (opts.hub_height) p.set("hub_height", opts.hub_height);
+    if (opts.turbine) p.set("turbine", opts.turbine);
+    return get(`/api/energy-data/renewables-ninja?${p}`);
+  },
+  carbonIntensity:  (postcode) => get(`/api/energy-data/carbon-intensity${postcode ? `?postcode=${enc(postcode)}` : ""}`),
+  carbonForecast:   (hours = 48) => get(`/api/energy-data/carbon-intensity/forecast?hours=${hours}`),
+  emissions:        (year = 2025) => get(`/api/energy-data/emissions?year=${year}`),
+  wholesalePrices:  (year = 2025) => get(`/api/energy-data/wholesale-prices?year=${year}`),
+  generationMix:    () => get("/api/energy-data/generation-mix"),
+  systemDemand:     (dateFrom, dateTo) => get(`/api/energy-data/system-demand?date_from=${enc(dateFrom)}&date_to=${enc(dateTo)}`),
+  systemPrice:      (dateFrom, dateTo) => get(`/api/energy-data/system-price?date_from=${enc(dateFrom)}&date_to=${enc(dateTo)}`),
+};
+
+// ── Energy Modelling Tools — atlite, GLAES, BESS optimizer, neural forecast, reV ──
+
+api.resource = {
+  capacityMap: (lonMin, latMin, lonMax, latMax, technology = "pv", year = 2023, turbine) => {
+    const q = new URLSearchParams({ lon_min: lonMin, lat_min: latMin, lon_max: lonMax, lat_max: latMax, technology, year });
+    if (turbine) q.set("turbine", turbine);
+    return get(`/api/resource/capacity-map?${q}`);
+  },
+};
+
+api.site.landEligibility = (lonMin, latMin, lonMax, latMax, technology = "solar", countryCode = "GB") =>
+  get(`/api/site/land-eligibility?lon_min=${lonMin}&lat_min=${latMin}&lon_max=${lonMax}&lat_max=${latMax}&technology=${enc(technology)}&country_code=${enc(countryCode)}`);
+
+api.site.supplyCurve = (lonMin, latMin, lonMax, latMax, technology = "pv") =>
+  get(`/api/site/supply-curve?lon_min=${lonMin}&lat_min=${latMin}&lon_max=${lonMax}&lat_max=${latMax}&technology=${enc(technology)}`);
+
+api.bess.optimize = (capacityMwh, powerMw, prices, pricesIntraday, pricesBalancing, efficiency = 0.88, degradationCost = 5) =>
+  post("/api/bess/optimize", {
+    capacity_mwh: capacityMwh, power_mw: powerMw, prices,
+    prices_intraday: pricesIntraday, prices_balancing: pricesBalancing,
+    efficiency, degradation_cost: degradationCost,
+  });
+
+api.bess.revenueEstimate = (capacityMwh = 100, powerMw = 50, year = 2025, region = "GB") =>
+  get(`/api/bess/revenue-estimate?capacity_mwh=${capacityMwh}&power_mw=${powerMw}&year=${year}&region=${enc(region)}`);
+
+api.bess.financial = (capexGbp, annualRevenueGbp, opexPct = 0.02, years = 20, discountRate = 0.08) =>
+  post("/bess/financial", { capex_gbp: capexGbp, annual_revenue_gbp: annualRevenueGbp, opex_pct: opexPct, years, discount_rate: discountRate });
+
+api.bess.colocation = (solarKw, lat = 52.5, lon = -1.5) =>
+  get(`/bess/colocation?solar_kw=${solarKw}&lat=${lat}&lon=${lon}`);
+
+api.bess.scan = (region = "south_west", minMw = 10, maxMw = 100) =>
+  get(`/bess/scan?region=${enc(region)}&min_mw=${minMw}&max_mw=${maxMw}`);
+
+api.bess.benchmarks = () => get("/bess/benchmarks");
+
+api.demand = api.demand || {};
+api.demand.neuralForecast = (gspId = "ABHA", horizon = 48, model = "nhits", daysHistory = 90) =>
+  get(`/api/demand/neural-forecast?gsp_id=${enc(gspId)}&horizon=${horizon}&model=${enc(model)}&days_history=${daysHistory}`);
+
+/* ── Site Design ────────────────────────────────────────────────────────── */
+api.design = {
+  autoLayout: (boundaryGeojson, technology = "solar", params = {}) =>
+    post("/api/design/auto-layout", { boundary_geojson: boundaryGeojson, technology, params }),
+};
+
+/* ── Finance (extended) ─────────────────────────────────────────────────── */
+api.finance = {
+  projectModel: (params) => post('/api/finance/project-model', params),
+  debtStructure: (params) => post('/api/finance/debt-structure', params),
+  ppaPrice: (params) => post('/api/finance/ppa-price', params),
+  sensitivity: (params) => post('/api/finance/sensitivity', params),
+  dispatch: (params) => post('/api/finance/dispatch', params),
+};
+
+/* ── Prospector ────────────────────────────────────────────────────────── */
+api.prospector = {
+  score: (lat, lon, technology) => get(`/prospector/score?lat=${lat}&lon=${lon}&technology=${enc(technology)}`),
+  scan: (region, technology, gridPoints) => get(`/prospector/scan?region=${enc(region)}&technology=${enc(technology)}&grid_points=${gridPoints}`),
+  similar: (lat, lon, radiusKm, technology, n) => get(`/prospector/similar?lat=${lat}&lon=${lon}&radius_km=${radiusKm}&technology=${enc(technology)}&num_candidates=${n}`),
+  regions: () => get('/prospector/regions'),
+};
+
+/* ── PPA Origination ───────────────────────────────────────────────────── */
+api.ppa = {
+  match: (params) => post("/api/ppa/match", params),
+  priceEstimate: (params) => post("/api/ppa/price-estimate", params),
+};
+
+/* ── Workflow Engine ───────────────────────────────────────────────────── */
+api.workflows = {
+  run: (params) => post("/api/workflows/run", params),
+  list: () => get("/api/workflows"),
+  status: (id) => get(`/api/workflows/${enc(id)}/status`),
+  pause: (id) => post(`/api/workflows/${enc(id)}/pause`),
+  resume: (id) => post(`/api/workflows/${enc(id)}/resume`),
+  cancel: (id) => post(`/api/workflows/${enc(id)}/cancel`),
+};
+
+/* ── Export Hub (extends api.exports) ──────────────────────────────────── */
+api.exports.generate = (params) => post("/api/exports/generate", params);
+api.exports.list = () => get("/api/exports");
+api.exports.download = (id) => get(`/api/exports/${enc(id)}/download`);
+
+/* ── Alert Rules ──────────────────────────────────────────────────────── */
+api.alerts = {
+  createRule: (rule) => post("/api/alerts/rules", rule),
+  listRules: () => get("/api/alerts/rules"),
+  updateRule: (id, data) => post(`/api/alerts/rules/${enc(id)}`, data),
+  deleteRule: (id) => fetchWithRetry(`/api/alerts/rules/${enc(id)}`, { method: "DELETE" }).then(json),
+  testRule: (rule) => post("/api/alerts/test", rule),
+  listAlerts: (limit = 20) => get(`/api/alerts?limit=${limit}`),
+};
+
+/* ── Prospector V2 ────────────────────────────────────────────────────── */
+api.prospectorV2 = {
+  heatmap: (params) => post("/api/prospector/v2/heatmap", params),
+  substationDetail: (id) => get(`/api/prospector/v2/substation/${enc(id)}`),
+  candidates: (params) => post("/api/prospector/v2/candidates", params),
+};
+
+/* ── Terrain & Environmental Analysis ──────────────────────────────────── */
+api.terrain = {
+  analyse: (lat, lon, slopeThreshold = 15, technology = "solar") =>
+    get(`/api/terrain/analyse?lat=${lat}&lon=${lon}&slope_threshold=${slopeThreshold}&technology=${enc(technology)}`),
+  viewshed: (lat, lon, observerHeight = 1.7, targetHeight = 3.5, radiusKm = 5) =>
+    post("/api/terrain/viewshed", { lat, lon, observer_height_m: observerHeight, target_height_m: targetHeight, radius_km: radiusKm }),
+  hydrology: (lat, lon) =>
+    get(`/api/terrain/hydrology?lat=${lat}&lon=${lon}`),
+  buildableArea: (lat, lon, slopeThreshold = 15, technology = "solar") =>
+    get(`/api/terrain/buildable-area?lat=${lat}&lon=${lon}&slope_threshold=${slopeThreshold}&technology=${enc(technology)}`),
+};
+
+/* ── Reports Hub ──────────────────────────────────────────────────────── */
+api.reports = {
+  generate: (params) => post("/api/reports/generate", params),
+  list: () => get("/api/reports/list"),
+  download: (reportId) => get(`/api/reports/download/${enc(reportId)}`),
+};
+
+/* ── Electrical Design ────────────────────────────────────────────────── */
+api.electrical = {
+  inverters: (capacityKwp, dcAcRatio = 1.25) =>
+    get(`/api/electrical/inverters?capacity_kwp=${capacityKwp}&dc_ac_ratio=${dcAcRatio}`),
+  transformers: (capacityKwp, inverterModel) =>
+    get(`/api/electrical/transformers?capacity_kwp=${capacityKwp}${inverterModel ? `&inverter_model=${enc(inverterModel)}` : ""}`),
+  cables: (capacityKwp) =>
+    get(`/api/electrical/cables?capacity_kwp=${capacityKwp}`),
+  design: (capacityKwp, technology = "solar") =>
+    post("/api/electrical/design", { capacity_kwp: capacityKwp, technology }),
+};
+
+/* ── Document Automation ──────────────────────────────────────────────── */
+api.documents = {
+  generate: (params) => post("/api/documents/generate", params),
+  list: () => get("/api/documents/list"),
+  types: () => get("/api/documents/types"),
+  checklist: (lat, lon, capacityMw, technology) =>
+    get(`/api/documents/checklist?lat=${lat}&lon=${lon}&capacity_mw=${capacityMw}&technology=${enc(technology)}`),
+};
+
+/* ── Portfolio Optimisation ─────────────────────────────────────────────── */
+api.portfolio = {
+  summary: (sites) => post("/api/sustainability/portfolio/summary", { sites }),
+  diversification: (sites) => post("/api/sustainability/portfolio/diversification", { sites }),
+  optimise: (budgetMw = 200, target = "max_revenue") =>
+    get(`/api/sustainability/portfolio/optimisation?budget_mw=${budgetMw}&target=${enc(target)}`),
+};
+
+/* ── Cable Routing ─────────────────────────────────────────────────────── */
+api.cableRouting = {
+  findRoute: (lat, lon, voltageKv, constraints = {}) =>
+    post("/api/advanced-grid/reinforcement/estimate", {
+      lat, lon, voltage_kv: voltageKv, ...constraints,
+    }),
+  benchmarks: () => get("/api/advanced-grid/reinforcement/benchmarks"),
+};
+
+/* ── Yield Assessment ──────────────────────────────────────────────────── */
+api.yieldAssessment = {
+  solar: (lat, lon, capacityKwp, tilt, azimuth, tracking, losses) => {
+    const q = new URLSearchParams({ lat, lon, capacity_kwp: capacityKwp });
+    if (tilt != null) q.set("tilt", tilt);
+    if (azimuth != null) q.set("azimuth", azimuth);
+    if (tracking) q.set("tracking", tracking);
+    if (losses != null) q.set("losses_pct", losses);
+    return get(`/api/yield/solar?${q}`);
+  },
+  wind: (lat, lon, capacityKw, hubHeightM) =>
+    get(`/api/yield/wind?lat=${lat}&lon=${lon}&capacity_kw=${capacityKw}&hub_height_m=${hubHeightM}`),
+  compare: (lat, lon, solarKwp, windKw) =>
+    get(`/api/yield/compare?lat=${lat}&lon=${lon}&solar_kwp=${solarKwp}&wind_kw=${windKw}`),
+};
+
+/* ── Construction Timeline ─────────────────────────────────────────────── */
+api.construction = {
+  plan: (capacityMw, technology, siteAreaHa, gridDistKm) =>
+    post("/api/site/construction-plan", {
+      capacity_mw: capacityMw, technology, site_area_ha: siteAreaHa, grid_distance_km: gridDistKm,
+    }),
+  progress: (projectId) => get(`/api/construction/progress/${enc(projectId)}`),
 };
 
 export default api;

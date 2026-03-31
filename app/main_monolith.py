@@ -2955,6 +2955,227 @@ async def api_demand_summary():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  ENERGY MODELLING TOOLS — atlite, GLAES, BESS optimizer, neural forecast, reV
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── atlite capacity factor maps ──
+
+from utils.atlite_wrapper import compute_capacity_map as atlite_capacity_map
+
+ATLITE_PYTHON_PATH = str(Path(__file__).resolve().parent.parent / ".venv-atlite" / "bin" / "python")
+ATLITE_RUNNER_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "atlite_runner.py")
+
+
+@app.get("/api/resource/capacity-map")
+async def api_resource_capacity_map(
+    lon_min: float = Query(...),
+    lat_min: float = Query(...),
+    lon_max: float = Query(...),
+    lat_max: float = Query(...),
+    technology: str = Query("pv"),
+    year: int = Query(2023),
+    turbine: str = Query(None),
+):
+    """
+    Compute gridded capacity factor map using atlite + ERA5 data.
+
+    Returns capacity factor grid, mean/P50/P90 stats, and GeoJSON polygons.
+    """
+    result = await atlite_capacity_map(
+        lon_min=lon_min, lat_min=lat_min,
+        lon_max=lon_max, lat_max=lat_max,
+        year=year, technology=technology, turbine=turbine,
+    )
+    record_metric("atlite_capacity_map", 0,
+                  labels={"technology": technology, "year": year})
+    return result
+
+
+# ── GLAES land eligibility ──
+
+from utils.glaes_wrapper import compute_land_eligibility as glaes_eligibility
+
+
+@app.get("/api/site/land-eligibility")
+async def api_land_eligibility(
+    lon_min: float = Query(...),
+    lat_min: float = Query(...),
+    lon_max: float = Query(...),
+    lat_max: float = Query(...),
+    technology: str = Query("solar"),
+    country_code: str = Query("GB"),
+):
+    """
+    Compute land eligibility applying UK-specific exclusion rules
+    (SSSI, AONB, flood zones, slope, residential buffers, etc.).
+
+    Returns eligible area percentage, exclusion breakdown, and GeoJSON.
+    """
+    result = await glaes_eligibility(
+        lon_min=lon_min, lat_min=lat_min,
+        lon_max=lon_max, lat_max=lat_max,
+        technology=technology, country_code=country_code,
+    )
+    record_metric("glaes_eligibility", 0,
+                  labels={"technology": technology})
+    return result
+
+
+# ── BESS optimizer ──
+
+from utils.bess_optimizer import optimize_bess_dispatch, estimate_bess_revenue
+
+
+@app.post("/api/bess/optimize")
+async def api_bess_optimize(body: dict):
+    """
+    Optimize BESS charge/discharge schedule across day-ahead,
+    intraday, and balancing markets.
+
+    Body: {capacity_mwh, power_mw, prices: [...], prices_intraday: [...],
+           prices_balancing: [...], efficiency: 0.88, degradation_cost: 5}
+    """
+    result = optimize_bess_dispatch(
+        capacity_mwh=body.get("capacity_mwh", 100),
+        power_mw=body.get("power_mw", 50),
+        prices_day_ahead=body.get("prices", []),
+        prices_intraday=body.get("prices_intraday"),
+        prices_balancing=body.get("prices_balancing"),
+        efficiency=body.get("efficiency", 0.88),
+        degradation_cost=body.get("degradation_cost", 5.0),
+    )
+    record_metric("bess_optimize", body.get("capacity_mwh", 100),
+                  labels={"power_mw": body.get("power_mw", 50)})
+    return result
+
+
+@app.get("/api/bess/revenue-estimate")
+async def api_bess_revenue_estimate(
+    capacity_mwh: float = Query(100),
+    power_mw: float = Query(50),
+    year: int = Query(2025),
+    region: str = Query("GB"),
+):
+    """
+    Quick annual BESS revenue estimate using UK market benchmarks.
+
+    Returns revenue breakdown by market stream (arbitrage, FFR, CM, BM).
+    """
+    result = estimate_bess_revenue(
+        capacity_mwh=capacity_mwh,
+        power_mw=power_mw,
+        year=year,
+        region=region,
+    )
+    record_metric("bess_revenue_estimate", capacity_mwh,
+                  labels={"power_mw": power_mw, "year": year})
+    return result
+
+
+# ── Neural demand forecasting ──
+
+NEURAL_FORECAST_SCRIPT = str(Path(__file__).resolve().parent.parent / "utils" / "neural_forecaster.py")
+
+
+@app.get("/api/demand/neural-forecast")
+async def api_demand_neural_forecast(
+    gsp_id: str = Query("ABHA"),
+    horizon: int = Query(48),
+    model: str = Query("nhits"),
+    days_history: int = Query(90),
+):
+    """
+    Advanced neural demand forecast using NHITS or PatchTST models.
+
+    Extends the existing demand forecast flow with deep-learning models.
+    Falls back to NHITS if PatchTST fails.
+    """
+    # First get historical data for the GSP
+    hist_result = await _run_forecast_subprocess(
+        {
+            "command": "generate_compact",
+            "n_gsps": 20,
+            "days": days_history,
+            "start_date": "2024-01-01",
+        },
+        script=DEMAND_INGESTER_SCRIPT,
+    )
+
+    # Extract time series for the requested GSP
+    data = []
+    if hist_result.get("ok") and hist_result.get("daily_summaries"):
+        for s in hist_result["daily_summaries"]:
+            if s["gsp_id"] == gsp_id:
+                data.append({
+                    "ds": s["date"],
+                    "y": s.get("mean_mw", s.get("peak_mw", 0)),
+                    "unique_id": gsp_id,
+                })
+
+    if not data:
+        # Generate synthetic training data
+        import datetime
+        base = datetime.datetime(2024, 1, 1)
+        for i in range(days_history * 24):
+            dt = base + datetime.timedelta(hours=i)
+            # Synthetic demand profile with daily/weekly pattern
+            import math
+            hour = dt.hour
+            dow = dt.weekday()
+            base_demand = 30 + 10 * math.sin(math.pi * hour / 12)
+            if dow >= 5:
+                base_demand *= 0.85
+            data.append({
+                "ds": dt.strftime("%Y-%m-%d %H:%M"),
+                "y": round(base_demand + (hash(str(i)) % 100) / 20, 2),
+                "unique_id": gsp_id,
+            })
+
+    # Run neural forecast via subprocess
+    payload = {
+        "command": "forecast",
+        "data": data,
+        "horizon": horizon,
+        "model": model,
+        "freq": "h" if len(data) > days_history else "D",
+    }
+
+    result = await _run_forecast_subprocess(payload, script=NEURAL_FORECAST_SCRIPT)
+    record_metric("neural_forecast", horizon,
+                  labels={"gsp_id": gsp_id, "model": model})
+    return result
+
+
+# ── reV supply curves ──
+
+from utils.rev_wrapper import compute_supply_curve as rev_supply_curve
+
+
+@app.get("/api/site/supply-curve")
+async def api_supply_curve(
+    lon_min: float = Query(...),
+    lat_min: float = Query(...),
+    lon_max: float = Query(...),
+    lat_max: float = Query(...),
+    technology: str = Query("pv"),
+):
+    """
+    Compute renewable energy supply curve for a region.
+
+    Returns site rankings ordered by LCOE, cumulative supply curve,
+    and exclusion analysis.
+    """
+    result = await rev_supply_curve(
+        lon_min=lon_min, lat_min=lat_min,
+        lon_max=lon_max, lat_max=lat_max,
+        technology=technology,
+    )
+    record_metric("rev_supply_curve", 0,
+                  labels={"technology": technology})
+    return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  CONNECTION STRATEGY — Curtailment, Flexible, Timeline, Strategy (Phase 8)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -7657,6 +7878,270 @@ async def alert_check_now():
     async with pool.acquire() as conn:
         result = await run_daily_alert_check(conn)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Council Search — UK council meeting transcript intelligence
+# ---------------------------------------------------------------------------
+
+from utils.council_searcher import (
+    search_planning_mentions as cs_search,
+    get_authorities as cs_authorities,
+    refresh_index as cs_refresh,
+    energy_summary as cs_energy_summary,
+    ENERGY_TERMS as CS_ENERGY_TERMS,
+)
+
+
+@app.get("/api/council/search")
+async def council_search(
+    q: str = Query("solar farm"),
+    authority: str = Query(None),
+    date_from: str = Query(None),
+    date_to: str = Query(None),
+    limit: int = Query(50),
+    offset: int = Query(0),
+):
+    """Search council meeting transcripts for energy/planning mentions."""
+    authorities = [a.strip() for a in authority.split(",")] if authority else None
+    return cs_search(
+        query=q, authorities=authorities,
+        date_from=date_from, date_to=date_to,
+        limit=limit, offset=offset,
+    )
+
+
+@app.get("/api/council/authorities")
+async def council_authorities():
+    """List indexed council authorities with transcript counts."""
+    return {"authorities": cs_authorities(), "energy_terms": CS_ENERGY_TERMS}
+
+
+@app.post("/api/council/refresh")
+async def council_refresh(
+    request: Request,
+):
+    """Trigger index refresh for specified authorities (admin)."""
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    authorities = body.get("authorities", None)
+    result = cs_refresh(authorities=authorities)
+    return result
+
+
+@app.get("/api/council/energy-summary")
+async def council_energy_summary():
+    """Pre-built summary of recent energy-related council discussions."""
+    return cs_energy_summary()
+
+
+# ---------------------------------------------------------------------------
+# Energy Data APIs — Renewables.ninja, Carbon Intensity, elmada, Elexon BMRS
+# ---------------------------------------------------------------------------
+
+from utils.renewables_ninja import (
+    get_pv_capacity_factors, get_wind_capacity_factors, get_annual_summary as ninja_annual_summary,
+)
+from utils.carbon_intensity import (
+    get_current_intensity, get_regional_intensity, get_intensity_forecast, get_generation_mix,
+)
+from utils.carbon_prices import get_marginal_emissions, get_wholesale_prices, get_carbon_summary
+from utils.elexon_client import (
+    get_system_demand as elexon_system_demand,
+    get_generation_by_fuel as elexon_generation_fuel,
+    get_system_price as elexon_system_price,
+    get_balancing_costs as elexon_balancing_costs,
+)
+
+
+@app.get("/api/energy-data/renewables-ninja")
+async def api_renewables_ninja(
+    lat: float = Query(52.5),
+    lon: float = Query(-1.5),
+    type: str = Query("pv"),
+    date_from: str = Query("2023-01-01"),
+    date_to: str = Query("2023-12-31"),
+    capacity: float = Query(1),
+    tilt: float = Query(35),
+    azim: float = Query(180),
+    hub_height: float = Query(80),
+    turbine: str = Query("Vestas V80 2000"),
+):
+    """Hourly PV or wind capacity factors from Renewables.ninja."""
+    if type == "wind":
+        data = get_wind_capacity_factors(lat, lon, date_from, date_to, capacity, hub_height, turbine)
+    elif type == "summary":
+        data = ninja_annual_summary(lat, lon)
+        return data
+    else:
+        data = get_pv_capacity_factors(lat, lon, date_from, date_to, capacity, tilt=tilt, azim=azim)
+    return {"type": type, "lat": lat, "lon": lon, "count": len(data), "data": data}
+
+
+@app.get("/api/energy-data/carbon-intensity")
+async def api_carbon_intensity(postcode: str = Query(None)):
+    """Current + regional carbon intensity (gCO2/kWh)."""
+    current = get_current_intensity()
+    regional = get_regional_intensity(postcode) if postcode else None
+    result = {"current": current}
+    if regional:
+        result["regional"] = regional
+    return result
+
+
+@app.get("/api/energy-data/carbon-intensity/forecast")
+async def api_carbon_intensity_forecast(hours: int = Query(48, ge=1, le=96)):
+    """48h carbon intensity forecast."""
+    return {"hours": hours, "data": get_intensity_forecast(hours)}
+
+
+@app.get("/api/energy-data/emissions")
+async def api_marginal_emissions(year: int = Query(2025), country: str = Query("GB")):
+    """Hourly marginal emission factors via elmada."""
+    data = get_marginal_emissions(year, country)
+    return {"year": year, "country": country, "count": len(data), "data": data}
+
+
+@app.get("/api/energy-data/wholesale-prices")
+async def api_wholesale_prices(year: int = Query(2025), country: str = Query("GB")):
+    """Hourly wholesale electricity prices via elmada."""
+    data = get_wholesale_prices(year, country)
+    return {"year": year, "country": country, "count": len(data), "data": data}
+
+
+@app.get("/api/energy-data/generation-mix")
+async def api_generation_mix():
+    """Current national generation fuel mix."""
+    return {"data": get_generation_mix()}
+
+
+@app.get("/api/energy-data/system-demand")
+async def api_system_demand(
+    date_from: str = Query("2025-03-01"),
+    date_to: str = Query("2025-03-07"),
+):
+    """BMRS system demand outturn."""
+    data = elexon_system_demand(date_from, date_to)
+    return {"date_from": date_from, "date_to": date_to, "count": len(data), "data": data}
+
+
+@app.get("/api/energy-data/system-price")
+async def api_system_price(
+    date_from: str = Query("2025-03-01"),
+    date_to: str = Query("2025-03-07"),
+):
+    """BMRS system buy/sell prices."""
+    data = elexon_system_price(date_from, date_to)
+    return {"date_from": date_from, "date_to": date_to, "count": len(data), "data": data}
+
+
+# ── Land Parcels — HM Land Registry INSPIRE + suitability heatmap ────────
+
+from utils.land_parcels import (
+    fetch_parcels_in_bbox, get_parcel_detail, search_parcels,
+    get_land_classification_heatmap,
+    select_parcels_for_project, get_project_parcels,
+    setup_project_parcels_table,
+)
+
+
+@app.get("/api/parcels")
+async def api_parcels(
+    lon_min: float = Query(...),
+    lat_min: float = Query(...),
+    lon_max: float = Query(...),
+    lat_max: float = Query(...),
+    limit: int = Query(500, ge=1, le=2000),
+):
+    """Fetch UK land parcels (HMLR INSPIRE polygons) within a bounding box."""
+    result = await fetch_parcels_in_bbox(lon_min, lat_min, lon_max, lat_max, limit=limit)
+    record_metric("land_parcels_fetch", 0, labels={"total": result["metadata"]["total"]})
+    return result
+
+
+@app.get("/api/parcels/search")
+async def api_parcels_search(
+    q: str = Query(""),
+    lat: float = Query(None),
+    lon: float = Query(None),
+    radius_km: float = Query(5.0, ge=0.1, le=50),
+):
+    """Search parcels by title number prefix or near a location."""
+    results = await search_parcels(q, near_lat=lat, near_lon=lon, radius_km=radius_km)
+    return {"query": q, "total": len(results), "results": results}
+
+
+@app.get("/api/parcels/{title_number}")
+async def api_parcel_detail(title_number: str):
+    """Get detailed info for a specific land parcel by title number."""
+    detail = await get_parcel_detail(title_number)
+    return detail
+
+
+@app.get("/api/land/classification-heatmap")
+async def api_land_classification_heatmap(
+    lon_min: float = Query(...),
+    lat_min: float = Query(...),
+    lon_max: float = Query(...),
+    lat_max: float = Query(...),
+):
+    """Generate a land suitability heatmap (ALC, slope, flood, grid, protected areas)."""
+    result = await get_land_classification_heatmap(lon_min, lat_min, lon_max, lat_max)
+    record_metric("land_heatmap", 0, labels={"cells": result["metadata"]["total_cells"]})
+    return result
+
+
+@app.post("/api/parcels/select")
+async def api_parcels_select(body: dict):
+    """Save selected parcels to a project. Body: {title_numbers: [...], project_name: "..."}"""
+    title_numbers = body.get("title_numbers", [])
+    project_name = body.get("project_name", "")
+    if not title_numbers or not project_name:
+        return {"error": "title_numbers (list) and project_name (string) are required"}
+    await setup_project_parcels_table(pool)
+    result = await select_parcels_for_project(pool, title_numbers, project_name)
+    return result
+
+
+@app.get("/api/parcels/project/{project_name}")
+async def api_project_parcels(project_name: str):
+    """Get all parcels saved for a project as GeoJSON."""
+    await setup_project_parcels_table(pool)
+    result = await get_project_parcels(pool, project_name)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Site Auto-Design
+# ---------------------------------------------------------------------------
+
+from utils.site_auto_designer import auto_design_solar, auto_design_bess, auto_design_hybrid
+
+
+@app.post("/api/design/auto-layout")
+async def api_design_auto_layout(body: dict):
+    """Generate an auto-layout for solar PV, BESS, or hybrid infrastructure.
+
+    Body: { boundary_geojson, technology: "solar"|"bess"|"hybrid", params: {...} }
+    """
+    boundary = body.get("boundary_geojson")
+    technology = body.get("technology", "solar")
+    params = body.get("params", {})
+
+    if not boundary:
+        return {"error": "boundary_geojson is required"}
+
+    try:
+        if technology == "solar":
+            result = auto_design_solar(boundary, **params)
+        elif technology == "bess":
+            result = auto_design_bess(boundary, **params)
+        elif technology == "hybrid":
+            result = auto_design_hybrid(boundary, **params)
+        else:
+            return {"error": f"Unknown technology: {technology}"}
+        return result
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ---------------------------------------------------------------------------

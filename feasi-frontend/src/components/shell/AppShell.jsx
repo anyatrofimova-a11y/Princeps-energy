@@ -5,7 +5,7 @@ import TopStatusBar from "./TopStatusBar";
 import LiveDataStrip from "./LiveDataStrip";
 import GridCanvas from "../GridCanvas";
 
-export default function AppShell({ children, onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence }) {
+export default function AppShell({ children, onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence, onSiteDesigner }) {
   const { toggleBrowser, toggleDetail, setActiveWorkspace, activeWorkspace, setActiveViewMode } = useWorkspace();
 
   // Keyboard shortcuts
@@ -76,6 +76,7 @@ export default function AppShell({ children, onGridTwin, onBems, onAssetInspect,
           onDcTwin={onDcTwin}
           onPipeline={onPipeline}
           onIntelligence={onIntelligence}
+          onSiteDesigner={onSiteDesigner}
         />
         {children}
         <LiveDataStrip />

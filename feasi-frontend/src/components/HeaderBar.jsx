@@ -25,6 +25,8 @@ const STUDY_STEPS = [
   { id: "route_to_market", intent: "route_to_market", label: "RTM" },
   { id: "sustainability", intent: "sustainability", label: "Sustain." },
   { id: "investment_readiness", intent: "investment_readiness", label: "Invest" },
+  { id: "financial", intent: "financial", label: "Finance" },
+  { id: "site_prospecting", intent: "site_prospecting", label: "Prospect" },
 ];
 
 const WORKFLOW_BUTTONS = [
@@ -53,6 +55,7 @@ export default function HeaderBar({ onAnalyse, onNomExplorer, onLayoutToggle, on
     runAgent, samDay,
     workflowResults, workflowRunning, workflowProgress, workflowSummary,
     runWorkflow,
+    setWorkflowPanelOpen, setExportPanelOpen,
   } = useSite();
 
   const handleStepClick = (step) => {
@@ -194,6 +197,8 @@ export default function HeaderBar({ onAnalyse, onNomExplorer, onLayoutToggle, on
           <span>kW</span>
         </span>
 
+        <button className="btn-topbar-action" onClick={() => setWorkflowPanelOpen(true)}>FLOW</button>
+        <button className="btn-topbar-action" onClick={() => setExportPanelOpen(true)}>EXPORT</button>
         <button className="btn-topbar-action" onClick={onGridTwin}>TWIN</button>
         <button className="btn-topbar-action" onClick={onPitch}>PITCH</button>
         <button className="btn-topbar-action" onClick={onNomExplorer}>NOM</button>

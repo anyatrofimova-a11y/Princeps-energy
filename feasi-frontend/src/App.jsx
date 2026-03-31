@@ -61,6 +61,7 @@ const ComponentPalette = lazy(() => import("./components/ComponentPalette"));
 const AssetDock = lazy(() => import("./components/AssetDock"));
 const EnergyFlowPanel = lazy(() => import("./components/EnergyFlowPanel"));
 const ScenarioCompare = lazy(() => import("./components/ScenarioCompare"));
+const SiteDesigner3D = lazy(() => import("./components/SiteDesigner3D"));
 
 const LazyFallback = () => <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", zIndex: 9999, color: "#fff", fontSize: 13 }}>Loading...</div>;
 import {
@@ -119,6 +120,7 @@ export default function App() {
   useEffect(() => { if (pickedLocation) setDashV2Closed(false); }, [pickedLocation]);
   const [scenarioCompareOpen, setScenarioCompareOpen] = useState(false);
   const [dashboardBuilderOpen, setDashboardBuilderOpen] = useState(false);
+  const [siteDesignerOpen, setSiteDesignerOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(() => !localStorage.getItem("princeps_onboarded"));
   const [backendReady, setBackendReady] = useState(false);
@@ -642,6 +644,7 @@ export default function App() {
       case "dc-twin": setDcTwinOpen(true); break;
       case "dc-landing": setDcLandingOpen(true); break;
       case "dc-compare": setDcComparisonOpen(true); break;
+      case "site-designer": setSiteDesignerOpen(true); break;
       case "dc-score": {
         // Score the current site for DC feasibility
         const lat = pickedLocation?.lat;
@@ -683,6 +686,7 @@ export default function App() {
       onDcTwin={() => setDcTwinOpen(true)}
       onDcLanding={() => setDcLandingOpen(true)}
       onDcCompare={() => setDcComparisonOpen(true)}
+      onSiteDesigner={() => setSiteDesignerOpen(true)}
       onPipeline={() => setActiveWorkspace("pipeline")}
       onPitch={() => setPitchMode(true)}
       onNomExplorer={() => setNomMode(true)}
@@ -744,6 +748,16 @@ export default function App() {
         <Suspense fallback={<LazyFallback />}>
           <ErrorBoundary name="GridTwin" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>Grid Twin failed to load</h2><button onClick={()=>setGridTwinOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
             <GridTwin onClose={() => setGridTwinOpen(false)} />
+          </ErrorBoundary>
+        </Suspense>
+      )}
+      {siteDesignerOpen && (
+        <Suspense fallback={<LazyFallback />}>
+          <ErrorBoundary name="SiteDesigner3D" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>Site Designer failed to load</h2><button onClick={()=>setSiteDesignerOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
+            <SiteDesigner3D
+              onClose={() => setSiteDesignerOpen(false)}
+              initialLocation={pickedLocation ? [pickedLocation.lon, pickedLocation.lat] : null}
+            />
           </ErrorBoundary>
         </Suspense>
       )}

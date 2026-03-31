@@ -20,6 +20,10 @@ import TimelineScrubber from "./TimelineScrubber";
 import SignalFeed from "./SignalFeed";
 import AgentDispatcher from "./AgentDispatcher";
 import TwinSiteFinder from "./TwinSiteFinder";
+import LandParcelLayer from "./LandParcelLayer";
+import LandClassificationLayer from "./LandClassificationLayer";
+import LayerControlPanel from "./LayerControlPanel";
+import ParcelDetailPanel from "./ParcelDetailPanel";
 import api from "../services/api";
 import {
   GIBS_LAYERS,
@@ -130,6 +134,53 @@ export default function GridTwinCesium({ onClose }) {
     queueDepth: null,    // ECR queue data per GSP
     planningRisk: null,  // planning probability data
   });
+  /* ── Land parcel + classification state ── */
+  const [showLandParcels, setShowLandParcels] = useState(false);
+  const [showLandClassification, setShowLandClassification] = useState(false);
+  const [selectedParcels, setSelectedParcels] = useState([]);
+  const [parcelFilters, setParcelFilters] = useState({});
+  const [gisLayers, setGisLayers] = useState({
+    landParcels: { visible: false, opacity: 0.3 },
+    landClassification: { visible: false, opacity: 0.6 },
+    gridInfra: { visible: true, opacity: 1 },
+    energyAssets: { visible: true, opacity: 1 },
+    floodZones: { visible: false, opacity: 0.5 },
+    protectedAreas: { visible: false, opacity: 0.5 },
+    alcGrades: { visible: false, opacity: 0.5 },
+    slopeAnalysis: { visible: false, opacity: 0.5 },
+    constraintPins: { visible: false, opacity: 0.8 },
+    satellite: { visible: false, opacity: 0.7 },
+    buildings: { visible: false, opacity: 1 },
+  });
+
+  const handleGisLayerChange = useCallback((key, state) => {
+    setGisLayers(prev => ({ ...prev, [key]: state }));
+    // Sync with existing toggles
+    if (key === "landParcels") setShowLandParcels(state.visible);
+    if (key === "landClassification") setShowLandClassification(state.visible);
+    if (key === "gridInfra") setTwinLayers(p => ({ ...p, substations: state.visible, lines: state.visible }));
+    if (key === "energyAssets") setShowAssets(state.visible);
+    if (key === "buildings") setShowBuildings(state.visible);
+  }, []);
+
+  const handleParcelClick = useCallback((parcel) => {
+    setSelectedParcels([parcel]);
+  }, []);
+
+  const handleParcelSelectionChange = useCallback((parcels) => {
+    setSelectedParcels(parcels);
+  }, []);
+
+  const handleCopyToProject = useCallback((parcels) => {
+    console.log("[Twin] Copy parcels to project:", parcels.length);
+  }, []);
+
+  const handleSaveToProject = useCallback(({ projectName, parcels }) => {
+    api.parcels?.selectForProject?.({ project_name: projectName, parcels })
+      .then(() => console.log(`[Twin] Saved ${parcels.length} parcels to "${projectName}"`))
+      .catch(e => console.warn("[Twin] Save parcels error:", e));
+  }, []);
+
   const lidarLayerRef = useRef(null);
   const assetDsRef = useRef(null);
   const projectDsRef = useRef(null);
@@ -1034,6 +1085,16 @@ export default function GridTwinCesium({ onClose }) {
               <span>{l.label}</span>
             </label>
           ))}
+          <div className="gt2-flyout-section">Land</div>
+          {[
+            { key: "landParcels", label: "Land Parcels", active: showLandParcels, toggle: () => { setShowLandParcels(p => !p); setGisLayers(prev => ({ ...prev, landParcels: { ...prev.landParcels, visible: !showLandParcels } })); }, color: "#c040ff" },
+            { key: "landClass", label: "Land Classification", active: showLandClassification, toggle: () => { setShowLandClassification(p => !p); setGisLayers(prev => ({ ...prev, landClassification: { ...prev.landClassification, visible: !showLandClassification } })); }, color: "#34a853" },
+          ].map(l => (
+            <label key={l.key} className="gt2-layer-row">
+              <input type="checkbox" checked={l.active} onChange={l.toggle} />
+              <span style={l.color ? { color: l.color } : {}}>{l.label}</span>
+            </label>
+          ))}
           <div className="gt2-flyout-section">Data</div>
           {[
             { key: "assets", label: "Energy Assets", active: showAssets, toggle: () => setShowAssets(!showAssets) },
@@ -1110,6 +1171,39 @@ export default function GridTwinCesium({ onClose }) {
         gibsDate={gibsDate}
         initialView={{ lon: -0.12, lat: 51.5, height: 800000, heading: 0, pitch: -60 }}
         className="gt-map"
+      />
+
+      {/* ── Land Parcel Layer ── */}
+      <LandParcelLayer
+        viewer={viewerRef.current}
+        visible={showLandParcels}
+        opacity={gisLayers.landParcels?.opacity ?? 0.3}
+        filters={parcelFilters}
+        onParcelClick={handleParcelClick}
+        onSelectionChange={handleParcelSelectionChange}
+      />
+
+      {/* ── Land Classification Layer ── */}
+      <LandClassificationLayer
+        viewer={viewerRef.current}
+        visible={showLandClassification}
+        opacity={gisLayers.landClassification?.opacity ?? 0.6}
+      />
+
+      {/* ── GIS Layer Control Panel (top-right) ── */}
+      <LayerControlPanel
+        layers={gisLayers}
+        onLayerChange={handleGisLayerChange}
+        filters={parcelFilters}
+        onFilterChange={setParcelFilters}
+      />
+
+      {/* ── Parcel Detail Panel (right side) ── */}
+      <ParcelDetailPanel
+        selectedParcels={selectedParcels}
+        onClose={() => setSelectedParcels([])}
+        onCopyToProject={handleCopyToProject}
+        onSaveToProject={handleSaveToProject}
       />
 
       {/* ── Loading overlay ── */}

@@ -88,6 +88,9 @@ export function SiteProvider({ children }) {
   // ── Demand Forecast Panel ──
   const [demandForecastOpen, setDemandForecastOpen] = useState(false);
 
+  // ── Council Search Panel ──
+  const [councilSearchOpen, setCouncilSearchOpen] = useState(false);
+
   // ── Grid Digital Twin ──
   const [gridTwinOpen, setGridTwinOpen] = useState(false);
 
@@ -109,6 +112,12 @@ export function SiteProvider({ children }) {
   // ── Investment Panel ──
   const [investmentOpen, setInvestmentOpen] = useState(false);
 
+  // ── Financial Model Panel ──
+  const [financialModelOpen, setFinancialModelOpen] = useState(false);
+
+  // ── Site Prospector Panel ──
+  const [siteProspectorOpen, setSiteProspectorOpen] = useState(false);
+
   // ── Data Centre Twin (unified) ──
   const [dcTwinOpen, setDcTwinOpen] = useState(false);
   const [dcLandingOpen, setDcLandingOpen] = useState(false);
@@ -124,6 +133,24 @@ export function SiteProvider({ children }) {
   // ── Grid Graph Topology ──
   const [gridGraphOpen, setGridGraphOpen] = useState(false);
 
+  // ── Planning Intelligence Panel ──
+  const [planningIntelOpen, setPlanningIntelOpen] = useState(false);
+
+  // ── BESS Panel ──
+  const [bessPanelOpen, setBessPanelOpen] = useState(false);
+
+  // ── Portfolio Panel ──
+  const [portfolioPanelOpen, setPortfolioPanelOpen] = useState(false);
+
+  // ── Cable Routing Panel ──
+  const [cableRoutingOpen, setCableRoutingOpen] = useState(false);
+
+  // ── Yield Assessment Panel ──
+  const [yieldAssessmentOpen, setYieldAssessmentOpen] = useState(false);
+
+  // ── Construction Panel ──
+  const [constructionPanelOpen, setConstructionPanelOpen] = useState(false);
+
   // ── BESS Facility Twin ──
   const [bessFacilityOpen, setBessFacilityOpen] = useState(false);
 
@@ -135,6 +162,26 @@ export function SiteProvider({ children }) {
 
   // ── Thermal Model (TEASER) ──
   const [thermalModelOpen, setThermalModelOpen] = useState(false);
+
+  // ── Terrain Analysis Panel ──
+  const [terrainAnalysisOpen, setTerrainAnalysisOpen] = useState(false);
+
+  // ── Reports Hub Panel ──
+  const [reportsHubOpen, setReportsHubOpen] = useState(false);
+
+  // ── Electrical Design Panel ──
+  const [electricalDesignOpen, setElectricalDesignOpen] = useState(false);
+
+  // ── Documents Panel ──
+  const [documentsPanelOpen, setDocumentsPanelOpen] = useState(false);
+
+  // ── Tier 3 Panels ──
+  const [ppaOriginationOpen, setPpaOriginationOpen] = useState(false);
+  const [workflowPanelOpen, setWorkflowPanelOpen] = useState(false);
+  const [assessmentSnapshotOpen, setAssessmentSnapshotOpen] = useState(false);
+  const [exportPanelOpen, setExportPanelOpen] = useState(false);
+  const [alertRulesOpen, setAlertRulesOpen] = useState(false);
+  const [prospectorV2Open, setProspectorV2Open] = useState(false);
 
   // ── Palantir-style shared entity selection (cross-view linking) ──
   const [selectedEntity, setSelectedEntity] = useState(null);
@@ -549,6 +596,8 @@ export function SiteProvider({ children }) {
     gridHighlightSub, setGridHighlightSub,
     // Demand Forecast Panel
     demandForecastOpen, setDemandForecastOpen,
+    // Council Search Panel
+    councilSearchOpen, setCouncilSearchOpen,
     // Grid Digital Twin
     gridTwinOpen, setGridTwinOpen,
     // Advanced Grid Panel
@@ -563,6 +612,10 @@ export function SiteProvider({ children }) {
     sustainabilityOpen, setSustainabilityOpen,
     // Investment Panel
     investmentOpen, setInvestmentOpen,
+    // Financial Model Panel
+    financialModelOpen, setFinancialModelOpen,
+    // Site Prospector Panel
+    siteProspectorOpen, setSiteProspectorOpen,
     // Data Centre Panel
     dcTwinOpen, setDcTwinOpen,
     dcLandingOpen, setDcLandingOpen,
@@ -574,6 +627,18 @@ export function SiteProvider({ children }) {
     assetInspectorOpen, setAssetInspectorOpen,
     // Grid Graph Topology
     gridGraphOpen, setGridGraphOpen,
+    // Planning Intelligence Panel
+    planningIntelOpen, setPlanningIntelOpen,
+    // BESS Panel
+    bessPanelOpen, setBessPanelOpen,
+    // Portfolio Panel
+    portfolioPanelOpen, setPortfolioPanelOpen,
+    // Cable Routing Panel
+    cableRoutingOpen, setCableRoutingOpen,
+    // Yield Assessment Panel
+    yieldAssessmentOpen, setYieldAssessmentOpen,
+    // Construction Panel
+    constructionPanelOpen, setConstructionPanelOpen,
     // BESS Facility Twin
     bessFacilityOpen, setBessFacilityOpen,
     // Hardware Configurator
@@ -585,6 +650,21 @@ export function SiteProvider({ children }) {
     actionSidebarOpen, setActionSidebarOpen,
     // Thermal Model (TEASER)
     thermalModelOpen, setThermalModelOpen,
+    // Terrain Analysis Panel
+    terrainAnalysisOpen, setTerrainAnalysisOpen,
+    // Reports Hub Panel
+    reportsHubOpen, setReportsHubOpen,
+    // Electrical Design Panel
+    electricalDesignOpen, setElectricalDesignOpen,
+    // Documents Panel
+    documentsPanelOpen, setDocumentsPanelOpen,
+    // Tier 3 Panels
+    ppaOriginationOpen, setPpaOriginationOpen,
+    workflowPanelOpen, setWorkflowPanelOpen,
+    assessmentSnapshotOpen, setAssessmentSnapshotOpen,
+    exportPanelOpen, setExportPanelOpen,
+    alertRulesOpen, setAlertRulesOpen,
+    prospectorV2Open, setProspectorV2Open,
     // GeeFlow
     geeflowData, setGeeflowData,
     geeflowLoading, setGeeflowLoading,

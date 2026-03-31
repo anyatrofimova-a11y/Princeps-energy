@@ -96,6 +96,12 @@ and explicitly reference any that materially affect your verdict:
    flood indicators, vegetation density, infrastructure presence, usable area %.
    Reference vision findings for ground-truth confirmation of other data sources.
 
+10. ENERGY MARKET DATA — Carbon intensity (gCO2/kWh, current and forecast),
+    marginal emission factors (elmada MEF), wholesale electricity prices (EUR/MWh),
+    generation fuel mix, system demand outturn (BMRS), and capacity factors from
+    Renewables.ninja. Use these to assess revenue potential, carbon avoidance value,
+    and grid decarbonisation contribution.
+
 If specific data for a domain is absent from the input, state this explicitly
 (e.g. "ALC data not provided — recommend obtaining before planning submission").
 """
@@ -285,6 +291,19 @@ INTENT_PROMPTS: dict[str, str] = {
         "SBP/SSP system prices, constraint payments, and multi-market revenue stacking (wholesale, CfD, "
         "capacity market, frequency response, BM, embedded benefits, Triad avoidance). "
         "Provide GO / CAUTION / NO-GO verdict on dispatch strategy with confidence score."
+    ),
+    "council_search": (
+        "You are a UK planning intelligence analyst specialising in local government "
+        "decision-making on energy infrastructure. Analyse council meeting transcripts "
+        "to identify discussions about solar farms, wind farms, battery storage, "
+        "substations, grid connections, and planning applications. Summarise the "
+        "political sentiment (supportive, neutral, hostile) towards renewable energy "
+        "in each authority. Flag specific objections raised (landscape, noise, glint, "
+        "traffic, heritage, ecology, agricultural land). Identify planning committee "
+        "members who are influential on energy decisions. Cross-reference with "
+        "REPD/NSIP data to correlate council discussions with actual planning outcomes. "
+        "Provide a GO / CAUTION / NO-GO verdict on the local planning environment "
+        "for the proposed energy project."
     ),
     "demand_forecast": (
         "You are a UK electricity demand forecasting specialist. "
@@ -608,6 +627,18 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "action": "open_panel",
                 "panel": "hardware",
             },
+            {
+                "label": "Capacity Factor Map (atlite)",
+                "endpoint": f"/api/resource/capacity-map?lon_min={lon - 0.5}&lat_min={lat - 0.5}&lon_max={lon + 0.5}&lat_max={lat + 0.5}&technology=pv",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Land Eligibility (GLAES)",
+                "endpoint": f"/api/site/land-eligibility?lon_min={lon - 0.5}&lat_min={lat - 0.5}&lon_max={lon + 0.5}&lat_max={lat + 0.5}&technology=solar",
+                "method": "GET",
+                "payload": {},
+            },
         ]
     elif intent == "grid_study":
         load_mw = cap / 1000
@@ -633,6 +664,18 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "method": "GET",
                 "payload": {},
             },
+            {
+                "label": "BESS Revenue Estimate",
+                "endpoint": f"/api/bess/revenue-estimate?capacity_mwh={cap / 1000 * 2}&power_mw={cap / 1000}&year=2025",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Supply Curve (LCOE)",
+                "endpoint": f"/api/site/supply-curve?lon_min={lon - 0.5}&lat_min={lat - 0.5}&lon_max={lon + 0.5}&lat_max={lat + 0.5}&technology=pv",
+                "method": "GET",
+                "payload": {},
+            },
         ]
     elif intent == "planning":
         actions = [
@@ -642,7 +685,46 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "method": "GET",
                 "payload": {},
             },
+            {
+                "label": "Search Council Discussions",
+                "endpoint": "/api/council/search?q=solar+farm+planning",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Open Council Search",
+                "action": "open_panel",
+                "panel": "council_search",
+            },
         ]
+
+    elif intent == "council_search":
+        actions = [
+            {
+                "label": "Search Council Transcripts",
+                "endpoint": "/api/council/search?q=solar+farm",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Energy Discussion Summary",
+                "endpoint": "/api/council/energy-summary",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "View Indexed Authorities",
+                "endpoint": "/api/council/authorities",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Open Council Search Panel",
+                "action": "open_panel",
+                "panel": "council_search",
+            },
+        ]
+
     elif intent == "grid_opportunity":
         actions = [
             {
@@ -967,6 +1049,18 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "payload": {},
             },
             {
+                "label": "Neural Forecast (NHITS)",
+                "endpoint": "/api/demand/neural-forecast?gsp_id=ABHA&horizon=48&model=nhits",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Neural Forecast (PatchTST)",
+                "endpoint": "/api/demand/neural-forecast?gsp_id=ABHA&horizon=48&model=patchtst",
+                "method": "GET",
+                "payload": {},
+            },
+            {
                 "label": "Scenario Projections",
                 "endpoint": f"/api/demand/scenarios?gsp_id=ABHA&years_ahead=10",
                 "method": "GET",
@@ -1046,6 +1140,24 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "method": "GET",
                 "payload": {},
             },
+            {
+                "label": "Capacity Factor Map (atlite)",
+                "endpoint": f"/api/resource/capacity-map?lon_min={lon - 0.5}&lat_min={lat - 0.5}&lon_max={lon + 0.5}&lat_max={lat + 0.5}&technology=pv",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Land Eligibility (GLAES)",
+                "endpoint": f"/api/site/land-eligibility?lon_min={lon - 0.5}&lat_min={lat - 0.5}&lon_max={lon + 0.5}&lat_max={lat + 0.5}&technology=solar",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Supply Curve (reV)",
+                "endpoint": f"/api/site/supply-curve?lon_min={lon - 0.5}&lat_min={lat - 0.5}&lon_max={lon + 0.5}&lat_max={lat + 0.5}&technology=pv",
+                "method": "GET",
+                "payload": {},
+            },
         ]
 
     elif intent == "bess_optimisation":
@@ -1079,6 +1191,18 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "endpoint": "/bess/benchmarks",
                 "method": "GET",
                 "payload": {},
+            },
+            {
+                "label": "BESS Revenue Estimate (Optimizer)",
+                "endpoint": "/api/bess/revenue-estimate?capacity_mwh=100&power_mw=50&year=2025",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Optimize Dispatch Schedule",
+                "endpoint": "/api/bess/optimize",
+                "method": "POST",
+                "payload": {"capacity_mwh": 100, "power_mw": 50, "prices": []},
             },
         ]
 
@@ -1338,6 +1462,47 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
             },
         ]
 
+    # Add energy data actions to financial, feasibility, and environmental intents
+    if intent in ("feasibility", "financial", "environmental"):
+        actions.append({
+            "label": "Carbon Intensity (Live)",
+            "endpoint": "/api/energy-data/carbon-intensity",
+            "method": "GET",
+            "payload": {},
+        })
+        actions.append({
+            "label": "Generation Fuel Mix",
+            "endpoint": "/api/energy-data/generation-mix",
+            "method": "GET",
+            "payload": {},
+        })
+    if intent == "financial":
+        actions.append({
+            "label": "Wholesale Prices",
+            "endpoint": "/api/energy-data/wholesale-prices?year=2025",
+            "method": "GET",
+            "payload": {},
+        })
+        actions.append({
+            "label": "PV Capacity Factors",
+            "endpoint": f"/api/energy-data/renewables-ninja?lat={lat}&lon={lon}&type=pv",
+            "method": "GET",
+            "payload": {},
+        })
+    if intent == "environmental":
+        actions.append({
+            "label": "Marginal Emissions",
+            "endpoint": "/api/energy-data/emissions?year=2025",
+            "method": "GET",
+            "payload": {},
+        })
+        actions.append({
+            "label": "Carbon Intensity Forecast",
+            "endpoint": "/api/energy-data/carbon-intensity/forecast",
+            "method": "GET",
+            "payload": {},
+        })
+
     # Add satellite analysis as secondary action for feasibility and grid_opportunity
     if intent in ("feasibility", "grid_opportunity"):
         actions.append({
@@ -1394,5 +1559,35 @@ async def enrich_context_with_trackers(conn, context: dict) -> dict:
             ]
     except Exception as e:
         log.debug("TEC enrichment failed: %s", e)
+
+    return enriched
+
+
+def enrich_context_with_energy_data(context: dict, intent: str) -> dict:
+    """Inject live energy market data for financial/environmental/feasibility intents."""
+    if intent not in ("feasibility", "financial", "environmental"):
+        return context
+
+    enriched = {**context}
+
+    try:
+        from utils.carbon_intensity import get_current_intensity, get_generation_mix
+        ci = get_current_intensity()
+        if ci and "error" not in ci:
+            enriched["carbon_intensity"] = ci
+        mix = get_generation_mix()
+        if mix and not (len(mix) == 1 and "error" in mix[0]):
+            enriched["generation_mix"] = mix
+    except Exception as e:
+        log.debug("Carbon intensity enrichment failed: %s", e)
+
+    if intent in ("financial", "environmental"):
+        try:
+            from utils.carbon_prices import get_carbon_summary
+            summary = get_carbon_summary()
+            if summary and "error" not in summary.get("emissions", {}):
+                enriched["carbon_price_summary"] = summary
+        except Exception as e:
+            log.debug("Carbon price enrichment failed: %s", e)
 
     return enriched

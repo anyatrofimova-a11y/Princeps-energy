@@ -37,8 +37,12 @@ export const WORKSPACE_INTENTS = {
   analyse: [
     "feasibility", "grid_study", "grid_connection", "demand_forecast", "advanced_grid", "grid_efficiency",
     "financial", "bess_optimisation", "satellite_analysis", "environmental", "planning", "legacy_compliance",
+    "terrain_analysis", "electrical_design",
+    "yield_assessment", "cable_routing",
   ],
-  design:  ["connection_strategy", "dispatch_optimisation", "route_to_market", "sustainability"],
+  design:  ["connection_strategy", "dispatch_optimisation", "route_to_market", "sustainability",
+    "report_generation", "document_automation", "construction_timeline"],
+  pipeline: ["portfolio_optimisation"],
   comply:  ["investment_readiness"],
 };
 
@@ -52,7 +56,26 @@ export const INTENT_DETAIL_MAP = {
   route_to_market:       "rtm",
   sustainability:        "sustainability",
   investment_readiness:  "investment",
+  financial:            "financial",
+  site_prospecting:     "prospector",
   dc_colocation:        "datacentre",
+  council_search:       "council",
+  planning:             "planning",
+  bess_optimisation:    "bess",
+  portfolio_optimisation: "portfolio",
+  cable_routing:        "cablerouting",
+  yield_assessment:     "yield",
+  construction_timeline: "construction",
+  ppa_origination:      "ppa",
+  workflow_engine:       "workflow",
+  assessment_snapshot:   "snapshot",
+  export_hub:            "export",
+  alert_rules:           "alerts",
+  prospector_v2:         "prospector_v2",
+  terrain_analysis:      "terrain",
+  report_generation:     "reports",
+  electrical_design:     "electrical",
+  document_automation:   "documents",
 };
 
 export function WorkspaceProvider({ children }) {
