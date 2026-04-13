@@ -18,9 +18,9 @@ export const WORKSPACE_ALIASES = {
 
 // Per-workspace view configurations
 export const WORKSPACE_VIEWS = {
-  home:    ["dashboard", "map"],
-  analyse: ["map", "network", "forecast", "table", "chart"],
-  design:  ["map", "table", "chart"],
+  home:    ["dashboard", "projects", "pulse", "grid_graph", "curtailment", "dc_connection", "neso098", "dc_twin", "map"],
+  analyse: ["map", "grid_graph", "network", "forecast", "table", "chart", "curtailment"],
+  design:  ["map", "table", "chart", "dc_connection", "dc_twin"],
   comply:  ["dashboard", "table"],
 };
 
@@ -80,7 +80,7 @@ export const INTENT_DETAIL_MAP = {
 
 export function WorkspaceProvider({ children }) {
   const [activeWorkspace, setActiveWorkspaceRaw] = useState("home");
-  const [activeViewMode, setActiveViewMode] = useState("map");
+  const [activeViewMode, setActiveViewMode] = useState(WORKSPACE_DEFAULTS.home.viewMode);
   const [browserOpen, setBrowserOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailSection, setDetailSection] = useState("cards"); // "cards" | deep-dive key

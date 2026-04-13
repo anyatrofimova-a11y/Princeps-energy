@@ -148,7 +148,11 @@ export default function SiteDesigner3D({ onClose, initialBoundary, initialLocati
 
   /* ── Drawing state ── */
   const [activeTool, setActiveTool] = useState(null);
+  const activeToolRef = useRef(null);
+  useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
   const [pointType, setPointType] = useState("substation");
+  const pointTypeRef = useRef("substation");
+  useEffect(() => { pointTypeRef.current = pointType; }, [pointType]);
   const [drawnBoundary, setDrawnBoundary] = useState(initialBoundary || null);
   const [drawnExclusions, setDrawnExclusions] = useState([]);
   const [drawnRoads, setDrawnRoads] = useState([]);
@@ -196,7 +200,7 @@ export default function SiteDesigner3D({ onClose, initialBoundary, initialLocati
     const lon = Cesium.Math.toDegrees(carto.longitude);
     const lat = Cesium.Math.toDegrees(carto.latitude);
 
-    const tool = activeTool;
+    const tool = activeToolRef.current;
     if (!tool) return;
 
     if (tool === "polygon" || tool === "exclusion") {
@@ -208,7 +212,7 @@ export default function SiteDesigner3D({ onClose, initialBoundary, initialLocati
       drawCoordsRef.current = [...drawCoordsRef.current, [lon, lat]];
       _renderRoadPreview(viewer, drawCoordsRef.current);
     } else if (tool === "point") {
-      setDrawnPoints((prev) => [...prev, { lon, lat, type: pointType }]);
+      setDrawnPoints((prev) => [...prev, { lon, lat, type: pointTypeRef.current }]);
       setUndoStack((prev) => [...prev, { action: "add_point" }]);
     } else if (tool === "measure_d") {
       if (drawCoordsRef.current.length === 0) {
@@ -230,14 +234,14 @@ export default function SiteDesigner3D({ onClose, initialBoundary, initialLocati
         setMeasurement({ type: "area", value: area });
       }
     }
-  }, [activeTool, pointType]);
+  }, []);
 
   /* ── Double-click to close polygon ── */
   const handleMapDoubleClick = useCallback((click, viewer) => {
     const coords = drawCoordsRef.current;
     if (coords.length < 3) return;
 
-    const tool = activeTool;
+    const tool = activeToolRef.current;
     if (tool === "polygon") {
       setDrawnBoundary([...coords]);
       setUndoStack((prev) => [...prev, { action: "set_boundary" }]);
@@ -261,7 +265,7 @@ export default function SiteDesigner3D({ onClose, initialBoundary, initialLocati
       drawCoordsRef.current = [];
       setDrawingCoords([]);
     }
-  }, [activeTool]);
+  }, []);
 
   /* ── Drawing preview helpers ── */
   function _renderDrawingPreview(viewer, coords) {

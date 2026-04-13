@@ -7,6 +7,13 @@ const VIEW_ICONS = {
   table:      "M3 10h18M3 14h18M3 6h18M3 18h18",
   chart:      "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
   dashboard:  "M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z",
+  projects:    "M3 7a2 2 0 012-2h4l2 2h7a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z",
+  pulse:         "M4 12h3l2-7 4 14 2-7h5",
+  curtailment:   "M3 17l6-6 4 4 8-8M14 7h7v7",
+  dc_connection: "M4 6h16v12H4zM8 6v12M16 6v12M4 12h16",
+  neso098:       "M12 2a10 10 0 100 20 10 10 0 000-20zm0 4a6 6 0 110 12 6 6 0 010-12zm0 3a3 3 0 100 6 3 3 0 000-6z",
+  grid_graph:    "M3 12h4l3-9 4 18 3-9h4",
+  dc_twin:       "M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z",
   // Grid-specific views
   explore:    "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v6m-3-3h6",
   network:    "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z",
@@ -19,6 +26,13 @@ const VIEW_ICONS = {
 
 const VIEW_LABELS = {
   map: "Map", table: "Table", chart: "Chart", dashboard: "Dashboard",
+  projects: "Projects",
+  pulse: "Pulse",
+  curtailment: "Curtailment",
+  dc_connection: "DC Connection",
+  neso098: "DC Optimiser",
+  grid_graph: "Grid Graph",
+  dc_twin: "DC Twin",
   explore: "Explore", network: "Network", circuit: "Circuit",
   data: "Data", forecast: "Forecast", compare: "Compare", satellite: "Satellite",
 };

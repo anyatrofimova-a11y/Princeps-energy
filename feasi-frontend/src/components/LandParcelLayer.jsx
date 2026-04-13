@@ -20,7 +20,7 @@ const PARCEL_FILL = Cesium.Color.fromCssColorString("#c040ff").withAlpha(0.3);
 const PARCEL_STROKE = Cesium.Color.fromCssColorString("#ffffff").withAlpha(0.7);
 const PARCEL_SELECTED = Cesium.Color.fromCssColorString("#D4A018").withAlpha(0.5);
 const PARCEL_SELECTED_STROKE = Cesium.Color.fromCssColorString("#D4A018").withAlpha(0.9);
-const LABEL_VISIBLE_HEIGHT = 5000; // metres
+const LABEL_VISIBLE_HEIGHT = 20000; // metres — show labels from further out
 
 function debounce(fn, ms) {
   let t;
@@ -46,6 +46,7 @@ export default function LandParcelLayer({
   visible = true,
   opacity = 0.3,
   filters = {},
+  filterVersion = 0,
 }) {
   const dsRef = useRef(null);
   const handlerRef = useRef(null);
@@ -75,7 +76,7 @@ export default function LandParcelLayer({
     const { west, south, east, north } = bbox;
     try {
       const res = await fetch(
-        `/api/parcels?lon_min=${west}&lat_min=${south}&lon_max=${east}&lat_max=${north}`
+        `/api/land/parcels?west=${west}&south=${south}&east=${east}&north=${north}`
       );
       if (!res.ok) return;
       const data = await res.json();
@@ -137,26 +138,32 @@ export default function LandParcelLayer({
         };
         entity._parcelTitle = titleNo;
 
-        // Label at centroid
+        // Label at centroid — show Bk number (title number)
         if (showLabels && titleNo) {
           const [cLon, cLat] = polygonCentroid(polygon);
+          // Format: extract prefix + number for compact display
+          const match = titleNo.match(/^([A-Z]{1,3})(\d+)$/);
+          const displayText = match ? `Bk ${match[1]}${match[2]}` : titleNo;
           ds.entities.add({
             position: Cesium.Cartesian3.fromDegrees(cLon, cLat),
             label: {
-              text: titleNo,
-              font: "11px 'JetBrains Mono', monospace",
+              text: displayText,
+              font: "bold 12px 'JetBrains Mono', monospace",
               fillColor: isSelected
                 ? Cesium.Color.fromCssColorString("#D4A018")
                 : Cesium.Color.WHITE,
-              outlineColor: Cesium.Color.BLACK.withAlpha(0.8),
-              outlineWidth: 3,
+              outlineColor: Cesium.Color.BLACK.withAlpha(0.9),
+              outlineWidth: 4,
               style: Cesium.LabelStyle.FILL_AND_OUTLINE,
               verticalOrigin: Cesium.VerticalOrigin.CENTER,
               horizontalOrigin: Cesium.HorizontalOrigin.CENTER,
               disableDepthTestDistance: Number.POSITIVE_INFINITY,
-              scaleByDistance: new Cesium.NearFarScalar(500, 1.0, 5000, 0.4),
+              scaleByDistance: new Cesium.NearFarScalar(500, 1.2, 20000, 0.5),
               pixelOffset: new Cesium.Cartesian2(0, 0),
               heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+              showBackground: true,
+              backgroundColor: Cesium.Color.BLACK.withAlpha(0.5),
+              backgroundPadding: new Cesium.Cartesian2(6, 4),
             },
           });
         }
@@ -195,8 +202,8 @@ export default function LandParcelLayer({
       const east = Cesium.Math.toDegrees(rect.east);
       const north = Cesium.Math.toDegrees(rect.north);
 
-      // Skip if bbox unchanged
-      const bboxKey = `${west.toFixed(4)},${south.toFixed(4)},${east.toFixed(4)},${north.toFixed(4)}`;
+      // Skip if bbox unchanged AND filters haven't changed
+      const bboxKey = `${west.toFixed(4)},${south.toFixed(4)},${east.toFixed(4)},${north.toFixed(4)}_fv${filterVersion}`;
       if (bboxKey === lastBboxRef.current) return;
       lastBboxRef.current = bboxKey;
 
@@ -207,13 +214,13 @@ export default function LandParcelLayer({
     }, 300);
 
     const removeListener = camera_addMoveEnd(viewer, updateFromCamera);
-    // Initial load
+    // Initial load (or re-load on filter change)
     updateFromCamera();
 
     return () => {
       removeListener();
     };
-  }, [viewer, visible, fetchParcels, renderParcels]);
+  }, [viewer, visible, fetchParcels, renderParcels, filterVersion]);
 
   /* ── Click handler for parcel selection ── */
   useEffect(() => {

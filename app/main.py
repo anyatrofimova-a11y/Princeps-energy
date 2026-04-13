@@ -77,6 +77,31 @@ async def lifespan(_app: FastAPI):
     chat_module.init_pool(pool)
 
     await setup_database(pool)
+
+    # Pulse suite — ensure new schemas exist (idempotent, fast)
+    try:
+        from utils.cluster_graph import ensure_schema as ensure_cluster_schema
+        from utils.grid_events import ensure_schema as ensure_events_schema
+        from utils.nged_live_feed import ensure_schema as ensure_nged_live_schema
+        from utils.nged_gsp_data import ensure_schema as ensure_nged_gsp_schema
+        from utils.nged_ecr import ensure_schema as ensure_nged_ecr_schema
+        from utils.curtailment_intelligence import ensure_schema as ensure_curtailment_schema
+        from utils.gu_capabilities import ensure_schema as ensure_gu_schema
+        from utils.dno_opendata_ingester import ensure_schema as ensure_dno_schema
+        from utils.neso098_dc_optimiser import ensure_schema as ensure_neso098_schema
+        await ensure_cluster_schema(pool)
+        await ensure_events_schema(pool)
+        await ensure_nged_live_schema(pool)
+        await ensure_nged_gsp_schema(pool)
+        await ensure_nged_ecr_schema(pool)
+        await ensure_curtailment_schema(pool)
+        await ensure_gu_schema(pool)
+        await ensure_dno_schema(pool)
+        await ensure_neso098_schema(pool)
+        log.info("Pulse + Gu + NESO098 schemas ensured")
+    except Exception as e:
+        log.warning("Pulse suite schema setup failed: %s", e)
+
     await launch_background_tasks(pool)
 
     yield
@@ -231,6 +256,20 @@ from app.routers import (  # noqa: E402
     solar_layout as solar_layout_router,
     export_usd as export_usd_router,
     design as design_router,
+    analysis as analysis_router,
+    neso as neso_router,
+    dno as dno_router,
+    market_data as market_data_router,
+    # Pulse suite (April 2026)
+    cluster as cluster_router,
+    events as events_router,
+    portfolio_delta as portfolio_delta_router,
+    nged as nged_router,
+    curtailment as curtailment_router,
+    dc_hyperscaler as dc_hyperscaler_router,
+    ltds_cim as ltds_cim_router,
+    gu as gu_router,
+    neso098 as neso098_router,
 )
 
 _routers = [
@@ -274,6 +313,20 @@ _routers = [
     solar_layout_router.router,
     export_usd_router.router,
     design_router.router,
+    analysis_router.router,
+    neso_router.router,
+    dno_router.router,
+    market_data_router.router,
+    # Pulse suite
+    cluster_router.router,
+    events_router.router,
+    portfolio_delta_router.router,
+    nged_router.router,
+    curtailment_router.router,
+    dc_hyperscaler_router.router,
+    ltds_cim_router.router,
+    gu_router.router,
+    neso098_router.router,
 ]
 
 app.include_router(graph_router)

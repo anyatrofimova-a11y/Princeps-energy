@@ -49,10 +49,13 @@ export default function SiteDashboardV2({ onClose }) {
 
   const [envData, setEnvData] = useState(null);
   const [envLoading, setEnvLoading] = useState(false);
+  const [envError, setEnvError] = useState(null);
   const [terrainData, setTerrainData] = useState(null);
   const [terrainLoading, setTerrainLoading] = useState(false);
+  const [terrainError, setTerrainError] = useState(null);
   const [planningData, setPlanningData] = useState(null);
   const [planningLoading, setPlanningLoading] = useState(false);
+  const [planningError, setPlanningError] = useState(null);
 
   const lat = pickedLocation?.lat || explain?.lat || explain?.location?.lat;
   const lon = pickedLocation?.lon || explain?.lon || explain?.location?.lon;
@@ -60,30 +63,54 @@ export default function SiteDashboardV2({ onClose }) {
   // Auto-fetch environmental constraints
   useEffect(() => {
     if (!lat || envData) return;
-    setEnvLoading(true);
-    api.environment?.constraints(lat, lon, 2000)
-      .then(d => { if (d) setEnvData(d); })
-      .catch(() => {})
-      .finally(() => setEnvLoading(false));
+    runEnvironmental();
   }, [lat, lon]);
+
+  const runEnvironmental = async () => {
+    if (!lat) return;
+    setEnvLoading(true);
+    setEnvError(null);
+    try {
+      // Try the dedicated environment endpoint first, then fall back to constraint checker
+      let d;
+      try {
+        d = await api.environment?.constraints(lat, lon, 2000);
+      } catch {}
+      if (!d || d.error) {
+        // Fallback: use the new constraint checker
+        const r = await fetch(`/api/analysis/constraint-check?lat=${lat}&lon=${lon}&radius_km=2`, { method: "POST" });
+        if (r.ok) {
+          const cc = await r.json();
+          d = { risk_level: cc.verdict?.toLowerCase() === "go" ? "low" : cc.verdict?.toLowerCase() === "no-go" ? "high" : "medium", constraints: cc.no_go_reasons?.concat(cc.caution_reasons || []).map(r => ({ type: r.split(":")[0], name: r })) || [], total: (cc.no_go_reasons?.length || 0) + (cc.caution_reasons?.length || 0), checks: cc.checks };
+        }
+      }
+      if (d) setEnvData(d);
+      else setEnvError("No data returned");
+    } catch (e) { setEnvError(e.message || "Failed"); }
+    setEnvLoading(false);
+  };
 
   const runTerrain = async () => {
     if (!lat) return;
     setTerrainLoading(true);
+    setTerrainError(null);
     try {
       const d = await api.terrain?.analyse(lat, lon, 500);
-      if (d) setTerrainData(d);
-    } catch {}
+      if (d && !d.error) setTerrainData(d);
+      else setTerrainError(d?.error || "Terrain analysis returned no data");
+    } catch (e) { setTerrainError(e.message || "Failed"); }
     setTerrainLoading(false);
   };
 
   const runPlanning = async () => {
     if (!lat) return;
     setPlanningLoading(true);
+    setPlanningError(null);
     try {
       const d = await api.planning?.predictApproval(lat, lon, 50, "solar");
-      if (d) setPlanningData(d);
-    } catch {}
+      if (d && !d.error) setPlanningData(d);
+      else setPlanningError(d?.error || "Planning prediction returned no data");
+    } catch (e) { setPlanningError(e.message || "Failed"); }
     setPlanningLoading(false);
   };
 
@@ -136,8 +163,8 @@ export default function SiteDashboardV2({ onClose }) {
         {/* Environment — auto-fetched */}
         <ActionCard
           title="Environmental"
-          status={envData ? (envData.risk_level === "low" ? "done" : "warning") : null}
-          onRun={() => { setEnvLoading(true); api.environment?.constraints(lat, lon, 2000).then(d => { if (d) setEnvData(d); }).finally(() => setEnvLoading(false)); }}
+          status={envData ? (envData.risk_level === "low" ? "done" : "warning") : envError ? "warning" : null}
+          onRun={runEnvironmental}
           running={envLoading}
         >
           {envData && (
@@ -145,16 +172,20 @@ export default function SiteDashboardV2({ onClose }) {
               <MetricRow label="Risk" value={envData.risk_level?.toUpperCase()} color={envData.risk_level === "low" ? "#16a34a" : envData.risk_level === "high" ? "#dc2626" : "#d97706"} />
               <MetricRow label="Constraints" value={envData.total || envData.constraints?.length || 0} />
               {envData.constraints?.slice(0, 3).map((c, i) => (
-                <div key={i} className="sd2-constraint">{c.type}: {c.name} ({c.distance_m?.toFixed(0)}m)</div>
+                <div key={i} className="sd2-constraint">{typeof c === "string" ? c : `${c.type}: ${c.name} (${c.distance_m?.toFixed(0) || "?"}m)`}</div>
+              ))}
+              {envData.checks && Object.entries(envData.checks).map(([k, v]) => (
+                <MetricRow key={k} label={k} value={v.status} color={v.status === "GO" ? "#16a34a" : v.status === "NO-GO" ? "#dc2626" : "#d97706"} />
               ))}
             </>
           )}
+          {envError && <div className="sd2-error">{envError}</div>}
         </ActionCard>
 
         {/* Terrain — on demand */}
         <ActionCard
           title="Terrain Analysis"
-          status={terrainData ? "done" : null}
+          status={terrainData ? "done" : terrainError ? "warning" : null}
           onRun={runTerrain}
           running={terrainLoading}
         >
@@ -166,12 +197,13 @@ export default function SiteDashboardV2({ onClose }) {
               <MetricRow label="Elevation Range" value={terrainData.elevation_range_m?.toFixed(0)} unit="m" />
             </>
           )}
+          {terrainError && <div className="sd2-error">{terrainError}</div>}
         </ActionCard>
 
         {/* Planning — on demand */}
         <ActionCard
           title="Planning Approval"
-          status={planningData ? (planningData.approval_probability > 0.6 ? "done" : "warning") : null}
+          status={planningData ? (planningData.approval_probability > 0.6 ? "done" : "warning") : planningError ? "warning" : null}
           onRun={runPlanning}
           running={planningLoading}
         >
@@ -183,6 +215,7 @@ export default function SiteDashboardV2({ onClose }) {
               <MetricRow label="Model" value={`${planningData.model_stats?.training_samples?.toLocaleString()} projects`} />
             </>
           )}
+          {planningError && <div className="sd2-error">{planningError}</div>}
         </ActionCard>
 
         {/* Slope — show if data exists */}
@@ -197,8 +230,8 @@ export default function SiteDashboardV2({ onClose }) {
         {/* Price — show if data exists */}
         {energyPrice && (
           <ActionCard title="Energy Price" status="done">
-            <MetricRow label="Current" value={`£${energyPrice.current_price?.toFixed(0)}`} unit="/MWh" />
-            {energyPrice.avg_price && <MetricRow label="Average" value={`£${energyPrice.avg_price?.toFixed(0)}`} unit="/MWh" />}
+            <MetricRow label="Current" value={`£${(energyPrice.current_price ?? energyPrice.price?.daily_avg)?.toFixed(0)}`} unit="/MWh" />
+            {(energyPrice.avg_price ?? energyPrice.price?.daily_avg) && <MetricRow label="Average" value={`£${(energyPrice.avg_price ?? energyPrice.price?.daily_avg)?.toFixed(0)}`} unit="/MWh" />}
           </ActionCard>
         )}
       </div>

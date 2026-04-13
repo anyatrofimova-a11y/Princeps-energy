@@ -355,6 +355,7 @@ export function SiteProvider({ children }) {
     electricityZones: false,
     epcZones: false, epcDom: false, epcNondom: false, postcodes: false,
     dcCapacity: false, dcFibre: false, dcIxp: false,
+    gridTwin3d: false,
     google3d: false,
     cesiumGlobe: false,
     gibsModis: false,
@@ -369,6 +370,12 @@ export function SiteProvider({ children }) {
     queueDepth: false,
     landParcels: false,
     planningDensity: false,
+    planningConstraints: false,
+    // Pulse · NGED live-intelligence layers
+    nged_headroom: false,
+    nged_ecr: false,
+    nged_gsp: false,
+    nged_licence: false,
   });
   const toggleLayer = useCallback((id) => {
     setLayers(l => ({ ...l, [id]: !l[id] }));

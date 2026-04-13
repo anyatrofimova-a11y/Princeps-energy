@@ -664,6 +664,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
       // Planning density source
       map.addSource("planning-density", { type: "geojson", data: EMPTY_FC });
+      map.addSource("planning-constraints", { type: "geojson", data: EMPTY_FC });
 
       // DC infrastructure sources
       map.addSource("dc-capacity", { type: "geojson", data: EMPTY_FC });
@@ -1140,7 +1141,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           "text-anchor": "top",
           visibility: "none",
         },
-        minzoom: 10,
+        minzoom: 12,
       });
 
       // Tower dots (very numerous — only at zoom >= 12)
@@ -1270,10 +1271,10 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           ],
           "circle-color": [
             "match", ["coalesce", ["get", "rag"], "gray"],
-            "green", "#4caf50",
-            "amber", "#ff9800",
-            "red", "#f44336",
-            "#999"
+            "green", "#2D7A4F",
+            "amber", "#C67A1A",
+            "red", "#B5432A",
+            "#9C9590"
           ],
           "circle-opacity": 0.8,
           "circle-stroke-width": 1.5,
@@ -1300,7 +1301,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           "text-anchor": "top",
           "text-optional": true,
         },
-        minzoom: 10,
+        minzoom: 11,
       });
 
       // NGED substation click popup
@@ -1358,12 +1359,12 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"],
             5, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 2, 10, 3, 50, 5, 200, 8],
-            8, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 3, 10, 6, 50, 10, 200, 16],
-            12, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 5, 10, 10, 50, 18, 200, 28],
+            8, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 4, 10, 8, 50, 16, 200, 24],
+            12, ["interpolate", ["linear"], ["coalesce", ["get", "gen_headroom_mw"], 0], 0, 8, 10, 16, 50, 28, 200, 40],
           ],
           "circle-color": [
             "match", ["coalesce", ["get", "rag"], "gray"],
-            "green", "#16A34A", "amber", "#E8A012", "red", "#DC2626", "#9CA3AF"
+            "green", "#2D7A4F", "amber", "#C67A1A", "red", "#B5432A", "#9C9590"
           ],
           "circle-opacity": ["interpolate", ["linear"], ["zoom"], 5, 0.4, 8, 0.6, 12, 0.75],
           "circle-stroke-width": 1,
@@ -1389,7 +1390,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           "text-optional": true,
           "text-allow-overlap": false,
         },
-        minzoom: 10,
+        minzoom: 11,
       });
 
       // Verdict badges — GO/CAUTION/NO-GO above substations
@@ -1450,24 +1451,29 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         // Determine verdict
         const hw = parseFloat(p.gen_headroom_mw) || 0;
         const verdict = hw >= 50 ? "GO" : hw >= 10 ? "CAUTION" : "NO-GO";
-        const verdictColor = hw >= 50 ? "#24a148" : hw >= 10 ? "#f1c21b" : "#da1e28";
+        const verdictColor = hw >= 50 ? "#2D7A4F" : hw >= 10 ? "#C67A1A" : "#B5432A";
+        const availLabel = hw >= 50 ? "HIGH AVAILABILITY" : hw >= 10 ? "LIMITED" : "CONSTRAINED";
+        const availBg = hw >= 50 ? "rgba(45,122,79,0.1)" : hw >= 10 ? "rgba(198,122,26,0.1)" : "rgba(181,67,42,0.1)";
         const voltageStr = p.voltage_kv ? `${p.voltage_kv}kV` : "";
         const headroomStr = p.gen_headroom_mw != null ? `${p.gen_headroom_mw} MW` : "N/A";
         const queueStr = p.ecr_queued ? `${p.ecr_queued} projects` : "N/A";
-        // Estimate connection cost (simplified UK rates)
         const vkv = parseFloat(p.voltage_kv) || 33;
         const costPerKm = vkv >= 132 ? 500 : vkv >= 33 ? 150 : 80;
         const distKm = parseFloat(p.dist_km) || 2;
         const estCostK = Math.round(costPerKm * distKm);
         const timelineMonths = vkv >= 132 ? 36 : vkv >= 33 ? 24 : 12;
-        new mapboxgl.Popup({ maxWidth: "280px" })
+        new mapboxgl.Popup({ maxWidth: "300px" })
           .setLngLat(e.lngLat)
-          .setHTML(`<div style="font-size:12px;line-height:1.6">
-            <strong>${name}</strong>${voltageStr ? ` — ${voltageStr}` : ""}
-            <br/>Headroom: <strong>${headroomStr}</strong> | Queue: ${queueStr}
-            <br/>Verdict: <span style="color:${verdictColor};font-weight:700;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">${verdict}</span>
-            <br/>Est. Cost: <strong>\u00A3${estCostK}k</strong> | Timeline: ~${timelineMonths} months
-            <br/><span style="color:#78a9ff;cursor:pointer;text-decoration:underline" onclick="window.dispatchEvent(new CustomEvent('princeps-node-click',{detail:${JSON.stringify({ ...p, name, lat: coords[1], lon: coords[0] }).replace(/"/g, "'")}}))">Click for full analysis</span>
+          .setHTML(`<div style="font-family:'DM Sans',sans-serif;font-size:12px;line-height:1.7">
+            <div style="font-weight:700;font-size:14px;color:#1A1714;margin-bottom:4px">${name}${voltageStr ? ` <span style="color:#9C9590;font-weight:500">— ${voltageStr}</span>` : ""}</div>
+            <div style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;color:${verdictColor};background:${availBg};letter-spacing:0.03em;margin-bottom:6px">${availLabel} — ${headroomStr}</div>
+            <div style="color:#6B6560">Queue: ${queueStr}</div>
+            <div style="display:flex;gap:12px;margin-top:6px;padding-top:6px;border-top:1px solid #E8E5DF">
+              <div><span style="color:#9C9590;font-size:10px">Est. Cost</span><br/><strong style="color:#1A1714">\u00A3${estCostK}k</strong></div>
+              <div><span style="color:#9C9590;font-size:10px">Timeline</span><br/><strong style="color:#1A1714">~${timelineMonths} mo</strong></div>
+              <div><span style="color:#9C9590;font-size:10px">Verdict</span><br/><strong style="color:${verdictColor}">${verdict}</strong></div>
+            </div>
+            <div style="margin-top:8px"><span style="color:#E8A012;cursor:pointer;font-weight:600;font-size:11px" onclick="window.dispatchEvent(new CustomEvent('princeps-node-click',{detail:${JSON.stringify({ ...p, name, lat: coords[1], lon: coords[0] }).replace(/"/g, "'")}}))">View full analysis &rarr;</span></div>
           </div>`)
           .addTo(map);
       });
@@ -1901,6 +1907,69 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       });
       map.on("mouseenter", "planning-density-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "planning-density-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
+
+      // ── Planning Constraint Choropleth (LPA polygons) ──
+      map.addLayer({
+        id: "planning-constraints-fill",
+        type: "fill",
+        source: "planning-constraints",
+        paint: {
+          "fill-color": [
+            "interpolate", ["linear"], ["coalesce", ["get", "constraint_score"], 0],
+            0, "#16A34A", 20, "#86EFAC",
+            40, "#FACC15", 60, "#F97316",
+            80, "#DC2626", 100, "#DC2626",
+          ],
+          "fill-opacity": 0.5,
+        },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "planning-constraints-outline",
+        type: "line",
+        source: "planning-constraints",
+        paint: { "line-color": "#ffffff", "line-width": 1, "line-opacity": 0.8 },
+        layout: { visibility: "none" },
+      });
+      map.addLayer({
+        id: "planning-constraints-labels",
+        type: "symbol",
+        source: "planning-constraints",
+        paint: {
+          "text-color": "#fff",
+          "text-halo-color": "rgba(0,0,0,0.85)",
+          "text-halo-width": 1.5,
+        },
+        layout: {
+          visibility: "none",
+          "text-field": ["concat", ["get", "lpa_name"], "\n", ["to-string", ["get", "constraint_score"]], "/100"],
+          "text-size": 11,
+          "text-font": ["Noto Sans Bold"],
+          "text-allow-overlap": false,
+        },
+        minzoom: 9,
+      });
+      map.on("click", "planning-constraints-fill", (e) => {
+        if (map._pickMode) return;
+        const p = e.features[0].properties;
+        const scoreColor = p.constraint_score >= 80 ? "#DC2626" : p.constraint_score >= 60 ? "#F97316"
+          : p.constraint_score >= 40 ? "#FACC15" : p.constraint_score >= 20 ? "#86EFAC" : "#16A34A";
+        new mapboxgl.Popup({ maxWidth: "300px" })
+          .setLngLat(e.lngLat)
+          .setHTML(`<div style="font-size:12px;line-height:1.6">
+            <strong>${p.lpa_name}</strong> <span style="opacity:0.6">(${p.lpa_code})</span>
+            <br/>Constraint Score: <span style="color:${scoreColor};font-weight:700">${p.constraint_score}/100</span>
+            <br/>Approval Rate: ${((p.approval_rate || 0) * 100).toFixed(1)}%
+            <br/>Green Belt: ${((p.green_belt_pct || 0) * 100).toFixed(1)}%
+            | Flood Zone: ${((p.flood_pct || 0) * 100).toFixed(1)}%
+            <br/>AONB: ${((p.aonb_pct || 0) * 100).toFixed(1)}%
+            | SSSI: ${p.sssi_count || 0} sites
+            <br/>Heritage Assets: ${p.heritage_count || 0}
+          </div>`)
+          .addTo(map);
+      });
+      map.on("mouseenter", "planning-constraints-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "planning-constraints-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
 
       // ── Queue Depth circles at substations ──
       map.addLayer({
@@ -2795,7 +2864,14 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     // Fallback if load never fires (e.g. network issues)
     setTimeout(() => { if (!map._setupDone) { console.warn("[MapView] load timeout — forcing setup"); setupMap(); } }, 5000);
 
-    return () => map.remove();
+    // Keep mapbox canvas in sync with container size (view switches, panel toggles, window resize)
+    const ro = new ResizeObserver(() => { try { map.resize(); } catch {} });
+    ro.observe(containerRef.current);
+
+    return () => {
+      ro.disconnect();
+      map.remove();
+    };
   }, []);
 
   // Lazy raster layer configs — added on first toggle to avoid slow initial load
@@ -2871,6 +2947,7 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       queueDepth: ["queue-depth-circles", "queue-depth-labels"],
       landParcels: ["land-parcels-fill", "land-parcels-outline", "land-parcels-labels", "land-available-markers"],
       planningDensity: ["planning-density-circles", "planning-density-labels"],
+      planningConstraints: ["planning-constraints-fill", "planning-constraints-outline", "planning-constraints-labels"],
       demandGsps: ["demand-gsp-circles", "demand-gsp-labels"],
       tecPipeline: ["eso-tec-circles", "eso-tec-labels"],
       repdProjects: ["repd-circles", "repd-labels"],

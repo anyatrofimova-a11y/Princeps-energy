@@ -135,12 +135,13 @@ export default function GridTwinCesium({ onClose }) {
     planningRisk: null,  // planning probability data
   });
   /* ── Land parcel + classification state ── */
-  const [showLandParcels, setShowLandParcels] = useState(false);
+  const [showLandParcels, setShowLandParcels] = useState(true);
   const [showLandClassification, setShowLandClassification] = useState(false);
   const [selectedParcels, setSelectedParcels] = useState([]);
   const [parcelFilters, setParcelFilters] = useState({});
+  const [filterVersion, setFilterVersion] = useState(0);
   const [gisLayers, setGisLayers] = useState({
-    landParcels: { visible: false, opacity: 0.3 },
+    landParcels: { visible: true, opacity: 0.3 },
     landClassification: { visible: false, opacity: 0.6 },
     gridInfra: { visible: true, opacity: 1 },
     energyAssets: { visible: true, opacity: 1 },
@@ -1179,6 +1180,7 @@ export default function GridTwinCesium({ onClose }) {
         visible={showLandParcels}
         opacity={gisLayers.landParcels?.opacity ?? 0.3}
         filters={parcelFilters}
+        filterVersion={filterVersion}
         onParcelClick={handleParcelClick}
         onSelectionChange={handleParcelSelectionChange}
       />
@@ -1196,6 +1198,7 @@ export default function GridTwinCesium({ onClose }) {
         onLayerChange={handleGisLayerChange}
         filters={parcelFilters}
         onFilterChange={setParcelFilters}
+        onApplyFilters={() => setFilterVersion(v => v + 1)}
       />
 
       {/* ── Parcel Detail Panel (right side) ── */}

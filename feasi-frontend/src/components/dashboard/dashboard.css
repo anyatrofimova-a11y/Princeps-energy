@@ -1,0 +1,566 @@
+/* ══════════════════════════════════════════════════════════════
+   PRINCEPS DECISION COCKPIT — V3 Premium
+   Halcyon / Grid / Cog inspired
+   Glassmorphism · Animated borders · Scanning lines · Glow
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Keyframes ──────────────────────────────────────────────── */
+
+@keyframes pd-scan {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+
+@keyframes pd-glow-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes pd-border-flow {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+@keyframes pd-fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pd-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pd-counter-flash {
+  0% { color: var(--gold); }
+  100% { color: var(--ink); }
+}
+
+@keyframes pd-ring-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pd-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pd-live-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+}
+
+@keyframes pd-metric-enter {
+  from { opacity: 0; transform: scale(0.95) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes pd-expand-in {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 300px; }
+}
+
+@keyframes pd-action-slide {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pd-tab-glow {
+  0%, 100% { box-shadow: 0 2px 8px rgba(245, 183, 49, 0.15); }
+  50% { box-shadow: 0 2px 16px rgba(245, 183, 49, 0.35); }
+}
+
+/* ── Dashboard shell ────────────────────────────────────────── */
+
+.princeps-dashboard {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--bg, #F2F3F5);
+  padding-bottom: 80px;
+  scroll-behavior: smooth;
+}
+
+.princeps-dashboard::-webkit-scrollbar { width: 5px; }
+.princeps-dashboard::-webkit-scrollbar-track { background: transparent; }
+.princeps-dashboard::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.princeps-dashboard::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-light);
+}
+
+/* ── Shared card system ─────────────────────────────────────── */
+
+.pd3-card {
+  position: relative;
+  background: var(--cds-layer-01, #ffffff);
+  border: 1px solid var(--border, #E8EAED);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.02);
+  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+  overflow: hidden;
+}
+
+.pd3-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.pd3-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.04);
+  border-color: rgba(245, 183, 49, 0.3);
+}
+
+.pd3-card:hover::before {
+  opacity: 1;
+}
+
+.pd3-card-interactive {
+  cursor: pointer;
+}
+
+.pd3-card-interactive:hover {
+  transform: translateY(-1px);
+  border-color: var(--gold);
+}
+
+/* Animated gradient border for featured cards */
+.pd3-card-glow {
+  border-image: linear-gradient(
+    120deg,
+    var(--border) 0%,
+    var(--gold) 30%,
+    var(--border) 60%,
+    var(--gold) 100%
+  ) 1;
+  background-clip: padding-box;
+  animation: pd-border-flow 4s linear infinite;
+  background-size: 200% 100%;
+}
+
+/* Scan line overlay for live components */
+.pd3-scan-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(245, 183, 49, 0.03), transparent);
+  animation: pd-scan 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Section labels ─────────────────────────────────────────── */
+
+.pd3-section-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted, #6B7280);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pd3-section-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border), transparent);
+}
+
+/* ── Metric number animation ────────────────────────────────── */
+
+.pd3-metric-value {
+  font-family: var(--mono, "JetBrains Mono"), monospace;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  transition: color 0.3s ease;
+}
+
+.pd3-metric-value.pd3-updating {
+  animation: pd-counter-flash 0.4s ease;
+}
+
+/* ── Delta badge ────────────────────────────────────────────── */
+
+.pd3-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  transition: transform 0.2s ease;
+}
+
+.pd3-delta:hover {
+  transform: scale(1.05);
+}
+
+.pd3-delta-up {
+  color: #16a34a;
+  background: rgba(22, 163, 74, 0.08);
+}
+
+.pd3-delta-down {
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+/* ── Sparkline container ────────────────────────────────────── */
+
+.pd3-sparkline {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.pd3-sparkline:hover {
+  opacity: 1;
+}
+
+/* ── Progress bars ──────────────────────────────────────────── */
+
+.pd3-progress-track {
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--cds-layer-03, #EBEDF0);
+  overflow: hidden;
+  position: relative;
+}
+
+.pd3-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.pd3-progress-fill::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 0 2px 2px 0;
+  animation: pd-glow-pulse 2s ease-in-out infinite;
+}
+
+/* ── Verdict pills ──────────────────────────────────────────── */
+
+.pd3-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 20px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.pd3-verdict:hover {
+  transform: scale(1.05);
+}
+
+.pd3-verdict-go {
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+  border: 1px solid rgba(22, 163, 74, 0.2);
+}
+
+.pd3-verdict-go:hover {
+  box-shadow: 0 0 8px rgba(22, 163, 74, 0.15);
+}
+
+.pd3-verdict-caution {
+  background: rgba(245, 183, 49, 0.1);
+  color: #92400e;
+  border: 1px solid rgba(245, 183, 49, 0.25);
+}
+
+.pd3-verdict-caution:hover {
+  box-shadow: 0 0 8px rgba(245, 183, 49, 0.15);
+}
+
+.pd3-verdict-nogo {
+  background: rgba(220, 38, 38, 0.08);
+  color: #991b1b;
+  border: 1px solid rgba(220, 38, 38, 0.2);
+}
+
+.pd3-verdict-nogo:hover {
+  box-shadow: 0 0 8px rgba(220, 38, 38, 0.15);
+}
+
+/* ── Table rows ─────────────────────────────────────────────── */
+
+.pd3-table-row {
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+
+.pd3-table-row:hover {
+  background: rgba(245, 183, 49, 0.03);
+}
+
+.pd3-table-row:hover td:first-child {
+  color: var(--gold-dark);
+}
+
+.pd3-table-row-expanded {
+  background: var(--cds-layer-02, #F7F8FA);
+  animation: pd-expand-in 0.3s ease;
+}
+
+/* ── Tabs system ────────────────────────────────────────────── */
+
+.pd3-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border, #E8EAED);
+  background: var(--cds-layer-01, #ffffff);
+  padding: 0 4px;
+  position: relative;
+}
+
+.pd3-tab {
+  position: relative;
+  padding: 14px 24px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: "DM Sans", sans-serif;
+  color: var(--muted, #6B7280);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.pd3-tab::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  width: 0;
+  height: 2px;
+  background: var(--gold, #F5B731);
+  border-radius: 1px 1px 0 0;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pd3-tab:hover {
+  color: var(--ink, #0F1318);
+}
+
+.pd3-tab-active {
+  color: var(--ink, #0F1318);
+  font-weight: 600;
+}
+
+.pd3-tab-active::after {
+  width: calc(100% - 48px);
+  left: 24px;
+  box-shadow: 0 1px 4px rgba(245, 183, 49, 0.3);
+}
+
+/* ── Action cards ───────────────────────────────────────────── */
+
+.pd3-action-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  transition: background 0.2s ease, padding-left 0.2s ease;
+  cursor: pointer;
+}
+
+.pd3-action-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: var(--gold);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.2s ease;
+}
+
+.pd3-action-card:hover {
+  background: rgba(245, 183, 49, 0.03);
+  padding-left: 24px;
+}
+
+.pd3-action-card:hover::before {
+  width: 3px;
+}
+
+/* ── Quick action grid cards ────────────────────────────────── */
+
+.pd3-quick-card {
+  position: relative;
+  background: var(--cds-layer-01, #ffffff);
+  border: 1px solid var(--border, #E8EAED);
+  border-radius: var(--radius-md, 12px);
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.pd3-quick-card::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.pd3-quick-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 183, 49, 0.4);
+  box-shadow: 0 4px 16px rgba(245, 183, 49, 0.08), 0 8px 32px rgba(0, 0, 0, 0.04);
+}
+
+.pd3-quick-card:hover::after {
+  opacity: 1;
+}
+
+.pd3-quick-card:active {
+  transform: translateY(0);
+  transition-duration: 0.1s;
+}
+
+.pd3-quick-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(245, 183, 49, 0.06);
+  border: 1px solid rgba(245, 183, 49, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+
+.pd3-quick-card:hover .pd3-quick-icon {
+  background: rgba(245, 183, 49, 0.12);
+  border-color: rgba(245, 183, 49, 0.25);
+}
+
+/* ── Risk dot with glow ─────────────────────────────────────── */
+
+.pd3-risk-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  transition: box-shadow 0.2s ease;
+}
+
+.pd3-risk-dot-high {
+  background: #dc2626;
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.15);
+}
+
+.pd3-risk-dot-high:hover {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.3);
+}
+
+.pd3-risk-dot-medium {
+  background: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+}
+
+.pd3-risk-dot-low {
+  background: #16a34a;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.15);
+}
+
+/* ── Filter chips ───────────────────────────────────────────── */
+
+.pd3-chip {
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: "DM Sans", sans-serif;
+  border-radius: 20px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  background: var(--cds-layer-03, #EBEDF0);
+  color: var(--muted, #6B7280);
+}
+
+.pd3-chip:hover {
+  background: rgba(245, 183, 49, 0.08);
+  color: var(--ink);
+  border-color: rgba(245, 183, 49, 0.2);
+}
+
+.pd3-chip-active {
+  background: var(--gold, #F5B731);
+  color: #ffffff;
+  font-weight: 600;
+  border-color: var(--gold-dark);
+  box-shadow: 0 2px 6px rgba(245, 183, 49, 0.25);
+}
+
+.pd3-chip-active:hover {
+  background: var(--gold-dark, #E8A012);
+  color: #ffffff;
+  border-color: var(--gold-dark);
+}
+
+/* ── Animated entry for dashboard sections ──────────────────── */
+
+.pd3-enter-1 { animation: pd-fade-up 0.4s ease both; animation-delay: 0.05s; }
+.pd3-enter-2 { animation: pd-fade-up 0.4s ease both; animation-delay: 0.1s; }
+.pd3-enter-3 { animation: pd-fade-up 0.4s ease both; animation-delay: 0.15s; }
+.pd3-enter-4 { animation: pd-fade-up 0.4s ease both; animation-delay: 0.2s; }
+.pd3-enter-5 { animation: pd-fade-up 0.4s ease both; animation-delay: 0.25s; }
+
+/* ── Responsive ─────────────────────────────────────────────── */
+
+@media (max-width: 1200px) {
+  .pd3-hero-grid { grid-template-columns: 1fr !important; }
+  .pd3-quick-grid { grid-template-columns: repeat(2, 1fr) !important; }
+}
+
+@media (max-width: 768px) {
+  .pd3-quick-grid { grid-template-columns: 1fr !important; }
+  .pd3-metrics-row { flex-direction: column !important; gap: 16px !important; }
+}

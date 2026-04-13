@@ -50,7 +50,7 @@ export default function LiveDataStrip() {
       {solarGW ? <MetricPill label="Solar" value={`${solarGW} GW`} color="#f59e0b" /> :
         solarEntry ? <MetricPill label="Solar" value={`${solarEntry.perc}%`} color="#f59e0b" /> : null}
       {carbon && <MetricPill label="Carbon" value={`${Math.round(carbon)} gCO\u2082`} badge={carbonIndex} badgeColor={carbonColor} />}
-      {freq && <MetricPill label="Freq" value={`${freq.toFixed(2)} Hz`} color={freq < 49.95 || freq > 50.05 ? '#ef4444' : '#16a34a'} />}
+      {freq != null && <MetricPill label="Freq" value={`${parseFloat(freq).toFixed(2)} Hz`} color={parseFloat(freq) < 49.95 || parseFloat(freq) > 50.05 ? '#ef4444' : '#16a34a'} />}
       {price != null && <MetricPill label="Price" value={`\u00a3${Number(price).toFixed(0)}/MWh`} color="#22c55e" />}
       {renewPct != null && <MetricPill label="Renewables" value={`${renewPct}%`} color="#16a34a" />}
 

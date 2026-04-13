@@ -15,6 +15,7 @@ Coordinate transforms use pyproj (OSGB36 EPSG:27700 <-> WGS84 EPSG:4326).
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -173,6 +174,20 @@ async def fetch_parcels_in_bbox(
         log.info("INSPIRE WFS returned no data — falling back to Overpass API")
         features = await _fetch_overpass_parcels(lon_min, lat_min, lon_max, lat_max, limit)
 
+    # Batch local authority lookup for the bbox centre (one call, applies to all parcels)
+    centre_lat = (lat_min + lat_max) / 2
+    centre_lon = (lon_min + lon_max) / 2
+    la_info = await _get_local_authority(centre_lat, centre_lon)
+    bbox_local_authority = la_info.get("admin_district", "")
+
+    # Attach local_authority to each feature (same for entire bbox area)
+    for f in features:
+        if not f["properties"].get("local_authority"):
+            f["properties"]["local_authority"] = bbox_local_authority
+        # Ensure land_use field exists (INSPIRE parcels won't have it)
+        if "land_use" not in f["properties"] and "landuse" not in f["properties"]:
+            f["properties"]["land_use"] = None
+
     result = {
         "type": "FeatureCollection",
         "features": features,
@@ -182,6 +197,7 @@ async def fetch_parcels_in_bbox(
             "leasehold": sum(1 for f in features if f["properties"].get("tenure") == "leasehold"),
             "bbox": [lon_min, lat_min, lon_max, lat_max],
             "source": features[0]["properties"].get("source", "unknown") if features else "none",
+            "local_authority": bbox_local_authority,
         },
     }
 
@@ -317,10 +333,14 @@ async def _fetch_overpass_parcels(
                         "area_ha": round(area_ha, 3),
                         "tenure": tenure,
                         "landuse": landuse,
+                        "land_use": landuse,
                         "osm_id": el.get("id"),
                         "osm_name": tags.get("name", ""),
+                        "osm_operator": tags.get("operator", ""),
+                        "osm_owner": tags.get("owner", ""),
                         "color": "#2563eb" if tenure == "freehold" else "#ea580c",
                         "source": "OpenStreetMap (synthetic title)",
+                        "local_authority": "",
                         "hmlr_url": "",
                     },
                 })
@@ -362,7 +382,244 @@ def _overpass_element_to_geojson_geom(el: dict) -> dict | None:
     return None
 
 
-# ── 2. Parcel Detail ──────────────────────────────────────────────────────
+# ── 2. Enrichment Helpers ─────────────────────────────────────────────────
+
+_NOMINATIM_LAST_CALL = 0.0  # rate-limit: 1 req/s
+
+
+async def _reverse_geocode(lat: float, lon: float) -> dict:
+    """Reverse geocode via Nominatim (free, 1 req/s rate limit)."""
+    global _NOMINATIM_LAST_CALL
+    # Respect 1 req/s rate limit
+    now = time.time()
+    wait = max(0, 1.05 - (now - _NOMINATIM_LAST_CALL))
+    if wait > 0:
+        await asyncio.sleep(wait)
+    _NOMINATIM_LAST_CALL = time.time()
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params={"lat": lat, "lon": lon, "format": "json", "zoom": 16},
+                headers={"User-Agent": "Princeps/1.0 (energy site assessment)"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                addr = data.get("address", {})
+                return {
+                    "display_name": data.get("display_name", ""),
+                    "road": addr.get("road", ""),
+                    "suburb": addr.get("suburb", addr.get("hamlet", addr.get("village", ""))),
+                    "city": addr.get("city", addr.get("town", addr.get("village", ""))),
+                    "county": addr.get("county", ""),
+                    "postcode": addr.get("postcode", ""),
+                    "country": addr.get("country", ""),
+                }
+    except Exception as e:
+        log.debug("Nominatim reverse geocode failed: %s", e)
+    return {}
+
+
+async def _get_local_authority(lat: float, lon: float) -> dict:
+    """Look up local authority via postcodes.io (free, no auth)."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.postcodes.io/postcodes",
+                params={"lon": lon, "lat": lat, "limit": 1},
+                headers={"User-Agent": "Princeps/1.0"},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get("result", [])
+                if results and len(results) > 0:
+                    r = results[0]
+                    return {
+                        "admin_district": r.get("admin_district", ""),
+                        "admin_county": r.get("admin_county", ""),
+                        "parish": r.get("parish", ""),
+                        "parliamentary_constituency": r.get("parliamentary_constituency", ""),
+                        "region": r.get("region", ""),
+                        "postcode": r.get("postcode", ""),
+                    }
+    except Exception as e:
+        log.debug("postcodes.io lookup failed: %s", e)
+    return {}
+
+
+async def _get_osm_land_info(lat: float, lon: float) -> dict:
+    """Query OSM for land use and operator/owner at a point."""
+    query = f"""
+    [out:json][timeout:10];
+    (
+      way(around:50,{lat},{lon})["landuse"];
+      way(around:50,{lat},{lon})["building"];
+      way(around:50,{lat},{lon})["leisure"];
+      relation(around:50,{lat},{lon})["landuse"];
+    );
+    out tags 1;
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                OVERPASS_API,
+                data={"data": query},
+                headers={"User-Agent": "Princeps/1.0 (energy site assessment)"},
+            )
+            if resp.status_code == 200:
+                elements = resp.json().get("elements", [])
+                if elements:
+                    tags = elements[0].get("tags", {})
+                    return {
+                        "landuse": tags.get("landuse", tags.get("building", tags.get("leisure", ""))),
+                        "operator": tags.get("operator", ""),
+                        "owner": tags.get("owner", tags.get("name", "")),
+                        "name": tags.get("name", ""),
+                        "description": tags.get("description", ""),
+                    }
+    except Exception as e:
+        log.debug("OSM land info lookup failed: %s", e)
+    return {}
+
+
+def _derive_proprietor_category(
+    landuse: str, osm_owner: str, local_authority: str,
+) -> tuple[str, str]:
+    """
+    Derive proprietor name and category from land use and OSM data.
+
+    Returns (proprietor_name, proprietor_category).
+    """
+    landuse_lower = landuse.lower() if landuse else ""
+    owner = osm_owner.strip() if osm_owner else ""
+
+    # If OSM has an explicit owner/operator, use it
+    if owner:
+        # Detect category from owner name patterns
+        owner_lower = owner.lower()
+        if any(k in owner_lower for k in ("council", "borough", "county", "district", "authority", "government")):
+            return owner, "Local Authority"
+        if any(k in owner_lower for k in ("church", "diocese", "chapel", "parish")):
+            return owner, "Religious Body"
+        if any(k in owner_lower for k in ("trust", "charity", "foundation", "society")):
+            return owner, "Charity / Trust"
+        if any(k in owner_lower for k in ("ltd", "plc", "limited", "holdings", "group", "inc")):
+            return owner, "Corporate Body"
+        if any(k in owner_lower for k in ("network rail", "highways", "national grid", "crown estate")):
+            return owner, "Public Body"
+        return owner, "Corporate Body"
+
+    # Derive from land use
+    if landuse_lower in ("farmland", "meadow", "orchard", "vineyard", "allotments"):
+        return "Private landowner (agricultural)", "Private Individual"
+    if landuse_lower in ("grass", "greenfield"):
+        return "Private landowner", "Private Individual"
+    if landuse_lower in ("industrial", "commercial", "retail", "warehouse"):
+        return "Corporate owner (commercial/industrial)", "Corporate Body"
+    if landuse_lower in ("residential",):
+        return "Private landowner (residential)", "Private Individual"
+    if landuse_lower in ("brownfield", "construction"):
+        return "Developer / Corporate owner", "Corporate Body"
+    if landuse_lower in ("recreation_ground", "park", "village_green"):
+        if local_authority:
+            return f"{local_authority} (likely)", "Local Authority"
+        return "Local authority (likely)", "Local Authority"
+    if landuse_lower in ("forest", "wood"):
+        return "Forestry Commission / Private owner", "Unknown"
+    if landuse_lower in ("military",):
+        return "Ministry of Defence", "Public Body"
+    if landuse_lower in ("cemetery",):
+        if local_authority:
+            return f"{local_authority} / Church", "Local Authority"
+        return "Local authority / Church", "Unknown"
+
+    # Default
+    if local_authority:
+        return "Unknown (search HMLR for details)", "Unknown"
+    return "Unknown (search HMLR for details)", "Unknown"
+
+
+async def _enrich_parcel_detail(detail: dict) -> dict:
+    """
+    Enrich a parcel detail dict with freely available data:
+    reverse geocode, local authority, OSM land use, proprietor inference.
+    """
+    geom = detail.get("geometry")
+    if not geom:
+        return detail
+
+    # Compute centroid
+    try:
+        centroid = shape(geom).centroid
+        lat, lon = centroid.y, centroid.x
+    except Exception:
+        return detail
+
+    # Run enrichment lookups in parallel
+    geocode_result, la_result, osm_result = await asyncio.gather(
+        _reverse_geocode(lat, lon),
+        _get_local_authority(lat, lon),
+        _get_osm_land_info(lat, lon),
+        return_exceptions=True,
+    )
+
+    # Handle any exceptions from gather
+    if isinstance(geocode_result, Exception):
+        log.debug("Geocode enrichment error: %s", geocode_result)
+        geocode_result = {}
+    if isinstance(la_result, Exception):
+        log.debug("LA enrichment error: %s", la_result)
+        la_result = {}
+    if isinstance(osm_result, Exception):
+        log.debug("OSM enrichment error: %s", osm_result)
+        osm_result = {}
+
+    # Build address from reverse geocode
+    addr_parts = []
+    if geocode_result.get("road"):
+        addr_parts.append(geocode_result["road"])
+    if geocode_result.get("suburb"):
+        addr_parts.append(geocode_result["suburb"])
+    if geocode_result.get("city"):
+        addr_parts.append(geocode_result["city"])
+    if geocode_result.get("postcode"):
+        addr_parts.append(geocode_result["postcode"])
+    address_str = ", ".join(addr_parts) if addr_parts else None
+
+    # Local authority
+    local_authority = la_result.get("admin_district", "")
+
+    # Land use and proprietor inference
+    osm_landuse = osm_result.get("landuse", "")
+    osm_owner = osm_result.get("operator") or osm_result.get("owner", "")
+    osm_name = osm_result.get("name", "")
+
+    proprietor_name, proprietor_category = _derive_proprietor_category(
+        osm_landuse, osm_owner, local_authority,
+    )
+
+    # Update the detail dict
+    detail["proprietor_name"] = proprietor_name
+    detail["proprietor_category"] = proprietor_category
+    detail["proprietor_address"] = address_str
+    # date_added stays None — only available via paid HMLR API
+    detail["local_authority"] = local_authority
+    detail["admin_county"] = la_result.get("admin_county", "")
+    detail["parish"] = la_result.get("parish", "")
+    detail["region"] = la_result.get("region", "")
+    detail["parliamentary_constituency"] = la_result.get("parliamentary_constituency", "")
+    detail["land_use"] = osm_landuse or None
+    detail["osm_name"] = osm_name or None
+    detail["address_road"] = geocode_result.get("road", "")
+    detail["address_postcode"] = geocode_result.get("postcode", la_result.get("postcode", ""))
+    detail["address_city"] = geocode_result.get("city", "")
+    detail["address_county"] = geocode_result.get("county", "")
+
+    return detail
+
+
+# ── 2b. Parcel Detail ─────────────────────────────────────────────────────
 
 async def get_parcel_detail(title_number: str) -> dict:
     """
@@ -376,10 +633,12 @@ async def get_parcel_detail(title_number: str) -> dict:
         "title_number": title_number,
         "area_ha": None,
         "tenure": None,
-        "proprietor_name": "Requires HMLR search",
+        "proprietor_name": None,
         "proprietor_category": None,
         "proprietor_address": None,
         "date_added": None,
+        "local_authority": None,
+        "land_use": None,
         "geometry": None,
         "source": None,
     }
@@ -429,6 +688,8 @@ async def get_parcel_detail(title_number: str) -> dict:
                         f"{props.get('POLY_ID') or props.get('poly_id', '')}"
                     ),
                 })
+                # Enrich with reverse geocode, local authority, OSM data
+                detail = await _enrich_parcel_detail(detail)
                 return detail
             except Exception as e:
                 log.debug("INSPIRE detail fetch failed for %s/%s: %s", tenure, title_number, e)
@@ -443,8 +704,11 @@ async def get_parcel_detail(title_number: str) -> dict:
                         "area_ha": f["properties"].get("area_ha"),
                         "tenure": f["properties"].get("tenure"),
                         "geometry": f.get("geometry"),
+                        "land_use": f["properties"].get("landuse"),
                         "source": f["properties"].get("source", "cache"),
                     })
+                    # Enrich with reverse geocode, local authority, OSM data
+                    detail = await _enrich_parcel_detail(detail)
                     return detail
         except Exception:
             pass

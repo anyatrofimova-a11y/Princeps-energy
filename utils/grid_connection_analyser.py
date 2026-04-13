@@ -70,9 +70,19 @@ async def assess_connection(
     t0 = time.time()
 
     # 1. Find nearest substations with headroom data
+    #    Auto-expand radius if no results (coverage gaps in DNO data)
     substations = await _find_nearest_substations(
         conn, lat, lon, search_radius_km, max_substations,
     )
+    expanded_radius = search_radius_km
+    if not substations and search_radius_km < 50:
+        for r in [30, 50]:
+            substations = await _find_nearest_substations(
+                conn, lat, lon, r, max_substations,
+            )
+            if substations:
+                expanded_radius = r
+                break
 
     # 2. Identify the DNO area
     dno_area = await _identify_dno(conn, lat, lon)
@@ -105,7 +115,7 @@ async def assess_connection(
 
     elapsed = round(time.time() - t0, 3)
 
-    return {
+    result = {
         "location": {"lat": lat, "lon": lon},
         "capacity_mw": capacity_mw,
         "technology": technology,
@@ -120,6 +130,10 @@ async def assess_connection(
         "tier": "data",
         "elapsed_s": elapsed,
     }
+    if expanded_radius > search_radius_km:
+        result["search_radius_km"] = expanded_radius
+        result["note"] = f"No substations within {search_radius_km}km; expanded search to {expanded_radius}km"
+    return result
 
 
 async def _find_nearest_substations(
@@ -144,6 +158,8 @@ async def _find_nearest_substations(
             ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700),
             $3
         )
+        AND site_type NOT IN ('lv_transformer', 'traction', 'unknown')
+        AND (voltage_kv IS NULL OR voltage_kv >= 11)
         ORDER BY geom <-> ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700)
         LIMIT $4
     """, lon, lat, radius_km * 1000, limit)

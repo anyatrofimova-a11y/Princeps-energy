@@ -176,7 +176,7 @@ const INTENT_CARDS = [
     id: "find",
     title: "Find a Site",
     desc: "Search by postcode, coordinates, or browse the map",
-    color: "#D4A018",
+    color: "#F5B731",
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
@@ -186,8 +186,8 @@ const INTENT_CARDS = [
   {
     id: "assess",
     title: "Assess a Site",
-    desc: "Run AI feasibility study with solar, grid, and planning analysis",
-    color: "#16a34a",
+    desc: "Run AI feasibility study with grid, planning, and financial analysis",
+    color: "#F5B731",
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -199,7 +199,7 @@ const INTENT_CARDS = [
     id: "grid",
     title: "Grid Connection Study",
     desc: "Assess connection feasibility, capacity, and cost estimates",
-    color: "#0891b2",
+    color: "#F5B731",
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
@@ -210,7 +210,7 @@ const INTENT_CARDS = [
     id: "portfolio",
     title: "Review Portfolio",
     desc: "View project pipeline, verdicts, and portfolio analytics",
-    color: "#7c3aed",
+    color: "#F5B731",
     icon: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />

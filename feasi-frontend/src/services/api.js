@@ -408,6 +408,7 @@ const api = {
     // Site benchmarking against 14K REPD projects
     benchmarkSite: (lat, lon, mw = 50, tech = "solar") =>
       post("/api/planning/benchmark-site", { lat, lon, capacity_mw: mw, technology: tech }),
+    constraintMap: () => get("/api/planning/constraint-map"),
   },
 
   bmrs: {
@@ -1407,6 +1408,185 @@ api.construction = {
       capacity_mw: capacityMw, technology, site_area_ha: siteAreaHa, grid_distance_km: gridDistKm,
     }),
   progress: (projectId) => get(`/api/construction/progress/${enc(projectId)}`),
+};
+
+
+/* ════════════════════════════════════════════════════════════════════════
+   PULSE SUITE — Cluster graph, events, portfolio delta, NGED, curtailment
+   ════════════════════════════════════════════════════════════════════════ */
+
+api.cluster = {
+  stats:           () => get("/api/cluster/stats"),
+  studies:         () => get("/api/cluster/studies"),
+  ingest:          (dryRun = false) => post(`/api/cluster/ingest?dry_run=${dryRun}`),
+  recompute:       (studyId) => post(`/api/cluster/recompute-dependencies${studyId ? `?study_id=${enc(studyId)}` : ""}`),
+  view:            (projectId) => get(`/api/cluster/${enc(projectId)}`),
+  withdraw:        (projectId) => post(`/api/cluster/${enc(projectId)}/withdraw`),
+  graphGeojson:    (studyId) => get(`/api/cluster/graph/${enc(studyId)}.geojson`),
+};
+
+api.events = {
+  list:            (params = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, v);
+    return get(`/api/events/?${q}`);
+  },
+  emit:            (event) => post("/api/events/emit", event),
+  runDiff:         () => post("/api/events/diff/run"),
+  stats:           () => get("/api/events/stats"),
+  notifications:   (userId = "default", unreadOnly = false, limit = 100) =>
+    get(`/api/events/notifications?user_id=${enc(userId)}&unread_only=${unreadOnly}&limit=${limit}`),
+  markRead:        (notificationId) => post(`/api/events/notifications/${notificationId}/read`),
+  listRules:       (userId = "default") => get(`/api/events/rules?user_id=${enc(userId)}`),
+  createRule:      (rule) => post("/api/events/rules", rule),
+  wsUrl:           () => {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}/api/events/ws`;
+  },
+};
+
+api.portfolioDelta = {
+  snapshot:        (takenAt) => post(`/api/portfolio/snapshot/take${takenAt ? `?taken_at=${takenAt}` : ""}`),
+  deltas:          (fromDate, toDate) => {
+    const q = new URLSearchParams();
+    if (fromDate) q.set("from_date", fromDate);
+    if (toDate)   q.set("to_date", toDate);
+    return get(`/api/portfolio/deltas?${q}`);
+  },
+  latest:          (limit = 50) => get(`/api/portfolio/deltas/latest?limit=${limit}`),
+  weeklySummary:   () => get("/api/portfolio/weekly-summary"),
+};
+
+api.nged = {
+  // Live Data Feed (licence-area aggregate)
+  liveIngest:      () => post("/api/nged/live/ingest"),
+  liveLatest:      () => get("/api/nged/live/latest"),
+  liveLicenceAreasGeojson: () => get("/api/nged/live/licence-areas.geojson"),
+  liveHistory:     (licenceArea, hours = 24) => {
+    const q = new URLSearchParams({ hours });
+    if (licenceArea) q.set("licence_area", licenceArea);
+    return get(`/api/nged/live/history?${q}`);
+  },
+
+  // Live GSP Data (per-GSP 5-min time series)
+  regions:         () => get("/api/nged/regions"),
+  gspIngest:       (region, maxRowsPerGsp = 500) => {
+    const q = new URLSearchParams({ max_rows_per_gsp: maxRowsPerGsp });
+    if (region) q.set("region", region);
+    return post(`/api/nged/gsp/ingest?${q}`);
+  },
+  gspResolve:      () => post("/api/nged/gsp/resolve-locations"),
+  gspGeojson:      (region) => get(`/api/nged/gsp.geojson${region ? `?region=${enc(region)}` : ""}`),
+  gspTimeseries:   (region, gspName, hours = 48) =>
+    get(`/api/nged/gsp/${enc(region)}/${enc(gspName)}/timeseries?hours=${hours}`),
+  gspStats:        () => get("/api/nged/gsp/stats"),
+
+  // Embedded Capacity Register
+  ecrIngest:       (limit) => post(`/api/nged/ecr/ingest${limit ? `?limit=${limit}` : ""}`),
+  ecrGeojson:      (params = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, v);
+    return get(`/api/nged/ecr.geojson?${q}`);
+  },
+  ecrStats:        () => get("/api/nged/ecr/stats"),
+
+  // Network Opportunity Map headroom
+  headroomGeojson: (kind = "demand", dno, minVoltageKv = 11, limit = 5000) => {
+    const q = new URLSearchParams({ kind, min_voltage_kv: minVoltageKv, limit });
+    if (dno) q.set("dno", dno);
+    return get(`/api/nged/headroom.geojson?${q}`);
+  },
+  headroomStats:   (dno) => get(`/api/nged/headroom/stats${dno ? `?dno=${enc(dno)}` : ""}`),
+};
+
+api.dcHyperscaler = {
+  dualFeedPairs: (lat, lon, capacityMva, maxRadiusKm = 25, minVoltageKv = 33) =>
+    get(`/api/dc/hyperscaler/dual-feed-pairs?lat=${lat}&lon=${lon}&capacity_mva=${capacityMva}&max_radius_km=${maxRadiusKm}&min_voltage_kv=${minVoltageKv}`),
+  mvsGap:          (params) => post("/api/dc/hyperscaler/mvs-gap", params),
+  optioneer:       (params) => post("/api/dc/hyperscaler/optioneer", params),
+  idnos:           (region) => get(`/api/dc/hyperscaler/idnos${region ? `?region=${enc(region)}` : ""}`),
+  pathwaySplit:    (params) => post("/api/dc/hyperscaler/pathway-split", params),
+  sqssCheck:       (params) => post("/api/dc/hyperscaler/sqss-check", params),
+  msipEligibility: (params) => post("/api/dc/hyperscaler/msip-eligibility", params),
+  switchgear:      (params) => {
+    const q = new URLSearchParams(params);
+    return get(`/api/dc/hyperscaler/switchgear?${q}`);
+  },
+  connectionBom:   (params) => post("/api/dc/hyperscaler/connection-bom", params),
+  escalate:        (costGbp, fromYear, toYear) =>
+    get(`/api/dc/hyperscaler/escalate?cost_gbp=${costGbp}&from_year=${fromYear}&to_year=${toYear}`),
+  stats:           () => get("/api/dc/hyperscaler/stats"),
+};
+
+
+api.neso098 = {
+  criteria:          () => get("/api/neso098/criteria"),
+  scoreSite:         (params) => post("/api/neso098/score-site", params),
+  power:             (itPowerMw, dcType = "hyperscaler", pueOverride = null) => {
+    const q = new URLSearchParams({ it_power_mw: itPowerMw, dc_type: dcType });
+    if (pueOverride != null) q.set("pue_override", pueOverride);
+    return get(`/api/neso098/power?${q}`);
+  },
+  forecastBuild:     (scenario = "moderate", startYear = 2024, endYear = 2040) =>
+    post(`/api/neso098/forecast/build?scenario=${enc(scenario)}&start_year=${startYear}&end_year=${endYear}`),
+  forecast:          (scenario = "moderate") => get(`/api/neso098/forecast?scenario=${enc(scenario)}`),
+  queueDedupe:       (applications) => post("/api/neso098/queue/dedupe", { applications }),
+  queueAttrition:    (applications) => post("/api/neso098/queue/attrition", { applications }),
+  estateUpsert:      (record) => post("/api/neso098/estate/upsert", record),
+  estateSummary:     () => get("/api/neso098/estate/summary"),
+  estateGeojson:     () => get("/api/neso098/estate.geojson"),
+};
+
+
+api.gu = {
+  lric:             (params) => post("/api/gu/lric", params),
+  hostingCapacity:  (params) => post("/api/gu/hosting-capacity", params),
+  carbonLcoe:       (params) => post("/api/gu/carbon-lcoe", params),
+  tclRevenue:       (params) => post("/api/gu/tcl-revenue", params),
+  drlBess:          (params) => post("/api/gu/drl-bess", params),
+  marketSim:        (params) => post("/api/gu/market-sim", params),
+  climateResilience:(params) => post("/api/gu/climate-resilience", params),
+  waterNexus:       (params) => post("/api/gu/water-nexus", params),
+  hydrogen:         (params) => post("/api/gu/hydrogen", params),
+  regulatorySeed:   () => post("/api/gu/regulatory/seed"),
+  regulatorySearch: (q, k = 5) => get(`/api/gu/regulatory/search?q=${enc(q)}&k=${k}`),
+  regulatoryAnswer: (question, context) => post("/api/gu/regulatory/answer", { question, context }),
+  dnoIngest:        (dno) => post(`/api/gu/dno/ingest${dno ? `?dno=${enc(dno)}` : ""}`),
+  dnoStatus:        () => get("/api/gu/dno/status"),
+  dnoAdapters:      () => get("/api/gu/dno/adapters"),
+  largeDemandGeojson:(dno) => get(`/api/gu/dno/large-demand.geojson${dno ? `?dno=${enc(dno)}` : ""}`),
+};
+
+
+api.ltds = {
+  ingest:           (downloadDir) => post(`/api/ltds/ingest${downloadDir ? `?download_dir=${enc(downloadDir)}` : ""}`),
+  matchCoordinates: () => post("/api/ltds/match-coordinates"),
+  stats:            () => get("/api/ltds/stats"),
+  substations:      (params = {}) => {
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) if (v != null && v !== "") q.set(k, v);
+    return get(`/api/ltds/substations?${q}`);
+  },
+  substationsGeojson:() => get("/api/ltds/substations.geojson"),
+  substationDetail: (mrid) => get(`/api/ltds/substations/${enc(mrid)}`),
+};
+
+
+api.curtailment = {
+  analyse:         (params) => post("/api/curtailment/analyse", params),
+  analyseGet:      (params) => {
+    const q = new URLSearchParams(params);
+    return get(`/api/curtailment/analyse?${q}`);
+  },
+  portfolioScreen: (scenario = "base", limit = 200) =>
+    post(`/api/curtailment/portfolio/screen?scenario=${enc(scenario)}&limit=${limit}`),
+  constraintsNear: (lat, lon, limit = 20) =>
+    get(`/api/curtailment/constraints/near?lat=${lat}&lon=${lon}&limit=${limit}`),
+  queueRank:       (projectId, constraintGroup = "") =>
+    get(`/api/curtailment/queue-rank/${enc(projectId)}?constraint_group=${enc(constraintGroup)}`),
+  scenarios:       () => get("/api/curtailment/scenarios"),
+  profile:         (profileId) => get(`/api/curtailment/profiles/${enc(profileId)}`),
+  stats:           () => get("/api/curtailment/stats"),
 };
 
 export default api;

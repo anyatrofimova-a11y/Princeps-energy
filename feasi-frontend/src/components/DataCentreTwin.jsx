@@ -516,7 +516,7 @@ function DCScene({ rackLayout, telemetry, selectedRack, onSelectRack, colorBy, c
       {/* Floor plane */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[120, 120]} />
-        <meshStandardMaterial color="#0c1018" roughness={0.9} />
+        <meshStandardMaterial color="#C5D4B0" roughness={0.9} />
       </mesh>
 
       {/* 2D orthographic camera for planning mode (datacenter-planner pattern) */}

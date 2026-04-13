@@ -81,14 +81,14 @@ export default function GridTwin({ onClose }) {
   const [google3d, setGoogle3d] = useState(false);
 
   /* ── Animate flow arrows ── */
+  const rafRef = useRef(null);
   useEffect(() => {
-    let raf;
     const tick = () => {
       setAnimPhase(p => (p + 0.008) % 1);
-      raf = requestAnimationFrame(tick);
+      rafRef.current = requestAnimationFrame(tick);
     };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
   }, []);
 
   /* ── Fetch initial state ── */
@@ -104,48 +104,77 @@ export default function GridTwin({ onClose }) {
     })();
   }, []);
 
-  /* ── WebSocket live updates ── */
+  /* ── WebSocket live updates with reconnection ── */
+  const wsRetryRef = useRef(0);
+  const wsTimerRef = useRef(null);
   useEffect(() => {
     if (!liveMode) {
       if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+      clearTimeout(wsTimerRef.current);
+      wsRetryRef.current = 0;
       return;
     }
-    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${window.location.host}/ws/grid-twin`);
-    ws.onmessage = (e) => {
-      try { setGridState(JSON.parse(e.data)); } catch {}
+    let unmounted = false;
+    const connect = () => {
+      if (unmounted) return;
+      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${proto}//${window.location.host}/ws/grid-twin`);
+      ws.onopen = () => { wsRetryRef.current = 0; };
+      ws.onmessage = (e) => {
+        try { setGridState(JSON.parse(e.data)); }
+        catch (err) { console.warn("GridTwin WS parse error:", err); }
+      };
+      ws.onclose = () => {
+        if (unmounted) return;
+        const delay = Math.min(2000 * Math.pow(2, wsRetryRef.current), 30000);
+        wsRetryRef.current += 1;
+        console.info(`GridTwin WS closed, reconnecting in ${delay}ms (attempt ${wsRetryRef.current})`);
+        wsTimerRef.current = setTimeout(connect, delay);
+      };
+      ws.onerror = () => ws.close();
+      wsRef.current = ws;
     };
-    ws.onerror = () => ws.close();
-    wsRef.current = ws;
-    return () => { ws.close(); wsRef.current = null; };
+    connect();
+    return () => {
+      unmounted = true;
+      clearTimeout(wsTimerRef.current);
+      if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+    };
   }, [liveMode]);
 
   /* ── Apply scenario projection ── */
   useEffect(() => {
     if (scenario === "baseline" && scenarioYear === 2024) return;
-    if (liveMode) return; // live mode uses real-time data
-    let cancelled = false;
+    if (liveMode) return;
+    const controller = new AbortController();
     (async () => {
       try {
-        const data = await (await fetch(
-          `/api/grid-twin/scenario/${scenario}?year=${scenarioYear}`
-        )).json();
-        if (!cancelled) setGridState(data);
-      } catch {}
+        const resp = await fetch(
+          `/api/grid-twin/scenario/${scenario}?year=${scenarioYear}`,
+          { signal: controller.signal }
+        );
+        const data = await resp.json();
+        if (!controller.signal.aborted) setGridState(data);
+      } catch (e) {
+        if (e.name !== "AbortError") console.warn("Scenario fetch:", e);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => controller.abort();
   }, [scenario, scenarioYear, liveMode]);
 
   /* ── Build deck.gl layers ── */
   const deckLayers = useMemo(() => {
     if (!gridState) return [];
+    const substations = gridState?.substations || [];
+    const lines = gridState?.lines || [];
+    try {
     const layers = [];
 
     // ── Substation columns (height = demand, color = utilisation) ──
     if (twinLayers.substations) {
       layers.push(new ColumnLayer({
         id: "gt-substation-columns",
-        data: gridState.substations,
+        data: substations,
         getPosition: d => [d.lon, d.lat],
         getElevation: d => Math.max(d.demand_mw * 10, 500),
         getFillColor: d => utilisationColor(d.utilisation),
@@ -170,7 +199,7 @@ export default function GridTwin({ onClose }) {
       // Capacity ring (wireframe-style ring showing max capacity)
       layers.push(new ScatterplotLayer({
         id: "gt-capacity-rings",
-        data: gridState.substations,
+        data: substations,
         getPosition: d => [d.lon, d.lat],
         getRadius: d => 3000 + d.capacity_mw * 3,
         getFillColor: [0, 0, 0, 0],
@@ -186,7 +215,7 @@ export default function GridTwin({ onClose }) {
     if (twinLayers.lines) {
       layers.push(new ArcLayer({
         id: "gt-power-arcs",
-        data: gridState.lines,
+        data: lines,
         getSourcePosition: d => d.from_coords,
         getTargetPosition: d => d.to_coords,
         getSourceColor: d => d.congested ? [245, 34, 45, 220] : [...voltageColor(d.voltage_kv), 180],
@@ -207,12 +236,12 @@ export default function GridTwin({ onClose }) {
 
       // GPU particle flow system — thousands of particles along transmission arcs
       if (particlesEnabled) {
-        layers.push(createParticleLayer(gridState.lines, animPhase));
+        layers.push(createParticleLayer(lines, animPhase));
       } else {
         // Fallback: original dash-animated arc layer
         layers.push(new ArcLayer({
           id: "gt-flow-particles",
-          data: gridState.lines.filter(l => Math.abs(l.flow_mw) > 10),
+          data: lines.filter(l => Math.abs(l.flow_mw) > 10),
           getSourcePosition: d => d.flow_mw >= 0 ? d.from_coords : d.to_coords,
           getTargetPosition: d => d.flow_mw >= 0 ? d.to_coords : d.from_coords,
           getSourceColor: [255, 255, 255, 200],
@@ -278,6 +307,10 @@ export default function GridTwin({ onClose }) {
     }
 
     return layers;
+    } catch (err) {
+      console.error("GridTwin layer creation failed:", err);
+      return [];
+    }
   }, [gridState, twinLayers, animPhase, particlesEnabled, google3d]);
 
   /* ── Init Mapbox + deck.gl overlay ── */
@@ -567,7 +600,7 @@ export default function GridTwin({ onClose }) {
               {(sys.system_utilisation * 100).toFixed(1)}%
             </span>
           </div>
-          {gridState.scenario && (
+          {gridState?.scenario && (
             <div className="gt-metric gt-metric-scenario">
               <span className="gt-metric-label">Scenario</span>
               <span className="gt-metric-value">{gridState.scenario.name.replace(/_/g, " ")} {gridState.scenario.year}</span>

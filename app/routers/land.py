@@ -14,7 +14,7 @@ router = APIRouter(tags=["land"])
 async def land_parcels(
     west: float = Query(...), south: float = Query(...),
     east: float = Query(...), north: float = Query(...),
-    min_area_ha: float = Query(0.5),
+    min_area_ha: float = Query(0.1),
 ):
     """HM Land Registry INSPIRE polygons as GeoJSON for map overlay."""
     from utils.land_registry import get_land_parcels

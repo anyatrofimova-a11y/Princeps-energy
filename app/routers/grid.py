@@ -127,7 +127,7 @@ async def api_grid_assess(
     lon: float = Query(-1.5),
     capacity_mw: float = Query(5.0, ge=0.001),
     technology: str = Query("solar"),
-    radius_km: float = Query(20.0, ge=1, le=100),
+    radius_km: float = Query(30.0, ge=1, le=100),
     pool: asyncpg.Pool = Depends(get_pool),
 ):
     """

@@ -6959,6 +6959,27 @@ async def health_check():
     return {"status": overall, "checks": checks}
 
 
+@app.get("/api/readiness")
+async def readiness_endpoint():
+    """Progressive readiness for the startup overlay."""
+    db_ok = False
+    try:
+        async with pool.acquire(timeout=3) as conn:
+            await conn.fetchval("SELECT 1")
+        db_ok = True
+    except Exception:
+        pass
+
+    return {
+        "overall": "ready" if db_ok else "starting",
+        "core_ready": db_ok,
+        "subsystems": {
+            "database": {"status": "ready" if db_ok else "loading"},
+            "core_api": {"status": "ready"},
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # NOM — Network Opportunity Map
 # ---------------------------------------------------------------------------

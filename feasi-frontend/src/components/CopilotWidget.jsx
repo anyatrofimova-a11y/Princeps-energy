@@ -375,9 +375,29 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
   // Listen for princeps-chat events
   useEffect(() => {
     const handler = (e) => {
-      if (e.detail?.text) {
-        pendingRef.current = e.detail.text;
-        setInput(e.detail.text);
+      const { text, announce, lat, lon } = e.detail || {};
+      if (announce) {
+        // Open chat and post an assistant greeting — do NOT auto-send anything.
+        setActiveTab("chat");
+        const locStr = (lat != null && lon != null)
+          ? ` at ${lat.toFixed(4)}, ${lon.toFixed(4)}`
+          : "";
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: `I see you've dropped a pin${locStr}. I'm Princeps — your energy development copilot. Tell me what you'd like to do with this site, or pick one of these:`,
+          timestamp: Date.now(),
+          suggestions: [
+            "Run a feasibility assessment",
+            "Check grid connection capacity",
+            "Analyse planning constraints",
+            "Estimate solar yield and financials",
+          ],
+        }]);
+        return;
+      }
+      if (text) {
+        pendingRef.current = text;
+        setInput(text);
         setActiveTab("chat");
       }
     };
@@ -412,41 +432,23 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
     return () => window.removeEventListener("princeps-asset-click", handler);
   }, []);
 
-  // ── AUTO-ANALYSE: copilot drives all site analysis when pin is dropped ──
+  // Show a system chip in the chat when a new pin is dropped — but don't auto-send anything.
   const prevLocationRef = useRef(null);
   useEffect(() => {
     if (!pickedLocation?.lat || !pickedLocation?.lon) return;
     const key = `${pickedLocation.lat.toFixed(4)},${pickedLocation.lon.toFixed(4)}`;
     if (prevLocationRef.current === key) return;
     prevLocationRef.current = key;
-    if (streaming) return;
 
     const lat = pickedLocation.lat.toFixed(4);
     const lon = Math.abs(pickedLocation.lon).toFixed(4);
     const lonDir = pickedLocation.lon < 0 ? "W" : "E";
 
-    // Open copilot and show what's happening
-    setActiveTab("chat");
     setMessages(prev => [...prev, {
       role: "system",
       content: `📍 **${lat}°N, ${lon}°${lonDir}** selected`,
       timestamp: Date.now(),
     }]);
-
-    // Send the auto-analysis prompt — this is the key: the COPILOT runs the analysis,
-    // not a hidden function. The user sees every tool call, every result.
-    setTimeout(() => {
-      const prompt = `New site at ${pickedLocation.lat}, ${pickedLocation.lon}. Run a rapid feasibility check:
-1. Find the nearest grid substation and available headroom
-2. Estimate solar yield for a ground-mount array
-3. Check for environmental constraints (SSSI, AONB, flood zone)
-4. Assess planning risk based on nearby REPD projects
-5. Give me a GO / CAUTION / NO-GO verdict with confidence
-
-Be concise — bullet points, no long paragraphs.`;
-      setInput(prompt);
-      pendingRef.current = prompt;
-    }, 300);
   }, [pickedLocation?.lat, pickedLocation?.lon]);
 
   // Ctrl+J to toggle chat tab

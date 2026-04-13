@@ -13,8 +13,9 @@
  *   filters        — { minArea, maxArea, tenure, alcGrades[], maxSlope,
  *                      excludeFloodZone2, excludeFloodZone3, maxGridDistance }
  *   onFilterChange — callback(newFilters)
+ *   onApplyFilters — callback(filters) — called when user clicks Apply Filters
  */
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 
 const LAYER_DEFS = [
   { key: "landParcels", label: "Land Parcels", color: "#c040ff", group: "Land" },
@@ -33,16 +34,71 @@ const LAYER_DEFS = [
 const ALC_GRADES = ["Grade 1", "Grade 2", "Grade 3a", "Grade 3b", "Grade 4", "Grade 5"];
 const TENURE_OPTIONS = ["All", "Freehold", "Leasehold"];
 
+const DEFAULT_FILTERS = {
+  minArea: null,
+  maxArea: null,
+  tenure: "All",
+  alcGrades: [],
+  maxSlope: 30,
+  excludeFloodZone2: false,
+  excludeFloodZone3: false,
+  maxGridDistance: 20,
+};
+
+/** Count how many filters are actively constraining results. */
+function countActiveFilters(f) {
+  let n = 0;
+  if (f.minArea != null && f.minArea > 0) n++;
+  if (f.maxArea != null) n++;
+  if (f.tenure && f.tenure !== "All") n++;
+  if (f.alcGrades && f.alcGrades.length > 0) n++;
+  if (f.maxSlope != null && f.maxSlope < 30) n++;
+  if (f.excludeFloodZone2) n++;
+  if (f.excludeFloodZone3) n++;
+  if (f.maxGridDistance != null && f.maxGridDistance < 20) n++;
+  return n;
+}
+
+/** Build human-readable chip labels for active filters. */
+function buildFilterChips(f) {
+  const chips = [];
+  if (f.tenure && f.tenure !== "All")
+    chips.push({ key: "tenure", label: `${f.tenure} only` });
+  if (f.minArea != null && f.minArea > 0)
+    chips.push({ key: "minArea", label: `> ${f.minArea} ha` });
+  if (f.maxArea != null)
+    chips.push({ key: "maxArea", label: `< ${f.maxArea} ha` });
+  if (f.alcGrades && f.alcGrades.length > 0)
+    chips.push({ key: "alcGrades", label: `ALC: ${f.alcGrades.join(", ")}` });
+  if (f.maxSlope != null && f.maxSlope < 30)
+    chips.push({ key: "maxSlope", label: `Slope < ${f.maxSlope}\u00b0` });
+  if (f.excludeFloodZone2)
+    chips.push({ key: "excludeFloodZone2", label: "No Flood Zone 2" });
+  if (f.excludeFloodZone3)
+    chips.push({ key: "excludeFloodZone3", label: "No Flood Zone 3" });
+  if (f.maxGridDistance != null && f.maxGridDistance < 20)
+    chips.push({ key: "maxGridDistance", label: `Grid < ${f.maxGridDistance} km` });
+  return chips;
+}
+
 export default function LayerControlPanel({
   layers = {},
   onLayerChange,
   filters = {},
   onFilterChange,
+  onApplyFilters,
 }) {
   const [layersOpen, setLayersOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  // Draft filters: edited in the dropdown, only committed on "Apply"
+  const [draftFilters, setDraftFilters] = useState(filters);
   const layerRef = useRef(null);
   const filterRef = useRef(null);
+
+  // Sync draft when external filters change
+  useEffect(() => {
+    setDraftFilters(filters);
+  }, [filters]);
 
   // Close panels when clicking outside
   useEffect(() => {
@@ -68,17 +124,49 @@ export default function LayerControlPanel({
     onLayerChange?.(key, { ...current, opacity: val / 100 });
   };
 
-  const updateFilter = (key, val) => {
-    onFilterChange?.({ ...filters, [key]: val });
+  const updateDraft = (key, val) => {
+    setDraftFilters(prev => ({ ...prev, [key]: val }));
   };
 
   const toggleAlcGrade = (grade) => {
-    const current = filters.alcGrades || [];
+    const current = draftFilters.alcGrades || [];
     const next = current.includes(grade)
       ? current.filter(g => g !== grade)
       : [...current, grade];
-    updateFilter("alcGrades", next);
+    updateDraft("alcGrades", next);
   };
+
+  const handleApply = () => {
+    onFilterChange?.(draftFilters);
+    onApplyFilters?.(draftFilters);
+    setFiltersOpen(false);
+  };
+
+  const handleClearAll = () => {
+    const cleared = { ...DEFAULT_FILTERS };
+    setDraftFilters(cleared);
+    onFilterChange?.(cleared);
+    onApplyFilters?.(cleared);
+  };
+
+  /** Remove a single filter chip */
+  const removeChip = (chipKey) => {
+    const updated = { ...filters };
+    if (chipKey === "tenure") updated.tenure = "All";
+    else if (chipKey === "minArea") updated.minArea = null;
+    else if (chipKey === "maxArea") updated.maxArea = null;
+    else if (chipKey === "alcGrades") updated.alcGrades = [];
+    else if (chipKey === "maxSlope") updated.maxSlope = 30;
+    else if (chipKey === "excludeFloodZone2") updated.excludeFloodZone2 = false;
+    else if (chipKey === "excludeFloodZone3") updated.excludeFloodZone3 = false;
+    else if (chipKey === "maxGridDistance") updated.maxGridDistance = 20;
+    setDraftFilters(updated);
+    onFilterChange?.(updated);
+    onApplyFilters?.(updated);
+  };
+
+  const activeCount = useMemo(() => countActiveFilters(filters), [filters]);
+  const chips = useMemo(() => buildFilterChips(filters), [filters]);
 
   // Group layers
   const groups = {};
@@ -93,19 +181,27 @@ export default function LayerControlPanel({
       <div className="lyc-buttons">
         <div ref={filterRef} className="lyc-btn-wrapper">
           <button
-            className={`lyc-btn ${filtersOpen ? "lyc-btn-active" : ""}`}
+            className={`lyc-btn ${filtersOpen ? "lyc-btn-active" : ""} ${activeCount > 0 ? "lyc-btn-has-filters" : ""}`}
             onClick={() => { setFiltersOpen(!filtersOpen); setLayersOpen(false); }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
             </svg>
-            Filters
+            Filters{activeCount > 0 ? ` (${activeCount})` : ""}
+            {activeCount > 0 && <span className="lyc-filter-badge">{activeCount}</span>}
           </button>
 
           {/* Filters dropdown */}
           {filtersOpen && (
             <div className="lyc-dropdown lyc-filter-dropdown">
-              <div className="lyc-dropdown-title">Filters</div>
+              <div className="lyc-dropdown-header">
+                <div className="lyc-dropdown-title">Filters</div>
+                {activeCount > 0 && (
+                  <button className="lyc-clear-all" onClick={handleClearAll}>
+                    Clear all
+                  </button>
+                )}
+              </div>
 
               {/* Area range */}
               <div className="lyc-filter-group">
@@ -115,8 +211,8 @@ export default function LayerControlPanel({
                     type="number"
                     className="lyc-filter-input"
                     placeholder="Min"
-                    value={filters.minArea || ""}
-                    onChange={(e) => updateFilter("minArea", e.target.value ? Number(e.target.value) : null)}
+                    value={draftFilters.minArea || ""}
+                    onChange={(e) => updateDraft("minArea", e.target.value ? Number(e.target.value) : null)}
                     min={0}
                     step={0.5}
                   />
@@ -125,8 +221,8 @@ export default function LayerControlPanel({
                     type="number"
                     className="lyc-filter-input"
                     placeholder="Max"
-                    value={filters.maxArea || ""}
-                    onChange={(e) => updateFilter("maxArea", e.target.value ? Number(e.target.value) : null)}
+                    value={draftFilters.maxArea || ""}
+                    onChange={(e) => updateDraft("maxArea", e.target.value ? Number(e.target.value) : null)}
                     min={0}
                     step={0.5}
                   />
@@ -140,8 +236,8 @@ export default function LayerControlPanel({
                   {TENURE_OPTIONS.map(t => (
                     <button
                       key={t}
-                      className={`lyc-pill ${(filters.tenure || "All") === t ? "lyc-pill-active" : ""}`}
-                      onClick={() => updateFilter("tenure", t)}
+                      className={`lyc-pill ${(draftFilters.tenure || "All") === t ? "lyc-pill-active" : ""}`}
+                      onClick={() => updateDraft("tenure", t)}
                     >
                       {t}
                     </button>
@@ -157,7 +253,7 @@ export default function LayerControlPanel({
                     <label key={g} className="lyc-checkbox-label">
                       <input
                         type="checkbox"
-                        checked={(filters.alcGrades || []).includes(g)}
+                        checked={(draftFilters.alcGrades || []).includes(g)}
                         onChange={() => toggleAlcGrade(g)}
                       />
                       <span>{g}</span>
@@ -169,14 +265,14 @@ export default function LayerControlPanel({
               {/* Max slope */}
               <div className="lyc-filter-group">
                 <div className="lyc-filter-label">
-                  Max slope: {filters.maxSlope ?? 30}&deg;
+                  Max slope: {draftFilters.maxSlope ?? 30}&deg;
                 </div>
                 <input
                   type="range"
                   className="lyc-slider"
                   min={0} max={30} step={1}
-                  value={filters.maxSlope ?? 30}
-                  onChange={(e) => updateFilter("maxSlope", Number(e.target.value))}
+                  value={draftFilters.maxSlope ?? 30}
+                  onChange={(e) => updateDraft("maxSlope", Number(e.target.value))}
                 />
               </div>
 
@@ -187,16 +283,16 @@ export default function LayerControlPanel({
                   <label className="lyc-checkbox-label">
                     <input
                       type="checkbox"
-                      checked={!!filters.excludeFloodZone2}
-                      onChange={(e) => updateFilter("excludeFloodZone2", e.target.checked)}
+                      checked={!!draftFilters.excludeFloodZone2}
+                      onChange={(e) => updateDraft("excludeFloodZone2", e.target.checked)}
                     />
                     <span>Zone 2</span>
                   </label>
                   <label className="lyc-checkbox-label">
                     <input
                       type="checkbox"
-                      checked={!!filters.excludeFloodZone3}
-                      onChange={(e) => updateFilter("excludeFloodZone3", e.target.checked)}
+                      checked={!!draftFilters.excludeFloodZone3}
+                      onChange={(e) => updateDraft("excludeFloodZone3", e.target.checked)}
                     />
                     <span>Zone 3</span>
                   </label>
@@ -206,15 +302,22 @@ export default function LayerControlPanel({
               {/* Distance to grid */}
               <div className="lyc-filter-group">
                 <div className="lyc-filter-label">
-                  Max distance to grid: {filters.maxGridDistance ?? 20} km
+                  Max distance to grid: {draftFilters.maxGridDistance ?? 20} km
                 </div>
                 <input
                   type="range"
                   className="lyc-slider"
                   min={0} max={50} step={1}
-                  value={filters.maxGridDistance ?? 20}
-                  onChange={(e) => updateFilter("maxGridDistance", Number(e.target.value))}
+                  value={draftFilters.maxGridDistance ?? 20}
+                  onChange={(e) => updateDraft("maxGridDistance", Number(e.target.value))}
                 />
+              </div>
+
+              {/* Apply button */}
+              <div className="lyc-filter-actions">
+                <button className="lyc-apply-btn" onClick={handleApply}>
+                  Apply Filters
+                </button>
               </div>
             </div>
           )}
@@ -284,6 +387,21 @@ export default function LayerControlPanel({
           )}
         </div>
       </div>
+
+      {/* ── Active filter chips strip ── */}
+      {chips.length > 0 && (
+        <div className="lyc-chip-strip">
+          {chips.map(chip => (
+            <span key={chip.key} className="lyc-chip" onClick={() => removeChip(chip.key)}>
+              {chip.label}
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -18,6 +18,7 @@ const COMMANDS = [
   { id: "act-hardware", label: "Open Hardware Configurator", section: "Actions", action: "hardware" },
   { id: "act-thermal", label: "Open Thermal Model (TEASER)", section: "Actions", action: "thermal" },
   { id: "act-pitch", label: "Open Pitch Deck", section: "Actions", action: "pitch" },
+  { id: "act-capabilities", label: "Platform Capabilities", section: "Actions", action: "capabilities" },
   { id: "act-nom", label: "Open NOM Explorer", section: "Actions", action: "nom" },
   { id: "act-compare", label: "Compare Scenarios", section: "Actions", action: "compare" },
   { id: "act-pdf", label: "Download PDF Report", section: "Actions", action: "pdf" },

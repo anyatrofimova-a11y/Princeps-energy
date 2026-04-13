@@ -4,6 +4,13 @@ import ViewTabs from "./ViewTabs";
 import WorkspaceHome from "./WorkspaceHome";
 import DataTableView from "../views/DataTableView";
 import ChartView from "../views/ChartView";
+import ProjectsView from "../views/ProjectsView";
+import CurtailmentBrowser from "../curtailment/CurtailmentBrowser";
+const PulseWorkspace = lazy(() => import("../pulse/PulseWorkspace"));
+const DCHyperscalerPanel = lazy(() => import("../dc/DCHyperscalerPanel"));
+const NESO098Workspace = lazy(() => import("../neso098/NESO098Workspace"));
+const GridGraphContainer = lazy(() => import("../grid-graph/GridGraphContainer"));
+const DCPhysicalTwin = lazy(() => import("../DCPhysicalTwin"));
 
 const GridNetworkView = lazy(() => import("../grid/GridNetworkView"));
 const GridCircuitView = lazy(() => import("../grid/GridCircuitView"));
@@ -18,20 +25,48 @@ const ViewLoading = () => (
 export default function CenterCanvas({ children, dashboardView }) {
   const { activeViewMode } = useWorkspace();
 
-  // Map mode: no tab bar, map fills everything
-  const isMapMode = activeViewMode === "map" || activeViewMode === "explore" || activeViewMode === "satellite";
+  // Map stays mounted across view switches — unmounting Mapbox on every toggle
+  // destroys zoom/pan state and is slow. We hide the map with CSS instead so its
+  // ResizeObserver picks up the dimension change and calls map.resize() on show.
+  const isMapView = activeViewMode === "map" || activeViewMode === "explore" || activeViewMode === "satellite";
 
   return (
     <div className="center-canvas">
-      {/* Only show tab bar when NOT in map mode — map should fill the screen */}
-      {!isMapMode && <ViewTabs />}
+      <ViewTabs />
       <div className="center-canvas-body">
-        {activeViewMode === "map" && children}
-        {activeViewMode === "explore" && children}
-        {activeViewMode === "satellite" && children}
+        {/* Map layer — always mounted, shown only on map-like views */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: isMapView ? "block" : "none",
+          }}
+        >
+          {children}
+        </div>
+
         {activeViewMode === "table" && <DataTableView />}
         {activeViewMode === "chart" && <ChartView />}
         {activeViewMode === "dashboard" && (dashboardView || <WorkspaceHome />)}
+        {activeViewMode === "projects" && <ProjectsView />}
+        {activeViewMode === "curtailment" && <CurtailmentBrowser />}
+        {activeViewMode === "pulse" && (
+          <Suspense fallback={<ViewLoading />}><PulseWorkspace /></Suspense>
+        )}
+        {activeViewMode === "dc_connection" && (
+          <Suspense fallback={<ViewLoading />}><DCHyperscalerPanel /></Suspense>
+        )}
+        {activeViewMode === "neso098" && (
+          <Suspense fallback={<ViewLoading />}><NESO098Workspace /></Suspense>
+        )}
+        {activeViewMode === "grid_graph" && (
+          <Suspense fallback={<ViewLoading />}>
+            <GridGraphContainer mapContent={children} />
+          </Suspense>
+        )}
+        {activeViewMode === "dc_twin" && (
+          <Suspense fallback={<ViewLoading />}><DCPhysicalTwin /></Suspense>
+        )}
 
         {activeViewMode === "network" && (
           <Suspense fallback={<ViewLoading />}><GridNetworkView /></Suspense>

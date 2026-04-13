@@ -18,8 +18,8 @@ function buildSkyGradient(scene) {
   canvas.height = 512;
   const ctx = canvas.getContext("2d");
   const grad = ctx.createLinearGradient(0, 0, 0, 512);
-  grad.addColorStop(0, "#0a1628");
-  grad.addColorStop(0.15, "#1a3a5c");
+  grad.addColorStop(0, "#4a7ab5");
+  grad.addColorStop(0.15, "#6a9fd0");
   grad.addColorStop(0.35, "#4a8ab5");
   grad.addColorStop(0.5, "#87ceeb");
   grad.addColorStop(0.7, "#b8dce8");

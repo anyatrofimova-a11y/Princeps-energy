@@ -274,7 +274,7 @@ function AccessRoad() {
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-10.5, 0.01, 0]}>
       <planeGeometry args={[2, 8]} />
-      <meshStandardMaterial color="#2a2a2a" roughness={0.9} metalness={0.1} />
+      <meshStandardMaterial color="#8a8a88" roughness={0.9} metalness={0.1} />
     </mesh>
   );
 }
@@ -347,7 +347,7 @@ function BESSFacilityScene({ containers, systemState, selectedContainer, onSelec
       />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
         <planeGeometry args={[24, 10]} />
-        <meshStandardMaterial color="#151a25" roughness={1} metalness={0} />
+        <meshStandardMaterial color="#C5D4B0" roughness={1} metalness={0} />
       </mesh>
 
       {/* Row 1 of containers (top row, z = -1.8) */}
@@ -664,7 +664,7 @@ function BidderPanel({ powerMw, energyMwh, onClose }) {
           onChange={e => setBidderStrategy(e.target.value)}
           style={{
             height: 28, background: "#1a1f2e", border: T.border,
-            borderRadius: 4, color: T.text, fontSize: 11, outline: "none", padding: "0 8px", flex: 1,
+            borderRadius: 4, color: "#E8E6E1", fontSize: 11, outline: "none", padding: "0 8px", flex: 1,
           }}
         >
           {BIDDER_STRATEGIES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}
@@ -674,7 +674,7 @@ function BidderPanel({ powerMw, energyMwh, onClose }) {
           onChange={e => setBidderHours(+e.target.value)}
           style={{
             height: 28, background: "#1a1f2e", border: T.border,
-            borderRadius: 4, color: T.text, fontSize: 11, outline: "none", padding: "0 8px", width: 60,
+            borderRadius: 4, color: "#E8E6E1", fontSize: 11, outline: "none", padding: "0 8px", width: 60,
           }}
         >
           {[24, 48, 72, 168].map(h => <option key={h} value={h}>{h}h</option>)}
@@ -994,7 +994,7 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
           onChange={e => setPowerMw(Math.max(1, +e.target.value || 1))}
           style={{
             width: 56, height: 28, background: "#1a1f2e", border: T.border,
-            borderRadius: 4, color: T.text, textAlign: "center", fontSize: 12, outline: "none",
+            borderRadius: 4, color: "#E8E6E1", textAlign: "center", fontSize: 12, outline: "none",
           }}
         />
 
@@ -1005,7 +1005,7 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
           onChange={e => setDuration(e.target.value)}
           style={{
             height: 28, background: "#1a1f2e", border: T.border,
-            borderRadius: 4, color: T.text, fontSize: 12, outline: "none", padding: "0 8px",
+            borderRadius: 4, color: "#E8E6E1", fontSize: 12, outline: "none", padding: "0 8px",
           }}
         >
           {DURATIONS.map(d => <option key={d} value={d}>{d}</option>)}
@@ -1018,7 +1018,7 @@ export default function BESSFacilityTwin({ onClose, lat, lon }) {
           onChange={e => setStrategy(e.target.value)}
           style={{
             height: 28, background: "#1a1f2e", border: T.border,
-            borderRadius: 4, color: T.text, fontSize: 12, outline: "none", padding: "0 8px",
+            borderRadius: 4, color: "#E8E6E1", fontSize: 12, outline: "none", padding: "0 8px",
           }}
         >
           {STRATEGIES.map(s => <option key={s} value={s}>{s.replace(/_/g, " ")}</option>)}

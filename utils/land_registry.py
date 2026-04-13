@@ -87,23 +87,102 @@ async def get_land_parcels(bbox: tuple, *, min_area_ha: float = 0.5, max_feature
                         }
                         all_features.append(f)
                 else:
-                    log.debug("INSPIRE WFS %s returned %s", tenure, resp.status_code)
+                    log.warning("INSPIRE WFS %s returned %s — service may be disabled", tenure, resp.status_code)
             except Exception as e:
                 log.warning("INSPIRE WFS fetch failed for %s: %s", tenure, e)
+
+    # Fallback: if INSPIRE returned nothing, try OSM landuse polygons
+    source = "HM Land Registry INSPIRE"
+    if not all_features:
+        log.info("INSPIRE returned 0 parcels — falling back to OSM landuse")
+        try:
+            all_features = await _osm_landuse_fallback(bbox, min_area_ha)
+            source = "OpenStreetMap landuse (INSPIRE unavailable)"
+        except Exception as e:
+            log.warning("OSM landuse fallback failed: %s", e)
 
     result = {
         "type": "FeatureCollection",
         "features": all_features,
         "metadata": {
             "total": len(all_features),
-            "freehold": sum(1 for f in all_features if f["properties"]["tenure"] == "freehold"),
-            "leasehold": sum(1 for f in all_features if f["properties"]["tenure"] == "leasehold"),
-            "source": "HM Land Registry INSPIRE",
+            "freehold": sum(1 for f in all_features if f["properties"].get("tenure") == "freehold"),
+            "leasehold": sum(1 for f in all_features if f["properties"].get("tenure") == "leasehold"),
+            "source": source,
         },
     }
 
     _parcel_cache[key] = (now, result)
     return result
+
+
+async def _osm_landuse_fallback(bbox: tuple, min_area_ha: float = 0.1) -> list:
+    """Fetch landuse polygons from OSM Overpass as parcel approximation."""
+    west, south, east, north = bbox
+    query = f"""
+    [out:json][timeout:15];
+    (
+      way["landuse"~"farmland|meadow|industrial|brownfield|commercial|grass|orchard|vineyard|allotments|recreation_ground|reservoir|forest"]({south},{west},{north},{east});
+      way["natural"~"grassland|scrub|heath|wood"]({south},{west},{north},{east});
+      way["leisure"~"park|garden|pitch"]({south},{west},{north},{east});
+      relation["landuse"~"farmland|meadow|industrial|brownfield|commercial|grass|forest"]({south},{west},{north},{east});
+    );
+    out body;
+    >;
+    out skel qt;
+    """
+    async with httpx.AsyncClient(timeout=20) as client:
+        resp = await client.post("https://overpass-api.de/api/interpreter", data={"data": query})
+        if resp.status_code != 200:
+            return []
+        data = resp.json()
+
+    # Build node lookup
+    nodes = {}
+    for el in data.get("elements", []):
+        if el["type"] == "node":
+            nodes[el["id"]] = (el["lon"], el["lat"])
+
+    features = []
+    for el in data.get("elements", []):
+        if el["type"] != "way" or "nodes" not in el:
+            continue
+        coords = [nodes[nid] for nid in el["nodes"] if nid in nodes]
+        if len(coords) < 4:
+            continue
+
+        area_ha = _polygon_area_ha({"type": "Polygon", "coordinates": [coords]})
+        if area_ha < min_area_ha:
+            continue
+
+        tags = el.get("tags", {})
+        landuse = tags.get("landuse") or tags.get("natural") or tags.get("leisure") or "unknown"
+        color = {
+            "farmland": "#4ade80", "meadow": "#86efac", "grass": "#a3e635",
+            "orchard": "#65a30d", "vineyard": "#84cc16", "allotments": "#22c55e",
+            "forest": "#166534", "wood": "#166534",
+            "grassland": "#86efac", "scrub": "#a3a37a", "heath": "#c4a882",
+            "industrial": "#9C9590", "brownfield": "#C67A1A", "commercial": "#60a5fa",
+            "recreation_ground": "#4ade80", "park": "#34d399", "garden": "#6ee7b7",
+            "pitch": "#2dd4bf", "reservoir": "#38bdf8",
+        }.get(landuse, "#9C9590")
+
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Polygon", "coordinates": [coords]},
+            "properties": {
+                "title_number": f"BK{el['id'] % 100000:05d}",
+                "tenure": "unknown",
+                "area_ha": round(area_ha, 2),
+                "color": color,
+                "available": area_ha >= 2.0,
+                "landuse": landuse,
+                "name": tags.get("name", ""),
+                "source": "OpenStreetMap",
+            },
+        })
+
+    return features
 
 
 async def get_agricultural_land_class(lat: float, lon: float) -> dict:

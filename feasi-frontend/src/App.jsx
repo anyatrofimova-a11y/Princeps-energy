@@ -19,6 +19,9 @@ import FinancialStrip from "./components/FinancialStrip";
 import IntelligencePanel from "./components/IntelligencePanel";
 import Asset3DOverlay from "./components/Asset3DOverlay";
 import Google3DTilesOverlay from "./components/Google3DTilesOverlay";
+import GridTwinOverlay from "./components/GridTwinOverlay";
+import NGEDLiveLayer from "./components/pulse/NGEDLiveLayer";
+import GridIntelPanel from "./components/pulse/GridIntelPanel";
 const CesiumMapOverlay = lazy(() => import("./components/CesiumMapOverlay"));
 import CameraToolbar from "./components/CameraToolbar";
 import SitePicker from "./components/SitePicker";
@@ -31,6 +34,8 @@ import AIOrb from "./components/AIOrb";
 import NotificationCentre from "./components/NotificationCentre";
 import StartupOverlay, { saveRecentSite } from "./components/StartupOverlay";
 import { useWorkspace } from "./contexts/WorkspaceContext";
+
+const DeveloperConsole = lazy(() => import("./components/DeveloperConsole"));
 
 // ── Lazy-loaded overlays (split into separate chunks) ──
 const DigitalTwin = lazy(() => import("./components/DigitalTwin"));
@@ -50,6 +55,7 @@ const DCComparisonDashboard = lazy(() => import("./components/DCComparisonDashbo
 const NOMExplorer = lazy(() => import("./components/NOMExplorer"));
 const SettingsPage = lazy(() => import("./components/SettingsPage"));
 const PitchPage = lazy(() => import("./components/PitchPage"));
+const CapabilitiesPage = lazy(() => import("./components/CapabilitiesPage"));
 const ProjectPipeline = lazy(() => import("./components/ProjectPipeline"));
 const SiteDashboard = lazy(() => import("./components/SiteDashboard"));
 const SiteDashboardV2 = lazy(() => import("./components/SiteDashboardV2"));
@@ -113,8 +119,13 @@ export default function App() {
   const { activeWorkspace, setActiveWorkspace, navigateToIntent } = useWorkspace();
 
   const [mapInstance, setMapInstance] = useState(null);
+  const [devConsoleOpen, setDevConsoleOpen] = useState(false);
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [dashV2Closed, setDashV2Closed] = useState(false);
+  // Pulse · right-hand grid intel panel selection (substation / ECR / GSP / licence area)
+  const [pulseSelection, setPulseSelection] = useState(null);
+  const handlePulseSelect = useCallback((sel) => setPulseSelection(sel), []);
+  const handlePulseClose = useCallback(() => setPulseSelection(null), []);
 
   // Re-open dashboard when a new site is picked
   useEffect(() => { if (pickedLocation) setDashV2Closed(false); }, [pickedLocation]);
@@ -262,15 +273,20 @@ export default function App() {
   const [nomMode, setNomMode] = useState(false);
   const [settingsMode, setSettingsMode] = useState(false);
   const [pitchMode, setPitchMode] = useState(false);
+  const [capabilitiesMode, setCapabilitiesMode] = useState(false);
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
   const [intelligenceOpen, setIntelligenceOpen] = useState(false);
 
-  // Cmd+K / Ctrl+K to open command palette
+  // Cmd+K / Ctrl+K to open command palette, Cmd+Shift+D for developer console
   useEffect(() => {
     const handler = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setCmdPaletteOpen(p => !p);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "d") {
+        e.preventDefault();
+        setDevConsoleOpen(p => !p);
       }
     };
     window.addEventListener("keydown", handler);
@@ -322,7 +338,7 @@ export default function App() {
   };
 
   // Handle map click in pick mode
-  const handleMapPick = async ({ lat, lon }) => {
+  const handleMapPick = ({ lat, lon }) => {
     console.log("[App] handleMapPick called:", { lat, lon });
     setPickMode(false);
     setPickedLocation({ lat, lon });
@@ -332,23 +348,10 @@ export default function App() {
         duration: 3000, essential: true,
       });
     }
-    try {
-      const data = await api.site.fromLocation(lat, lon);
-      if (data?.parcel_id) {
-        setParcelId(data.parcel_id);
-        setPickedLocation({ lat: data.lat, lon: data.lon });
-        await loadSite(data.parcel_id, samCapacity, samDay);
-        runDeferral(5, 4);
-        // Save to recent sites for StartupOverlay
-        saveRecentSite({
-          id: data.parcel_id,
-          name: data.location_name || data.parcel_id,
-          lat: data.lat, lon: data.lon,
-          parcelId: data.parcel_id,
-          lastModified: new Date().toLocaleDateString("en-GB"),
-        });
-      }
-    } catch (err) { console.error(err); }
+    // Announce the agent — don't auto-run any analysis. User drives what happens next.
+    window.dispatchEvent(new CustomEvent("princeps-chat", {
+      detail: { announce: true, lat, lon },
+    }));
   };
 
   const handleAnalyse = () => {
@@ -488,6 +491,9 @@ export default function App() {
   if (pitchMode) {
     return <PitchPage onExit={() => setPitchMode(false)} />;
   }
+  if (capabilitiesMode) {
+    return <Suspense fallback={null}><CapabilitiesPage onExit={() => setCapabilitiesMode(false)} /></Suspense>;
+  }
 
   // Map content (rendered inside CenterCanvas via WorkspaceRouter)
   const mapContent = (
@@ -524,6 +530,19 @@ export default function App() {
       <ErrorBoundary name="Google3DTilesOverlay" fallback={null}>
         <Google3DTilesOverlay mapInstance={mapInstance} enabled={!!layers.google3d} />
       </ErrorBoundary>
+      <ErrorBoundary name="GridTwinOverlay" fallback={null}>
+        <GridTwinOverlay map={mapInstance} enabled={!!layers.gridTwin3d} />
+      </ErrorBoundary>
+
+      {/* Pulse · NGED live intelligence layers (headroom / ECR / GSP / licence areas) */}
+      <ErrorBoundary name="NGEDLiveLayer" fallback={null}>
+        <NGEDLiveLayer map={mapInstance} layers={layers} onSelect={handlePulseSelect} />
+      </ErrorBoundary>
+
+      {/* Pulse · right-hand detail panel — only when a feature is selected */}
+      {pulseSelection && (
+        <GridIntelPanel selection={pulseSelection} onClose={handlePulseClose} />
+      )}
       {layers.cesiumGlobe && (
         <ErrorBoundary name="CesiumMapOverlay" fallback={null}>
           <Suspense fallback={null}>
@@ -634,6 +653,7 @@ export default function App() {
       case "inspect": setAssetInspectorOpen(true); break;
       case "graph": setGridGraphOpen(true); break;
       case "pitch": setPitchMode(true); break;
+      case "capabilities": setCapabilitiesMode(true); break;
       case "nom": setNomMode(true); break;
       case "bess-facility": setBessFacilityOpen(true); break;
       case "hardware": setHwConfigOpen(true); break;
@@ -689,6 +709,7 @@ export default function App() {
       onSiteDesigner={() => setSiteDesignerOpen(true)}
       onPipeline={() => setActiveWorkspace("pipeline")}
       onPitch={() => setPitchMode(true)}
+      onCapabilities={() => setCapabilitiesMode(true)}
       onNomExplorer={() => setNomMode(true)}
       onSettings={() => setSettingsMode(true)}
       onCommandPalette={() => setCmdPaletteOpen(true)}

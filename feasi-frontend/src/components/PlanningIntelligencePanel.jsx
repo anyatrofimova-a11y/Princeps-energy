@@ -20,6 +20,7 @@ const TECH_OPTIONS = [
   { value: "solar", label: "Solar PV" },
   { value: "wind", label: "Wind" },
   { value: "bess", label: "BESS" },
+  { value: "data_centre", label: "Data Centre" },
   { value: "hybrid", label: "Hybrid" },
 ];
 
@@ -89,7 +90,7 @@ function ComplianceRing({ score, total, size = 100 }) {
 /* ═══════════════════════════════════════════════════════════════════════════
    PlanningIntelligencePanel
    ═══════════════════════════════════════════════════════════════════════════ */
-export default function PlanningIntelligencePanel({ onClose }) {
+export default function PlanningIntelligencePanel({ onClose, embedded }) {
   const { explain, selectedParcel } = useSite();
 
   /* ── State ── */
@@ -200,7 +201,7 @@ export default function PlanningIntelligencePanel({ onClose }) {
   };
 
   return (
-    <div className="gc-panel pi-panel">
+    <div className={`gc-panel pi-panel${embedded ? " gc-panel--embedded" : ""}`}>
       {/* Header */}
       <div className="gc-panel-header">
         <div className="gc-panel-title">

@@ -34,6 +34,7 @@ const SECTIONS = [
       { id: "envConstraints", label: "SSSI / AONB / Flood", color: "#ef4444" },
       { id: "landParcels", label: "Ownership (HMLR)", color: "#2563eb" },
       { id: "planningDensity", label: "Planning Apps", color: "#f59e0b" },
+      { id: "planningConstraints", label: "LPA Constraints", color: "#DC2626" },
       { id: "geeflowLandUse", label: "Land Use", color: "#D4A018" },
       { id: "ndvi", label: "Vegetation", color: "#24a148" },
     ],
@@ -51,9 +52,26 @@ const SECTIONS = [
       { id: "slope", label: "Slope", color: "#D4A018", hasOpacity: true },
       { id: "contours", label: "Contours", color: "#24a148" },
       { id: "aerial", label: "Aerial", color: "#a56eff" },
+      { id: "gridTwin3d", label: "3D Grid Twin", color: "#D4A018" },
       { id: "google3d", label: "Google 3D", color: "#4285f4" },
       { id: "cesiumGlobe", label: "Cesium Globe", color: "#00b4d8" },
       { id: "satellite", label: "Sentinel-2", color: "#D4A018" },
+    ],
+  },
+  {
+    id: "live",
+    label: "Live",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M12 3v3m0 12v3M3 12h3m12 0h3M5.636 5.636l2.122 2.122m8.485 8.485l2.121 2.121M5.636 18.364l2.122-2.122m8.485-8.485l2.121-2.121" />
+      </svg>
+    ),
+    layers: [
+      { id: "nged_headroom", label: "NOM Headroom", color: "#2e7d32" },
+      { id: "nged_ecr", label: "Capacity Register", color: "#7c3aed" },
+      { id: "nged_gsp", label: "Live GSPs", color: "#2563eb" },
+      { id: "nged_licence", label: "Licence Areas", color: "#c0392b" },
     ],
   },
   {

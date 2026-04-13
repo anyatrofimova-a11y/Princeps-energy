@@ -10,7 +10,7 @@
  *   onCopyToProject — callback(parcels) to copy polygons to a project
  *   onSaveToProject — callback({ projectName, parcels }) to save
  */
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 function formatDate(d) {
   if (!d) return "--";
@@ -36,10 +36,51 @@ export default function ParcelDetailPanel({
   const [projectName, setProjectName] = useState("");
   const [expandedDesc, setExpandedDesc] = useState(false);
 
+  // ── Enrichment: auto-fetch site analysis when a single parcel is selected ──
+  const [enrichment, setEnrichment] = useState(null);
+  const [enrichLoading, setEnrichLoading] = useState(false);
+
   if (!selectedParcels || selectedParcels.length === 0) return null;
 
   const isSingle = selectedParcels.length === 1;
   const parcel = isSingle ? selectedParcels[0] : null;
+
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!parcel) { setEnrichment(null); return; }
+    const lat = parcel.lat ?? parcel.latitude ?? parcel.centroid_lat;
+    const lon = parcel.lon ?? parcel.longitude ?? parcel.centroid_lon;
+    if (!lat || !lon) return;
+
+    let cancelled = false;
+    setEnrichLoading(true);
+    setEnrichment(null);
+
+    const fetchAll = async () => {
+      const results = {};
+      const safe = async (key, url) => {
+        try {
+          const r = await fetch(url, { method: url.includes("?") ? "POST" : "POST" });
+          if (r.ok) results[key] = await r.json();
+        } catch {}
+      };
+
+      await Promise.allSettled([
+        safe("constraints", `/api/analysis/constraint-check?lat=${lat}&lon=${lon}&radius_km=2`),
+        safe("score", `/api/parcels/score?lat=${lat}&lon=${lon}&area_ha=${parcel.area_ha || parcel.area || 50}`),
+        safe("connectivity", `/api/analysis/connectivity-score?lat=${lat}&lon=${lon}`),
+        safe("water", `/api/analysis/water-stress?lat=${lat}&lon=${lon}`),
+        safe("grid", `/api/grid/assess?lat=${lat}&lon=${lon}&capacity_mw=50&technology=solar`),
+      ]);
+
+      if (!cancelled) {
+        setEnrichment(results);
+        setEnrichLoading(false);
+      }
+    };
+    fetchAll();
+    return () => { cancelled = true; };
+  }, [parcel?.title_number || parcel?.titleNumber || parcel?.title_no]);
   const totalArea = selectedParcels.reduce((sum, p) => sum + (p.area_ha || p.area || 0), 0);
 
   const handleCopy = () => {
@@ -143,6 +184,149 @@ export default function ParcelDetailPanel({
               </div>
             )}
           </div>
+
+          {/* ── Enriched Analysis ──────────────────────────────── */}
+          {enrichLoading && (
+            <div className="lp-enrich-loading">
+              <div className="lp-spinner" /> Analysing site...
+            </div>
+          )}
+
+          {enrichment && (
+            <div className="lp-enrich-section">
+              {/* Site Score */}
+              {enrichment.score && (
+                <div className="lp-enrich-card">
+                  <div className="lp-enrich-card-header">
+                    <span>Site Suitability</span>
+                    <span className={`lp-verdict lp-verdict-${enrichment.score.verdict?.toLowerCase()}`}>
+                      {enrichment.score.verdict}
+                    </span>
+                  </div>
+                  <div className="lp-score-bar-wrap">
+                    <div className="lp-score-bar" style={{ width: `${enrichment.score.score}%`, background: enrichment.score.score >= 65 ? '#24a148' : enrichment.score.score >= 40 ? '#D4A018' : '#da1e28' }} />
+                  </div>
+                  <span className="lp-score-label">{enrichment.score.score}/100</span>
+                  {enrichment.score.breakdown && (
+                    <div className="lp-enrich-breakdown">
+                      {Object.entries(enrichment.score.breakdown).map(([k, v]) => (
+                        <div key={k} className="lp-detail-row">
+                          <span className="lp-detail-label">{k.replace(/_/g, ' ')}</span>
+                          <span className="lp-detail-value">{v}/100</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {enrichment.score.grid_distance_km != null && (
+                    <div className="lp-detail-row">
+                      <span className="lp-detail-label">Nearest substation</span>
+                      <span className="lp-detail-value">{enrichment.score.grid_distance_km} km ({enrichment.score.nearest_substation_kv || '?'} kV)</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Grid Connection */}
+              {enrichment.grid && (
+                <div className="lp-enrich-card">
+                  <div className="lp-enrich-card-header">
+                    <span>Grid Connection</span>
+                    <span className={`lp-verdict lp-verdict-${enrichment.grid.verdict?.toLowerCase()}`}>
+                      {enrichment.grid.verdict}
+                    </span>
+                  </div>
+                  {enrichment.grid.best_candidate && (
+                    <>
+                      <div className="lp-detail-row">
+                        <span className="lp-detail-label">Best substation</span>
+                        <span className="lp-detail-value">{enrichment.grid.best_candidate.name}</span>
+                      </div>
+                      <div className="lp-detail-row">
+                        <span className="lp-detail-label">Distance</span>
+                        <span className="lp-detail-value">{enrichment.grid.best_candidate.distance_km?.toFixed(1)} km</span>
+                      </div>
+                      <div className="lp-detail-row">
+                        <span className="lp-detail-label">Voltage</span>
+                        <span className="lp-detail-value">{enrichment.grid.best_candidate.voltage_kv} kV</span>
+                      </div>
+                    </>
+                  )}
+                  {enrichment.grid.cost_estimate?.cost_gbp && (
+                    <div className="lp-detail-row">
+                      <span className="lp-detail-label">Est. connection cost</span>
+                      <span className="lp-detail-value">£{(enrichment.grid.cost_estimate.cost_gbp.p50 / 1e6)?.toFixed(1)}M</span>
+                    </div>
+                  )}
+                  <div className="lp-detail-row">
+                    <span className="lp-detail-label">Candidates</span>
+                    <span className="lp-detail-value">{enrichment.grid.candidates?.length || 0}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Planning Constraints */}
+              {enrichment.constraints && (
+                <div className="lp-enrich-card">
+                  <div className="lp-enrich-card-header">
+                    <span>Planning Constraints</span>
+                    <span className={`lp-verdict lp-verdict-${enrichment.constraints.verdict?.toLowerCase()}`}>
+                      {enrichment.constraints.verdict}
+                    </span>
+                  </div>
+                  {enrichment.constraints.checks && Object.entries(enrichment.constraints.checks).map(([k, v]) => (
+                    <div key={k} className="lp-detail-row">
+                      <span className="lp-detail-label">{k}</span>
+                      <span className={`lp-verdict-inline lp-verdict-${v.status?.toLowerCase()}`}>
+                        {v.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Water Stress */}
+              {enrichment.water && (
+                <div className="lp-enrich-card">
+                  <div className="lp-enrich-card-header">
+                    <span>Water Stress</span>
+                    <span className="lp-detail-value">{enrichment.water.stress_level}</span>
+                  </div>
+                  <div className="lp-detail-row">
+                    <span className="lp-detail-label">Region</span>
+                    <span className="lp-detail-value">{enrichment.water.region}</span>
+                  </div>
+                  <div className="lp-detail-row">
+                    <span className="lp-detail-label">Drought risk</span>
+                    <span className="lp-detail-value">{enrichment.water.drought_risk}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Connectivity */}
+              {enrichment.connectivity && (
+                <div className="lp-enrich-card">
+                  <div className="lp-enrich-card-header">
+                    <span>Connectivity</span>
+                    <span className={`lp-verdict lp-verdict-${enrichment.connectivity.verdict?.toLowerCase()}`}>
+                      {enrichment.connectivity.score}/100
+                    </span>
+                  </div>
+                  <div className="lp-detail-row">
+                    <span className="lp-detail-label">Nearest IXP</span>
+                    <span className="lp-detail-value">{enrichment.connectivity.nearest_ixp} ({enrichment.connectivity.nearest_ixp_km?.toFixed(0)} km)</span>
+                  </div>
+                  <div className="lp-detail-row">
+                    <span className="lp-detail-label">IXPs within 50km</span>
+                    <span className="lp-detail-value">{enrichment.connectivity.ixp_count_50km}</span>
+                  </div>
+                  <div className="lp-detail-row">
+                    <span className="lp-detail-label">Fiber routes (10km)</span>
+                    <span className="lp-detail-value">{enrichment.connectivity.fiber_routes_10km}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Save button */}
           <button className="lp-save-btn" onClick={() => setSaveModalOpen(true)}>
