@@ -713,6 +713,131 @@ async def upsert_dc_record(
     return {"dc_id": dc_id, "total_facility_power_mw": total_mw, "pue": pue}
 
 
+async def populate_estate_from_ukpn(pool: asyncpg.Pool) -> dict:
+    """Populate neso098_dc_estate from UKPN ingested datasets.
+
+    Sources (in priority order):
+      1. `data_centres_by_la` — UKPN's official DC-by-LA rollup
+         (operational + pipeline MVA per local authority). Creates one
+         aggregate record per LA with operational capacity as
+         status='operational' and pipeline as status='pipeline'.
+      2. `large_demand_list` — anonymised UKPN connection queue.
+         Rows with demand_technology_type='Large Demand' and capacity
+         ≥ 5 MVA are treated as candidate DC connections; mapped to the
+         LA by grid_supply_point (when derivable).
+
+    The resulting estate is a best-effort consolidated view from public
+    UKPN data; richer records (operator, coordinates, PUE, etc.)
+    require manual enrichment or a subsequent API-key-gated feed.
+    """
+    created = 0
+    updated_la = 0
+    updated_ldl = 0
+
+    async with pool.acquire() as conn:
+        # 1. DC-by-LA aggregate records (operational + pipeline)
+        la_rows = await conn.fetch(
+            """
+            SELECT row
+            FROM dno_ltds_tabular
+            WHERE dno = 'UKPN' AND dataset_key = 'data_centres_by_la'
+            """
+        )
+        for r in la_rows:
+            rec = r["row"]
+            if isinstance(rec, str):
+                rec = json.loads(rec)
+            la = rec.get("local_authority_district_name")
+            if not la:
+                continue
+            op_mva = rec.get("operational_data_centre_capacity_mva")
+            pipe_mva = rec.get("pipeline_data_centre_capacity_mva")
+            # operational rollup
+            if op_mva:
+                op_mw = float(op_mva) * 0.95  # MVA → MW at 0.95 pf
+                await upsert_dc_record(
+                    pool,
+                    dc_id=f"ukpn-la-op-{la.lower().replace(' ', '-')}",
+                    name=f"{la} — operational DC estate (rollup)",
+                    dc_type="colocation",
+                    latency_class="regionally_constrained",
+                    status="operational",
+                    it_power_mw=op_mw / 1.35,  # back-calc IT from total via typical PUE
+                    local_authority=la,
+                    licence_area="UKPN",
+                    data_source="ukpn_data_centres_by_la",
+                    raw=rec,
+                )
+                updated_la += 1
+            # pipeline rollup
+            if pipe_mva:
+                pipe_mw = float(pipe_mva) * 0.95
+                await upsert_dc_record(
+                    pool,
+                    dc_id=f"ukpn-la-pipe-{la.lower().replace(' ', '-')}",
+                    name=f"{la} — pipeline DC applications (rollup)",
+                    dc_type="colocation",
+                    latency_class="regionally_constrained",
+                    status="pipeline",
+                    it_power_mw=pipe_mw / 1.35,
+                    local_authority=la,
+                    licence_area="UKPN",
+                    data_source="ukpn_data_centres_by_la",
+                    raw=rec,
+                )
+                updated_la += 1
+                created += 1
+
+        # 2. Large Demand List — Large Demand rows ≥ 5 MVA as candidate DCs
+        ldl_rows = await conn.fetch(
+            """
+            SELECT anonymised_name, licence_area, grid_supply_point,
+                   required_import_capacity_kva, application_date, raw
+            FROM dno_large_demand_list
+            WHERE dno = 'UKPN'
+              AND demand_technology_type = 'Large Demand'
+              AND required_import_capacity_kva >= 5000
+            """
+        )
+        for r in ldl_rows:
+            mva = float(r["required_import_capacity_kva"]) / 1000
+            # Infer DC type from capacity band
+            if mva >= 50:
+                dc_type = "hyperscaler"
+            elif mva >= 10:
+                dc_type = "colocation"
+            else:
+                dc_type = "enterprise"
+            it_power_mw = mva * 0.95 / 1.35
+            await upsert_dc_record(
+                pool,
+                dc_id=f"ukpn-ldl-{r['anonymised_name'].lower().replace(' ', '-').replace('#','')}",
+                name=r["anonymised_name"],
+                dc_type=dc_type,
+                latency_class="regionally_constrained",
+                status="applied",
+                it_power_mw=it_power_mw,
+                licence_area=r["licence_area"],
+                grid_supply_point=r["grid_supply_point"],
+                target_energisation=r["application_date"],
+                data_source="ukpn_large_demand_list",
+                raw=r["raw"] if isinstance(r["raw"], dict) else json.loads(r["raw"] or "{}"),
+            )
+            updated_ldl += 1
+            created += 1
+
+    return {
+        "ok": True,
+        "ukpn_la_records_created": updated_la,
+        "ukpn_ldl_records_created": updated_ldl,
+        "total_created_or_updated": created,
+        "note": (
+            "UKPN LDL is anonymised (no operator name, no coordinates). "
+            "Operator enrichment requires a separate OSM + 451 Global + press data pass."
+        ),
+    }
+
+
 async def estate_summary(pool: asyncpg.Pool) -> dict:
     """Aggregate view of the consolidated DC estate."""
     async with pool.acquire() as conn:

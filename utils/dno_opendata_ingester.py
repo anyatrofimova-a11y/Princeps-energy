@@ -476,18 +476,29 @@ async def ingest_grid_primary_sites(pool: asyncpg.Pool, dno: str, records: list[
 
 
 async def ingest_primary_transformers(pool: asyncpg.Pool, dno: str, records: list[dict]) -> int:
-    """Normalise primary transformer records into dno_primary_transformers."""
+    """Normalise primary transformer records into dno_primary_transformers.
+
+    UKPN schema (verified Apr 2026): functionallocation / sitedesc /
+    operationalvoltage / onanrating_kva / primary_winding_voltage /
+    secondary_winding_voltage / make / model / dno / reverse_power_capability.
+    """
     rows = []
     for r in records:
-        aid = r.get("asset_id") or r.get("transformer_id") or r.get("id")
+        aid = (
+            r.get("functionallocation") or r.get("asset_id")
+            or r.get("transformer_id") or r.get("id")
+            or r.get("equipment")
+        )
         if not aid:
             continue
+        rated_kva = _num(r.get("onanrating_kva"))
+        rated_mva = rated_kva / 1000 if rated_kva else _num(r.get("rated_mva") or r.get("capacity_mva"))
         rows.append((
             dno, str(aid),
-            r.get("site_name") or r.get("substation_name"),
-            _num(r.get("primary_voltage_kv") or r.get("hv_voltage_kv")),
-            _num(r.get("secondary_voltage_kv") or r.get("lv_voltage_kv")),
-            _num(r.get("rated_mva") or r.get("capacity_mva")),
+            r.get("sitedesc") or r.get("site_name") or r.get("substation_name"),
+            _num(r.get("primary_winding_voltage") or r.get("primary_voltage_kv") or r.get("hv_voltage_kv")),
+            _num(r.get("secondary_winding_voltage") or r.get("secondary_voltage_kv") or r.get("lv_voltage_kv")),
+            rated_mva,
             _num(r.get("peak_demand_mva")),
             _num(r.get("utilisation_pct") or r.get("loading_pct")),
             r.get("rag_status") or r.get("rag"),

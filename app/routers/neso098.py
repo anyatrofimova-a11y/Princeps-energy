@@ -20,6 +20,7 @@ from utils.neso098_dc_optimiser import (
     upsert_dc_record,
     estate_summary,
     estate_geojson,
+    populate_estate_from_ukpn,
 )
 
 router = APIRouter(tags=["neso098"], prefix="/api/neso098")
@@ -32,10 +33,10 @@ async def site_score(body: dict = Body(...), pool: asyncpg.Pool = Depends(get_po
     """Compute the NESO 9-criteria location score for a candidate DC site."""
     return await score_site(
         pool,
-        site_id=body["site_id"],
+        site_id=body.get("site_id", "ad-hoc"),
         lat=float(body["lat"]),
         lon=float(body["lon"]),
-        capacity_mva=float(body.get("capacity_mva", 100)),
+        capacity_mva=float(body.get("capacity_mw", body.get("capacity_mva", 100))),
         dc_type=body.get("dc_type", "hyperscaler"),
         latency_class=body.get("latency_class", "regionally_constrained"),
         power_cost_gbp_per_mwh=body.get("power_cost_gbp_per_mwh"),
@@ -163,3 +164,11 @@ async def estate_summary_endpoint(pool: asyncpg.Pool = Depends(get_pool)):
 async def estate_geojson_endpoint(pool: asyncpg.Pool = Depends(get_pool)):
     """Consolidated DC estate as GeoJSON for the map."""
     return await estate_geojson(pool)
+
+
+@router.post("/estate/populate-from-ukpn")
+async def estate_populate_from_ukpn(pool: asyncpg.Pool = Depends(get_pool)):
+    """Populate the consolidated estate from UKPN ingested datasets
+    (data_centres_by_la + large_demand_list).
+    """
+    return await populate_estate_from_ukpn(pool)
