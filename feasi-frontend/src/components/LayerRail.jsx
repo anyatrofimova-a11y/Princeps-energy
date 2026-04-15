@@ -72,6 +72,7 @@ const SECTIONS = [
       { id: "nged_ecr", label: "Capacity Register", color: "#7c3aed" },
       { id: "nged_gsp", label: "Live GSPs", color: "#2563eb" },
       { id: "nged_licence", label: "Licence Areas", color: "#c0392b" },
+      { id: "dc_estate", label: "DC Estate (NESO098)", color: "#f5b731" },
     ],
   },
   {

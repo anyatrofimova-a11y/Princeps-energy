@@ -171,6 +171,54 @@ async def ensure_schema(pool: asyncpg.Pool) -> None:
 
 
 # ════════════════════════════════════════════════════════════════════════
+# ONS Local Authority centroid lookup (for DC-by-LA rollup placement)
+# ════════════════════════════════════════════════════════════════════════
+
+_ONS_LA_FEATURESERVER = (
+    "https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/"
+    "Local_Authority_Districts_December_2024_Boundaries_UK_BUC/FeatureServer/0/query"
+)
+
+
+async def _fetch_ons_la_centroids(la_names: list[str]) -> dict[str, tuple[float, float]]:
+    """Fetch (lat, lon) for a list of LA names via the ONS Open Geography Portal.
+
+    Returns dict: LA name → (lat, lon). Names not found are silently
+    omitted. Uses the ONS December 2024 LAD boundaries + the LAT/LONG
+    attributes which are population-weighted centroids.
+    """
+    import httpx
+    if not la_names:
+        return {}
+
+    # ArcGIS IN clause: LAD24NM IN ('A','B',...)
+    quoted = ",".join("'" + n.replace("'", "''") + "'" for n in la_names)
+    where = f"LAD24NM IN ({quoted})"
+    params = {
+        "where": where,
+        "outFields": "LAD24NM,LAT,LONG",
+        "outSR": "4326",
+        "returnGeometry": "false",
+        "f": "json",
+    }
+    out: dict[str, tuple[float, float]] = {}
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.get(_ONS_LA_FEATURESERVER, params=params)
+            r.raise_for_status()
+            for feat in r.json().get("features", []):
+                attrs = feat.get("attributes", {})
+                name = attrs.get("LAD24NM")
+                lat = attrs.get("LAT")
+                lon = attrs.get("LONG")
+                if name and lat is not None and lon is not None:
+                    out[name] = (float(lat), float(lon))
+    except Exception as e:
+        log.warning("ONS LA centroid fetch failed: %s", e)
+    return out
+
+
+# ════════════════════════════════════════════════════════════════════════
 # 1. NESO 9-CRITERIA LOCATION SCORECARD
 # ════════════════════════════════════════════════════════════════════════
 
@@ -711,6 +759,88 @@ async def upsert_dc_record(
             json.dumps(raw or {}),
         )
     return {"dc_id": dc_id, "total_facility_power_mw": total_mw, "pue": pue}
+
+
+async def enrich_estate_coordinates(pool: asyncpg.Pool) -> dict:
+    """Fuzzy-match grid_supply_point → dno_grid_primary_sites.site_name
+    and copy coordinates into neso098_dc_estate where missing.
+
+    Matching strategy: use the GSP's first token (e.g. "WARLEY" from
+    "WARLEY GRID 132KV") as a LIKE prefix against dno_grid_primary_sites
+    site_name. When multiple primary sites match, prefer highest voltage.
+    Falls back to local_authority centroid lookup for LA rollup records.
+    """
+    matched = 0
+    la_matched = 0
+    async with pool.acquire() as conn:
+        # 1. Match estate records by grid_supply_point → primary site
+        updated = await conn.execute(
+            """
+            WITH best_match AS (
+                SELECT DISTINCT ON (e.dc_id)
+                    e.dc_id, ps.lat, ps.lon
+                FROM neso098_dc_estate e
+                JOIN dno_grid_primary_sites ps
+                  ON UPPER(ps.site_name) LIKE '%' || UPPER(SPLIT_PART(e.grid_supply_point, ' ', 1)) || '%'
+                WHERE e.lat IS NULL
+                  AND e.grid_supply_point IS NOT NULL
+                  AND ps.lat IS NOT NULL
+                ORDER BY e.dc_id, ps.voltage_kv DESC NULLS LAST
+            )
+            UPDATE neso098_dc_estate e
+            SET lat = bm.lat, lon = bm.lon, updated_at = now()
+            FROM best_match bm
+            WHERE e.dc_id = bm.dc_id
+            """
+        )
+        # asyncpg returns 'UPDATE <n>'
+        try:
+            matched = int(updated.split()[-1])
+        except Exception:
+            matched = 0
+
+        # 2. For remaining LA rollups without coords, fetch ONS LA centroids.
+        #    Uses the ONS Open Geography Portal ArcGIS FeatureServer endpoint
+        #    for Local Authority Districts (December 2024 boundaries).
+        la_names = await conn.fetch(
+            """
+            SELECT DISTINCT local_authority
+            FROM neso098_dc_estate
+            WHERE lat IS NULL
+              AND data_source = 'ukpn_data_centres_by_la'
+              AND local_authority IS NOT NULL
+            """
+        )
+        if la_names:
+            centroids = await _fetch_ons_la_centroids(
+                [r["local_authority"] for r in la_names]
+            )
+            for la, (lat, lon) in centroids.items():
+                res = await conn.execute(
+                    """
+                    UPDATE neso098_dc_estate
+                    SET lat = $1, lon = $2, updated_at = now()
+                    WHERE local_authority = $3
+                      AND lat IS NULL
+                      AND data_source = 'ukpn_data_centres_by_la'
+                    """,
+                    lat, lon, la,
+                )
+                try:
+                    la_matched += int(res.split()[-1])
+                except Exception:
+                    pass
+
+    return {
+        "ok": True,
+        "matched_via_gsp": matched,
+        "matched_via_la_centroid": la_matched,
+        "note": (
+            "GSP records matched via first-token LIKE against primary_sites "
+            "(preferring highest-voltage candidate). LA rollups placed at "
+            "ONS LAD24 population-weighted centroids."
+        ),
+    }
 
 
 async def populate_estate_from_ukpn(pool: asyncpg.Pool) -> dict:

@@ -21,6 +21,7 @@ import Asset3DOverlay from "./components/Asset3DOverlay";
 import Google3DTilesOverlay from "./components/Google3DTilesOverlay";
 import GridTwinOverlay from "./components/GridTwinOverlay";
 import NGEDLiveLayer from "./components/pulse/NGEDLiveLayer";
+import DCEstateLayer from "./components/pulse/DCEstateLayer";
 import GridIntelPanel from "./components/pulse/GridIntelPanel";
 const CesiumMapOverlay = lazy(() => import("./components/CesiumMapOverlay"));
 import CameraToolbar from "./components/CameraToolbar";
@@ -537,6 +538,11 @@ export default function App() {
       {/* Pulse · NGED live intelligence layers (headroom / ECR / GSP / licence areas) */}
       <ErrorBoundary name="NGEDLiveLayer" fallback={null}>
         <NGEDLiveLayer map={mapInstance} layers={layers} onSelect={handlePulseSelect} />
+      </ErrorBoundary>
+
+      {/* NESO098 · Consolidated DC estate (UKPN Large Demand List + DC-by-LA) */}
+      <ErrorBoundary name="DCEstateLayer" fallback={null}>
+        <DCEstateLayer map={mapInstance} layers={layers} onSelect={handlePulseSelect} />
       </ErrorBoundary>
 
       {/* Pulse · right-hand detail panel — only when a feature is selected */}

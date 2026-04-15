@@ -19,6 +19,8 @@ from utils.gu_capabilities import (
     seed_regulation_corpus,
     regulatory_retrieve,
     regulatory_answer,
+    ingest_regulation_pdf,
+    bulk_ingest_accessible_pdfs,
 )
 from utils.dno_opendata_ingester import (
     ingest_dno,
@@ -208,6 +210,27 @@ async def reg_search(
 async def reg_answer(body: dict = Body(...), pool: asyncpg.Pool = Depends(get_pool)):
     """R10 — Structured regulatory compliance answer with citations."""
     return await regulatory_answer(pool, question=body["question"], context=body.get("context"))
+
+
+@router.post("/regulatory/ingest-pdf")
+async def reg_ingest_pdf(body: dict = Body(...), pool: asyncpg.Pool = Depends(get_pool)):
+    """R10 — Download + extract + chunk + index a single regulatory PDF."""
+    return await ingest_regulation_pdf(
+        pool,
+        doc_id=body["doc_id"],
+        url=body["url"],
+        source=body["source"],
+        doc_type=body["doc_type"],
+        title=body["title"],
+        version=body.get("version"),
+        publication_date=body.get("publication_date"),
+    )
+
+
+@router.post("/regulatory/bulk-ingest")
+async def reg_bulk_ingest(pool: asyncpg.Pool = Depends(get_pool)):
+    """R10 — Ingest the curated list of publicly-accessible NESO regulatory PDFs."""
+    return await bulk_ingest_accessible_pdfs(pool)
 
 
 # ────────────────────────── Multi-DNO OpenDataSoft (support) ─────────────────

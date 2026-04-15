@@ -171,9 +171,11 @@ CREATE TABLE IF NOT EXISTS gu_regulation_chunks (
     clause_ref      TEXT,
     text            TEXT,
     token_count     INTEGER,
+    tsv             TSVECTOR,
     ingested_at     TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_gu_reg_chunks_doc ON gu_regulation_chunks (doc_id);
+CREATE INDEX IF NOT EXISTS idx_gu_reg_chunks_tsv ON gu_regulation_chunks USING GIN (tsv);
 """
 
 
@@ -1035,16 +1037,232 @@ async def seed_regulation_corpus(pool: asyncpg.Pool) -> dict:
     return {"ok": True, "docs_seeded": inserted, "note": "metadata-only; full_text ingestion requires PDF download"}
 
 
+# ── Real PDF ingestion ─────────────────────────────────────────────────
+
+# NESO-hosted regulatory PDFs that respond 200 (all public). Augment via
+# /api/gu/regulatory/ingest-pdf with any url+metadata.
+_ACCESSIBLE_REGULATORY_PDFS = [
+    {
+        "doc_id": "NESO_CMP434_435_URGENCY",
+        "source": "NESO",
+        "doc_type": "CUSC_Mod",
+        "title": "CMP434/CMP435 — Urgency treatment decision update",
+        "version": "Feb 2025",
+        "publication_date": "2025-02-15",
+        "url": "https://www.neso.energy/document/346566/download",
+    },
+    {
+        "doc_id": "NESO_DOC_320476",
+        "source": "NESO",
+        "doc_type": "Methodology",
+        "title": "NESO — Connections / network document 320476",
+        "version": "2024",
+        "publication_date": "2024-06-01",
+        "url": "https://www.neso.energy/document/320476/download",
+    },
+    {
+        "doc_id": "NESO_DOC_320471",
+        "source": "NESO",
+        "doc_type": "Methodology",
+        "title": "NESO — Connections / network document 320471",
+        "version": "2024",
+        "publication_date": "2024-06-01",
+        "url": "https://www.neso.energy/document/320471/download",
+    },
+    {
+        "doc_id": "NESO_DOC_321666",
+        "source": "NESO",
+        "doc_type": "Methodology",
+        "title": "NESO — Connections / network document 321666",
+        "version": "2024",
+        "publication_date": "2024-06-01",
+        "url": "https://www.neso.energy/document/321666/download",
+    },
+]
+
+
+def _chunk_text(text: str, target_chars: int = 1200, overlap: int = 150) -> list[str]:
+    """Split text into overlapping chunks on paragraph boundaries.
+
+    Prefers breaking at blank lines; falls back to char windows.
+    """
+    paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+    chunks: list[str] = []
+    buf = ""
+    for p in paras:
+        if len(buf) + len(p) + 2 <= target_chars:
+            buf += (p + "\n\n")
+        else:
+            if buf:
+                chunks.append(buf.strip())
+            if len(p) <= target_chars:
+                buf = p + "\n\n"
+            else:
+                # Very long paragraph — char-window it
+                for i in range(0, len(p), target_chars - overlap):
+                    chunks.append(p[i : i + target_chars])
+                buf = ""
+    if buf.strip():
+        chunks.append(buf.strip())
+    return chunks
+
+
+async def ingest_regulation_pdf(
+    pool: asyncpg.Pool,
+    doc_id: str,
+    url: str,
+    source: str,
+    doc_type: str,
+    title: str,
+    version: str | None = None,
+    publication_date: str | None = None,
+) -> dict:
+    """Download a regulatory PDF, extract text via PyMuPDF, chunk + index it.
+
+    Idempotent on doc_id: existing rows are replaced. Uses PostgreSQL
+    tsvector full-text search for retrieval (pgvector can layer on later).
+    """
+    import httpx
+    import hashlib
+
+    try:
+        import pymupdf  # type: ignore
+    except ImportError:
+        import fitz as pymupdf  # type: ignore
+
+    # Download
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            pdf_bytes = r.content
+    except Exception as e:
+        return {"ok": False, "doc_id": doc_id, "error": f"download failed: {e}"}
+
+    # Extract text
+    try:
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        pages = [page.get_text("text") for page in doc]
+        full_text = "\n\n".join(pages)
+        doc.close()
+    except Exception as e:
+        return {"ok": False, "doc_id": doc_id, "error": f"pdf parse failed: {e}"}
+
+    if len(full_text.strip()) < 200:
+        return {"ok": False, "doc_id": doc_id, "error": "extracted text too short (likely image-only PDF)"}
+
+    text_hash = hashlib.sha256(full_text.encode("utf-8")).hexdigest()[:16]
+    chunks = _chunk_text(full_text)
+
+    pub_date = None
+    if publication_date:
+        try:
+            pub_date = datetime.fromisoformat(publication_date).date()
+        except Exception:
+            pass
+
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO gu_regulation_corpus
+                (doc_id, source, doc_type, title, version, publication_date, url, text_hash, full_text)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            ON CONFLICT (doc_id) DO UPDATE SET
+                source = EXCLUDED.source,
+                doc_type = EXCLUDED.doc_type,
+                title = EXCLUDED.title,
+                version = EXCLUDED.version,
+                publication_date = EXCLUDED.publication_date,
+                url = EXCLUDED.url,
+                text_hash = EXCLUDED.text_hash,
+                full_text = EXCLUDED.full_text,
+                ingested_at = now()
+            """,
+            doc_id, source, doc_type, title, version, pub_date, url, text_hash, full_text,
+        )
+        # Replace chunks
+        await conn.execute("DELETE FROM gu_regulation_chunks WHERE doc_id = $1", doc_id)
+        chunk_rows = [
+            (doc_id, i, None, c, len(c.split()))
+            for i, c in enumerate(chunks)
+        ]
+        await conn.executemany(
+            """
+            INSERT INTO gu_regulation_chunks
+                (doc_id, chunk_index, clause_ref, text, token_count, tsv)
+            VALUES ($1, $2, $3, $4, $5, to_tsvector('english', $4))
+            """,
+            chunk_rows,
+        )
+
+    return {
+        "ok": True,
+        "doc_id": doc_id,
+        "chars": len(full_text),
+        "chunks": len(chunks),
+        "pages": len(pages),
+        "text_hash": text_hash,
+    }
+
+
+async def bulk_ingest_accessible_pdfs(pool: asyncpg.Pool) -> dict:
+    """Ingest every PDF in the accessible-URLs list. Skips on error."""
+    results = []
+    for spec in _ACCESSIBLE_REGULATORY_PDFS:
+        r = await ingest_regulation_pdf(pool, **spec)
+        results.append(r)
+    ok = sum(1 for r in results if r.get("ok"))
+    total_chunks = sum(r.get("chunks", 0) for r in results if r.get("ok"))
+    return {
+        "ok": True,
+        "docs_ingested": ok,
+        "docs_failed": len(results) - ok,
+        "total_chunks": total_chunks,
+        "results": results,
+    }
+
+
 async def regulatory_retrieve(
     pool: asyncpg.Pool, query: str, k: int = 5,
 ) -> list[dict]:
-    """Keyword retrieval against the seeded corpus.
+    """Full-text search over regulatory chunks (tsvector ranked).
 
-    Upgrade path: switch to pgvector cosine search when we embed the full
-    text chunks. This keyword fallback keeps the capability useful today.
+    Falls back to title/type/source LIKE match against the corpus table when
+    no chunks exist (i.e. metadata-only seeded state).
     """
-    q = f"%{query.lower()}%"
     async with pool.acquire() as conn:
+        # Chunk-level full-text search
+        chunk_rows = await conn.fetch(
+            """
+            SELECT c.doc_id, c.chunk_index, c.text, c.clause_ref,
+                   d.source, d.doc_type, d.title, d.version, d.url,
+                   ts_rank_cd(c.tsv, plainto_tsquery('english', $1)) AS rank
+            FROM gu_regulation_chunks c
+            JOIN gu_regulation_corpus d ON d.doc_id = c.doc_id
+            WHERE c.tsv @@ plainto_tsquery('english', $1)
+            ORDER BY rank DESC
+            LIMIT $2
+            """,
+            query, k,
+        )
+        if chunk_rows:
+            return [
+                {
+                    "doc_id": r["doc_id"],
+                    "chunk_index": r["chunk_index"],
+                    "snippet": (r["text"][:480] + "…") if len(r["text"]) > 480 else r["text"],
+                    "clause_ref": r["clause_ref"],
+                    "source": r["source"],
+                    "doc_type": r["doc_type"],
+                    "title": r["title"],
+                    "version": r["version"],
+                    "url": r["url"],
+                    "rank": float(r["rank"]),
+                }
+                for r in chunk_rows
+            ]
+        # Fallback: metadata-only LIKE match
+        q = f"%{query.lower()}%"
         rows = await conn.fetch(
             """
             SELECT doc_id, source, doc_type, title, version, publication_date, url
@@ -1062,35 +1280,55 @@ async def regulatory_answer(
     question: str,
     context: dict | None = None,
 ) -> dict:
-    """Return a structured answer to a grid-compliance question.
+    """Return a structured answer + citations to a grid-compliance question.
 
-    In the shipping version, this would:
-      1. Retrieve top-k clauses via pgvector
-      2. Send retrieved text + question to Claude
-      3. Return the answer + citations + confidence
+    Retrieval is tsvector-ranked full-text over ingested PDF chunks. When
+    the corpus has no chunks yet it auto-ingests the accessible NESO set
+    on first call, then re-runs retrieval.
 
-    The preview here returns the retrieval hits + a canned structure so the
-    frontend can render the citation UI today.
+    The "answer" string synthesises a direct extract-based summary from
+    the top hits; upgrading to a Claude-backed synthesis is a later step
+    (the raw chunk text is already structured enough for the frontend to
+    render citation cards today).
     """
     hits = await regulatory_retrieve(pool, question, k=5)
+    # Auto-ingest on first query if corpus is empty
     if not hits:
-        # Seed the corpus on the fly if it's empty
-        await seed_regulation_corpus(pool)
-        hits = await regulatory_retrieve(pool, question, k=5)
+        async with pool.acquire() as conn:
+            (chunks,) = await conn.fetchrow("SELECT COUNT(*) FROM gu_regulation_chunks")
+        if chunks == 0:
+            await seed_regulation_corpus(pool)
+            await bulk_ingest_accessible_pdfs(pool)
+            hits = await regulatory_retrieve(pool, question, k=5)
+
+    if not hits:
+        answer_text = (
+            "No regulatory material matched the query. Try keywords like "
+            "'connection', 'reactive power', 'harmonics', 'voltage', 'firm access'."
+        )
+        status = "no_hits"
+    else:
+        # Extract-based synthesis: top hit's leading sentence(s) + citation trail
+        top = hits[0]
+        snippet = top.get("snippet", "")
+        trail = ", ".join(f"{h['title']} ({h['source']})" for h in hits[:3] if h.get("title"))
+        answer_text = (
+            f"Relevant clause from {top.get('title','corpus')}:\n\n"
+            f"{snippet}\n\n"
+            f"Sources: {trail}"
+        )
+        status = "ok" if "chunk_index" in top else "metadata_only"
 
     return {
         "question": question,
-        "answer": (
-            "[Princeps Regulatory Copilot — preview mode]\n"
-            "Full Claude-backed RAG answer will appear here once document PDFs are ingested. "
-            "For now, the corpus metadata matches are returned below — each is a valid starting "
-            "point for the user to open."
-        ),
+        "answer": answer_text,
         "citations": hits,
         "context": context or {},
         "methodology": (
-            "GAIA 2025 + Foundation Models for Grid 2024 — RAG over ENA / Ofgem / "
-            "NESO corpus. Gu's LRIC papers supply the quantitative evaluation set."
+            "PostgreSQL tsvector full-text search over PDF chunks (PyMuPDF extraction). "
+            "Corpus seeded from NESO / Ofgem / ENA / DESNZ public documents. "
+            "Ranking: ts_rank_cd with plainto_tsquery('english'). "
+            "Upgrade path: pgvector cosine similarity with embedded chunks + Claude synthesis."
         ),
-        "status": "preview",
+        "status": status,
     }

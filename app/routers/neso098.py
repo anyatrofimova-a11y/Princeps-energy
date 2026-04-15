@@ -21,6 +21,7 @@ from utils.neso098_dc_optimiser import (
     estate_summary,
     estate_geojson,
     populate_estate_from_ukpn,
+    enrich_estate_coordinates,
 )
 
 router = APIRouter(tags=["neso098"], prefix="/api/neso098")
@@ -172,3 +173,11 @@ async def estate_populate_from_ukpn(pool: asyncpg.Pool = Depends(get_pool)):
     (data_centres_by_la + large_demand_list).
     """
     return await populate_estate_from_ukpn(pool)
+
+
+@router.post("/estate/enrich-coords")
+async def estate_enrich_coords(pool: asyncpg.Pool = Depends(get_pool)):
+    """Fuzzy-match estate records to grid primary sites + ONS LA centroids
+    to fill in lat/lon for records that lack coordinates.
+    """
+    return await enrich_estate_coordinates(pool)
