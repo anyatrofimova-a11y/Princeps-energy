@@ -179,6 +179,36 @@ _ONS_LA_FEATURESERVER = (
     "Local_Authority_Districts_December_2024_Boundaries_UK_BUC/FeatureServer/0/query"
 )
 
+# UK LA reorganisations mean some names in UKPN data don't exist in LAD24.
+# Map the legacy name → the current LAD24 name it merged into.
+_LA_SYNONYMS: dict[str, str] = {
+    # 2020 reorganisation: Aylesbury Vale, Chiltern, South Bucks, Wycombe → Buckinghamshire
+    "Chiltern": "Buckinghamshire",
+    "Aylesbury Vale": "Buckinghamshire",
+    "South Bucks": "Buckinghamshire",
+    "Wycombe": "Buckinghamshire",
+    # 2023 North Yorkshire unitary
+    "Craven": "North Yorkshire",
+    "Hambleton": "North Yorkshire",
+    "Harrogate": "North Yorkshire",
+    "Richmondshire": "North Yorkshire",
+    "Ryedale": "North Yorkshire",
+    "Scarborough": "North Yorkshire",
+    "Selby": "North Yorkshire",
+    # 2021 Somerset unitary
+    "Mendip": "Somerset",
+    "Sedgemoor": "Somerset",
+    "South Somerset": "Somerset",
+    "Somerset West and Taunton": "Somerset",
+    # 2021 Cumbria → two unitaries
+    "Allerdale": "Cumberland",
+    "Copeland": "Cumberland",
+    "Carlisle": "Cumberland",
+    "Barrow-in-Furness": "Westmorland and Furness",
+    "Eden": "Westmorland and Furness",
+    "South Lakeland": "Westmorland and Furness",
+}
+
 
 async def _fetch_ons_la_centroids(la_names: list[str]) -> dict[str, tuple[float, float]]:
     """Fetch (lat, lon) for a list of LA names via the ONS Open Geography Portal.
@@ -191,8 +221,15 @@ async def _fetch_ons_la_centroids(la_names: list[str]) -> dict[str, tuple[float,
     if not la_names:
         return {}
 
+    # Apply synonym map: request the current LAD24 name but key the
+    # response back under the original name the caller asked for.
+    name_to_query: dict[str, str] = {}
+    for name in la_names:
+        name_to_query[name] = _LA_SYNONYMS.get(name, name)
+    unique_queries = set(name_to_query.values())
+
     # ArcGIS IN clause: LAD24NM IN ('A','B',...)
-    quoted = ",".join("'" + n.replace("'", "''") + "'" for n in la_names)
+    quoted = ",".join("'" + n.replace("'", "''") + "'" for n in unique_queries)
     where = f"LAD24NM IN ({quoted})"
     params = {
         "where": where,
@@ -201,7 +238,7 @@ async def _fetch_ons_la_centroids(la_names: list[str]) -> dict[str, tuple[float,
         "returnGeometry": "false",
         "f": "json",
     }
-    out: dict[str, tuple[float, float]] = {}
+    query_to_coords: dict[str, tuple[float, float]] = {}
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             r = await client.get(_ONS_LA_FEATURESERVER, params=params)
@@ -212,9 +249,15 @@ async def _fetch_ons_la_centroids(la_names: list[str]) -> dict[str, tuple[float,
                 lat = attrs.get("LAT")
                 lon = attrs.get("LONG")
                 if name and lat is not None and lon is not None:
-                    out[name] = (float(lat), float(lon))
+                    query_to_coords[name] = (float(lat), float(lon))
     except Exception as e:
         log.warning("ONS LA centroid fetch failed: %s", e)
+
+    # Re-key back to the original UKPN LA names
+    out: dict[str, tuple[float, float]] = {}
+    for orig, query in name_to_query.items():
+        if query in query_to_coords:
+            out[orig] = query_to_coords[query]
     return out
 
 

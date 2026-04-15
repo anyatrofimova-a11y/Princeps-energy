@@ -367,6 +367,39 @@ async def _ods_fetch_records(
         return r.json()
 
 
+async def _ods_fetch_exports_json(
+    base_url: str,
+    dataset_id: str,
+    api_key: str | None,
+    timeout: float = 180.0,
+) -> tuple[list[dict], str]:
+    """Fetch the entire dataset via /exports/json (no 10k offset cap).
+
+    This is the correct route for large datasets — OpenDataSoft hard-caps
+    the /records endpoint at offset=10000, but /exports/json streams
+    the full set.
+    """
+    url = f"{base_url}/api/explore/v2.1/catalog/datasets/{dataset_id}/exports/json"
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Apikey {api_key}"
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.get(url, headers=headers, params={"limit": -1})
+            if r.status_code == 403:
+                return [], "forbidden"
+            r.raise_for_status()
+            data = r.json()
+            if isinstance(data, list):
+                return data, "ok"
+            if isinstance(data, dict) and "results" in data:
+                return data["results"], "ok"
+            return [], "error"
+    except Exception as e:
+        log.warning("%s exports/json fetch failed: %s", dataset_id, e)
+        return [], "error"
+
+
 async def _ods_fetch_all_records(
     base_url: str,
     dataset_id: str,
@@ -376,14 +409,29 @@ async def _ods_fetch_all_records(
 ) -> tuple[list[dict], str]:
     """Page through an OpenDataSoft dataset until exhausted or max_rows reached.
 
+    Falls through to /exports/json when the /records endpoint hits the 10k
+    offset cap (OpenDataSoft returns 400 Bad Request past offset=10000).
+
     Returns (records, status) where status is 'ok' | 'forbidden' | 'error'.
     """
     out: list[dict] = []
     offset = 0
+    hit_cap = False
     while offset < max_rows:
         try:
             resp = await _ods_fetch_records(base_url, dataset_id, api_key, limit=page_size, offset=offset)
+        except httpx.HTTPStatusError as e:
+            # 400 at offset >= 10000 means we hit the hard cap
+            if e.response.status_code == 400 and offset >= 10000:
+                hit_cap = True
+                break
+            log.warning("%s records fetch failed: %s", dataset_id, e)
+            return out, "error"
         except Exception as e:
+            # Check if it's the 10k cap error wrapped as a generic exception
+            if offset >= 10000:
+                hit_cap = True
+                break
             log.warning("%s records fetch failed: %s", dataset_id, e)
             return out, "error"
         if resp.get("error") == "forbidden":
@@ -395,6 +443,16 @@ async def _ods_fetch_all_records(
         if len(results) < page_size:
             break
         offset += page_size
+
+    # Hit the 10k cap — retry via /exports/json for the full dataset
+    if hit_cap:
+        log.info("%s hit 10k records cap, falling through to exports/json", dataset_id)
+        full, status = await _ods_fetch_exports_json(base_url, dataset_id, api_key)
+        if status == "ok" and full:
+            return full, "ok"
+        # If exports also failed, return what we had from the paged fetch
+        return out, "ok"
+
     return out, "ok"
 
 

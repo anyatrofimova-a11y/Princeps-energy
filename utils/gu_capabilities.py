@@ -1227,24 +1227,63 @@ async def regulatory_retrieve(
 ) -> list[dict]:
     """Full-text search over regulatory chunks (tsvector ranked).
 
+    Query handling:
+      1. websearch_to_tsquery (handles quotes + natural language AND semantics)
+      2. If empty, fall back to OR-joined keyword query — important for
+         natural-language questions where no single chunk has every term.
+
     Falls back to title/type/source LIKE match against the corpus table when
     no chunks exist (i.e. metadata-only seeded state).
     """
+    # Build an OR-joined keyword query for graceful fallback
+    import re
+    stopwords = {
+        "what", "when", "where", "why", "how", "is", "are", "the", "a",
+        "an", "of", "for", "to", "in", "on", "and", "or", "do", "does",
+        "that", "this", "these", "those", "it", "its", "be", "been", "being",
+        "with", "from", "by", "at", "as", "i", "we", "you", "they",
+    }
+    tokens = [
+        t.lower().strip("?.,;:!\"'()[]") for t in re.split(r"\s+", query.strip())
+    ]
+    keywords = [t for t in tokens if t and t not in stopwords and len(t) > 1]
+    or_query = " | ".join(keywords) if keywords else query
+
     async with pool.acquire() as conn:
-        # Chunk-level full-text search
+        # Try websearch_to_tsquery (strict AND semantics, handles NL)
         chunk_rows = await conn.fetch(
             """
             SELECT c.doc_id, c.chunk_index, c.text, c.clause_ref,
                    d.source, d.doc_type, d.title, d.version, d.url,
-                   ts_rank_cd(c.tsv, plainto_tsquery('english', $1)) AS rank
+                   ts_rank_cd(c.tsv, websearch_to_tsquery('english', $1)) AS rank
             FROM gu_regulation_chunks c
             JOIN gu_regulation_corpus d ON d.doc_id = c.doc_id
-            WHERE c.tsv @@ plainto_tsquery('english', $1)
+            WHERE c.tsv @@ websearch_to_tsquery('english', $1)
             ORDER BY rank DESC
             LIMIT $2
             """,
             query, k,
         )
+        # Fallback: OR the keywords together for natural-language questions
+        if not chunk_rows and or_query:
+            try:
+                chunk_rows = await conn.fetch(
+                    """
+                    SELECT c.doc_id, c.chunk_index, c.text, c.clause_ref,
+                           d.source, d.doc_type, d.title, d.version, d.url,
+                           ts_rank_cd(c.tsv, to_tsquery('english', $1)) AS rank
+                    FROM gu_regulation_chunks c
+                    JOIN gu_regulation_corpus d ON d.doc_id = c.doc_id
+                    WHERE c.tsv @@ to_tsquery('english', $1)
+                    ORDER BY rank DESC
+                    LIMIT $2
+                    """,
+                    or_query, k,
+                )
+            except Exception as e:
+                # Invalid tsquery syntax (rare) — ignore, move on to LIKE fallback
+                log.warning("OR tsquery fallback failed: %s", e)
+                chunk_rows = []
         if chunk_rows:
             return [
                 {
@@ -1275,6 +1314,76 @@ async def regulatory_retrieve(
     return [dict(r) for r in rows]
 
 
+async def _claude_synthesise_regulatory(
+    question: str,
+    hits: list[dict],
+    context: dict | None = None,
+) -> str | None:
+    """Call Claude with the retrieved chunks as grounded context.
+
+    Returns None if the Anthropic SDK / API key isn't available — the
+    caller falls back to the extract-based synthesis.
+    """
+    import os
+    api_key = (
+        os.environ.get("ANTHROPIC_API_KEY")
+        or os.environ.get("CLAUDE_API_KEY")
+    )
+    if not api_key:
+        return None
+    try:
+        import anthropic
+    except ImportError:
+        return None
+
+    model = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
+
+    chunk_ctx_lines = []
+    for i, h in enumerate(hits[:5], 1):
+        src = f"[{i}] {h.get('title','?')} ({h.get('source','?')}, {h.get('doc_type','?')})"
+        snippet = h.get("snippet") or h.get("title") or ""
+        chunk_ctx_lines.append(f"{src}\n{snippet}\n")
+    chunks_block = "\n".join(chunk_ctx_lines) or "(no chunks)"
+
+    ctx_block = ""
+    if context:
+        ctx_block = "\n\nUser context:\n" + "\n".join(
+            f"- {k}: {v}" for k, v in context.items() if v is not None
+        )
+
+    system = (
+        "You are Princeps' UK grid regulatory copilot. You answer "
+        "connection / compliance questions strictly from the NESO / "
+        "Ofgem / ENA / DESNZ corpus passed to you. Cite sources inline "
+        "as [1], [2] etc matching the numbered sources. If the corpus "
+        "doesn't cover the question, say so — do not invent regulatory "
+        "clauses. Be concise and engineering-precise (no marketing "
+        "language, no emojis, no markdown tables)."
+    )
+    user = (
+        f"Question: {question}\n\n"
+        f"Retrieved regulatory corpus extracts:\n\n{chunks_block}"
+        f"{ctx_block}\n\n"
+        "Write a 4-8 sentence answer grounded in the extracts, with "
+        "inline citation numbers. If a claim isn't supported by the "
+        "extracts, flag that explicitly."
+    )
+
+    try:
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        resp = await client.messages.create(
+            model=model,
+            max_tokens=800,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+        parts = [b.text for b in resp.content if getattr(b, "type", None) == "text"]
+        return "".join(parts).strip() or None
+    except Exception as e:
+        log.warning("Claude synthesis failed: %s", e)
+        return None
+
+
 async def regulatory_answer(
     pool: asyncpg.Pool,
     question: str,
@@ -1282,17 +1391,13 @@ async def regulatory_answer(
 ) -> dict:
     """Return a structured answer + citations to a grid-compliance question.
 
-    Retrieval is tsvector-ranked full-text over ingested PDF chunks. When
-    the corpus has no chunks yet it auto-ingests the accessible NESO set
-    on first call, then re-runs retrieval.
+    Retrieval: tsvector-ranked full-text over ingested PDF chunks. Auto-
+    ingests the accessible NESO corpus on first call when empty.
 
-    The "answer" string synthesises a direct extract-based summary from
-    the top hits; upgrading to a Claude-backed synthesis is a later step
-    (the raw chunk text is already structured enough for the frontend to
-    render citation cards today).
+    Synthesis: Claude call grounded in the top-5 chunks (falls back to
+    extract-only when ANTHROPIC_API_KEY is unset).
     """
     hits = await regulatory_retrieve(pool, question, k=5)
-    # Auto-ingest on first query if corpus is empty
     if not hits:
         async with pool.acquire() as conn:
             (chunks,) = await conn.fetchrow("SELECT COUNT(*) FROM gu_regulation_chunks")
@@ -1302,22 +1407,34 @@ async def regulatory_answer(
             hits = await regulatory_retrieve(pool, question, k=5)
 
     if not hits:
-        answer_text = (
-            "No regulatory material matched the query. Try keywords like "
-            "'connection', 'reactive power', 'harmonics', 'voltage', 'firm access'."
-        )
-        status = "no_hits"
+        return {
+            "question": question,
+            "answer": (
+                "No regulatory material matched the query. Try keywords like "
+                "'connection', 'reactive power', 'harmonics', 'voltage', 'firm access'."
+            ),
+            "citations": [],
+            "context": context or {},
+            "methodology": "ts_rank_cd over PyMuPDF-extracted NESO / Ofgem / ENA chunks.",
+            "status": "no_hits",
+        }
+
+    # Try Claude synthesis first; extract-only is the graceful fallback
+    claude_answer = await _claude_synthesise_regulatory(question, hits, context)
+    if claude_answer:
+        answer_text = claude_answer
+        status = "ok_claude"
     else:
-        # Extract-based synthesis: top hit's leading sentence(s) + citation trail
         top = hits[0]
         snippet = top.get("snippet", "")
-        trail = ", ".join(f"{h['title']} ({h['source']})" for h in hits[:3] if h.get("title"))
+        trail = ", ".join(
+            f"{h['title']} ({h['source']})" for h in hits[:3] if h.get("title")
+        )
         answer_text = (
             f"Relevant clause from {top.get('title','corpus')}:\n\n"
-            f"{snippet}\n\n"
-            f"Sources: {trail}"
+            f"{snippet}\n\nSources: {trail}"
         )
-        status = "ok" if "chunk_index" in top else "metadata_only"
+        status = "ok_extract" if "chunk_index" in top else "metadata_only"
 
     return {
         "question": question,
@@ -1325,10 +1442,9 @@ async def regulatory_answer(
         "citations": hits,
         "context": context or {},
         "methodology": (
-            "PostgreSQL tsvector full-text search over PDF chunks (PyMuPDF extraction). "
-            "Corpus seeded from NESO / Ofgem / ENA / DESNZ public documents. "
-            "Ranking: ts_rank_cd with plainto_tsquery('english'). "
-            "Upgrade path: pgvector cosine similarity with embedded chunks + Claude synthesis."
+            "PostgreSQL tsvector full-text search over PDF chunks (PyMuPDF "
+            "extraction) → Claude synthesis grounded in top-5 chunks with "
+            "inline citation numbers. Corpus: NESO / Ofgem / ENA / DESNZ."
         ),
         "status": status,
     }
