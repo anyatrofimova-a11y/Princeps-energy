@@ -371,7 +371,7 @@ async def _ods_fetch_exports_json(
     base_url: str,
     dataset_id: str,
     api_key: str | None,
-    timeout: float = 300.0,
+    timeout: float = 600.0,
 ) -> tuple[list[dict], str]:
     """Fetch the entire dataset via /exports/json (no 10k offset cap).
 
@@ -409,7 +409,7 @@ async def _ods_fetch_exports_csv(
     base_url: str,
     dataset_id: str,
     api_key: str | None,
-    timeout: float = 300.0,
+    timeout: float = 600.0,
 ) -> tuple[list[dict], str]:
     """Fallback for huge datasets: stream /exports/csv line-by-line."""
     import csv
