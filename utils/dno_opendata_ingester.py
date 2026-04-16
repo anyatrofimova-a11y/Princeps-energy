@@ -371,13 +371,13 @@ async def _ods_fetch_exports_json(
     base_url: str,
     dataset_id: str,
     api_key: str | None,
-    timeout: float = 180.0,
+    timeout: float = 300.0,
 ) -> tuple[list[dict], str]:
     """Fetch the entire dataset via /exports/json (no 10k offset cap).
 
-    This is the correct route for large datasets — OpenDataSoft hard-caps
-    the /records endpoint at offset=10000, but /exports/json streams
-    the full set.
+    For huge datasets that break json.loads() on a single string (observed at
+    ~70MB+), falls through to /exports/csv which is streamable and decodable
+    row-by-row.
     """
     url = f"{base_url}/api/explore/v2.1/catalog/datasets/{dataset_id}/exports/json"
     headers = {}
@@ -389,7 +389,12 @@ async def _ods_fetch_exports_json(
             if r.status_code == 403:
                 return [], "forbidden"
             r.raise_for_status()
-            data = r.json()
+            try:
+                data = r.json()
+            except Exception as je:
+                # Huge payload — try CSV exports instead
+                log.warning("%s exports/json JSON parse failed (%s), trying CSV", dataset_id, je)
+                return await _ods_fetch_exports_csv(base_url, dataset_id, api_key, timeout)
             if isinstance(data, list):
                 return data, "ok"
             if isinstance(data, dict) and "results" in data:
@@ -398,6 +403,39 @@ async def _ods_fetch_exports_json(
     except Exception as e:
         log.warning("%s exports/json fetch failed: %s", dataset_id, e)
         return [], "error"
+
+
+async def _ods_fetch_exports_csv(
+    base_url: str,
+    dataset_id: str,
+    api_key: str | None,
+    timeout: float = 300.0,
+) -> tuple[list[dict], str]:
+    """Fallback for huge datasets: stream /exports/csv line-by-line."""
+    import csv
+    import io
+    url = f"{base_url}/api/explore/v2.1/catalog/datasets/{dataset_id}/exports/csv"
+    headers = {}
+    if api_key:
+        headers["Authorization"] = f"Apikey {api_key}"
+    rows: list[dict] = []
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream("GET", url, headers=headers, params={"limit": -1, "delimiter": ","}) as r:
+                if r.status_code == 403:
+                    return [], "forbidden"
+                r.raise_for_status()
+                buf = io.StringIO()
+                async for chunk in r.aiter_text():
+                    buf.write(chunk)
+                buf.seek(0)
+                reader = csv.DictReader(buf, delimiter=";")  # ODS CSV uses ;
+                for row in reader:
+                    rows.append(dict(row))
+        return rows, "ok"
+    except Exception as e:
+        log.warning("%s exports/csv fetch failed: %s", dataset_id, e)
+        return rows, "error" if not rows else "ok"
 
 
 async def _ods_fetch_all_records(
@@ -646,10 +684,54 @@ async def ingest_tabular_generic(pool: asyncpg.Pool, dno: str, dataset_key: str,
 # Dispatcher — pick the right parser for each dataset
 # ════════════════════════════════════════════════════════════════════════
 
+async def ingest_dc_demand_profiles(pool: asyncpg.Pool, dno: str, records: list[dict]) -> int:
+    """Ingest UKPN data-centre-demand-profiles (30-min half-hourly utilisation).
+
+    Schema (verified Apr 2026): cleansed_voltage_level /
+    anonymised_data_centre_name / dc_type / local_timestamp / utc_timestamp
+    / hh_utilisation_ratio.
+    """
+    rows = []
+    for r in records:
+        name = r.get("anonymised_data_centre_name") or r.get("data_centre_name")
+        ts = r.get("utc_timestamp") or r.get("local_timestamp")
+        if not name or not ts:
+            continue
+        try:
+            ts_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except Exception:
+            continue
+        rows.append((
+            dno,
+            name,
+            r.get("cleansed_voltage_level") or r.get("voltage_level"),
+            ts_dt,
+            _num(r.get("hh_utilisation_ratio")),
+            json.dumps(r),
+        ))
+    if not rows:
+        return 0
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO dno_dc_demand_profiles
+                (dno, profile_id, voltage_class, timestamp_utc, load_mw, raw)
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+            ON CONFLICT (dno, profile_id, timestamp_utc) DO UPDATE SET
+                voltage_class = EXCLUDED.voltage_class,
+                load_mw = EXCLUDED.load_mw,
+                raw = EXCLUDED.raw
+            """,
+            rows,
+        )
+    return len(rows)
+
+
 _PARSERS = {
     "grid_primary_sites":   ingest_grid_primary_sites,
     "primary_transformers": ingest_primary_transformers,
     "large_demand_list":    ingest_large_demand_list,
+    "data_centre_profiles": ingest_dc_demand_profiles,
 }
 
 
