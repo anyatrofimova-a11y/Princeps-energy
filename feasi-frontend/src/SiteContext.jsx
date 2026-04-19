@@ -368,7 +368,7 @@ export function SiteProvider({ children }) {
     gridConstraints: false,
     envConstraints: false,
     queueDepth: false,
-    landParcels: false,
+    landParcels: true,   // Default-on per 2026-04-19 UX feedback — parcels are a primary discovery surface, not a buried opt-in
     planningDensity: false,
     planningConstraints: false,
     // Pulse · NGED live-intelligence layers

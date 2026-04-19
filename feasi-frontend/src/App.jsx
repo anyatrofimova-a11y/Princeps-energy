@@ -34,9 +34,13 @@ import ActionSidebar from "./components/ActionSidebar";
 import AIOrb from "./components/AIOrb";
 import NotificationCentre from "./components/NotificationCentre";
 import StartupOverlay, { saveRecentSite } from "./components/StartupOverlay";
+import MissionControl from "./components/MissionControl";
+import ChatRail from "./components/shell/ChatRail";
+import InboxBridge from "./components/InboxBridge";
 import { useWorkspace } from "./contexts/WorkspaceContext";
 
 const DeveloperConsole = lazy(() => import("./components/DeveloperConsole"));
+const RedesignLayout = lazy(() => import("./components/shell/RedesignLayout"));
 
 // ── Lazy-loaded overlays (split into separate chunks) ──
 const DigitalTwin = lazy(() => import("./components/DigitalTwin"));
@@ -117,7 +121,7 @@ export default function App() {
     solarYield, gridContext,
   } = useSite();
 
-  const { activeWorkspace, setActiveWorkspace, navigateToIntent } = useWorkspace();
+  const { activeWorkspace, setActiveWorkspace, navigateToIntent, activeViewMode } = useWorkspace();
 
   const [mapInstance, setMapInstance] = useState(null);
   const [devConsoleOpen, setDevConsoleOpen] = useState(false);
@@ -699,6 +703,46 @@ export default function App() {
     }
   }, []);
 
+  // ── Redesign gate — `?redesign=1` swaps the main content area for the
+  // Gallatin-inspired project-first IA while keeping AppShell, all overlays,
+  // CommandPalette etc. intact. All existing launchers are exposed via the
+  // ActionsMenu inside the ProjectHeader.
+  const _redesignActive = typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("redesign") === "1";
+
+  // Nav reduction: when the user is on the redesigned Projects view (Home →
+  // Projects), suppress the legacy AIOrb + CopilotWidget so ChatRail is the
+  // only chat surface. Approved in 2026-04-19 redesign brief.
+  const _projectsViewActive = activeWorkspace === "home" && activeViewMode === "projects";
+  const _suppressLegacyChat = _redesignActive || _projectsViewActive;
+
+  const _redesignActions = {
+    gridTwin:        () => setGridTwinOpen(true),
+    dcTwin:          () => setDcTwinOpen(true),
+    bessFacility:    () => setBessFacilityOpen(true),
+    bems:            () => setBemsOpen(true),
+    digitalTwin:     () => setDigitalTwinOpen(true),
+    terrainTwin:     () => setTerrainTwinOpen(true),
+    asset3d:         () => setAsset3dOpen(true),
+    assetInspector:  () => setAssetInspectorOpen(true),
+    gridGraph:       () => setGridGraphOpen(true),
+    nomExplorer:     () => setNomMode(true),
+    scenarioCompare: () => setScenarioCompareOpen(true),
+    dcLanding:       () => setDcLandingOpen(true),
+    dcCompare:       () => setDcComparisonOpen(true),
+    intelligence:    () => setIntelligenceOpen(true),
+    siteDesigner:    () => setSiteDesignerOpen(true),
+    hwConfig:        () => setHwConfigOpen(true),
+    thermalModel:    () => setThermalModelOpen(true),
+    dashboardBuilder: () => setDashboardBuilderOpen(true),
+    assessmentWizard: () => setWizardOpen(true),
+    pipeline:        () => setActiveWorkspace("pipeline"),
+    pitch:           () => setPitchMode(true),
+    capabilities:    () => setCapabilitiesMode(true),
+    settings:        () => setSettingsMode(true),
+    commandPalette:  () => setCmdPaletteOpen(true),
+  };
+
   return (
     <AppShell
       onGridTwin={() => setGridTwinOpen(true)}
@@ -722,23 +766,25 @@ export default function App() {
       onIntelligence={() => setIntelligenceOpen(true)}
     >
       <div className="app-shell-content">
-        <WorkspaceRouter mapContent={mapContent} />
+        {_redesignActive ? (
+          <Suspense fallback={<LazyFallback />}>
+            <RedesignLayout
+              actions={_redesignActions}
+              mapSlot={mapContent}
+            />
+          </Suspense>
+        ) : (
+          <WorkspaceRouter mapContent={mapContent} />
+        )}
       </div>
 
-      <ErrorBoundary name="CopilotWidget" fallback={null}>
-        <CopilotWidget onMapLayer={handleChatMapLayer} onZoomTo={handleChatZoomTo} onAction={handleCmdAction} />
+      {/* Chat consolidation 2026-04-19: AIOrb + CopilotWidget retired in favour
+          of a single global ChatRail. The ChatRail listens for cmd-K and the
+          legacy "princeps-chat" custom event so existing AssetBrowser
+          suggestion-pills still expand the chat. */}
+      <ErrorBoundary name="ChatRail" fallback={null}>
+        <ChatRail parcelId={parcelId || null} projectId={null} />
       </ErrorBoundary>
-
-      {/* AI Orb — click to open copilot with context-aware suggestion */}
-      <AIOrb
-        onOpenChat={(suggestion) => {
-          // Dispatch event to copilot to open and optionally send a message
-          window.dispatchEvent(new CustomEvent("princeps-chat", {
-            detail: { text: suggestion || "" },
-          }));
-        }}
-        chatOpen={false}
-      />
 
       {/* Command Palette */}
       <Suspense fallback={null}>
@@ -921,8 +967,85 @@ export default function App() {
         <IntelligencePanel onClose={() => setIntelligenceOpen(false)} />
       )}
 
-      {/* Startup overlay — shown until backend health check passes */}
-      {!backendReady && <StartupOverlay onReady={handleBackendReady} onIntent={handleStartupIntent} />}
+      {/* Backend-ready signal — keep the original handler firing on first
+          render so legacy StartupOverlay logic still settles. */}
+      {!backendReady && <span style={{ display: "none" }} ref={() => handleBackendReady()} />}
+
+      {/* MISSION CONTROL TAKEOVER — when user is on Home → Dashboard view,
+          render MissionControl as a full-screen overlay that hides the
+          legacy AppShell chat-empty-state. This is the actual landing
+          experience per 2026-04-19 redesign brief. */}
+      {activeWorkspace === "home" && (activeViewMode === "dashboard" || !activeViewMode) && (
+        <div style={{
+          position: "fixed",
+          top: 0, left: "var(--sidebar-width, 240px)", right: 0, bottom: 32,
+          zIndex: 100,
+          background: "var(--bg, #F2F3F5)",
+          overflow: "auto",
+        }}>
+          <Suspense fallback={<div style={{padding:40,fontFamily:"DM Sans"}}>Loading Mission Control…</div>}>
+            <MissionControl
+              onSelectProject={(pid) => {
+                // Flip redesign on + select project + switch viewMode so this
+                // overlay unmounts and the project page renders underneath.
+                const url = new URL(window.location.href);
+                url.searchParams.set("redesign", "1");
+                if (pid) url.searchParams.set("project", pid);
+                window.history.replaceState({}, "", url);
+                setActiveViewMode("map");
+                window.dispatchEvent(new CustomEvent("princeps-redesign-select-project", { detail: { projectId: pid } }));
+              }}
+              onNewProject={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("redesign", "1");
+                window.history.replaceState({}, "", url);
+                setActiveViewMode("map");
+                window.dispatchEvent(new CustomEvent("princeps-redesign-new-project"));
+              }}
+              onPickWorkload={(workload) => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("redesign", "1");
+                window.history.replaceState({}, "", url);
+                setActiveViewMode("map");
+                window.dispatchEvent(new CustomEvent("princeps-redesign-new-project", { detail: { workload } }));
+              }}
+            />
+          </Suspense>
+        </div>
+      )}
+
+      {/* Inbox Bridge — global modal triggered by 'princeps-inbox-open'
+          event from Mission Control or cmd-K command palette. */}
+      <InboxBridgeModal />
     </AppShell>
+  );
+}
+
+function InboxBridgeModal() {
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener("princeps-inbox-open", onOpen);
+    return () => window.removeEventListener("princeps-inbox-open", onOpen);
+  }, []);
+  if (!open) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 200,
+      background: "rgba(15,19,24,0.45)",
+      display: "flex", alignItems: "flex-start", justifyContent: "center",
+      padding: "5vh 4vw", overflow: "auto",
+    }} onClick={(e) => { if (e.target === e.currentTarget) setOpen(false); }}>
+      <div style={{
+        background: "#fff", borderRadius: 12, maxWidth: 900, width: "100%",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.25)", position: "relative",
+      }}>
+        <button onClick={() => setOpen(false)} style={{
+          position: "absolute", top: 12, right: 12, background: "transparent",
+          border: "none", fontSize: 22, color: "#6B7280", cursor: "pointer", lineHeight: 1,
+        }} aria-label="Close">×</button>
+        <InboxBridge />
+      </div>
+    </div>
   );
 }

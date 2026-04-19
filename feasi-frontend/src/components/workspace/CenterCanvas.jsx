@@ -4,8 +4,9 @@ import ViewTabs from "./ViewTabs";
 import WorkspaceHome from "./WorkspaceHome";
 import DataTableView from "../views/DataTableView";
 import ChartView from "../views/ChartView";
-import ProjectsView from "../views/ProjectsView";
 import CurtailmentBrowser from "../curtailment/CurtailmentBrowser";
+const RedesignLayout = lazy(() => import("../shell/RedesignLayout"));
+const MissionControl = lazy(() => import("../MissionControl"));
 const PulseWorkspace = lazy(() => import("../pulse/PulseWorkspace"));
 const DCHyperscalerPanel = lazy(() => import("../dc/DCHyperscalerPanel"));
 const NESO098Workspace = lazy(() => import("../neso098/NESO098Workspace"));
@@ -47,8 +48,18 @@ export default function CenterCanvas({ children, dashboardView }) {
 
         {activeViewMode === "table" && <DataTableView />}
         {activeViewMode === "chart" && <ChartView />}
-        {activeViewMode === "dashboard" && (dashboardView || <WorkspaceHome />)}
-        {activeViewMode === "projects" && <ProjectsView />}
+        {activeViewMode === "dashboard" && (dashboardView || (
+          <Suspense fallback={<ViewLoading />}>
+            <MissionControl
+              onSelectProject={(pid) => window.dispatchEvent(new CustomEvent("princeps-set-view", { detail: { view: "projects", projectId: pid } }))}
+              onNewProject={() => window.dispatchEvent(new CustomEvent("princeps-set-view", { detail: { view: "projects" } }))}
+              onPickWorkload={(w) => window.dispatchEvent(new CustomEvent("princeps-set-view", { detail: { view: "projects", workload: w } }))}
+            />
+          </Suspense>
+        ))}
+        {activeViewMode === "projects" && (
+          <Suspense fallback={<ViewLoading />}><RedesignLayout mapSlot={children} /></Suspense>
+        )}
         {activeViewMode === "curtailment" && <CurtailmentBrowser />}
         {activeViewMode === "pulse" && (
           <Suspense fallback={<ViewLoading />}><PulseWorkspace /></Suspense>

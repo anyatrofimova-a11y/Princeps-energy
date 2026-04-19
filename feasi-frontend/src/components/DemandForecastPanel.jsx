@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useSite } from "../SiteContext";
 import api from "../services/api";
+import Provenance from "./Provenance";
 
 /* ── FES scenario metadata ─────────────────────────────────────────────── */
 const SCENARIOS = [
@@ -366,6 +367,11 @@ export default function DemandForecastPanel({ onClose }) {
                         P50: <b style={{ color: "#D4A018" }}>{sliderPoint.p50_mw.toFixed(0)}</b> &nbsp;
                         P90: <b>{sliderPoint.p90_mw.toFixed(0)}</b> MW
                       </span>
+                      <Provenance
+                        source="BMRS Insights API + NESO FES 2024"
+                        pathway="Leading the Way"
+                        fetchedAt={new Date().toISOString()}
+                      />
                     </div>
                   )}
                 </div>
