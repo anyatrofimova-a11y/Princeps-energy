@@ -275,6 +275,61 @@ def list_gsps() -> list[dict]:
     ]
 
 
+# ─── Async helper for IngestionAgent ────────────────────────────────────────
+
+async def refresh_recent(pool, *, lookback_days: int = 2) -> int:
+    """Fetch the last ``lookback_days`` of BMRS national demand and upsert
+    into ``demand_historical``.
+
+    Called by ``app.agents.ingestion.IngestionAgent`` with an asyncpg pool.
+    Returns the number of rows written (0 if BMRS returned nothing).
+
+    The BMRS fetch is synchronous (urllib); we run it off the event loop via
+    ``asyncio.to_thread`` so the worker doesn't block on network IO.
+    """
+    import asyncio
+    from datetime import datetime, timezone, timedelta
+
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=max(1, lookback_days))
+
+    records = await asyncio.to_thread(
+        fetch_national_demand,
+        start.strftime("%Y-%m-%d"),
+        end.strftime("%Y-%m-%d"),
+    )
+
+    # Filter out warning dicts emitted by fetch_national_demand on partial
+    # failures — only keep rows with a usable timestamp + demand value.
+    rows = [
+        (
+            r["gsp_id"],
+            r.get("gsp_name"),
+            r["timestamp_utc"],
+            float(r["demand_mw"]),
+            r.get("source", "bmrs"),
+        )
+        for r in records
+        if r.get("gsp_id") and r.get("timestamp_utc") and r.get("demand_mw") is not None
+    ]
+    if not rows:
+        return 0
+
+    async with pool.acquire() as conn:
+        await conn.executemany(
+            """
+            INSERT INTO demand_historical
+                (gsp_id, gsp_name, timestamp_utc, demand_mw, source)
+            VALUES ($1, $2, $3::timestamptz, $4, $5)
+            ON CONFLICT (gsp_id, timestamp_utc) DO UPDATE SET
+                demand_mw = EXCLUDED.demand_mw,
+                gsp_name  = COALESCE(EXCLUDED.gsp_name, demand_historical.gsp_name)
+            """,
+            rows,
+        )
+    return len(rows)
+
+
 # ─── Subprocess bridge ──────────────────────────────────────────────────────
 
 def main():

@@ -92,16 +92,29 @@ class IngestionAgent(BaseAgent):
         )
 
     async def _run_source(self, ctx: AgentContext, source: str) -> dict[str, Any]:
-        """Dispatch to the matching utils.*_ingester module. Placeholder stubs
-        — real version calls the ingester's async refresh entry point."""
-        # Per-source lazy import so the web tier doesn't need the whole graph
-        # loaded at import time.
+        """Dispatch to the matching utils.*_ingester module.
+
+        Each branch imports lazily + tolerates missing modules/functions so a
+        partially-wired source never takes down the whole agent. A missing
+        or broken ingester is logged and counted as a stub run rather than
+        raised — the agent's outer try/except will catch raised errors, but
+        an ``ImportError`` here means the file shipped without the expected
+        async entry point, which is a deploy-time bug we want visible in
+        ``ingestion_log`` rather than the failures table.
+        """
         if source == "bmrs":
-            from utils.demand_data_ingester import refresh_recent  # type: ignore
+            try:
+                from utils.demand_data_ingester import refresh_recent  # type: ignore
+            except ImportError as e:
+                await self._log_ingestion(
+                    ctx, source, 0, 0, f"no refresh_recent in demand_data_ingester: {e}"
+                )
+                return {"rows_ingested": 0, "note": "refresh_recent missing"}
             rows = await refresh_recent(ctx.db)
             await self._log_ingestion(ctx, source, rows, 0)
             return {"rows_ingested": rows}
-        # Fallback: minimal stub
+        # Other sources are not yet wired — emit a stub log row so we can
+        # see cadence in ingestion_log without blowing up the run.
         await self._log_ingestion(ctx, source, 0, 0, "stub — no runner wired")
         return {"rows_ingested": 0, "note": "stub"}
 
