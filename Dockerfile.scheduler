@@ -1,0 +1,27 @@
+# APScheduler service for Princeps.
+# Same base as Dockerfile.worker but runs the scheduler loop instead of an
+# ARQ worker. Enqueues jobs to per-agent queues based on cron triggers.
+#
+# Build: docker build -f Dockerfile.scheduler -t princeps-scheduler .
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+      libpq-dev \
+      && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ app/
+COPY utils/ utils/
+COPY sql/ sql/
+
+ENV PYTHONUNBUFFERED=1 \
+    LOG_FORMAT=json
+
+# Scheduler entry point — APScheduler loop that enqueues ARQ jobs on cron.
+CMD ["python", "-m", "app.agents.scheduler"]

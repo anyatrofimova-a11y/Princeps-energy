@@ -1,0 +1,44 @@
+# Multi-purpose ARQ worker image for Princeps agent bots.
+# Railway deploys this image once per agent service; AGENT_NAME env var
+# selects which agent the worker runs.
+#
+# Build: docker build -f Dockerfile.worker -t princeps-worker .
+# Run:   docker run -e AGENT_NAME=prospector -e DATABASE_URL=... -e REDIS_URL=... ...
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System deps for asyncpg/rasterio/matplotlib (keep minimal — heavy ML libs
+# live in separate subprocess venvs on the web tier, not here).
+# git + gh are required by the `builder` agent for clone/push/PR flows;
+# they are cheap and harmless for the other agent images.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      build-essential \
+      libpq-dev \
+      git \
+      curl \
+      ca-certificates \
+      && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+         | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \
+      && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \
+      && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+         > /etc/apt/sources.list.d/github-cli.list \
+      && apt-get update && apt-get install -y --no-install-recommends gh \
+      && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app/ app/
+COPY utils/ utils/
+COPY sql/ sql/
+
+ENV PYTHONUNBUFFERED=1 \
+    LOG_FORMAT=json \
+    AGENT_NAME=prospector \
+    WORKER_CONCURRENCY=4
+
+# ARQ worker entry point. AGENT_NAME env var decides which agent this
+# process runs (resolved inside app.agents.worker.startup).
+CMD ["arq", "app.agents.worker.WorkerSettings"]
