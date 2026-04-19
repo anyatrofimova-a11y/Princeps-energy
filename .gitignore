@@ -55,7 +55,7 @@ audit_logs/
 test-results/
 
 # Data
-data/
+/data/
 *.tif
 *.tiff
 *.csv

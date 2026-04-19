@@ -1,15 +1,20 @@
 #!/bin/sh
-# Substitute BACKEND_HOST placeholder in nginx config
+# Substitute BACKEND_URL placeholder in nginx config at container startup.
+# BACKEND_URL should be a full URL like https://princeps-web-production.up.railway.app
 set -e
 
-BACKEND_HOST="${BACKEND_HOST:-princeps-api.internal}"
+BACKEND_URL="${BACKEND_URL:-https://princeps-web-production.up.railway.app}"
+# Strip trailing slash if present
+BACKEND_URL="${BACKEND_URL%/}"
 
-# Replace placeholder with actual backend host
-sed -i "s/BACKEND_PLACEHOLDER/${BACKEND_HOST}/g" /etc/nginx/conf.d/default.conf 2>/dev/null || true
+TEMPLATE=/etc/nginx/templates/default.conf.template
+TARGET=/etc/nginx/conf.d/default.conf
 
-# If the template hasn't been processed yet, do it now
-if [ -f /etc/nginx/templates/default.conf.template ]; then
-    sed "s/BACKEND_PLACEHOLDER/${BACKEND_HOST}/g" \
-        /etc/nginx/templates/default.conf.template \
-        > /etc/nginx/conf.d/default.conf
+# Escape forward slashes for sed
+ESCAPED=$(echo "$BACKEND_URL" | sed 's/\//\\\//g')
+
+if [ -f "$TEMPLATE" ]; then
+    sed "s/BACKEND_URL_PLACEHOLDER/${ESCAPED}/g" "$TEMPLATE" > "$TARGET"
+elif [ -f "$TARGET" ]; then
+    sed -i "s/BACKEND_URL_PLACEHOLDER/${ESCAPED}/g" "$TARGET" 2>/dev/null || true
 fi

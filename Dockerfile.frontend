@@ -6,7 +6,7 @@ FROM node:20-slim AS builder
 WORKDIR /app
 
 COPY feasi-frontend/package.json feasi-frontend/package-lock.json* ./
-RUN npm ci --ignore-scripts 2>/dev/null || npm install
+RUN npm ci --ignore-scripts --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
 
 COPY feasi-frontend/ .
 

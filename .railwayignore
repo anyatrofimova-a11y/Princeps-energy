@@ -1,0 +1,84 @@
+# Railway deploy ignore — keeps the build context small.
+# The Dockerfile only COPYs app/, utils/, requirements.txt, sql/ — everything
+# else is irrelevant to the production image and bloats the upload.
+
+# ── Heavy vendored repos / submodules ────────────────────────────────────────
+SAM/
+vendor/
+pypsa-eur/
+pbcc-site/
+nebula.gl/
+pdal/
+
+# Research repos that got cloned into the working tree
+AI-for-energy-sector/
+EPC/
+Energy-UK/
+GBDEM/
+HA-NationalGrid/
+Machine-Learning-for-Solar-Energy-Prediction/
+PlaceBasedCarbonCalculator/
+PlaceBasedCarbonCalculator-inputdata/
+Predicting-UK-Energy-Demand/
+Solar-System-Repositories-management/
+SolarBIPV/
+Theridian/
+UK-Energy-Modelling/
+energy-price-forecast/
+gb-dispatch-model/
+octopus-agile-pi-prices/
+octopus-energy-rates-card/
+planning-applications/
+uk-electricity-demand-risk/
+Princeps_Market_Research/
+
+# ── Local data / artifacts ───────────────────────────────────────────────────
+/cutouts/
+/audit_logs/
+/test-results/
+/design-mockups/
+# models/ removed — contains Python source (models.cim.*), not just artifacts
+
+# ── Python caches and venvs ──────────────────────────────────────────────────
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Node / frontend artifacts (frontend has its own Dockerfile) ──────────────
+feasi-frontend/node_modules/
+feasi-frontend/dist/
+feasi-frontend/.vite/
+frontend/
+
+# ── VCS / editor / OS ────────────────────────────────────────────────────────
+.git/
+.github/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Alternate Dockerfiles kept in context — Railway picks one via
+#    RAILWAY_DOCKERFILE_PATH per service. Don't exclude.
+
+# ── Miscellaneous local ──────────────────────────────────────────────────────
+*.log
+.env
+.env.local
+.env.*.local
+session-export.md
+FIGMA_DESIGN_BRIEF.md
+
+# ── Legacy deploy configs (Railway doesn't need Fly) ─────────────────────────
+fly.toml
+fly.frontend.toml
+deploy.sh
+
+# ── Tests (keep in image if you want to run them post-deploy; exclude for speed) ──
+tests/
