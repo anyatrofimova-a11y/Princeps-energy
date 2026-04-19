@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useWorkspace, WORKSPACES } from "../../contexts/WorkspaceContext";
+import SettingsPanel from "./SettingsPanel";
 
 const C = {
   gold: "#F5B731", goldDark: "#E8A012", goldSurface: "rgba(245,183,49,0.06)",
@@ -145,6 +146,8 @@ export default function Sidebar({ onGridTwin, onPipeline, onSiteDesigner, onDcTw
   const { activeWorkspace, setActiveWorkspace, navigateToIntent, setActiveViewMode } = useWorkspace();
   const [collapsed, setCollapsed] = useState({});
   const [activeItem, setActiveItem] = useState("home");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState("team");
 
   const handleNav = (item) => {
     setActiveItem(item.id);
@@ -262,7 +265,11 @@ export default function Sidebar({ onGridTwin, onPipeline, onSiteDesigner, onDcTw
               key={item.id}
               item={item}
               active={activeItem === item.id}
-              onClick={() => setActiveItem(item.id)}
+              onClick={() => {
+                setActiveItem(item.id);
+                setSettingsTab(item.id === "apikeys" ? "apikeys" : item.id);
+                setSettingsOpen(true);
+              }}
             />
           ))}
         </div>
@@ -297,6 +304,12 @@ export default function Sidebar({ onGridTwin, onPipeline, onSiteDesigner, onDcTw
           <div style={{ fontSize: 10, color: C.tertiary }}>Admin</div>
         </div>
       </div>
+      <SettingsPanel
+        open={settingsOpen}
+        activeTab={settingsTab}
+        onTabChange={setSettingsTab}
+        onClose={() => setSettingsOpen(false)}
+      />
     </nav>
   );
 }
