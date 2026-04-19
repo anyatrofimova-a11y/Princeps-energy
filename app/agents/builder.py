@@ -310,11 +310,15 @@ class BuilderAgent(BaseAgent):
     ) -> None:
         remote = f"https://x-access-token:{token}@github.com/{repo}.git"
         await _run(["git", "clone", "--depth", "1", remote, str(workspace)])
+        # Commits authored as the Princeps7 bot account so PRs are
+        # correctly attributed in GitHub (verified noreply email).
         await _run(
-            ["git", "config", "user.email", "builder-bot@princeps.energy"], cwd=workspace,
+            ["git", "config", "user.email",
+             "276416581+Princeps7@users.noreply.github.com"],
+            cwd=workspace,
         )
         await _run(
-            ["git", "config", "user.name",  "princeps-builder-bot"], cwd=workspace,
+            ["git", "config", "user.name", "Princeps7"], cwd=workspace,
         )
         await _run(["git", "checkout", "-b", branch], cwd=workspace)
 
