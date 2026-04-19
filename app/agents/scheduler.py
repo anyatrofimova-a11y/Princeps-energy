@@ -62,6 +62,13 @@ _SCHEDULES = [
         "cron": CronTrigger(minute=5),
         "payload": {"_agent": "ingestion", "source": "bmrs"},
     },
+    # Ingestion: canonical grid tables (substations / ECR / snapshots)
+    # every 6 hours — feeds GridMonitorAgent's change detection.
+    {
+        "name": "ingestion.grid_6h",
+        "cron": CronTrigger(minute=15, hour="*/6"),
+        "payload": {"_agent": "ingestion", "source": "grid"},
+    },
     # Ingestion: heavy sources (NESO/DNO/OSM/GeeFlow) weekly Sunday 02:00 UTC
     {
         "name": "ingestion.weekly",

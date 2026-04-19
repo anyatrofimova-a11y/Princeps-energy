@@ -33,6 +33,7 @@ _SOURCES = {
     "dno":     "utils.dno_opendata_ingester",
     "osm":     "utils.grid_data_ingester",
     "geeflow": "utils.geeflow_runner",
+    "grid":    "utils.grid_substations_refresh",   # canonical grid_substations / grid_ecr / grid_snapshots
 }
 
 
@@ -113,6 +114,25 @@ class IngestionAgent(BaseAgent):
             rows = await refresh_recent(ctx.db)
             await self._log_ingestion(ctx, source, rows, 0)
             return {"rows_ingested": rows}
+
+        if source == "grid":
+            # Refreshes the canonical grid_substations / grid_ecr /
+            # grid_snapshots tables from NGED / OSM / DNO-primary feeds.
+            try:
+                from utils.grid_substations_refresh import refresh_all  # type: ignore
+            except ImportError as e:
+                await self._log_ingestion(
+                    ctx, source, 0, 0, f"grid_substations_refresh import failed: {e}"
+                )
+                return {"rows_ingested": 0, "note": "refresher missing"}
+            counts = await refresh_all(ctx.db)
+            total = sum(counts.values())
+            await self._log_ingestion(
+                ctx, source, total, 0,
+                f"substations={counts['substations']} ecr={counts['ecr']} snapshot={counts['snapshot']}",
+            )
+            return {"rows_ingested": total, **counts}
+
         # Other sources are not yet wired — emit a stub log row so we can
         # see cadence in ingestion_log without blowing up the run.
         await self._log_ingestion(ctx, source, 0, 0, "stub — no runner wired")
