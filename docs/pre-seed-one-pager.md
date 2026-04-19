@@ -1,20 +1,31 @@
 # PRINCEPS — Pre-Seed Investment One-Pager
 
+**The AI Co-Pilot for Energy and Industrial Development**
+
 ## The Problem
 
-700GW of renewable and storage applications are stuck in a 10+ year UK grid connection queue. Developers spend 3–6 months and £150k+ per site on manual feasibility work across disconnected consultants — grid, environmental, financial, planning — only to discover fatal flaws late in the process. 40–50% of applications are ultimately withdrawn. The same bottleneck is throttling deployment across Europe.
+Globally, over 3TW of renewable, storage, and data centre projects are stuck in grid connection queues — 10+ years in the UK, 5+ years across Europe and the US. Before a single planning application is filed, developers spend 3–6 months and £150k+ per site on manual feasibility — hiring separate consultants for grid, environmental, planning, and financial analysis. The work is slow, fragmented, and expensive. 40–50% of applications are ultimately withdrawn because fatal flaws are discovered too late. This is a universal problem wherever grid infrastructure meets new development.
 
 ## The Solution
 
-Princeps is an AI-native geospatial intelligence platform that replaces months of manual feasibility work with minutes of automated, integrated analysis. One platform covers grid connection assessment, solar resource modelling, power flow simulation, demand forecasting, BESS optimisation, environmental screening, and financial modelling — delivering an instant GO / CAUTION / NO-GO verdict for any site.
+Princeps automates the entire pre-development workflow into a single platform. Upload a site boundary, get a bankable feasibility report in minutes — not months.
+
+- **Grid connection assessment** — power flow simulation, substation capacity mapping, and connection cost estimates (P10/P50/P90). Launching with all 6 UK DNOs, architected for any deregulated grid market
+- **Automated planning prediction** — ML trained on 13,995+ real planning decisions predicts probability of approval before you spend on consultants. Model framework is jurisdiction-agnostic
+- **Satellite environmental screening** — land use, flood risk, habitat, and designation checks from a single click, using global satellite coverage
+- **25-year financial modelling** — project finance, debt sizing, PPA structuring, and curtailment analysis with bankable PDF output
+
+The platform constructs a digital twin of any candidate site in 60 seconds, integrating all of these analyses into a single GO / CAUTION / NO-GO verdict. For data centres: 3D facility twins with 24/7 carbon-free energy matching, cooling efficiency modelling, and water stress assessment.
+
+One platform replaces four consultancies.
 
 ## Traction
 
-- Live platform with real grid data integration across all 6 UK DNOs
-- 100+ customer discovery interviews with developers, field engineers, and National Grid operators
+- Live platform with real grid data integration across all 6 UK DNOs — first market, European expansion underway
+- 100+ customer discovery interviews with developers, field engineers, and grid operators across UK and Europe
 - Pilot discussions with a major UK data centre company and several renewable energy developers
 - Part of Climate Founders and Oxford Incubator
-- Invited to BRYCK Energy Accelerator (Essen)
+- Invited to BRYCK Energy Accelerator (Essen) — gateway to German and European markets
 
 ## Business Model
 
@@ -25,7 +36,7 @@ Enterprise SaaS subscription. £50k–£60k ACV. 85%+ gross margin. Entry via pi
 | | Value |
 |---|---|
 | TAM | £8B+ (global energy pre-development services) |
-| SAM | £1.2B (UK + Western Europe feasibility & grid connection) |
+| SAM | £1.2B (UK + Western Europe + US feasibility & grid connection) |
 | SOM (3yr) | £15M |
 
 ## The Round
@@ -64,7 +75,7 @@ Enterprise SaaS subscription. £50k–£60k ACV. 85%+ gross margin. Entry via pi
 
 ## Why Now
 
-The UK government has committed to clean power by 2030. Grid Reform is live — Ofgem is restructuring the connections process. Developers urgently need tools to navigate the new landscape. First-mover advantage in building the intelligence layer between developers and the grid.
+Governments globally are mandating clean power transitions — UK by 2030, EU by 2035, US IRA driving record deployment. Grid queues are the binding constraint everywhere. Data centre demand is surging — hyperscalers need sites fast but face the same grid and planning bottlenecks in every market. Regulators are restructuring connection processes (UK Grid Reform, EU grid code revisions), creating a window for software to become the intelligence layer between developers and the grid.
 
 ## Contact
 
