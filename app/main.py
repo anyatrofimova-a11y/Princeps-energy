@@ -76,7 +76,10 @@ async def lifespan(_app: FastAPI):
     import chat as chat_module
     chat_module.init_pool(pool)
 
-    await setup_database(pool)
+    try:
+        await setup_database(pool)
+    except Exception as _db_exc:
+        log.exception("setup_database failed — app will continue with partial schema: %s", _db_exc)
 
     # Pulse suite — ensure new schemas exist (idempotent, fast)
     try:
@@ -218,121 +221,48 @@ async def readiness_endpoint():
 # ---------------------------------------------------------------------------
 from app.graph import router as graph_router  # noqa: E402
 
-from app.routers import (  # noqa: E402
-    site, geeflow, grid, demand, strategy, market,
-    legacy, procurement, grid_efficiency, prospector, scoring,
-    sustainability, vision, analytics, retrofit,
-    regulatory, nom, notifications, investment, home_retrofit,
-    chat, jobs as jobs_router,
-    assessments, workflows as workflows_v1, auth,
-    cim as cim_router,
-    datacentre, reports,
-    hardware,
-    teaser as teaser_router,
-    dc_planner as dc_planner_router,
-    eurosat as eurosat_router,
-    land as land_router,
-    projects as projects_router,
-    finance as finance_router,
-    site_design as site_design_router,
-    environment as environment_router,
-    land_management as land_mgmt_router,
-    terrain as terrain_router,
-    planning_ml as planning_ml_router,
-    live_grid as live_grid_router,
-    construction as construction_router,
-    prospector_v2 as prospector_v2_router,
-    ppa_origination as ppa_origination_router,
-    dispatch_model as dispatch_model_router,
-    bess_revenue as bess_revenue_router,
-    cable_routing as cable_routing_router,
-    yield_assessment as yield_assessment_router,
-    portfolio as portfolio_router,
-    grid_queue as grid_queue_router,
-    documents as documents_router,
-    dc_layout as dc_layout_router,
-    electrical as electrical_router,
-    yield_intel as yield_intel_router,
-    solar_layout as solar_layout_router,
-    export_usd as export_usd_router,
-    design as design_router,
-    analysis as analysis_router,
-    neso as neso_router,
-    dno as dno_router,
-    market_data as market_data_router,
-    # Pulse suite (April 2026)
-    cluster as cluster_router,
-    events as events_router,
-    portfolio_delta as portfolio_delta_router,
-    nged as nged_router,
-    curtailment as curtailment_router,
-    dc_hyperscaler as dc_hyperscaler_router,
-    ltds_cim as ltds_cim_router,
-    gu as gu_router,
-    neso098 as neso098_router,
-)
-
-_routers = [
-    site.router, geeflow.router, grid.router, demand.router,
-    strategy.router, market.router, legacy.router, procurement.router,
-    grid_efficiency.router, prospector.router, scoring.router,
-    sustainability.router, vision.router, analytics.router,
-    retrofit.router, regulatory.router, nom.router,
-    notifications.router, investment.router, home_retrofit.router,
-    chat.router, jobs_router.router,
-    assessments.router, workflows_v1.router, auth.router,
-    cim_router.router,
-    datacentre.router,
-    reports.router,
-    hardware.router,
-    teaser_router.router,
-    dc_planner_router.router,
-    eurosat_router.router,
-    land_router.router,
-    projects_router.router,
-    finance_router.router,
-    site_design_router.router,
-    environment_router.router,
-    land_mgmt_router.router,
-    terrain_router.router,
-    planning_ml_router.router,
-    live_grid_router.router,
-    construction_router.router,
-    prospector_v2_router.router,
-    ppa_origination_router.router,
-    dispatch_model_router.router,
-    bess_revenue_router.router,
-    cable_routing_router.router,
-    yield_assessment_router.router,
-    portfolio_router.router,
-    grid_queue_router.router,
-    documents_router.router,
-    dc_layout_router.router,
-    electrical_router.router,
-    yield_intel_router.router,
-    solar_layout_router.router,
-    export_usd_router.router,
-    design_router.router,
-    analysis_router.router,
-    neso_router.router,
-    dno_router.router,
-    market_data_router.router,
-    # Pulse suite
-    cluster_router.router,
-    events_router.router,
-    portfolio_delta_router.router,
-    nged_router.router,
-    curtailment_router.router,
-    dc_hyperscaler_router.router,
-    ltds_cim_router.router,
-    gu_router.router,
-    neso098_router.router,
+_ROUTER_MODULES = [
+    "site", "geeflow", "grid", "demand", "strategy", "market",
+    "legacy", "procurement", "grid_efficiency", "prospector", "scoring",
+    "sustainability", "vision", "analytics", "retrofit",
+    "regulatory", "nom", "notifications", "investment", "home_retrofit",
+    "chat", "jobs",
+    "assessments", "workflows", "auth",
+    "cim",
+    "datacentre", "reports",
+    "hardware",
+    "teaser",
+    "dc_planner", "eurosat", "land", "projects", "finance",
+    "site_design", "environment", "land_management",
+    "terrain", "planning_ml", "live_grid", "construction",
+    "prospector_v2", "ppa_origination", "dispatch_model", "bess_revenue",
+    "cable_routing", "yield_assessment", "portfolio", "grid_queue",
+    "documents", "dc_layout", "electrical", "yield_intel",
+    "solar_layout", "export_usd", "design", "analysis",
+    "neso", "dno", "market_data",
+    "cluster", "events", "portfolio_delta", "nged", "curtailment",
+    "dc_hyperscaler", "ltds_cim", "gu", "neso098",
+    "portfolios_crud",
+    "project_actions",
 ]
 
 app.include_router(graph_router)
 
-for r in _routers:
-    app.include_router(r)
+import importlib  # noqa: E402
+
+_skipped: list[tuple[str, str]] = []
+for _mod_name in _ROUTER_MODULES:
+    try:
+        _mod = importlib.import_module(f"app.routers.{_mod_name}")
+        app.include_router(_mod.router)
+    except Exception as _exc:
+        _skipped.append((_mod_name, f"{type(_exc).__name__}: {_exc}"))
+        log.warning("router %s skipped: %s", _mod_name, _exc)
+
+if _skipped:
+    log.warning("Router load: %d of %d skipped — %s",
+                len(_skipped), len(_ROUTER_MODULES),
+                ", ".join(n for n, _ in _skipped))
 
 
 # ---------------------------------------------------------------------------

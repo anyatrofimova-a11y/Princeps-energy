@@ -47,6 +47,20 @@ async def setup_database(pool: asyncpg.Pool) -> None:
     """Run all CREATE TABLE / index DDL and seed fixed reference data."""
 
     async with pool.acquire() as conn:
+        # ── Required extensions (Railway Postgres ships without these) ────
+        await conn.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+        await conn.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+
+        # ── Agent tables (runtime bot infrastructure) ─────────────────────
+        import pathlib
+        _agent_migration = pathlib.Path(__file__).parent.parent / "sql" / "migrate_agent_tables.sql"
+        if _agent_migration.exists():
+            try:
+                await conn.execute(_agent_migration.read_text())
+                log.info("Applied migrate_agent_tables.sql")
+            except Exception:
+                log.exception("migrate_agent_tables.sql failed — agents may be degraded")
+
         # ── Planning applications + sample energy data ────────────────────
         await planning_setup(conn)
         await planning_seed(conn)
@@ -82,7 +96,7 @@ async def setup_database(pool: asyncpg.Pool) -> None:
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS geeflow_extractions (
                 extraction_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                parcel_id     UUID REFERENCES parcels(parcel_id) ON DELETE SET NULL,
+                parcel_id     UUID,
                 lat           DOUBLE PRECISION NOT NULL,
                 lon           DOUBLE PRECISION NOT NULL,
                 radius_km     DOUBLE PRECISION DEFAULT 5.0,
@@ -256,7 +270,7 @@ async def setup_database(pool: asyncpg.Pool) -> None:
             CREATE TABLE IF NOT EXISTS site_boundaries (
                 boundary_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 project_id    UUID REFERENCES projects(project_id) ON DELETE CASCADE,
-                parcel_id     UUID REFERENCES parcels(parcel_id) ON DELETE SET NULL,
+                parcel_id     UUID,
                 name          TEXT,
                 boundary_type TEXT DEFAULT 'site',
                 geojson       JSONB NOT NULL,
@@ -306,7 +320,7 @@ async def setup_database(pool: asyncpg.Pool) -> None:
             CREATE TABLE IF NOT EXISTS placed_assets (
                 asset_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 project_id    UUID REFERENCES projects(project_id) ON DELETE CASCADE,
-                parcel_id     UUID REFERENCES parcels(parcel_id) ON DELETE SET NULL,
+                parcel_id     UUID,
                 asset_type    TEXT NOT NULL,
                 label         TEXT,
                 capacity_mw   DOUBLE PRECISION DEFAULT 0,
@@ -330,6 +344,101 @@ async def setup_database(pool: asyncpg.Pool) -> None:
 
         # ── Notifications / alerts ────────────────────────────────────────
         await setup_notifications_table(conn)
+
+        # ── Portfolios (container for projects) ───────────────────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS portfolios (
+                portfolio_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                user_id      UUID,
+                name         TEXT NOT NULL,
+                description  TEXT,
+                created_at   TIMESTAMPTZ DEFAULT NOW(),
+                updated_at   TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        await conn.execute("""
+            ALTER TABLE projects
+            ADD COLUMN IF NOT EXISTS portfolio_id UUID
+            REFERENCES portfolios(portfolio_id) ON DELETE SET NULL
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_portfolio ON projects(portfolio_id)")
+
+        # ── Candidate sites for a project (distinct from junction project_sites) ─
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_candidate_sites (
+                candidate_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                project_id   UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+                name         TEXT,
+                lat          DOUBLE PRECISION,
+                lon          DOUBLE PRECISION,
+                capacity_mw  DOUBLE PRECISION,
+                scores       JSONB DEFAULT '{}'::jsonb,
+                lcoe         DOUBLE PRECISION,
+                verdict      TEXT,
+                is_preferred BOOLEAN DEFAULT false,
+                created_at   TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_candidate_sites_project ON project_candidate_sites(project_id)")
+
+        # ── Seed default portfolio + demo BESS + DC projects ──────────────
+        _portfolio_count = await conn.fetchval("SELECT count(*) FROM portfolios")
+        if _portfolio_count == 0:
+            log.info("Seeding default portfolio with BESS + DC demo projects")
+            _pf_id = await conn.fetchval("""
+                INSERT INTO portfolios (name, description)
+                VALUES ('Default Portfolio', 'Demo portfolio with BESS and DC projects')
+                RETURNING portfolio_id
+            """)
+            # BESS project — Thames BESS Phase 1, 50MW/100MWh, London
+            _bess_id = await conn.fetchval("""
+                INSERT INTO projects (portfolio_id, name, description, technology, capacity_mw,
+                                      stage, verdict, lat, lon, metadata)
+                VALUES ($1, 'Thames BESS Phase 1',
+                        '50 MW / 100 MWh grid-scale battery in Greater London.',
+                        'bess', 50.0, 'prospect', 'GO', 51.5074, -0.1278,
+                        '{"energy_mwh": 100, "duration_h": 2, "chemistry": "LFP"}'::jsonb)
+                RETURNING project_id
+            """, _pf_id)
+            _bess_sites = [
+                ('Rainham substation adjacent', 51.5180, 0.1900, 50.0, 82, 88, 71, 78, 65, 42.5, 'GO', True),
+                ('Dagenham industrial estate', 51.5400, 0.1500, 50.0, 78, 74, 68, 62, 72, 45.1, 'GO', False),
+                ('Tilbury port brownfield',   51.4650, 0.3600, 50.0, 74, 82, 45, 58, 80, 48.3, 'CAUTION', False),
+            ]
+            for nm, lat, lon, cap, rs, gs, ps, ls, ts, lc, vd, pref in _bess_sites:
+                await conn.execute("""
+                    INSERT INTO project_candidate_sites (project_id, name, lat, lon, capacity_mw,
+                                                          scores, lcoe, verdict, is_preferred)
+                    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
+                """, _bess_id, nm, lat, lon, cap,
+                     f'{{"resource":{rs},"grid":{gs},"planning":{ps},"land_use":{ls},"terrain":{ts}}}',
+                     lc, vd, pref)
+            # DC project — Slough Hyperscale DC, 40MW IT load
+            _dc_id = await conn.fetchval("""
+                INSERT INTO projects (portfolio_id, name, description, technology, capacity_mw,
+                                      stage, verdict, lat, lon, blocker, metadata)
+                VALUES ($1, 'Slough Hyperscale DC',
+                        '40 MW IT-load data centre with behind-the-meter generation.',
+                        'dc', 40.0, 'screened', 'CAUTION', 51.5105, -0.5950,
+                        'Grid headroom marginal at summer peak — requires reinforcement',
+                        '{"it_load_mw": 40, "pue_target": 1.2, "grid_headroom_mw": 15, "tier": "III"}'::jsonb)
+                RETURNING project_id
+            """, _pf_id)
+            _dc_sites = [
+                ('Slough West industrial', 51.5205, -0.6100, 40.0, 55, 42, 78, 82, 70, 68.2, 'CAUTION', True),
+                ('Reading east logistics', 51.4540, -0.9700, 40.0, 58, 68, 72, 75, 68, 62.5, 'GO', False),
+                ('Heathrow fringe plot',   51.4700, -0.4500, 40.0, 52, 38, 48, 55, 74, 75.1, 'NO-GO', False),
+            ]
+            for nm, lat, lon, cap, rs, gs, ps, ls, ts, lc, vd, pref in _dc_sites:
+                await conn.execute("""
+                    INSERT INTO project_candidate_sites (project_id, name, lat, lon, capacity_mw,
+                                                          scores, lcoe, verdict, is_preferred)
+                    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
+                """, _dc_id, nm, lat, lon, cap,
+                     f'{{"resource":{rs},"grid":{gs},"planning":{ps},"land_use":{ls},"terrain":{ts}}}',
+                     lc, vd, pref)
+            log.info("Seed complete: 1 portfolio, 2 projects (BESS + DC), 6 candidate sites")
+
 
         # ── Seed dno_substations from UK_SUBSTATIONS if empty ─────────────
         sub_count = await conn.fetchval("SELECT count(*) FROM dno_substations")

@@ -43,6 +43,7 @@ class ProjectCreateRequest(BaseModel):
     repd_id: str | None = None
     tec_id: str | None = None
     metadata: dict | None = None
+    portfolio_id: str | None = None
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -56,12 +57,36 @@ class ProjectUpdateRequest(BaseModel):
     blocker: str | None = None
     description: str | None = None
     metadata: dict | None = None
+    portfolio_id: str | None = None
+
+
+class CandidateSiteRequest(BaseModel):
+    name: str | None = None
+    lat: float
+    lon: float
+    capacity_mw: float | None = None
+    scores: dict | None = None
+    lcoe: float | None = None
+    verdict: str | None = None
+    is_preferred: bool = False
+
+
+class CandidateSiteUpdate(BaseModel):
+    name: str | None = None
+    lat: float | None = None
+    lon: float | None = None
+    capacity_mw: float | None = None
+    scores: dict | None = None
+    lcoe: float | None = None
+    verdict: str | None = None
+    is_preferred: bool | None = None
 
 
 def _row_to_dict(row) -> dict:
     return {
         "project_id": str(row["project_id"]),
         "user_id": str(row["user_id"]) if row["user_id"] else None,
+        "portfolio_id": str(row["portfolio_id"]) if "portfolio_id" in row and row["portfolio_id"] else None,
         "name": row["name"],
         "description": row["description"],
         "technology": row["technology"],
@@ -77,6 +102,22 @@ def _row_to_dict(row) -> dict:
         "metadata": json.loads(row["metadata"]) if row["metadata"] else {},
         "created_at": row["created_at"].isoformat(),
         "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+    }
+
+
+def _candidate_row(row) -> dict:
+    return {
+        "candidate_id": str(row["candidate_id"]),
+        "project_id": str(row["project_id"]),
+        "name": row["name"],
+        "lat": float(row["lat"]) if row["lat"] else None,
+        "lon": float(row["lon"]) if row["lon"] else None,
+        "capacity_mw": float(row["capacity_mw"]) if row["capacity_mw"] else None,
+        "scores": json.loads(row["scores"]) if isinstance(row["scores"], str) else (row["scores"] or {}),
+        "lcoe": float(row["lcoe"]) if row["lcoe"] else None,
+        "verdict": row["verdict"],
+        "is_preferred": row["is_preferred"],
+        "created_at": row["created_at"].isoformat() if row["created_at"] else None,
     }
 
 
@@ -101,14 +142,15 @@ async def create_project(
             """INSERT INTO projects
                    (user_id, name, description, technology, capacity_mw,
                     stage, verdict, lat, lon, blocker, stage_entered_at,
-                    repd_id, tec_id, metadata)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), $11, $12, $13)
+                    repd_id, tec_id, metadata, portfolio_id)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), $11, $12, $13, $14)
                RETURNING *""",
             user_id, body.name, body.description, body.technology,
             body.capacity_mw, body.stage or "prospect", body.verdict,
             body.lat, body.lon, body.blocker,
             body.repd_id, body.tec_id,
             json.dumps(body.metadata) if body.metadata else "{}",
+            UUID(body.portfolio_id) if body.portfolio_id else None,
         )
 
         # Record initial stage
@@ -785,3 +827,93 @@ async def delete_document(
         file_path.unlink()
 
     return {"deleted": True, "doc_id": doc_id}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Candidate sites — distinct from project_sites junction. These are multi-criteria
+# scored candidates used by the Sites tab (COA comparison) in the redesigned UI.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/{project_id}/candidate-sites")
+async def list_candidate_sites(project_id: str, pool: asyncpg.Pool = Depends(get_pool)):
+    pid = UUID(project_id)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT * FROM project_candidate_sites
+               WHERE project_id = $1
+               ORDER BY is_preferred DESC, created_at ASC""",
+            pid,
+        )
+    return {"project_id": project_id, "candidates": [_candidate_row(r) for r in rows]}
+
+
+@router.post("/{project_id}/candidate-sites")
+async def create_candidate_site(
+    project_id: str,
+    body: CandidateSiteRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    pid = UUID(project_id)
+    async with pool.acquire() as conn:
+        exists = await conn.fetchval("SELECT 1 FROM projects WHERE project_id = $1", pid)
+        if not exists:
+            raise HTTPException(404, "Project not found")
+        row = await conn.fetchrow(
+            """INSERT INTO project_candidate_sites
+                   (project_id, name, lat, lon, capacity_mw, scores, lcoe, verdict, is_preferred)
+               VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)
+               RETURNING *""",
+            pid, body.name, body.lat, body.lon, body.capacity_mw,
+            json.dumps(body.scores or {}), body.lcoe, body.verdict, body.is_preferred,
+        )
+    return _candidate_row(row)
+
+
+@router.patch("/{project_id}/candidate-sites/{candidate_id}")
+async def update_candidate_site(
+    project_id: str,
+    candidate_id: str,
+    body: CandidateSiteUpdate,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    cid = UUID(candidate_id)
+    sets, params = [], []
+    idx = 1
+    for field in ("name", "lat", "lon", "capacity_mw", "lcoe", "verdict", "is_preferred"):
+        v = getattr(body, field)
+        if v is not None:
+            sets.append(f"{field} = ${idx}")
+            params.append(v); idx += 1
+    if body.scores is not None:
+        sets.append(f"scores = ${idx}::jsonb")
+        params.append(json.dumps(body.scores)); idx += 1
+    if not sets:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM project_candidate_sites WHERE candidate_id = $1", cid)
+    else:
+        params.append(cid)
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                f"UPDATE project_candidate_sites SET {', '.join(sets)} WHERE candidate_id = ${idx} RETURNING *",
+                *params,
+            )
+    if not row:
+        raise HTTPException(404, "Candidate site not found")
+    return _candidate_row(row)
+
+
+@router.delete("/{project_id}/candidate-sites/{candidate_id}")
+async def delete_candidate_site(
+    project_id: str,
+    candidate_id: str,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    cid = UUID(candidate_id)
+    async with pool.acquire() as conn:
+        res = await conn.execute(
+            "DELETE FROM project_candidate_sites WHERE candidate_id = $1", cid
+        )
+    if res == "DELETE 0":
+        raise HTTPException(404, "Candidate site not found")
+    return {"deleted": candidate_id}
+
