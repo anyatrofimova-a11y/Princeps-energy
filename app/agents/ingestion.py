@@ -28,12 +28,13 @@ Respond with ONLY JSON."""
 
 
 _SOURCES = {
-    "bmrs":    "utils.demand_data_ingester",
-    "neso":    "utils.grid_data_ingester",
-    "dno":     "utils.dno_opendata_ingester",
-    "osm":     "utils.grid_data_ingester",
-    "geeflow": "utils.geeflow_runner",
-    "grid":    "utils.grid_substations_refresh",   # canonical grid_substations / grid_ecr / grid_snapshots
+    "bmrs":     "utils.demand_data_ingester",
+    "neso":     "utils.grid_data_ingester",
+    "dno":      "utils.dno_opendata_ingester",
+    "osm":      "utils.grid_data_ingester",
+    "geeflow":  "utils.geeflow_runner",
+    "grid":     "utils.grid_substations_refresh",  # canonical grid_substations / grid_ecr / grid_snapshots
+    "nged_ecr": "utils.nged_ecr",                   # monthly ECR CSV → nged_ecr → grid_ecr
 }
 
 
@@ -132,6 +133,35 @@ class IngestionAgent(BaseAgent):
                 f"substations={counts['substations']} ecr={counts['ecr']} snapshot={counts['snapshot']}",
             )
             return {"rows_ingested": total, **counts}
+
+        if source == "nged_ecr":
+            # Full monthly ECR snapshot from NGED's public CSV feed.
+            # ingest_ecr truncates nged_ecr each run — it's a whole-month
+            # replacement, not an append. Follow up with a grid-refresh so
+            # the canonical grid_ecr picks up the new source rows.
+            try:
+                from utils.nged_ecr import ingest_ecr  # type: ignore
+                from utils.grid_substations_refresh import refresh_ecr  # type: ignore
+            except ImportError as e:
+                await self._log_ingestion(ctx, source, 0, 0, f"ingester import failed: {e}")
+                return {"rows_ingested": 0, "note": "ingester missing"}
+            summary = await ingest_ecr(ctx.db)
+            if not summary.get("ok"):
+                await self._log_ingestion(
+                    ctx, source, 0, 0, f"ingest_ecr failed: {summary.get('reason')}",
+                )
+                return {"rows_ingested": 0, **summary}
+            inserted = int(summary.get("inserted", 0) or 0)
+            canonical = await refresh_ecr(ctx.db)
+            await self._log_ingestion(
+                ctx, source, inserted, canonical,
+                f"nged_ecr_inserted={inserted} grid_ecr_after={canonical}",
+            )
+            return {
+                "rows_ingested": inserted,
+                "grid_ecr_after": canonical,
+                **{k: v for k, v in summary.items() if k != "ok"},
+            }
 
         # Other sources are not yet wired — emit a stub log row so we can
         # see cadence in ingestion_log without blowing up the run.

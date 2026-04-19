@@ -69,6 +69,15 @@ _SCHEDULES = [
         "cron": CronTrigger(minute=15, hour="*/6"),
         "payload": {"_agent": "ingestion", "source": "grid"},
     },
+    # Ingestion: NGED Embedded Capacity Register. NGED publish a fresh CSV
+    # monthly, so we poll weekly (Sunday 01:30 UTC, before the weekly
+    # all-sources heavy ingest) to catch updates within a few days. Also
+    # triggers a grid_ecr refresh inside the handler.
+    {
+        "name": "ingestion.nged_ecr_weekly",
+        "cron": CronTrigger(day_of_week="sun", hour=1, minute=30),
+        "payload": {"_agent": "ingestion", "source": "nged_ecr"},
+    },
     # Ingestion: heavy sources (NESO/DNO/OSM/GeeFlow) weekly Sunday 02:00 UTC
     {
         "name": "ingestion.weekly",
