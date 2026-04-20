@@ -8,7 +8,7 @@ import math
 import random
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 import asyncpg
 
 from app.deps import get_pool
@@ -21,7 +21,11 @@ from utils.grid_data_platform import (
     health_check as gdp_health_check,
     record_metric, query_metrics,
 )
-from utils.grid_data_ingester import ingest_all_dnos
+from utils.grid_data_ingester import (
+    ingest_all_dnos,
+    latest_ingest_status_per_source,
+    DNO_CONFIGS as _GRID_DNO_CONFIGS,
+)
 from utils.grid_connection_analyser import (
     assess_connection as gc_assess,
     capacity_map_geojson as gc_capacity_map,
@@ -271,10 +275,40 @@ async def api_grid_substation(
     """
     Full detail for a grid substation including connected DER, TEC queue,
     and capacity history.
+
+    Legacy shape retained for back-compat. For the dense 8-section layout
+    wanted by DNOs / consultants / developers, use
+    ``GET /api/grid/substation/{substation_id}/detail``.
     """
     async with pool.acquire() as conn:
         result = await gc_substation_detail(conn, substation_id)
     if not result:
+        raise HTTPException(status_code=404, detail="Substation not found")
+    return result
+
+
+@router.get("/api/grid/substation/{substation_id}/detail")
+async def api_grid_substation_detail(
+    substation_id: int,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Dense, 8-section enriched detail for a substation.
+
+    Sections: identity, electrical, capacity_state, connections, queue,
+    regulatory, environment, engineering. Every section carries its own
+    provenance block; missing upstreams return an ``_explanation`` rather
+    than a 500.
+    """
+    from utils.substation_detail import enriched_substation_detail
+    try:
+        result = await enriched_substation_detail(pool, substation_id)
+    except Exception as e:  # noqa: BLE001 — never 500 on this route
+        return {
+            "error": f"enriched_substation_detail raised {type(e).__name__}: {e}",
+            "substation_id": substation_id,
+        }
+    if result is None:
         raise HTTPException(status_code=404, detail="Substation not found")
     return result
 
@@ -426,6 +460,110 @@ async def api_grid_ingestion_log(
             LIMIT $1
         """, limit)
     return [dict(r) for r in rows]
+
+
+# ─── Task #21: DNO Ingestion Health + Manual Trigger ──────────────────────
+
+def _require_admin(x_admin_token: str | None) -> None:
+    """Lightweight admin gate. Uses ADMIN_INGEST_TOKEN env var.
+
+    If the env var is unset we allow the call (dev / local). In prod set
+    ADMIN_INGEST_TOKEN to any non-empty string and pass it as
+    X-Admin-Token header to authorise.
+    """
+    import os as _os
+    expected = _os.environ.get("ADMIN_INGEST_TOKEN")
+    if not expected:
+        return
+    if not x_admin_token or x_admin_token != expected:
+        raise HTTPException(status_code=403, detail="admin token required")
+
+
+@router.get("/api/grid/ingest-status")
+async def api_grid_ingest_status(
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Latest grid ingestion run summary, grouped by (source, dataset).
+
+    Returns one row per (DNO, dataset) showing the most recent run's status,
+    timestamps, and row counts. Unified view of every DNO so operators
+    can see at a glance which feeds are live / stale / failing.
+    """
+    rows = await latest_ingest_status_per_source(pool)
+
+    # Enrich with the configured DNO set so missing feeds show as 'never_run'.
+    known_sources = set(_GRID_DNO_CONFIGS.keys())
+    seen = {(r["source"], r["dataset"]) for r in rows}
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    for dno_code in known_sources:
+        for dataset in ("substations", "ecr"):
+            if (dno_code, dataset) not in seen:
+                rows.append({
+                    "source": dno_code,
+                    "dataset": dataset,
+                    "status": "never_run",
+                    "records_fetched": 0,
+                    "records_upserted": 0,
+                    "rows_inserted": 0,
+                    "rows_updated": 0,
+                    "rows_failed": 0,
+                    "error_message": None,
+                    "started_at": None,
+                    "finished_at": None,
+                })
+
+    # Summary roll-up by source
+    by_source: dict[str, dict] = {}
+    for r in rows:
+        s = r["source"]
+        entry = by_source.setdefault(s, {
+            "source": s,
+            "datasets": [],
+            "status": "success",
+            "last_success_at": None,
+        })
+        entry["datasets"].append(r)
+        if r["status"] in ("failed", "never_run"):
+            entry["status"] = "failed" if r["status"] == "failed" else "never_run"
+        elif r["status"] == "partial" and entry["status"] == "success":
+            entry["status"] = "partial"
+        fin = r.get("finished_at")
+        if r["status"] in ("success", "partial") and fin:
+            prev = entry["last_success_at"]
+            if prev is None or (fin and fin > prev):
+                entry["last_success_at"] = fin
+
+    return {
+        "generated_at": now_iso,
+        "sources": list(by_source.values()),
+        "runs": rows,
+    }
+
+
+@router.post("/api/grid/ingest-run")
+async def api_grid_ingest_run(
+    dno: str | None = Query(None, description="Restrict to one DNO slug."),
+    dry_run: bool = Query(False, description="Fetch but do not persist."),
+    background: bool = Query(False, description="Queue run and return immediately."),
+    x_admin_token: str | None = Header(None, alias="X-Admin-Token"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Admin-only manual trigger for the DNO ingestion pipeline.
+
+    Requires `X-Admin-Token` header matching ADMIN_INGEST_TOKEN env var.
+    If ADMIN_INGEST_TOKEN is unset (typical for dev / local), the call is
+    accepted without auth.
+    """
+    _require_admin(x_admin_token)
+    if dno and dno not in _GRID_DNO_CONFIGS:
+        raise HTTPException(status_code=400, detail=f"unknown dno: {dno}")
+
+    if background:
+        asyncio.create_task(ingest_all_dnos(pool, only=dno, dry_run=dry_run))
+        return {"queued": True, "dno": dno or "all", "dry_run": dry_run}
+
+    result = await ingest_all_dnos(pool, only=dno, dry_run=dry_run)
+    return result
 
 
 # ─── Grid Dashboard, Health, Metrics ─────────────────────────────────────────
@@ -730,6 +868,24 @@ async def api_g99_protection(
     return g99_protection_settings(capacity_mw, voltage_kv, technology)
 
 
+@router.get("/api/grid/g99-brief/{project_id}")
+async def api_grid_g99_brief(
+    project_id: str,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    Assemble a G99 application brief for a project.
+
+    Returns structured form_context (ready to feed into a form mapper),
+    a human-readable markdown draft, and a provenance block.
+    Always returns 200 — upstream data gaps are surfaced via
+    provenance=synthetic_fallback + reason rather than HTTP errors.
+    """
+    from utils.g99_brief import build_g99_brief
+    async with pool.acquire() as conn:
+        return await build_g99_brief(conn, project_id)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  EXPORT ENGINE
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -793,7 +949,7 @@ async def api_usage_summary(user_id: str = Query("default")):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  COMPETITIVE INTELLIGENCE INTEGRATIONS (LandGate/Halcyon/Searchland/PVcase/Transect-class)
+#  COMPETITIVE INTELLIGENCE INTEGRATIONS (LandGate/Searchland/PVcase/Transect-class)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -961,14 +1117,26 @@ async def api_grid_constraints(
 
 @router.get("/api/grid/queue-depth")
 async def api_grid_queue_depth(
+    substation_id: int = Query(None, description="Substation to analyse. Omit for map-wide GeoJSON."),
     pool: asyncpg.Pool = Depends(get_pool),
 ):
     """
-    Queue depth per substation — how many MW are waiting for connection,
-    estimated wait time based on ECR progression rates.
+    Per-substation queue depth.
 
-    Returns GeoJSON FeatureCollection of substations with queue metrics.
+    If substation_id is supplied, returns a single detailed queue-depth
+    object (MW in queue, ahead-in-queue count, earliest viable year, and
+    a provenance block). Data comes from grid_ecr, then eso_tec_register,
+    then a live NESO CKAN call — in that order. Never raises; falls back
+    to provenance=synthetic_fallback with a reason if every source fails.
+
+    Without substation_id, returns the legacy map-wide GeoJSON so existing
+    callers keep working.
     """
+    if substation_id is not None:
+        from utils.queue_depth import queue_depth_for_substation
+        async with pool.acquire() as conn:
+            return await queue_depth_for_substation(conn, substation_id)
+
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT
@@ -1879,12 +2047,14 @@ async def detect_unmapped(
 
 @router.get("/api/grid/queue-depth/{substation_id}")
 async def queue_depth(substation_id: int, pool: asyncpg.Pool = Depends(get_pool)):
-    """Queue depth analysis for a single substation."""
-    from utils.queue_analyser import get_queue_depth
-    result = await get_queue_depth(pool, substation_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Substation not found or no queue data")
-    return result
+    """
+    Queue depth analysis for a single substation — delegates to the
+    honest queue_depth module (grid_ecr → eso_tec_register → NESO live →
+    synthetic_fallback) with a provenance block. Always 200.
+    """
+    from utils.queue_depth import queue_depth_for_substation
+    async with pool.acquire() as conn:
+        return await queue_depth_for_substation(conn, substation_id)
 
 
 @router.get("/api/grid/queue-summary")
@@ -2252,3 +2422,433 @@ async def constraints_nearby(
         }
     except Exception as e:
         return {"total": 0, "constraints": [], "error": str(e)}
+
+
+# ─── D2 — Split-Connection Suggester ──────────────────────────────────────
+
+from pydantic import BaseModel
+
+
+class SplitConnectionRequest(BaseModel):
+    lat: float
+    lon: float
+    capacity_mw: float
+    max_splits: int = 3
+
+
+@router.post("/api/grid/split-connection-suggest")
+async def split_connection_suggest(
+    req: SplitConnectionRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Propose split-connection options across nearest substations when the
+    single-connection headroom falls short of the target capacity.
+
+    Returns feasibility-ranked splits with per-substation allocation,
+    reinforcement cost (UK cable rates), and queue-time delta vs single.
+    """
+    from utils.grid_connection_analyser import (
+        _find_nearest_substations,
+        estimate_connection_cost,
+    )
+
+    async with pool.acquire() as conn:
+        subs = await _find_nearest_substations(
+            conn, req.lat, req.lon,
+            radius_km=30.0, limit=max(3, req.max_splits + 2),
+        )
+
+    if not subs:
+        return {
+            "single_connection_feasible": False,
+            "splits": [],
+            "warning": "No substations with data within 30 km — consider Tier 2 study.",
+        }
+
+    # Determine single-connection feasibility from best candidate.
+    best = subs[0]
+    best_headroom = float(best.get("gen_headroom_mw") or best.get("demand_headroom_mw") or 0)
+    single_ok = best_headroom >= req.capacity_mw
+
+    # Greedy split across top N subs: allocate min(remaining, sub_headroom) to each.
+    splits: list[dict] = []
+    for n in (2, 3)[: max(1, req.max_splits - 1)]:
+        picks = subs[:n]
+        remaining = req.capacity_mw
+        allocations = []
+        total_cost_m = 0.0
+        max_months = 0
+        for s in picks:
+            hr = float(s.get("gen_headroom_mw") or s.get("demand_headroom_mw") or 0)
+            mw = min(remaining, hr)
+            if mw <= 0:
+                continue
+            try:
+                cost = estimate_connection_cost(
+                    distance_km=float(s.get("distance_km") or 0),
+                    capacity_mw=mw,
+                    voltage_kv=int(s.get("voltage_kv") or 33),
+                )
+                # estimate_connection_cost returns {p10, p50, p90} in £.
+                total_cost_m += (cost.get("p50", 0) if isinstance(cost, dict) else float(cost)) / 1_000_000.0
+            except Exception:
+                total_cost_m += float(s.get("distance_km") or 0) * 0.15  # fallback £150k/km
+            # Crude queue-time proxy: more subs → more coordination.
+            max_months = max(max_months, 6 + n * 3)
+            allocations.append({
+                "id": str(s.get("id") or s.get("external_id") or ""),
+                "name": s.get("name", ""),
+                "mw_allocated": round(mw, 2),
+                "distance_km": round(float(s.get("distance_km") or 0), 2),
+                "voltage_kv": int(s.get("voltage_kv") or 33),
+            })
+            remaining -= mw
+        total_mw = req.capacity_mw - remaining
+        if total_mw <= 0:
+            continue
+        conf = (
+            "high" if total_mw >= req.capacity_mw * 0.98
+            else "medium" if total_mw >= req.capacity_mw * 0.85
+            else "low"
+        )
+        splits.append({
+            "substations": allocations,
+            "total_mw": round(total_mw, 2),
+            "reinforcement_cost_gbp_m": round(total_cost_m, 2),
+            "queue_months_added": max_months,
+            "confidence": conf,
+        })
+
+    # Rank: feasibility first, then cost.
+    splits.sort(
+        key=lambda s: (s["total_mw"] < req.capacity_mw, s["reinforcement_cost_gbp_m"]),
+    )
+    return {
+        "single_connection_feasible": single_ok,
+        "splits": splits,
+    }
+
+
+# ─── D3 — Lightweight agent/analyze for the DesignCanvas verdict rail ────
+
+class _AnalyzeRequest(BaseModel):
+    intent: str
+    context: dict = {}
+
+
+@router.post("/api/agent/analyze", tags=["agent"])
+async def agent_analyze(
+    body: _AnalyzeRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+    request: Request = None,
+):
+    """Minimal wrapper around app.agent.run_structured_agent. Takes
+    `{intent, context}`, returns the structured agent output (`verdict`,
+    `summary`, `risks`, `opportunities`, `next_steps`).
+
+    Used by the DesignCanvas verdict rail (4 parallel intents) and any
+    other surface that wants a one-shot verdict without the full
+    /site/{parcel_id}/agent plumbing.
+    """
+    from app.agent import (
+        run_structured_agent,
+        INTENT_PROMPTS,
+        _default_actions,
+    )
+    from app.helpers import CLAUDE_MODEL
+
+    if body.intent not in INTENT_PROMPTS:
+        raise HTTPException(400, f"Unknown intent: {body.intent}")
+
+    ctx = dict(body.context or {})
+    ctx.setdefault("intent", body.intent)
+
+    claude = None
+    try:
+        claude = getattr(request.app.state, "claude", None) if request else None
+    except Exception:
+        claude = None
+
+    if claude is None:
+        return {
+            "verdict": "CAUTION",
+            "confidence": 0.3,
+            "summary": "Agent offline — no Claude client configured.",
+            "risks": ["Agent unavailable"],
+            "opportunities": [],
+            "next_steps": [],
+            "actions": _default_actions(body.intent, ctx),
+            "intent": body.intent,
+        }
+
+    try:
+        return await run_structured_agent(
+            client=claude,
+            model=CLAUDE_MODEL,
+            context=ctx,
+            intent=body.intent,
+            pool=pool,
+        )
+    except Exception as e:
+        return {
+            "verdict": "CAUTION",
+            "confidence": 0.3,
+            "summary": f"Agent error ({e.__class__.__name__}) — heuristic fallback.",
+            "risks": ["Agent error"],
+            "opportunities": [],
+            "next_steps": [],
+            "actions": _default_actions(body.intent, ctx),
+            "intent": body.intent,
+        }
+
+
+# ─── Godmode #1 — Headroom-Now ticker feed ─────────────────────────────────
+
+@router.get("/api/grid/headroom-deltas")
+async def headroom_deltas(
+    window_h: int = Query(24, ge=1, le=168, description="Lookback window (hours)"),
+    limit: int = Query(40, ge=1, le=200),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Recent DNO headroom changes as a ticker-shaped list.
+
+    Pulls from the `grid_events` table when available; falls back to a
+    top-K capacity tour from `grid_substations` so the ticker always has
+    something to show.
+    """
+    try:
+        async with pool.acquire() as conn:
+            has_events = await conn.fetchval(
+                "SELECT to_regclass('public.grid_events') IS NOT NULL"
+            )
+            if has_events:
+                rows = await conn.fetch(
+                    """
+                    SELECT event_type, severity, substation_name, dno, region,
+                           delta_mw, detected_at, geometry,
+                           ST_Y(ST_Transform(geometry, 4326)) AS lat,
+                           ST_X(ST_Transform(geometry, 4326)) AS lon
+                    FROM grid_events
+                    WHERE detected_at >= NOW() - ($1 || ' hours')::interval
+                      AND delta_mw IS NOT NULL
+                    ORDER BY detected_at DESC
+                    LIMIT $2
+                    """,
+                    str(window_h), limit,
+                )
+                if rows:
+                    return {
+                        "source": "grid_events",
+                        "window_h": window_h,
+                        "deltas": [
+                            {
+                                "substation": r["substation_name"] or "",
+                                "dno": r["dno"] or "",
+                                "region": r["region"] or "",
+                                "delta_mw": round(float(r["delta_mw"] or 0), 1),
+                                "event_type": r["event_type"] or "",
+                                "severity": r["severity"] or "info",
+                                "detected_at": r["detected_at"].isoformat() if r["detected_at"] else None,
+                                "lat": float(r["lat"]) if r["lat"] is not None else None,
+                                "lon": float(r["lon"]) if r["lon"] is not None else None,
+                            }
+                            for r in rows
+                        ],
+                    }
+            # Fallback: show top-headroom substations as static chips.
+            rows = await conn.fetch(
+                """
+                SELECT name, dno, region, gen_headroom_mw, demand_headroom_mw, voltage_kv,
+                       ST_Y(ST_Transform(geom, 4326)) AS lat,
+                       ST_X(ST_Transform(geom, 4326)) AS lon
+                FROM grid_substations
+                WHERE COALESCE(gen_headroom_mw, demand_headroom_mw) IS NOT NULL
+                ORDER BY COALESCE(gen_headroom_mw, 0) DESC
+                LIMIT $1
+                """,
+                limit,
+            )
+            return {
+                "source": "static_top_headroom",
+                "window_h": window_h,
+                "deltas": [
+                    {
+                        "substation": r["name"] or "",
+                        "dno": r["dno"] or "",
+                        "region": r["region"] or "",
+                        "delta_mw": round(float(r["gen_headroom_mw"] or r["demand_headroom_mw"] or 0), 1),
+                        "event_type": "baseline",
+                        "severity": "info",
+                        "lat": float(r["lat"]) if r["lat"] is not None else None,
+                        "lon": float(r["lon"]) if r["lon"] is not None else None,
+                    }
+                    for r in rows
+                ],
+            }
+    except Exception as e:
+        return {"source": "error", "window_h": window_h, "deltas": [], "error": str(e)}
+
+
+# ─── Godmode #5 — N-1 Stress Test ──────────────────────────────────────────
+
+class N1StressRequest(BaseModel):
+    lat: float
+    lon: float
+    capacity_mw: float
+    substation_name: str | None = None
+    break_element: str | None = None  # "line:XYZ" or "trafo:ABC" — specific outage
+
+
+@router.post("/api/grid/n1-stress-test")
+async def n1_stress_test(
+    body: N1StressRequest,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """N-1 contingency stress test around a connection site.
+
+    Builds a small pandapower network around the target, runs contingency
+    (each line/transformer out-of-service in turn), reports voltage
+    violations and curtailment/reactive mitigations.
+    """
+    import os, asyncio, json as _json
+
+    grid_python = os.getenv("GRID_PYTHON")
+    runner = os.path.join(os.getenv("FEASIBLY_ROOT", os.path.dirname(os.path.dirname(__file__))), "..", "utils", "grid_power_flow.py")
+    if not grid_python or not os.path.exists(runner):
+        return {
+            "ok": False,
+            "reason": "grid subprocess unavailable",
+            "summary": "Pandapower bridge not configured (set GRID_PYTHON).",
+            "violations": [],
+            "mitigations": [],
+        }
+
+    payload = {
+        "lat": body.lat, "lon": body.lon,
+        "capacity_mw": body.capacity_mw,
+        "substation_name": body.substation_name,
+        "break_element": body.break_element,
+        "options": {"contingency": True, "verbose": False},
+    }
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            grid_python, runner, "--mode", "n1_stress", "--json",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(_json.dumps(payload).encode()), timeout=60,
+        )
+        if proc.returncode != 0:
+            return {
+                "ok": False,
+                "reason": "subprocess_nonzero",
+                "summary": f"Solver error: {stderr.decode()[:300]}",
+                "violations": [],
+                "mitigations": [],
+            }
+        result = _json.loads(stdout.decode())
+    except asyncio.TimeoutError:
+        return {
+            "ok": False, "reason": "timeout",
+            "summary": "Power-flow solver timed out after 60 s.",
+            "violations": [], "mitigations": [],
+        }
+    except Exception as e:
+        return {
+            "ok": False, "reason": "exception",
+            "summary": f"{e.__class__.__name__}: {e}",
+            "violations": [], "mitigations": [],
+        }
+
+    violations = result.get("violations", []) or result.get("contingency", {}).get("violations", [])
+    worst = max((abs(v.get("deviation_pct", 0)) for v in violations), default=0)
+    if worst == 0:
+        verdict_summary = f"Under N-1 with {body.capacity_mw:.0f} MW connected, all voltages stay within ±5%. No mitigation required."
+    else:
+        mvar = round(body.capacity_mw * worst * 0.12, 1)
+        curtail = round(body.capacity_mw * worst * 0.003, 1)
+        verdict_summary = (
+            f"Under N-1, worst undervoltage {worst:.1f}% at {violations[0].get('bus', 'bus')}. "
+            f"Mitigation: {mvar} MVAr reactive support or {curtail} MW curtailment contract."
+        )
+
+    return {
+        "ok": True,
+        "summary": verdict_summary,
+        "violations": violations,
+        "mitigations": result.get("mitigations", []),
+        "converged": result.get("converged", True),
+        "elapsed_s": result.get("elapsed_s"),
+    }
+
+
+# ─── Godmode #8 — Public read-only share view ─────────────────────────────
+
+from uuid import UUID as _UUID
+
+
+@router.get("/api/public/share/{token}")
+async def public_share_view(
+    token: str,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Stateless read-only view of a shared project.
+
+    Validates the HMAC token minted by POST /api/v1/projects/{id}/share,
+    returns a pruned public snapshot — no writes, no editing, no auth
+    cookies. Designed to be linked from `princeps.app/p/{token}`.
+    """
+    from app.routers.projects import _verify_share_token
+    project_id = _verify_share_token(token)
+    if not project_id:
+        raise HTTPException(404, "Share link invalid or expired")
+    try:
+        pid = _UUID(project_id)
+    except ValueError:
+        raise HTTPException(404, "Share link invalid")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT project_id, name, workload_type, stage, capacity_mw, created_at "
+            "FROM projects WHERE project_id = $1",
+            pid,
+        )
+        if not row:
+            raise HTTPException(404, "Project not found")
+        sites = await conn.fetch(
+            """
+            SELECT candidate_id, name,
+                   ST_Y(ST_Transform(centroid, 4326)) AS lat,
+                   ST_X(ST_Transform(centroid, 4326)) AS lon,
+                   capacity_mw, scores
+            FROM project_candidate_sites
+            WHERE project_id = $1 LIMIT 25
+            """,
+            pid,
+        )
+
+    return {
+        "project": {
+            "project_id": str(row["project_id"]),
+            "name": row["name"] or "Shared Project",
+            "workload_type": row["workload_type"] or "bess",
+            "stage": row["stage"] or "prospect",
+            "capacity_mw": float(row["capacity_mw"] or 0),
+            "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+        },
+        "candidate_sites": [
+            {
+                "candidate_id": str(r["candidate_id"]),
+                "name": r["name"] or "",
+                "lat": float(r["lat"]) if r["lat"] is not None else None,
+                "lon": float(r["lon"]) if r["lon"] is not None else None,
+                "capacity_mw": float(r["capacity_mw"] or 0),
+                "scores": r["scores"] if r["scores"] else {},
+            }
+            for r in sites
+        ],
+        "watermark": "Princeps · read-only shared view",
+    }
