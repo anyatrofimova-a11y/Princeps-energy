@@ -1,0 +1,415 @@
+{
+  "version": "2.9",
+  "children": [
+    {
+      "type": "frame",
+      "id": "YqRqY",
+      "x": 0,
+      "y": 0,
+      "name": "Deal Pipeline - Kanban",
+      "width": 1440,
+      "fill": "$--bg-page",
+      "placeholder": true,
+      "layout": "vertical",
+      "padding": [
+        0,
+        0,
+        40,
+        0
+      ],
+      "children": [
+        {
+          "type": "frame",
+          "id": "AGd4x",
+          "name": "Command Bar",
+          "width": "fill_container",
+          "height": 56,
+          "fill": "$--bg-card",
+          "stroke": {
+            "align": "inside",
+            "thickness": {
+              "bottom": 1
+            },
+            "fill": "$--border"
+          },
+          "padding": [
+            0,
+            32
+          ],
+          "justifyContent": "space_between",
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "DgKd8",
+              "name": "cmdLeft",
+              "gap": 12,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "ubI2M",
+                  "name": "wordmark",
+                  "fill": "$--ink",
+                  "content": "PRINCEPS",
+                  "fontFamily": "DM Sans",
+                  "fontSize": 16,
+                  "fontWeight": "700",
+                  "letterSpacing": 1.5
+                },
+                {
+                  "type": "frame",
+                  "id": "civmZ",
+                  "name": "liveBadge",
+                  "fill": "$--green-bg",
+                  "cornerRadius": 4,
+                  "gap": 4,
+                  "padding": [
+                    4,
+                    8
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "ellipse",
+                      "id": "ZtVw4",
+                      "name": "greenDot",
+                      "fill": "$--gold",
+                      "width": 6,
+                      "height": 6
+                    },
+                    {
+                      "type": "text",
+                      "id": "BUXq8",
+                      "name": "liveText",
+                      "fill": "$--gold-dark",
+                      "content": "LIVE",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 9,
+                      "fontWeight": "700",
+                      "letterSpacing": 1
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "4NRhY",
+              "name": "cmdCenter",
+              "width": 480,
+              "height": 36,
+              "fill": "$--bg-page",
+              "cornerRadius": 8,
+              "gap": 8,
+              "padding": [
+                0,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "w3oya",
+                  "name": "searchIcon",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "search",
+                  "iconFontFamily": "lucide",
+                  "fill": "$--ink-muted"
+                },
+                {
+                  "type": "text",
+                  "id": "x4akW",
+                  "name": "searchText",
+                  "fill": "$--ink-muted",
+                  "content": "Search sites, run analysis, simulate scenarios...",
+                  "fontFamily": "DM Sans",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "frame",
+                  "id": "B088O",
+                  "layoutPosition": "absolute",
+                  "x": 440,
+                  "y": 8,
+                  "name": "searchHint",
+                  "fill": "$--bg-card",
+                  "cornerRadius": 4,
+                  "stroke": {
+                    "align": "inside",
+                    "thickness": 1,
+                    "fill": "$--border"
+                  },
+                  "padding": [
+                    2,
+                    6
+                  ],
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "mu8il",
+                      "name": "searchSlash",
+                      "fill": "$--ink-tertiary",
+                      "content": "/",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "500"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Bf38r",
+              "name": "cmdRight",
+              "gap": 16,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "twFxz",
+                  "name": "bellWrap",
+                  "width": 32,
+                  "height": 32,
+                  "layout": "none",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "fHOmF",
+                      "x": 6,
+                      "y": 6,
+                      "name": "bellIcon",
+                      "width": 20,
+                      "height": 20,
+                      "iconFontName": "bell",
+                      "iconFontFamily": "lucide",
+                      "fill": "$--ink-secondary"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "kHaiJ",
+                      "x": 16,
+                      "y": 2,
+                      "name": "notifBadge",
+                      "fill": "$--gold",
+                      "cornerRadius": 8,
+                      "padding": [
+                        1,
+                        5
+                      ],
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "N8fNC",
+                          "name": "notifCount",
+                          "fill": "$--white",
+                          "content": "3",
+                          "fontFamily": "DM Sans",
+                          "fontSize": 9,
+                          "fontWeight": "700"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "id": "xp2Vo",
+                  "name": "dateText",
+                  "fill": "$--ink-secondary",
+                  "content": "Tue, 1 Apr 2026",
+                  "fontFamily": "DM Sans",
+                  "fontSize": 13,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "9ePoR",
+          "name": "body",
+          "width": "fill_container",
+          "height": "fit_content(92)",
+          "layout": "vertical"
+        }
+      ]
+    }
+  ],
+  "variables": {
+    "--amber": {
+      "type": "color",
+      "value": "#C67A1A"
+    },
+    "--amber-bg": {
+      "type": "color",
+      "value": "#C67A1A14"
+    },
+    "--bg-card": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "--bg-card-hover": {
+      "type": "color",
+      "value": "#FDFCFA"
+    },
+    "--bg-page": {
+      "type": "color",
+      "value": "#F7F8FA"
+    },
+    "--blue": {
+      "type": "color",
+      "value": "#F5B731"
+    },
+    "--blue-bg": {
+      "type": "color",
+      "value": "#FFF8E7"
+    },
+    "--border": {
+      "type": "color",
+      "value": "#E8E5DF"
+    },
+    "--border-light": {
+      "type": "color",
+      "value": "#F0EDE8"
+    },
+    "--gold": {
+      "type": "color",
+      "value": "#F5B731"
+    },
+    "--gold-border": {
+      "type": "color",
+      "value": "#F5B73133"
+    },
+    "--gold-light": {
+      "type": "color",
+      "value": "#FDF6E3"
+    },
+    "--green": {
+      "type": "color",
+      "value": "#2D7A4F"
+    },
+    "--green-bg": {
+      "type": "color",
+      "value": "#2D7A4F14"
+    },
+    "--green-text": {
+      "type": "color",
+      "value": "#2D7A4F"
+    },
+    "--ink": {
+      "type": "color",
+      "value": "#1A1714"
+    },
+    "--ink-muted": {
+      "type": "color",
+      "value": "#B5AFA8"
+    },
+    "--ink-secondary": {
+      "type": "color",
+      "value": "#6B6560"
+    },
+    "--ink-tertiary": {
+      "type": "color",
+      "value": "#9C9590"
+    },
+    "--orange": {
+      "type": "color",
+      "value": "#C67A1A"
+    },
+    "--orange-bg": {
+      "type": "color",
+      "value": "#C67A1A14"
+    },
+    "--red": {
+      "type": "color",
+      "value": "#B5432A"
+    },
+    "--red-bg": {
+      "type": "color",
+      "value": "#B5432A14"
+    },
+    "--red-text": {
+      "type": "color",
+      "value": "#B5432A"
+    },
+    "--shadow-sm": {
+      "type": "color",
+      "value": "#1A171408"
+    },
+    "--transparent": {
+      "type": "color",
+      "value": "#FFFFFF00"
+    },
+    "--white": {
+      "type": "color",
+      "value": "#FFFFFF"
+    },
+    "--gold-dark": {
+      "type": "color",
+      "value": "#E8A012"
+    },
+    "--gold-surface": {
+      "type": "color",
+      "value": "#F5B7310F"
+    },
+    "--gold-warm-bg": {
+      "type": "color",
+      "value": "#FFF8E7"
+    },
+    "--danger": {
+      "type": "color",
+      "value": "#B5432A"
+    },
+    "--danger-bg": {
+      "type": "color",
+      "value": "#B5432A14"
+    },
+    "--gold-20": {
+      "type": "color",
+      "value": "#F5B73133"
+    },
+    "--gold-30": {
+      "type": "color",
+      "value": "#F5B7314D"
+    },
+    "--gold-40": {
+      "type": "color",
+      "value": "#F5B73166"
+    },
+    "--gold-60": {
+      "type": "color",
+      "value": "#F5B73199"
+    },
+    "--gold-80": {
+      "type": "color",
+      "value": "#F5B731CC"
+    },
+    "--gold-bg": {
+      "type": "color",
+      "value": "#F5B73118"
+    },
+    "--success": {
+      "type": "color",
+      "value": "#2D7A4F"
+    },
+    "--success-bg": {
+      "type": "color",
+      "value": "#2D7A4F14"
+    },
+    "--warning": {
+      "type": "color",
+      "value": "#C67A1A"
+    },
+    "--warning-bg": {
+      "type": "color",
+      "value": "#C67A1A14"
+    }
+  }
+}

@@ -1,0 +1,635 @@
+{
+  "version": "2.9",
+  "children": [
+    {
+      "type": "frame",
+      "id": "CxbFV",
+      "x": 0,
+      "y": 0,
+      "name": "PRINCEPS Landing Page",
+      "width": 1440,
+      "height": 900,
+      "fill": "#F7F8FA",
+      "layout": "vertical",
+      "alignItems": "center",
+      "children": [
+        {
+          "type": "frame",
+          "id": "te4IP",
+          "layoutPosition": "absolute",
+          "x": 0,
+          "y": 0,
+          "name": "Background Pattern",
+          "width": 1440,
+          "height": 900,
+          "layout": "none",
+          "children": [
+            {
+              "type": "path",
+              "id": "3eU3E",
+              "x": 0,
+              "y": 0,
+              "name": "contour1",
+              "geometry": "M0 200c200-20 400 20 600-10 200-30 400 20 600-5 100-13 200 10 240 5",
+              "fill": "#00000000",
+              "width": 1440,
+              "height": 900,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#F5B73108"
+              }
+            },
+            {
+              "type": "path",
+              "id": "8pJJH",
+              "x": 1440,
+              "y": 0,
+              "name": "contour2",
+              "geometry": "M0 350c150-20 350 20 550-10 200-30 400 20 600-5 150-13 250 10 290 5",
+              "fill": "#00000000",
+              "width": 1440,
+              "height": 900,
+              "stroke": {
+                "thickness": 0.8,
+                "fill": "#F5B73106"
+              }
+            },
+            {
+              "type": "path",
+              "id": "1MOch",
+              "x": 2880,
+              "y": 0,
+              "name": "contour3",
+              "geometry": "M0 500c200-20 400 20 600-10 200-30 400 20 600-5 150-13 220 10 240 5",
+              "fill": "#00000000",
+              "width": 1440,
+              "height": 900,
+              "stroke": {
+                "thickness": 1,
+                "fill": "#F5B73108"
+              }
+            },
+            {
+              "type": "path",
+              "id": "N1r3d",
+              "x": 4320,
+              "y": 0,
+              "name": "contour4",
+              "geometry": "M0 650c250-20 450 20 650-10 200-30 400 20 600-5 130-13 180 10 190 5",
+              "fill": "#00000000",
+              "width": 1440,
+              "height": 900,
+              "stroke": {
+                "thickness": 0.7,
+                "fill": "#F5B73105"
+              }
+            },
+            {
+              "type": "path",
+              "id": "tBwqq",
+              "x": 5760,
+              "y": 0,
+              "name": "contour5",
+              "geometry": "M0 120c300-20 500 20 700-10 200-30 400 20 600-5 80-10 130 10 140 5",
+              "fill": "#00000000",
+              "width": 1440,
+              "height": 900,
+              "stroke": {
+                "thickness": 0.6,
+                "fill": "#F5B73105"
+              }
+            },
+            {
+              "type": "path",
+              "id": "hPYvc",
+              "x": 7200,
+              "y": 0,
+              "name": "contour6",
+              "geometry": "M0 780c200-20 400 20 600-10 200-30 400 20 600-5 150-13 220 10 240 5",
+              "fill": "#00000000",
+              "width": 1440,
+              "height": 900,
+              "stroke": {
+                "thickness": 0.8,
+                "fill": "#F5B73106"
+              }
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "8FDC0",
+          "name": "spacerTop",
+          "width": 10,
+          "height": 120
+        },
+        {
+          "type": "frame",
+          "id": "DuS9C",
+          "name": "Logo Row",
+          "gap": 12,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "frame",
+              "id": "stS8a",
+              "name": "Logo Icon",
+              "width": 36,
+              "height": 28,
+              "layout": "vertical",
+              "gap": 3,
+              "justifyContent": "center",
+              "children": [
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "vARYZ",
+                  "name": "bar1",
+                  "fill": "#F5B731",
+                  "width": 36,
+                  "height": 4
+                },
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "aDW9z",
+                  "name": "bar2",
+                  "fill": "#F5B731",
+                  "width": 28,
+                  "height": 4
+                },
+                {
+                  "type": "rectangle",
+                  "cornerRadius": 2,
+                  "id": "7YX2Y",
+                  "name": "bar3",
+                  "fill": "#F5B731",
+                  "width": 36,
+                  "height": 4
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "id": "56uIS",
+              "name": "wordmark",
+              "fill": "#1A1714",
+              "content": "PRINCEPS",
+              "fontFamily": "DM Sans",
+              "fontSize": 28,
+              "fontWeight": "700",
+              "letterSpacing": 2
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "mLcDm",
+          "name": "Tagline",
+          "fill": "#6B6560",
+          "content": "Energy Infrastructure Intelligence",
+          "fontFamily": "DM Sans",
+          "fontSize": 14,
+          "fontWeight": "500",
+          "letterSpacing": 0.5
+        },
+        {
+          "type": "frame",
+          "id": "TUItE",
+          "name": "spacerTag",
+          "width": 10,
+          "height": 24
+        },
+        {
+          "type": "frame",
+          "id": "zmb2L",
+          "name": "Status Indicator",
+          "gap": 8,
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "ellipse",
+              "id": "HlKOz",
+              "name": "statusDot",
+              "fill": "#F5B731",
+              "width": 8,
+              "height": 8
+            },
+            {
+              "type": "text",
+              "id": "FPpwc",
+              "name": "statusText",
+              "fill": "#F5B731",
+              "content": "Connecting to backend...",
+              "fontFamily": "DM Sans",
+              "fontSize": 12,
+              "fontWeight": "500"
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "aCuKH",
+          "name": "spacerCards",
+          "width": 10,
+          "height": 40
+        },
+        {
+          "type": "frame",
+          "id": "XVb48",
+          "name": "Card Grid",
+          "width": 800,
+          "layout": "vertical",
+          "gap": 16,
+          "children": [
+            {
+              "type": "frame",
+              "id": "Wwuh0",
+              "name": "Row 1",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "27DfE",
+                  "name": "Find a Site",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E8E5DF"
+                  },
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#1A171408",
+                    "offset": {
+                      "x": 0,
+                      "y": 2
+                    },
+                    "blur": 8
+                  },
+                  "gap": 16,
+                  "padding": 20,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "sHbTH",
+                      "name": "icon1bg",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "#F5B73115",
+                      "cornerRadius": 22,
+                      "layout": "vertical",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "3bO05",
+                          "name": "icon1",
+                          "width": 22,
+                          "height": 22,
+                          "iconFontName": "map-pin",
+                          "iconFontFamily": "lucide",
+                          "fill": "#F5B731"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "NxT8P",
+                      "name": "text1col",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "vaLrr",
+                          "name": "title1",
+                          "fill": "#1A1714",
+                          "content": "Find a Site",
+                          "fontFamily": "DM Sans",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Zu8xN",
+                          "name": "desc1",
+                          "fill": "#6B6560",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Search by postcode, coordinates, or browse the map",
+                          "fontFamily": "DM Sans",
+                          "fontSize": 13
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "kwHBc",
+                  "name": "Assess a Site",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E8E5DF"
+                  },
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#1A171408",
+                    "offset": {
+                      "x": 0,
+                      "y": 2
+                    },
+                    "blur": 8
+                  },
+                  "gap": 16,
+                  "padding": 20,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "UumXE",
+                      "name": "icon2bg",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "#F5B73115",
+                      "cornerRadius": 22,
+                      "layout": "vertical",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "zWOw6",
+                          "name": "icon2",
+                          "width": 22,
+                          "height": 22,
+                          "iconFontName": "activity",
+                          "iconFontFamily": "lucide",
+                          "fill": "#F5B731"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Eb3mC",
+                      "name": "text2col",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zbsXe",
+                          "name": "title2",
+                          "fill": "#1A1714",
+                          "content": "Assess a Site",
+                          "fontFamily": "DM Sans",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "6y4gd",
+                          "name": "desc2",
+                          "fill": "#6B6560",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Run AI feasibility study with grid, planning, and financial analysis",
+                          "fontFamily": "DM Sans",
+                          "fontSize": 13
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "Ikv8T",
+              "name": "Row 2",
+              "width": "fill_container",
+              "gap": 16,
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Abdb2",
+                  "name": "Grid Connection Study",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E8E5DF"
+                  },
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#1A171408",
+                    "offset": {
+                      "x": 0,
+                      "y": 2
+                    },
+                    "blur": 8
+                  },
+                  "gap": 16,
+                  "padding": 20,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "upsM3",
+                      "name": "icon3bg",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "#F5B73115",
+                      "cornerRadius": 22,
+                      "layout": "vertical",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "bbEOj",
+                          "name": "icon3",
+                          "width": 22,
+                          "height": 22,
+                          "iconFontName": "zap",
+                          "iconFontFamily": "lucide",
+                          "fill": "#F5B731"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "rIIZN",
+                      "name": "text3col",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "CbvWx",
+                          "name": "title3",
+                          "fill": "#1A1714",
+                          "content": "Grid Connection Study",
+                          "fontFamily": "DM Sans",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "VWQDq",
+                          "name": "desc3",
+                          "fill": "#6B6560",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "Assess connection feasibility, capacity, and cost estimates",
+                          "fontFamily": "DM Sans",
+                          "fontSize": 13
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "OKzlQ",
+                  "name": "Review Portfolio",
+                  "width": "fill_container",
+                  "fill": "#FFFFFF",
+                  "cornerRadius": 12,
+                  "stroke": {
+                    "thickness": 1,
+                    "fill": "#E8E5DF"
+                  },
+                  "effect": {
+                    "type": "shadow",
+                    "shadowType": "outer",
+                    "color": "#1A171408",
+                    "offset": {
+                      "x": 0,
+                      "y": 2
+                    },
+                    "blur": 8
+                  },
+                  "gap": 16,
+                  "padding": 20,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "BQ200",
+                      "name": "icon4bg",
+                      "width": 44,
+                      "height": 44,
+                      "fill": "#F5B73115",
+                      "cornerRadius": 22,
+                      "layout": "vertical",
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "icon_font",
+                          "id": "ZAUFa",
+                          "name": "icon4",
+                          "width": 22,
+                          "height": 22,
+                          "iconFontName": "briefcase",
+                          "iconFontFamily": "lucide",
+                          "fill": "#F5B731"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "QR1MY",
+                      "name": "text4col",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 4,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "ZobNt",
+                          "name": "title4",
+                          "fill": "#1A1714",
+                          "content": "Review Portfolio",
+                          "fontFamily": "DM Sans",
+                          "fontSize": 16,
+                          "fontWeight": "600"
+                        },
+                        {
+                          "type": "text",
+                          "id": "rivtO",
+                          "name": "desc4",
+                          "fill": "#6B6560",
+                          "textGrowth": "fixed-width",
+                          "width": "fill_container",
+                          "content": "View project pipeline, verdicts, and portfolio analytics",
+                          "fontFamily": "DM Sans",
+                          "fontSize": 13
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "frame",
+          "id": "UUD5T",
+          "name": "spacerBottom",
+          "width": 10,
+          "height": "fill_container"
+        },
+        {
+          "type": "text",
+          "id": "wsUba",
+          "name": "Shortcut Hint",
+          "fill": "#9C9590",
+          "content": "Press ⌘K anytime for search",
+          "fontFamily": "DM Sans",
+          "fontSize": 11
+        },
+        {
+          "type": "frame",
+          "id": "tiUKZ",
+          "name": "spacerFooter",
+          "width": 10,
+          "height": 24
+        },
+        {
+          "type": "text",
+          "id": "zc8UF",
+          "name": "Footer",
+          "fill": "#9C9590",
+          "content": "Princeps v2.0 — Energy Infrastructure Intelligence",
+          "fontFamily": "DM Sans",
+          "fontSize": 12
+        },
+        {
+          "type": "frame",
+          "id": "gBZsa",
+          "name": "spacerEnd",
+          "width": 10,
+          "height": 32
+        }
+      ]
+    }
+  ]
+}
