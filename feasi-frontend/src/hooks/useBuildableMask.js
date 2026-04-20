@@ -70,11 +70,22 @@ export default function useBuildableMask({ lat, lon, radiusM = 1500, enabled = t
   const [error, setError] = useState(null);
   const abortRef = useRef(null);
 
+  // Server-computed positive-buildable polygon (BOT-B1). When the new
+  // /api/design/buildable endpoint returns 200, we use its single
+  // class=buildable polygon directly and skip the client-side subtract
+  // step below. Falls back silently to the restricted-mask flow if the
+  // endpoint 404s / 5xxs so older deployments keep working.
+  const [positive, setPositive] = useState(null);
+
   useEffect(() => {
     if (!enabled || lat == null || lon == null) return;
     const key = cacheKey(lat, lon, radiusM);
     const cached = cacheRef.current.get(key);
-    if (cached) { setMask(cached); return; }
+    if (cached) {
+      setMask(cached.mask || null);
+      setPositive(cached.positive || null);
+      return;
+    }
 
     const ctrl = new AbortController();
     abortRef.current?.abort();
@@ -83,18 +94,34 @@ export default function useBuildableMask({ lat, lon, radiusM = 1500, enabled = t
     setError(null);
 
     (async () => {
+      let maskData = null;
+      let positiveData = null;
       try {
+        // 1. Try the new positive endpoint first.
+        try {
+          const posUrl = `/api/design/buildable?lat=${lat}&lon=${lon}&radius_m=${radiusM}`;
+          const posRes = await fetch(posUrl, { signal: ctrl.signal });
+          if (posRes.ok) positiveData = await posRes.json();
+        } catch (e) {
+          if (e.name === "AbortError") throw e;
+          // swallow — fall through to mask
+        }
+
+        // 2. Always fetch the restricted-mask so we keep flood-distance,
+        // restriction-at, etc. working even when the positive endpoint is up.
         const url = `/api/design/buildable-mask?lat=${lat}&lon=${lon}&radius_m=${radiusM}`;
         const res = await fetch(url, { signal: ctrl.signal });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        cacheRef.current.set(key, data);
+        if (!res.ok && !positiveData) throw new Error(`HTTP ${res.status}`);
+        if (res.ok) maskData = await res.json();
+
+        const payload = { mask: maskData, positive: positiveData };
+        cacheRef.current.set(key, payload);
         if (cacheRef.current.size > 40) {
-          // Drop oldest entry to keep memory bounded
           const first = cacheRef.current.keys().next().value;
           cacheRef.current.delete(first);
         }
-        setMask(data);
+        setMask(maskData);
+        setPositive(positiveData);
       } catch (e) {
         if (e.name !== "AbortError") setError(e);
       } finally {
@@ -227,18 +254,27 @@ export default function useBuildableMask({ lat, lon, radiusM = 1500, enabled = t
     };
   }, [mask, lat, lon, radiusM]);
 
+  // Prefer the server-computed positive polygon when present. It's already the
+  // buffer minus restrictions with holes punched out, so we can render it
+  // directly as a single fill layer instead of making the frontend do geometry.
+  const serverBuildable = positive?.features?.[0]?.geometry || null;
+  const serverAreaHa = positive?.buildable_area_ha ?? null;
+
   return {
     mask,
+    positive,                    // full server payload (provenance, explanation)
     loading,
     error,
     radiusM,
-    buildablePolygon: derived?.buildablePolygon || null,
+    buildablePolygon: serverBuildable || derived?.buildablePolygon || null,
+    buildableAreaHa: serverAreaHa,
     parcelPolygon: derived?.parcelPolygon || null,
     buildableCentroid: derived?.buildableCentroid || null,
     isBuildable: derived?.isBuildable || (() => true),
     parcelContains: derived?.parcelContains || (() => true),
     restrictionAt: derived?.restrictionAt || (() => null),
     nearestFloodBufferM: derived?.nearestFloodBufferM || (() => Infinity),
+    source: serverBuildable ? "server_positive" : (mask ? "client_subtract" : "none"),
   };
 }
 

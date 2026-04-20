@@ -323,6 +323,7 @@ def calculate_noise_contours(
     compliance_limit_dba: float = UK_NOISE_LIMIT_DEFAULT_DBA,
     receptors: list[dict[str, Any]] | None = None,
     tonal_penalty: bool = False,
+    contour_levels: list[int] | tuple[int, ...] | None = None,
 ) -> dict[str, Any]:
     """
     Calculate ISO 9613-2 noise contours from energy infrastructure sources.
@@ -420,7 +421,8 @@ def calculate_noise_contours(
 
     # Extract contours
     features = []
-    for level in CONTOUR_LEVELS:
+    levels_to_draw = list(contour_levels) if contour_levels else CONTOUR_LEVELS
+    for level in levels_to_draw:
         polylines = _marching_squares_contour(noise_grid, level, x_coords, y_coords)
         geom = _contour_to_polygon(polylines, ref_lat, ref_lon)
         if geom:

@@ -306,15 +306,59 @@ async def generate(
             raise HTTPException(500, f"Solar layout failed: {e}")
     else:  # dc
         capacity = body.capacity_mw or body.params.get("it_load_mw") or 40.0
-        pue = body.params.get("pue_target") or 1.2
+        pue = body.params.get("pue_target") or 1.3
+        tier = int(body.params.get("tier") or 3)
+        redundancy = body.params.get("redundancy") or "N+1"
         layout = _bess_layout(body.lat, body.lon, capacity, 1)  # visual proxy
+
+        # Engineering-grade CapEx per MW IT.
+        # Cushman & Wakefield UK Data Centre Market 2025, CBRE H1 2025: Tier 3
+        # benchmark range £3.5–5.0 M/MW IT; mid-point £4.2 M/MW. Tier 4 adds
+        # ~25% (2N vs N+1 distribution trains). Previous hard-coded £9.5 M/MW
+        # was ~2× the benchmark — fixed 2026-04-20.
+        _tier_factor = {1: 0.70, 2: 0.85, 3: 1.00, 4: 1.25}.get(tier, 1.00)
+        _red_factor = {"N": 0.92, "N+1": 1.00, "2N": 1.20, "2N+1": 1.28}.get(redundancy, 1.00)
+        capex_per_mw = 4.2 * _tier_factor * _red_factor  # £M per MW IT
+        capex_gbp_m = round(capacity * capex_per_mw, 1)
+
+        # Annual IT energy — 85% utilisation typical UK colo, hyperscaler ~90%.
+        annual_it_mwh = capacity * 8760 * 0.85
+        # Total facility energy including PUE overhead.
+        annual_facility_mwh = annual_it_mwh * pue
+
+        # Revenue — 2026 UK hyperscaler wholesale lease benchmark
+        # (Cushman H1 2025): £2.4–3.2 M/MW IT/yr. Use £2.8 M as the default.
+        annual_revenue_gbp_m = round(capacity * 2.8, 1)
+
+        # OpEx — Cornwall Insight DC OpEx report 2025: £/MW/yr split roughly
+        # 60% power, 30% staff/maintenance, 10% other. At £110/MWh PPA baseline
+        # for UK 2026 merchant, £-per-MW-facility = 8760 * PUE * 110 / 1e6.
+        annual_opex_gbp_m = round(
+            (annual_facility_mwh * 0.110 / 1_000) + (capacity * 0.35), 1
+        )
+
+        # Simple IRR proxy (15-yr cashflow, no tax): ((rev - opex) * 15 / capex - 1)
+        # / 1.5 clamp ≥ 0. Replaces the previously hard-coded 14.2%.
+        _net = max(annual_revenue_gbp_m - annual_opex_gbp_m, 0)
+        irr_pct = round(max(0, ((_net * 15) / max(capex_gbp_m, 1) - 1)) * 100 / 1.5, 1) if capex_gbp_m else 0.0
+        # LCOE for a DC is not standard; report cost-per-MWh-delivered instead.
+        lcoe_gbp_per_mwh = round((capex_gbp_m * 1_000_000 / 15 + annual_opex_gbp_m * 1_000_000) / max(annual_it_mwh, 1), 1)
+
         kpis = {
-            "effective_capacity_mw": capacity, "pue": pue,
-            "annual_mwh": capacity * 8760 * 0.85,
-            "capex_gbp_m": capacity * 9.5,
-            "irr_pct": 14.2, "lcoe_gbp_per_mwh": 72, "npv_gbp_m": 0,
-            "energy_mwh": capacity * 8760,
-            "annual_revenue_gbp_m": capacity * 3.8,
+            "effective_capacity_mw": capacity,
+            "pue": pue,
+            "tier": tier,
+            "redundancy": redundancy,
+            "annual_mwh": round(annual_facility_mwh),      # facility (incl. PUE)
+            "energy_mwh": round(annual_it_mwh),             # IT throughput
+            "capex_gbp_m": capex_gbp_m,
+            "capex_per_mw_gbp_m": round(capex_per_mw, 2),
+            "annual_revenue_gbp_m": annual_revenue_gbp_m,
+            "annual_opex_gbp_m": annual_opex_gbp_m,
+            "irr_pct": irr_pct,
+            "lcoe_gbp_per_mwh": lcoe_gbp_per_mwh,
+            "npv_gbp_m": 0,
+            "benchmark_source": "Cushman & Wakefield UK DC Market 2025 + CBRE H1 2025 + Cornwall Insight DC OpEx 2025",
         }
     constraints_applied.append("Fire breaks: 8 m (BS 8629:2019)")
     constraints_applied.append("Setback: 10 m from boundary")
@@ -976,6 +1020,40 @@ async def buildable_mask(
     }
     _mask_cache_put(key, payload)
     return payload
+
+
+# ---------------------------------------------------------------------------
+# D5b — Positive buildable polygon (companion to /buildable-mask)
+# ---------------------------------------------------------------------------
+
+@router.get("/buildable")
+async def buildable_positive(
+    lat: float = Query(..., ge=49, le=61),
+    lon: float = Query(..., ge=-8, le=2),
+    radius_m: float = Query(1500, ge=200, le=5000),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Return the BUILDABLE polygon directly (not the restricted polygons).
+
+    Companion to ``/buildable-mask``. The mask endpoint gives a list of
+    restricted polygons and expects the client to subtract them from a
+    buffer; this endpoint does that server-side and returns a single
+    GeoJSON FeatureCollection with one ``class=buildable`` polygon (with
+    holes where restrictions apply) plus area stats and provenance.
+
+    Falls open with a ``warning`` + explanation string if the upstream
+    mask is unavailable, rather than 500.
+    """
+    from app.analysis.buildable_area import positive_buildable_polygon
+    try:
+        mask_payload = await buildable_mask(lat=lat, lon=lon, radius_m=radius_m, pool=pool)
+    except Exception as exc:
+        log.warning("buildable_mask failed inside /buildable: %s", exc)
+        mask_payload = {"type": "FeatureCollection", "features": [],
+                        "warning": f"mask_unavailable:{type(exc).__name__}"}
+    return await positive_buildable_polygon(
+        lat=lat, lon=lon, radius_m=radius_m, pool=pool, mask_payload=mask_payload,
+    )
 
 
 # ---------------------------------------------------------------------------

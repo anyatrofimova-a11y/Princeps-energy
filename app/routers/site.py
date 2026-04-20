@@ -2249,3 +2249,40 @@ async def construction_plan(body: dict):
         "schedule": schedule,
         "traffic": traffic,
     }
+
+
+# ---------------------------------------------------------------------------
+# BOT-B1 — Nearest residential receptor (OSM, no PAF licence)
+# ---------------------------------------------------------------------------
+
+@router.get("/api/site/nearest-residence")
+async def site_nearest_residence(
+    lat: float = Query(..., ge=49, le=61, description="Site centre latitude (WGS84)"),
+    lon: float = Query(..., ge=-8, le=2, description="Site centre longitude (WGS84)"),
+    radius_m: float = Query(500.0, ge=50, le=5000,
+                            description="Search radius in metres."),
+):
+    """Return the nearest residential receptor to (lat, lon) for noise /
+    setback / visual-amenity checks.
+
+    Source: OpenStreetMap ``building`` tags (``residential``, ``apartments``,
+    ``dormitory``, ``house``, ``detached``, ``semidetached_house``,
+    ``terrace``, ``bungalow``, ``static_caravan``, ``farm``, ``farmhouse``,
+    ``cabin``). Not authoritative — confirm before planning submission.
+
+    Response shape::
+        {
+          "feature": GeoJSON Feature | null,
+          "distance_m": float | null,
+          "count_within_radius": int,
+          "radius_m": float,
+          "provenance": {...},
+          "explanation": "..."
+        }
+
+    Always returns 200: on upstream failure the response carries
+    ``feature=null`` and a ``synthetic_fallback`` provenance so the client
+    can render an honest message instead of fabricating a receptor.
+    """
+    from utils.nearest_residence import nearest_residence
+    return await nearest_residence(lat=lat, lon=lon, radius_m=radius_m)

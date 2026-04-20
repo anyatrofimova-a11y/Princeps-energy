@@ -104,3 +104,93 @@ async def lookup(
                 "(£3/title via land-registry.data.gov.uk Business Gateway)."
             ),
         }
+
+
+async def lookup_by_inspire_id(
+    inspire_id: str,
+    *,
+    pool: Optional[asyncpg.Pool] = None,
+) -> dict[str, Any]:
+    """Return the HMLR INSPIRE parcel identified by ``inspire_id``.
+
+    Companion to :func:`lookup`. Used by ``GET /api/parcels/{inspire_id}/geometry``
+    so the frontend can fetch the real INSPIRE polygon instead of a circular
+    radius proxy. Never raises — returns ``{"found": False, ...}`` when the
+    table is missing or the id is unknown, with an explanation string so the
+    caller can render an honest fallback.
+    """
+    if not inspire_id:
+        return {
+            "found": False,
+            "inspire_id": None,
+            "parcel_geom_geojson": None,
+            "parcel_area_ha": None,
+            "centroid": None,
+            "explanation": "No inspire_id supplied.",
+        }
+    if pool is None:
+        raise ValueError("hmlr: no DB pool provided")
+
+    async with pool.acquire() as conn:
+        if not await _table_exists(conn):
+            return {
+                "found": False,
+                "inspire_id": inspire_id,
+                "parcel_geom_geojson": None,
+                "parcel_area_ha": None,
+                "centroid": None,
+                "explanation": (
+                    f"INSPIRE parcel table '{_TABLE}' not ingested. "
+                    "Run utils.hmlr_inspire_ingester to populate."
+                ),
+            }
+
+        row = await conn.fetchrow(
+            f"""
+            SELECT
+                inspire_id,
+                area_m2,
+                ST_AsGeoJSON(ST_Transform(geom, 4326)) AS geom_4326,
+                ST_Y(ST_Centroid(ST_Transform(geom, 4326))) AS clat,
+                ST_X(ST_Centroid(ST_Transform(geom, 4326))) AS clon
+            FROM {_TABLE}
+            WHERE inspire_id = $1
+            LIMIT 1
+            """,
+            inspire_id,
+        )
+        if row is None:
+            return {
+                "found": False,
+                "inspire_id": inspire_id,
+                "parcel_geom_geojson": None,
+                "parcel_area_ha": None,
+                "centroid": None,
+                "explanation": (
+                    f"INSPIRE id '{inspire_id}' not found in HMLR parcel index. "
+                    "Monthly HMLR export may predate this registration, or the id "
+                    "may belong to a different authority export."
+                ),
+            }
+
+        area_m2 = float(row["area_m2"]) if row["area_m2"] is not None else None
+        try:
+            geojson = json.loads(row["geom_4326"]) if row["geom_4326"] else None
+        except Exception:
+            geojson = None
+        centroid = None
+        if row["clat"] is not None and row["clon"] is not None:
+            centroid = [float(row["clon"]), float(row["clat"])]
+
+        return {
+            "found": True,
+            "inspire_id": row["inspire_id"],
+            "parcel_geom_geojson": geojson,
+            "parcel_area_ha": round(area_m2 / 10_000.0, 4) if area_m2 else None,
+            "centroid": centroid,
+            "explanation": (
+                f"HMLR INSPIRE index polygon for {row['inspire_id']} "
+                f"({round((area_m2 or 0) / 10_000.0, 2)} ha). "
+                "Title number requires paid Official Copy lookup."
+            ),
+        }

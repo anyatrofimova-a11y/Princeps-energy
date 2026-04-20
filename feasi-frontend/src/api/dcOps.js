@@ -2,16 +2,15 @@
  * dcOps.js — aggregator for DC live-ops overlays shown in DCDesignTwin.
  *
  * Endpoints called (when VITE_MOCK_DC_OPS !== "true"):
- *   POST /api/dc/thermal-field           → hall-level 2D temp grid (EXISTS)
- *   GET  /api/dc/noise-contours          → genset/chiller dB contours (MISSING — follow-up)
- *   GET  /api/dc/glint-screen            → solar-noon glint cones     (MISSING — follow-up)
- *   WS   /ws/dc-ops                      → live PUE / IT load ticks   (MISSING — follow-up)
- *   GET  /api/dc/ops                     → PUE / IT load snapshot     (MISSING — follow-up)
+ *   POST /api/dc/thermal-field           → hall-level 2D temp grid (app/routers/grid.py)
+ *   GET  /api/dc/noise-contours          → genset/chiller dB contours (app/routers/dc_ops.py)
+ *   GET  /api/dc/glint-screen            → solar-noon glint cones     (app/routers/dc_ops.py)
+ *   GET  /api/dc/ops                     → PUE / IT load snapshot     (app/routers/dc_ops.py)
+ *   WS   /ws/dc-ops/{project_id}         → live PUE / IT load ticks   (app/routers/dc_ops.py, 5s)
  *
- * For endpoints that don't yet exist, we fall back to deterministic
- * client-side derivations from the building geometry + IT load so the
- * overlays still render something defensible during demos. Replace
- * with live calls once BOT-backend lands the routes.
+ * Client-side simulators are kept as an escape hatch: set
+ * VITE_MOCK_DC_OPS="true" to force offline demo mode, or leave the default
+ * and the helpers auto-fall-back if a backend call throws.
  */
 
 const MOCK_FLAG = (import.meta.env.VITE_MOCK_DC_OPS ?? "true").toString().toLowerCase();
@@ -94,10 +93,10 @@ function mockThermalField(rows, racksPerRow, supplyTempC, rackKw, containment) {
  *     receptor_flags: [{ lat, lon, db_at_receptor, exceeds: true/false }]
  *   }
  */
-export async function fetchNoiseContours({ lat, lon, itLoadMw = 50, genLat, genLon, chillLat, chillLon, receptors = [] } = {}) {
+export async function fetchNoiseContours({ lat, lon, itLoadMw = 50, genLat, genLon, chillLat, chillLon, receptors = [], sources = "genset,chiller" } = {}) {
   if (!USE_MOCK_DC_OPS) {
     try {
-      const qs = new URLSearchParams({ lat, lon, it_mw: itLoadMw });
+      const qs = new URLSearchParams({ lat, lon, sources, mw: itLoadMw });
       const r = await fetch(`${API_BASE}/api/dc/noise-contours?${qs}`);
       if (r.ok) return await r.json();
     } catch { /* fall through */ }
@@ -149,7 +148,8 @@ export async function fetchNoiseContours({ lat, lon, itLoadMw = 50, genLat, genL
 export async function fetchGlintCones({ lat, lon, coolingLat, coolingLon, receptors = [] } = {}) {
   if (!USE_MOCK_DC_OPS) {
     try {
-      const qs = new URLSearchParams({ lat, lon });
+      const extent = (coolingLat != null && coolingLon != null) ? `${coolingLat},${coolingLon}` : `${lat},${lon}`;
+      const qs = new URLSearchParams({ lat, lon, cooling_plant_extent: extent });
       const r = await fetch(`${API_BASE}/api/dc/glint-screen?${qs}`);
       if (r.ok) return await r.json();
     } catch { /* fall through */ }
@@ -190,7 +190,7 @@ export async function fetchGlintCones({ lat, lon, coolingLat, coolingLon, recept
  * Returns an unsubscribe function. `onTick` is called with a snapshot:
  *   { pue, it_load_pct, cooling_mw, water_lpm, ts }
  */
-export function subscribeDcOps({ itLoadMw = 50, onTick }) {
+export function subscribeDcOps({ itLoadMw = 50, projectId = "demo", onTick }) {
   let alive = true;
   let ws = null;
   let pollTimer = null;
@@ -218,7 +218,8 @@ export function subscribeDcOps({ itLoadMw = 50, onTick }) {
     if (!alive) return;
     if (USE_MOCK_DC_OPS) { emitFake(); return; }
     try {
-      const r = await fetch(`${API_BASE}/api/dc/ops`);
+      const qs = new URLSearchParams({ project_id: projectId, it_load_mw: itLoadMw });
+      const r = await fetch(`${API_BASE}/api/dc/ops?${qs}`);
       if (r.ok) { const j = await r.json(); onTick?.(j); return; }
     } catch { /* silent */ }
     emitFake();
@@ -227,7 +228,8 @@ export function subscribeDcOps({ itLoadMw = 50, onTick }) {
   if (!USE_MOCK_DC_OPS) {
     try {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      ws = new WebSocket(`${proto}//${window.location.host}/ws/dc-ops`);
+      const wsQs = new URLSearchParams({ it_load_mw: itLoadMw });
+      ws = new WebSocket(`${proto}//${window.location.host}/ws/dc-ops/${encodeURIComponent(projectId)}?${wsQs}`);
       ws.onmessage = (ev) => {
         try { onTick?.(JSON.parse(ev.data)); } catch { /* noop */ }
       };

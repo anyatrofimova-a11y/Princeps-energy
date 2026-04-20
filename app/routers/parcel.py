@@ -262,3 +262,93 @@ async def parcel_detail(
             },
         )
     return envelope
+
+
+# ---------------------------------------------------------------------------
+# HMLR INSPIRE polygon — BOT-B1 shipping the endpoint BOT-DP hacked around
+# ---------------------------------------------------------------------------
+
+
+async def _inspire_geometry_response(
+    inspire_id: str,
+    pool: asyncpg.Pool,
+) -> dict:
+    """Shared impl for singular + plural geometry routes."""
+    from utils.site_enrichment.hmlr import lookup_by_inspire_id
+    try:
+        result = await lookup_by_inspire_id(inspire_id, pool=pool)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("lookup_by_inspire_id crashed: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "hmlr_lookup_failed",
+                "inspire_id": inspire_id,
+                "reason": f"{type(exc).__name__}: {str(exc)[:160]}",
+            },
+        )
+
+    if not result.get("found"):
+        # Honest 404 — caller can fall back to circular buffer and render the
+        # ``explanation`` string so the user knows why there's no real polygon.
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "error": "inspire_parcel_not_found",
+                "inspire_id": inspire_id,
+                "explanation": result.get("explanation"),
+            },
+        )
+
+    geom = result.get("parcel_geom_geojson")
+    feature = {
+        "type": "Feature",
+        "geometry": geom,
+        "properties": {
+            "inspire_id": result["inspire_id"],
+            "parcel_area_ha": result.get("parcel_area_ha"),
+            "centroid": result.get("centroid"),
+        },
+    }
+    from datetime import datetime as _dt
+    return {
+        "type": "FeatureCollection",
+        "features": [feature] if geom else [],
+        "inspire_id": result["inspire_id"],
+        "parcel_area_ha": result.get("parcel_area_ha"),
+        "centroid": result.get("centroid"),
+        "provenance": {
+            "data_provenance": "db_snapshot",
+            "last_refreshed_utc": _dt.utcnow().isoformat(timespec="seconds") + "Z",
+            "reason": (
+                "HMLR INSPIRE index polygon (OGL-licensed monthly publication). "
+                "Title number requires paid HMLR Official Copy lookup."
+            ),
+        },
+        "explanation": result.get("explanation"),
+    }
+
+
+@router.get("/api/parcels/{inspire_id}/geometry")
+async def parcel_inspire_geometry(
+    inspire_id: str = Path(..., description="HMLR INSPIRE parcel id"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Return the HMLR INSPIRE polygon for ``inspire_id`` as a GeoJSON
+    FeatureCollection (single Feature). Used by DesignCanvas to draw the
+    real parcel boundary instead of a circular proxy.
+
+    Returns 404 if the id is unknown or the HMLR table is not yet ingested,
+    with an ``explanation`` string so the caller can render a honest fallback.
+    """
+    return await _inspire_geometry_response(inspire_id, pool)
+
+
+@router.get("/api/parcel/{inspire_id}/geometry")
+async def parcel_inspire_geometry_singular(
+    inspire_id: str = Path(..., description="HMLR INSPIRE parcel id"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Alias under the existing ``/api/parcel/{id}`` prefix for backward
+    compatibility with clients that used the singular path."""
+    return await _inspire_geometry_response(inspire_id, pool)
