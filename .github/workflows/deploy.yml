@@ -1,0 +1,85 @@
+name: Deploy to Railway
+
+# Why this exists:
+#   Railway's GitHub auto-deploy webhook is fragile — it broke during the
+#   feasibly → Princeps-energy rename in Apr 2026 and silently stopped
+#   redeploying services on push. This workflow is the durable replacement:
+#   it ships every push to main into Railway via `railway up`, regardless
+#   of what state Railway's own GitHub link is in.
+#
+# One-time setup:
+#   GitHub repo Settings → Secrets and variables → Actions → New secret
+#   Name:  RAILWAY_TOKEN
+#   Value: a Railway account token (Account Settings → Tokens → New)
+#
+# Manual redeploy of a single service (e.g. after rolling back a config):
+#   GitHub → Actions tab → "Deploy to Railway" → "Run workflow"
+#   Set the `service` input to the service name (blank = all).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Single service to redeploy (blank = all)"
+        required: false
+        default: ""
+
+jobs:
+  # All-services matrix deploy. Fires on every push to main and on
+  # workflow_dispatch with no service input.
+  deploy-all:
+    name: Deploy ${{ matrix.service }}
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.service == '')
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - princeps-frontend
+          - princeps-web
+          - princeps-scheduler
+          - princeps-worker-prospector
+          - princeps-worker-grid-monitor
+          - princeps-worker-procurement
+          - princeps-worker-ingestion
+          - princeps-worker-report
+          - princeps-worker-analyst
+          - princeps-worker-rnd
+          - princeps-worker-planning
+          - princeps-worker-market
+          - princeps-worker-builder
+    concurrency:
+      group: deploy-${{ matrix.service }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: curl -fsSL https://railway.com/install.sh | sh
+
+      - name: Deploy ${{ matrix.service }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service ${{ matrix.service }} --detach
+
+  # Single-service redeploy. Fires only on workflow_dispatch with a
+  # service input set.
+  deploy-one:
+    name: Deploy ${{ github.event.inputs.service }} (manual)
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.service != ''
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-${{ github.event.inputs.service }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: curl -fsSL https://railway.com/install.sh | sh
+
+      - name: Deploy ${{ github.event.inputs.service }}
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service "${{ github.event.inputs.service }}" --detach
