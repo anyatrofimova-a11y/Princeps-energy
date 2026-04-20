@@ -97,17 +97,29 @@ class Object:
 class ActionResult:
     """Return payload of ``preview()`` and ``commit()``.
 
-    ``preview`` sets ``committed=False`` and fills ``diff`` with what
-    *would* change. ``commit`` sets ``committed=True`` and fills
-    ``committed_object`` with the post-mutation state.
+    Two overlapping shapes are supported so that both the class-based
+    ``Action.commit()`` path and the functional dispatch layer
+    (``app.ontology.dispatch``) can share the same value type:
+
+      * Class path fills ``object_key``, ``diff``, ``committed``,
+        ``committed_object``, ``reason``.
+      * Functional path fills ``object_after``, ``side_effects``,
+        ``error``, ``duration_ms``, ``provenance``.
     """
 
     ok: bool
-    object_key: str
+    object_key: str = ""
     diff: dict[str, Any] = field(default_factory=dict)
     committed: bool = False
     committed_object: dict[str, Any] | None = None
     reason: str | None = None
+
+    # Functional-dispatch additions
+    object_after: dict[str, Any] | None = None
+    side_effects: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+    duration_ms: int = 0
+    provenance: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -116,7 +128,12 @@ class ActionResult:
             "diff": self.diff,
             "committed": self.committed,
             "committed_object": self.committed_object,
-            "reason": self.reason,
+            "reason": self.reason or self.error,
+            "object_after": self.object_after,
+            "side_effects": self.side_effects,
+            "error": self.error,
+            "duration_ms": self.duration_ms,
+            "provenance": self.provenance,
         }
 
 

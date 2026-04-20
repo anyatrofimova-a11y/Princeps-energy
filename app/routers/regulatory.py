@@ -305,7 +305,7 @@ async def rag_ingest(pool: asyncpg.Pool = Depends(get_pool)):
 
 
 # ══════════════════════════════════════════════════════════════
-# UK Regulatory Alerts (Halcyon-style monitoring for UK market)
+# UK Regulatory Alerts (authoritative-source monitoring for UK market)
 # ══════════════════════════════════════════════════════════════
 
 @router.get("/api/regulatory/alerts")
