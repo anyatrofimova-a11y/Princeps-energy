@@ -1,7 +1,7 @@
 """
 Planning NLP — Extract structured data from UK planning documents.
 
-Inspired by Halcyon's docket NLP (95%+ precision on regulatory filings).
+Industry-standard docket NLP targeting 95%+ precision on regulatory filings.
 Handles: planning decisions, connection offers, EIA screening, G99 packs.
 """
 

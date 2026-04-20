@@ -7,10 +7,24 @@ Adapters:
   - OverpassAdapter: OpenStreetMap power infrastructure
 
 All adapters write to the grid_* PostGIS tables (SRID 27700).
+
+CLI:
+    python -m utils.grid_data_ingester --once [--dry-run] [--dno ukpn]
+
+Every ingestion run writes a row to `grid_ingestion_log` with:
+    source, dataset, started_at, finished_at,
+    records_fetched, records_upserted,
+    rows_inserted, rows_updated, rows_failed,
+    status ('running'|'success'|'partial'|'failed'),
+    error / error_message
 """
 
 from __future__ import annotations
 
+import argparse
+import asyncio
+import csv as _csv
+import io as _io
 import json
 import logging
 import os
@@ -300,11 +314,12 @@ class CKANAdapter(DataAdapter):
     async def _fetch_records(
         self, resource_id: str, page_size: int = 1000,
     ) -> list[dict]:
-        """Fetch all records from a CKAN datastore resource."""
-        url = f"{self.base_url}{self.api_path}"
-        all_records: list[dict] = []
-        offset = 0
+        """Fetch all records from a CKAN portal.
 
+        Tries datastore_search first (works for NESO, SSEN Datopian). If the
+        resource isn't in the datastore (true for most NGED CSVs), falls
+        through to package_show + direct CSV download.
+        """
         headers: dict[str, str] = {"User-Agent": _USER_AGENT}
         if self.api_key:
             headers["Authorization"] = self.api_key
@@ -314,21 +329,80 @@ class CKANAdapter(DataAdapter):
             headers=headers,
             follow_redirects=True,
         ) as client:
-            while True:
-                r = await client.get(url, params={
-                    "resource_id": resource_id,
-                    "limit": page_size,
-                    "offset": offset,
-                })
-                r.raise_for_status()
-                data = r.json()
-                records = data.get("result", {}).get("records", [])
-                if not records:
-                    break
-                all_records.extend(records)
-                offset += len(records)
-                if len(records) < page_size:
-                    break
+            # 1) datastore_search path (NESO, SSEN Datopian)
+            datastore_url = f"{self.base_url}{self.api_path}"
+            all_records: list[dict] = []
+            offset = 0
+            datastore_ok = False
+            try:
+                while True:
+                    r = await client.get(datastore_url, params={
+                        "resource_id": resource_id,
+                        "limit": page_size,
+                        "offset": offset,
+                    })
+                    if r.status_code != 200:
+                        break
+                    data = r.json()
+                    if not data.get("success"):
+                        break
+                    records = data.get("result", {}).get("records", [])
+                    if not records and offset == 0:
+                        # Empty datastore OR resource not in datastore — try CSV fall-through
+                        break
+                    if not records:
+                        datastore_ok = True
+                        break
+                    datastore_ok = True
+                    all_records.extend(records)
+                    offset += len(records)
+                    if len(records) < page_size:
+                        break
+            except Exception as e:
+                log.debug("CKAN datastore_search failed for %s: %s", resource_id, e)
+
+            if datastore_ok and all_records:
+                return all_records
+
+            # 2) package_show → first CSV resource download (NGED, fallback)
+            try:
+                r = await client.get(
+                    f"{self.base_url}/api/3/action/package_show",
+                    params={"id": resource_id},
+                )
+                if r.status_code == 200 and r.json().get("success"):
+                    pkg = r.json().get("result", {})
+                    csv_res = next(
+                        (res for res in pkg.get("resources", [])
+                         if (res.get("format") or "").upper() == "CSV" and res.get("url")),
+                        None,
+                    )
+                    if csv_res:
+                        csv_r = await client.get(csv_res["url"], timeout=120.0)
+                        csv_r.raise_for_status()
+                        reader = _csv.DictReader(_io.StringIO(csv_r.text))
+                        rows = [dict(row) for row in reader]
+                        return rows
+            except Exception as e:
+                log.debug("CKAN package_show fetch failed for %s: %s", resource_id, e)
+
+            # 3) If the caller passed a literal resource_id (not a package id),
+            # try GETting the resource_show endpoint to resolve the URL.
+            try:
+                r = await client.get(
+                    f"{self.base_url}/api/3/action/resource_show",
+                    params={"id": resource_id},
+                )
+                if r.status_code == 200 and r.json().get("success"):
+                    res = r.json().get("result", {})
+                    url = res.get("url")
+                    if url and (res.get("format") or "").upper() == "CSV":
+                        csv_r = await client.get(url, timeout=120.0)
+                        csv_r.raise_for_status()
+                        reader = _csv.DictReader(_io.StringIO(csv_r.text))
+                        return [dict(row) for row in reader]
+            except Exception as e:
+                log.debug("CKAN resource_show fetch failed for %s: %s", resource_id, e)
 
         return all_records
 
@@ -700,13 +774,102 @@ async def upsert_dno_boundaries(conn, boundaries: list[dict]) -> int:
 
 # ─── Log Helpers ──────────────────────────────────────────────────────────
 
+# Task #21 extension: per-source start/finish accounting with
+# rows_inserted / rows_updated / rows_failed + error_message columns.
+# Added as ALTER TABLE IF NOT EXISTS to be safe against fresh deploys where
+# the migration file hasn't been updated yet.
+
+_LOG_SCHEMA_EXTENSION = """
+ALTER TABLE grid_ingestion_log
+  ADD COLUMN IF NOT EXISTS rows_inserted INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS rows_updated  INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS rows_failed   INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS error_message TEXT;
+CREATE INDEX IF NOT EXISTS idx_grid_ingest_log_source
+  ON grid_ingestion_log (source, started_at DESC);
+"""
+
+
+async def ensure_log_schema(conn) -> None:
+    """Idempotent — extend grid_ingestion_log with the richer columns."""
+    for stmt in _LOG_SCHEMA_EXTENSION.split(";"):
+        if stmt.strip():
+            try:
+                await conn.execute(stmt)
+            except Exception as e:
+                log.debug("ensure_log_schema statement failed: %s", e)
+
+
+async def start_ingestion(conn, source: str, dataset: str) -> int:
+    """Insert a 'running' row and return its id for later completion."""
+    row = await conn.fetchrow(
+        """
+        INSERT INTO grid_ingestion_log
+            (source, dataset, status, started_at)
+        VALUES ($1, $2, 'running', NOW())
+        RETURNING id
+        """,
+        source, dataset,
+    )
+    return int(row["id"]) if row else 0
+
+
+async def finish_ingestion(
+    conn, log_id: int, *,
+    status: str,
+    fetched: int = 0,
+    upserted: int = 0,
+    inserted: int = 0,
+    updated: int = 0,
+    failed: int = 0,
+    error: str | None = None,
+) -> None:
+    """Mark a running row complete. Gracefully no-ops if log_id==0."""
+    if not log_id:
+        return
+    await conn.execute(
+        """
+        UPDATE grid_ingestion_log
+           SET status            = $2,
+               records_fetched   = $3,
+               records_upserted  = $4,
+               rows_inserted     = $5,
+               rows_updated      = $6,
+               rows_failed       = $7,
+               error             = $8,
+               error_message     = $8,
+               finished_at       = NOW()
+         WHERE id = $1
+        """,
+        log_id, status, fetched, upserted, inserted, updated, failed, error,
+    )
+
+
 async def log_ingestion(conn, source: str, dataset: str, status: str,
-                         fetched: int = 0, upserted: int = 0, error: str | None = None):
-    """Record an ingestion run in grid_ingestion_log."""
-    await conn.execute("""
-        INSERT INTO grid_ingestion_log (source, dataset, status, records_fetched, records_upserted, error, finished_at)
-        VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $3 != 'running' THEN NOW() END)
-    """, source, dataset, status, fetched, upserted, error)
+                         fetched: int = 0, upserted: int = 0, error: str | None = None,
+                         inserted: int = 0, updated: int = 0, failed: int = 0):
+    """Record a one-shot ingestion run in grid_ingestion_log (legacy helper).
+
+    Prefer start_ingestion + finish_ingestion for new code.
+    """
+    await conn.execute(
+        """
+        INSERT INTO grid_ingestion_log
+            (source, dataset, status,
+             records_fetched, records_upserted,
+             rows_inserted, rows_updated, rows_failed,
+             error, error_message, finished_at)
+        VALUES ($1, $2, $3,
+                $4, $5,
+                $6, $7, $8,
+                $9, $9,
+                CASE WHEN $3 != 'running' THEN NOW() END)
+        """,
+        source, dataset, status,
+        fetched, upserted,
+        inserted, updated, failed,
+        error,
+    )
 
 
 # ─── Orchestrator ─────────────────────────────────────────────────────────
@@ -725,81 +888,238 @@ def get_adapter(dno_code: str) -> DataAdapter:
         raise ValueError(f"Unknown platform: {config['platform']}")
 
 
-async def ingest_all_dnos(pool) -> dict:
+async def _run_one_dataset(
+    conn, dno_code: str, dataset: str,
+    fetch_fn, upsert_fn, *,
+    dry_run: bool = False,
+) -> dict:
+    """Fetch + upsert one dataset for one DNO, with per-run log accounting.
+
+    Any exception is captured, recorded as 'failed' in grid_ingestion_log,
+    and the summary dict returned — we NEVER let a single dataset's
+    blow-up kill the rest of the pipeline.
+    """
+    log_id = await start_ingestion(conn, dno_code, dataset)
+    try:
+        records = await fetch_fn()
+    except httpx.HTTPStatusError as e:
+        msg = f"HTTP {e.response.status_code}: {str(e)[:200]}"
+        await finish_ingestion(
+            conn, log_id, status="failed",
+            fetched=0, upserted=0, failed=1, error=msg,
+        )
+        log.warning("[%s/%s] fetch failed: %s", dno_code, dataset, msg)
+        return {"status": "failed", "fetched": 0, "upserted": 0, "error": msg}
+    except Exception as e:
+        msg = f"{type(e).__name__}: {str(e)[:200]}"
+        await finish_ingestion(
+            conn, log_id, status="failed",
+            fetched=0, upserted=0, failed=1, error=msg,
+        )
+        log.warning("[%s/%s] fetch error: %s", dno_code, dataset, msg)
+        return {"status": "failed", "fetched": 0, "upserted": 0, "error": msg}
+
+    n_fetched = len(records) if records else 0
+    if dry_run:
+        await finish_ingestion(
+            conn, log_id, status="success",
+            fetched=n_fetched, upserted=0,
+            inserted=0, updated=0, failed=0,
+        )
+        return {"status": "dry_run", "fetched": n_fetched, "upserted": 0}
+
+    try:
+        n_upserted = await upsert_fn(records) if records else 0
+    except Exception as e:
+        msg = f"{type(e).__name__}: {str(e)[:200]}"
+        await finish_ingestion(
+            conn, log_id, status="failed",
+            fetched=n_fetched, upserted=0, failed=n_fetched, error=msg,
+        )
+        log.exception("[%s/%s] upsert failed", dno_code, dataset)
+        return {"status": "failed", "fetched": n_fetched, "upserted": 0, "error": msg}
+
+    # Heuristic: can't cheaply distinguish inserts from updates without
+    # xmax inspection, so we record both as `inserted + updated` total.
+    # DNO ingest is upsert-heavy; record n_upserted under both when we
+    # can't split. `rows_failed` = fetched but not persisted (missing coords etc).
+    rows_failed = max(0, n_fetched - n_upserted)
+    status = "success" if rows_failed == 0 else "partial"
+    await finish_ingestion(
+        conn, log_id,
+        status=status,
+        fetched=n_fetched,
+        upserted=n_upserted,
+        inserted=n_upserted,   # best-effort — upsert doesn't split
+        updated=0,
+        failed=rows_failed,
+    )
+    return {
+        "status": status,
+        "fetched": n_fetched,
+        "upserted": n_upserted,
+        "failed": rows_failed,
+    }
+
+
+async def ingest_all_dnos(pool, *, only: str | None = None, dry_run: bool = False) -> dict:
     """
     Run ingestion for all DNOs. Called from FastAPI lifespan or background task.
+
+    Args:
+        pool: asyncpg pool
+        only: ingest a single DNO by its slug (ukpn/npg/spen/enwl/ssen/nged)
+        dry_run: fetch but do not persist (diagnostics)
 
     Returns summary dict with counts per DNO.
     """
     t0 = time.time()
-    summary: dict[str, Any] = {}
+    summary: dict[str, Any] = {"dry_run": bool(dry_run)}
 
     async with pool.acquire() as conn:
-        # Ensure tables exist
-        migration = open(
-            str(__import__("pathlib").Path(__file__).parent.parent / "sql" / "migrate_grid_connection.sql")
-        ).read()
-        for stmt in migration.split(";"):
-            stmt = stmt.strip()
-            if stmt and not stmt.startswith("--"):
-                try:
-                    await conn.execute(stmt)
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        log.warning("Migration statement failed: %s", e)
+        # Ensure tables exist (idempotent migrations)
+        try:
+            migration = open(
+                str(__import__("pathlib").Path(__file__).parent.parent / "sql" / "migrate_grid_connection.sql")
+            ).read()
+            for stmt in migration.split(";"):
+                stmt = stmt.strip()
+                if stmt and not stmt.startswith("--"):
+                    try:
+                        await conn.execute(stmt)
+                    except Exception as e:
+                        if "already exists" not in str(e).lower():
+                            log.warning("Migration statement failed: %s", e)
+        except FileNotFoundError:
+            log.debug("migrate_grid_connection.sql not found — assuming schema already migrated")
 
-        # Ingest each DNO
-        for dno_code in DNO_CONFIGS:
+        # Extend the log schema with the richer columns (rows_inserted etc.)
+        await ensure_log_schema(conn)
+
+        # Ingest each DNO (or just one if `only` is set)
+        dnos_to_run = [only] if only else list(DNO_CONFIGS)
+        for dno_code in dnos_to_run:
+            if dno_code not in DNO_CONFIGS:
+                summary[dno_code] = {"status": "unknown_dno"}
+                continue
             try:
                 adapter = get_adapter(dno_code)
-
-                subs = await adapter.fetch_substations()
-                sub_count = await upsert_substations(conn, subs) if subs else 0
-
-                ecr = await adapter.fetch_ecr()
-                ecr_count = await upsert_ecr(conn, ecr) if ecr else 0
-
-                await log_ingestion(conn, dno_code, "substations", "done", len(subs), sub_count)
-                if ecr:
-                    await log_ingestion(conn, dno_code, "ecr", "done", len(ecr), ecr_count)
-
-                summary[dno_code] = {
-                    "substations": sub_count,
-                    "ecr": ecr_count,
-                    "status": "done",
-                }
-                log.info("[%s] Ingested %d substations, %d ECR", dno_code, sub_count, ecr_count)
-
             except Exception as e:
-                log.error("[%s] Ingestion failed: %s", dno_code, e)
-                await log_ingestion(conn, dno_code, "all", "failed", error=str(e))
+                log.error("[%s] adapter init failed: %s", dno_code, e)
+                # Still record in log so health endpoint shows it
+                log_id = await start_ingestion(conn, dno_code, "all")
+                await finish_ingestion(
+                    conn, log_id, status="failed",
+                    error=f"adapter init: {type(e).__name__}: {e}",
+                    failed=1,
+                )
                 summary[dno_code] = {"status": "failed", "error": str(e)}
+                continue
+
+            sub_result = await _run_one_dataset(
+                conn, dno_code, "substations",
+                fetch_fn=adapter.fetch_substations,
+                upsert_fn=(lambda subs: upsert_substations(conn, subs)),
+                dry_run=dry_run,
+            )
+            ecr_result = await _run_one_dataset(
+                conn, dno_code, "ecr",
+                fetch_fn=adapter.fetch_ecr,
+                upsert_fn=(lambda entries: upsert_ecr(conn, entries)),
+                dry_run=dry_run,
+            )
+
+            statuses = {sub_result["status"], ecr_result["status"]}
+            overall = (
+                "failed" if statuses == {"failed"}
+                else "partial" if "failed" in statuses or "partial" in statuses
+                else "success"
+            )
+            summary[dno_code] = {
+                "status": overall,
+                "substations": sub_result,
+                "ecr": ecr_result,
+            }
+            log.info(
+                "[%s] sub=%s/%s ecr=%s/%s status=%s",
+                dno_code,
+                sub_result.get("upserted"), sub_result.get("fetched"),
+                ecr_result.get("upserted"), ecr_result.get("fetched"),
+                overall,
+            )
 
         # DNO boundaries
-        try:
-            boundaries = await fetch_dno_boundaries()
-            b_count = await upsert_dno_boundaries(conn, boundaries)
-            summary["dno_boundaries"] = b_count
-            log.info("Ingested %d DNO boundaries", b_count)
-        except Exception as e:
-            log.warning("DNO boundaries ingestion failed: %s", e)
-            summary["dno_boundaries"] = {"error": str(e)}
+        if not only:
+            log_id = await start_ingestion(conn, "neso", "dno_boundaries")
+            try:
+                boundaries = await fetch_dno_boundaries()
+                b_count = 0 if dry_run else await upsert_dno_boundaries(conn, boundaries)
+                summary["dno_boundaries"] = b_count
+                await finish_ingestion(
+                    conn, log_id, status="success",
+                    fetched=len(boundaries), upserted=b_count,
+                    inserted=b_count,
+                )
+                log.info("Ingested %d DNO boundaries", b_count)
+            except Exception as e:
+                await finish_ingestion(
+                    conn, log_id, status="failed",
+                    error=f"{type(e).__name__}: {e}", failed=1,
+                )
+                log.warning("DNO boundaries ingestion failed: %s", e)
+                summary["dno_boundaries"] = {"error": str(e)}
 
-        # OSM power infrastructure
-        try:
-            osm = OverpassAdapter()
-            osm_lines = await osm.fetch_power_lines(min_voltage_kv=132)
-            line_count = await upsert_grid_lines(conn, osm_lines)
-            summary["osm_lines"] = line_count
-            log.info("Ingested %d OSM power lines", line_count)
-        except Exception as e:
-            log.warning("OSM ingestion failed: %s", e)
-            summary["osm_lines"] = {"error": str(e)}
+            # OSM power infrastructure
+            log_id = await start_ingestion(conn, "osm", "power_lines")
+            try:
+                osm = OverpassAdapter()
+                osm_lines = await osm.fetch_power_lines(min_voltage_kv=132)
+                line_count = 0 if dry_run else await upsert_grid_lines(conn, osm_lines)
+                summary["osm_lines"] = line_count
+                await finish_ingestion(
+                    conn, log_id, status="success",
+                    fetched=len(osm_lines), upserted=line_count,
+                    inserted=line_count,
+                )
+                log.info("Ingested %d OSM power lines", line_count)
+            except Exception as e:
+                await finish_ingestion(
+                    conn, log_id, status="failed",
+                    error=f"{type(e).__name__}: {e}", failed=1,
+                )
+                log.warning("OSM ingestion failed: %s", e)
+                summary["osm_lines"] = {"error": str(e)}
 
     elapsed = round(time.time() - t0, 1)
     summary["elapsed_s"] = elapsed
-    log.info("Grid data ingestion complete in %.1fs", elapsed)
+    log.info("Grid data ingestion complete in %.1fs (dry_run=%s)", elapsed, dry_run)
     return summary
+
+
+# ─── Health / Status helpers ───────────────────────────────────────────────
+
+async def latest_ingest_status_per_source(pool) -> list[dict]:
+    """Return the most-recent grid_ingestion_log row per (source, dataset).
+
+    Powers `GET /api/grid/ingest-status`.
+    """
+    async with pool.acquire() as conn:
+        await ensure_log_schema(conn)
+        rows = await conn.fetch(
+            """
+            SELECT DISTINCT ON (source, dataset)
+                   source, dataset, status,
+                   records_fetched, records_upserted,
+                   COALESCE(rows_inserted, 0) AS rows_inserted,
+                   COALESCE(rows_updated, 0)  AS rows_updated,
+                   COALESCE(rows_failed, 0)   AS rows_failed,
+                   COALESCE(error_message, error) AS error_message,
+                   started_at, finished_at
+              FROM grid_ingestion_log
+             ORDER BY source, dataset, started_at DESC
+            """
+        )
+    return [dict(r) for r in rows]
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────
@@ -856,3 +1176,52 @@ def _parse_voltage_kv(voltage_str: str) -> float | None:
         elif v:
             voltages.append(v)
     return max(voltages) if voltages else None
+
+
+# ─── CLI entrypoint ───────────────────────────────────────────────────────
+# Run with: python -m utils.grid_data_ingester --once [--dry-run] [--dno ukpn]
+
+async def _cli_main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Run Princeps grid data ingestion against configured DNOs.",
+    )
+    parser.add_argument("--once", action="store_true",
+                        help="Run one full ingestion cycle and exit.")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Fetch from upstream but do NOT persist to DB.")
+    parser.add_argument("--dno", default=None,
+                        help=f"Only ingest this DNO (one of: {', '.join(DNO_CONFIGS)})")
+    parser.add_argument("--db-url", default=os.environ.get("DATABASE_URL"),
+                        help="Postgres connection string (defaults to $DATABASE_URL).")
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=os.environ.get("LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+
+    if not args.db_url:
+        log.error("No DATABASE_URL set and --db-url not passed. Aborting.")
+        return 2
+
+    import asyncpg as _asyncpg
+    pool = await _asyncpg.create_pool(args.db_url, min_size=1, max_size=3)
+    try:
+        summary = await ingest_all_dnos(
+            pool, only=args.dno, dry_run=args.dry_run,
+        )
+        print(json.dumps(summary, indent=2, default=str))
+    finally:
+        await pool.close()
+
+    # Exit non-zero if any DNO failed entirely
+    had_failure = any(
+        isinstance(v, dict) and v.get("status") == "failed"
+        for v in summary.values()
+    )
+    return 1 if had_failure else 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(asyncio.run(_cli_main()))

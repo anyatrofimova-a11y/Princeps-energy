@@ -608,8 +608,9 @@ async def bulk_import_repd(
     tech_map = {"solar": "solar", "wind": "wind", "bess": "bess", "biomass": "solar", "hydro": "solar"}
 
     async with pool.acquire() as conn:
-        # Build query
-        conditions = ["r.capacity_mw >= $1", "r.capacity_mw <= $2", "r.lat IS NOT NULL"]
+        # Build query — repd_projects stores lat/lon as a SRID 27700 geometry,
+        # so transform to WGS84 on read and filter on geometry presence.
+        conditions = ["r.capacity_mw >= $1", "r.capacity_mw <= $2", "r.geometry IS NOT NULL"]
         params = [min_capacity_mw, max_capacity_mw]
         idx = 3
 
@@ -628,7 +629,11 @@ async def bulk_import_repd(
 
         where = " AND ".join(conditions)
         rows = await conn.fetch(
-            f"""SELECT r.* FROM repd_projects r
+            f"""SELECT r.repd_id, r.site_name, r.status, r.tech_category, r.capacity_mw,
+                       r.developer, r.planning_authority, r.county, r.region,
+                       ST_Y(ST_Transform(r.geometry, 4326)) AS lat,
+                       ST_X(ST_Transform(r.geometry, 4326)) AS lon
+                FROM repd_projects r
                 LEFT JOIN projects p ON p.repd_id = r.repd_id
                 WHERE {where} AND p.project_id IS NULL
                 ORDER BY r.capacity_mw DESC
@@ -916,4 +921,71 @@ async def delete_candidate_site(
     if res == "DELETE 0":
         raise HTTPException(404, "Candidate site not found")
     return {"deleted": candidate_id}
+
+
+# ─── Godmode #8 — Project share-link (read-only public view) ──────────────
+
+import hmac as _hmac
+import hashlib as _hashlib
+import base64 as _b64
+import time as _time
+
+_SHARE_SECRET = os.environ.get("PRINCEPS_SHARE_SECRET", "princeps-dev-secret-change-me").encode()
+
+
+def _sign_share_token(project_id: str, expires_ts: int) -> str:
+    payload = f"{project_id}.{expires_ts}".encode()
+    sig = _hmac.new(_SHARE_SECRET, payload, _hashlib.sha256).digest()[:12]
+    token = _b64.urlsafe_b64encode(payload + b"." + sig).decode().rstrip("=")
+    return token
+
+
+def _verify_share_token(token: str) -> str | None:
+    try:
+        pad = "=" * (-len(token) % 4)
+        raw = _b64.urlsafe_b64decode(token + pad)
+        # raw = project_id.expires_ts.sig
+        project_id_b, expires_b, sig = raw.rsplit(b".", 2)
+        project_id = project_id_b.decode()
+        expires_ts = int(expires_b.decode())
+        expected = _hmac.new(
+            _SHARE_SECRET, f"{project_id}.{expires_ts}".encode(), _hashlib.sha256
+        ).digest()[:12]
+        if not _hmac.compare_digest(sig, expected):
+            return None
+        if _time.time() > expires_ts:
+            return None
+        return project_id
+    except Exception:
+        return None
+
+
+class _ShareRequest(BaseModel):
+    ttl_days: int = 30
+
+
+@router.post("/{project_id}/share")
+async def create_share_link(
+    project_id: str,
+    body: _ShareRequest | None = None,
+):
+    """Generate a signed read-only share token for a project.
+
+    Token payload: `{project_id}.{expires_ts}.{hmac_sig[:12]}` base64url-encoded.
+    Stateless — no DB writes. Verify via GET /api/public/share/{token}.
+    """
+    ttl = (body.ttl_days if body else 30)
+    ttl = max(1, min(365, ttl))
+    expires = int(_time.time()) + ttl * 86400
+    token = _sign_share_token(project_id, expires)
+    return {
+        "token": token,
+        "expires_at": expires,
+        "path": f"/p/{token}",
+    }
+
+
+# The corresponding GET /api/public/share/{token} endpoint lives in grid.py's
+# prefix-less router (it can't live here because this router has prefix
+# /api/v1/projects). The helpers above are imported by grid.py.
 

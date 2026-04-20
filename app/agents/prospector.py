@@ -256,7 +256,7 @@ def _estimate_cost_gbp(tokens_in: int, tokens_out: int, model: str) -> float:
     rates = {
         MODEL_HAIKU: (0.80, 4.00),
         MODEL_SONNET: (3.00, 15.00),
-        "claude-opus-4-6": (15.00, 75.00),
+        "claude-opus-4-7": (15.00, 75.00),
     }
     rate_in, rate_out = rates.get(model, rates[MODEL_SONNET])
     usd = (tokens_in / 1e6) * rate_in + (tokens_out / 1e6) * rate_out

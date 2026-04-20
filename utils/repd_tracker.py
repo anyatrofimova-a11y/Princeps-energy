@@ -22,12 +22,17 @@ _TIMEOUT = 30
 _CACHE: dict[str, Any] = {"data": None, "ts": 0}
 _CACHE_TTL = 4 * 3600  # 4 hours
 
-# REPD CSV hosted on gov.uk — discovery URL updated periodically
-REPD_CSV_URL = (
-    "https://assets.publishing.service.gov.uk/media/"
-    "renewable-energy-planning-database-repd.csv"
-)
-# Fallback: gov.uk publications page to scrape latest CSV link
+# REPD CSV hosted on gov.uk. The media-path-slug URL above used to redirect
+# to the current quarter's CSV but the redirect has been unstable since 2025-Q3
+# (observed silent 403/404). Use an explicit quarterly fallback ladder,
+# most-recent-first — the scrape at REPD_PUBLICATIONS_URL runs as a last resort.
+REPD_CSV_URL_FALLBACK_LADDER = [
+    # 2025 Q4 — known-good from utils/repd.py
+    "https://assets.publishing.service.gov.uk/media/6985c316d3f57710b50a9b1f/REPD_Publication_Q4_2025.csv",
+    # 2025 Q3 / Q2 / Q1 — if DESNZ rotates the asset ID we fall to discovery.
+    "https://assets.publishing.service.gov.uk/media/renewable-energy-planning-database-repd.csv",
+]
+REPD_CSV_URL = REPD_CSV_URL_FALLBACK_LADDER[0]
 REPD_PUBLICATIONS_URL = (
     "https://www.gov.uk/government/publications/"
     "renewable-energy-planning-database-monthly-extract"
@@ -158,20 +163,35 @@ async def setup_repd_table(conn: asyncpg.Connection):
 # ── Ingestion ────────────────────────────────────────────────────────────
 
 async def _discover_csv_url() -> str:
-    """Try to discover the latest REPD CSV URL from gov.uk publications page."""
-    try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
+    """Resolve the current REPD CSV URL.
+
+    Strategy — try each known quarterly asset URL with a HEAD; return the
+    first that returns 200. If none respond, fall back to scraping the
+    publications page for a CSV href, then to REPD_CSV_URL as a last resort.
+    """
+    async with httpx.AsyncClient(timeout=_TIMEOUT, follow_redirects=True) as client:
+        for candidate in REPD_CSV_URL_FALLBACK_LADDER:
+            try:
+                r = await client.head(candidate)
+                if r.status_code == 200:
+                    log.info("REPD URL resolved via ladder: %s", candidate)
+                    return candidate
+            except Exception as exc:
+                log.debug("REPD ladder candidate %s unreachable: %s", candidate, exc)
+        try:
             r = await client.get(REPD_PUBLICATIONS_URL)
             r.raise_for_status()
-            # Look for CSV attachment link
             match = re.search(
                 r'href="(https://assets\.publishing\.service\.gov\.uk/[^"]+\.csv)"',
                 r.text,
             )
             if match:
-                return match.group(1)
-    except Exception as e:
-        log.warning("REPD URL discovery failed: %s — using default", e)
+                url = match.group(1)
+                log.info("REPD URL resolved via publications scrape: %s", url)
+                return url
+        except Exception as e:
+            log.warning("REPD URL discovery scrape failed: %s", e)
+    log.warning("REPD URL discovery exhausted — using static default %s", REPD_CSV_URL)
     return REPD_CSV_URL
 
 

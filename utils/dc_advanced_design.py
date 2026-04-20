@@ -15,6 +15,8 @@ import math
 import random
 from typing import Optional
 
+from app.regulatory.versions import nppf_para as _nppf_para
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  1. HEAT REUSE & DISTRICT HEATING REVENUE
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -536,7 +538,7 @@ def community_sentiment_assessment(
         "risk_factors": risk_factors,
         "mitigations": mitigations,
         "engagement_strategy": [
-            "Pre-application consultation (NPPF para 39-46)",
+            f"Pre-application consultation ({_nppf_para('PRE_APP_CONSULTATION')})",
             "Community exhibition with 3D visualisations",
             "Parish/ward councillor briefing",
             "Noise and traffic FAQ leaflet to nearest 200 addresses",

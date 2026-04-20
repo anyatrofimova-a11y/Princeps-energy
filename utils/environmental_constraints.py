@@ -26,6 +26,8 @@ from typing import Any
 
 import httpx
 
+from app.regulatory.versions import nppf_para as _nppf_para
+
 log = logging.getLogger("princeps.environmental_constraints")
 
 _TIMEOUT = 15
@@ -263,7 +265,7 @@ def _planning_impact_text(designations: list[dict]) -> str:
     if "Ramsar" in inside_types:
         impacts.append("Site is within a Ramsar wetland — treated as European site in planning policy. Appropriate Assessment required.")
     if "AONB" in inside_types:
-        impacts.append("Site is within an AONB (National Landscape) — landscape impact assessment required. Major development only in exceptional circumstances (NPPF para 177).")
+        impacts.append(f"Site is within an AONB (National Landscape) — landscape impact assessment required. Major development only in exceptional circumstances ({_nppf_para('AONB')}).")
     if "National_Park" in inside_types:
         impacts.append("Site is within a National Park — highest level of landscape protection. Major development only in exceptional circumstances.")
 

@@ -578,3 +578,245 @@ async def market_timing(
     """
     from utils.market_intelligence import market_timing_analysis
     return market_timing_analysis(capacity_mw, technology, region)
+
+
+@router.get("/api/planning-ml/nearby-precedent")
+async def nearby_precedent(
+    lat: float = Query(..., ge=49, le=61, description="Latitude (WGS84)"),
+    lon: float = Query(..., ge=-8, le=2, description="Longitude (WGS84)"),
+    tech: str = Query("bess", pattern="^(bess|solar|dc|wind|hybrid)$"),
+    radius_km: float = Query(25, ge=1, le=200),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Nearest approved + refused planning precedent for a given technology family.
+
+    - BESS / solar / wind / hybrid: query REPD (Renewable Energy Planning Database).
+    - DC: REPD has no data-centre class. Try `dc_planning_applications` if the
+      table exists (NSIP + LPA scrape); otherwise return an empty well-formed
+      response with a warning so the frontend can fall back to "no precedent
+      nearby" UX rather than erroring.
+
+    Returns the 5 closest approved and 5 closest refused projects within
+    `radius_km`, filtered by the technology family.
+    """
+    empty = {
+        "approved": [],
+        "refused": [],
+        "radius_km": radius_km,
+        "total_found": 0,
+    }
+
+    # Route DC through the data-centre precedent table (if ingested) rather
+    # than REPD, which is renewables-only.
+    if tech == "dc":
+        try:
+            has_dc_table = await pool.fetchval(
+                "SELECT to_regclass('public.dc_planning_applications') IS NOT NULL"
+            )
+        except Exception as e:
+            return {**empty, "warning": f"DC planning data unavailable: {e}"}
+
+        if not has_dc_table:
+            return {
+                **empty,
+                "warning": (
+                    "No ingested DC planning-precedent table yet. NSIP decisions "
+                    "and LPA large-load applications still to be scraped into "
+                    "public.dc_planning_applications."
+                ),
+            }
+
+        radius_m = radius_km * 1000.0
+        approved_rows = await pool.fetch("""
+            SELECT application_ref AS ref_id, site_name, lpa_name AS council,
+                   it_load_mw AS capacity_mw, decision_status, decision_date,
+                   ST_Y(geometry) AS lat, ST_X(geometry) AS lon,
+                   ST_Distance(geometry::geography,
+                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                   ) / 1000.0 AS distance_km
+            FROM dc_planning_applications
+            WHERE decision_status IN ('Approved', 'Granted', 'Consented')
+              AND ST_DWithin(geometry::geography,
+                             ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+            ORDER BY geometry <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)
+            LIMIT 5
+        """, lat, lon, radius_m)
+        refused_rows = await pool.fetch("""
+            SELECT application_ref AS ref_id, site_name, lpa_name AS council,
+                   it_load_mw AS capacity_mw, decision_status, decision_date,
+                   refusal_reasons,
+                   ST_Y(geometry) AS lat, ST_X(geometry) AS lon,
+                   ST_Distance(geometry::geography,
+                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                   ) / 1000.0 AS distance_km
+            FROM dc_planning_applications
+            WHERE decision_status IN ('Refused', 'Withdrawn', 'Called-in')
+              AND ST_DWithin(geometry::geography,
+                             ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $3)
+            ORDER BY geometry <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)
+            LIMIT 5
+        """, lat, lon, radius_m)
+    else:
+        # REPD path for BESS / solar / wind / hybrid.
+        tech_like = {
+            "solar": "Solar%",
+            "bess": "Battery%",
+            "wind": "Wind%",
+            "hybrid": "%",
+        }.get(tech, "Solar%")
+
+        try:
+            has_repd = await pool.fetchval(
+                "SELECT to_regclass('public.repd_project') IS NOT NULL"
+            )
+        except Exception as e:
+            return {**empty, "warning": f"REPD data unavailable: {e}"}
+
+        if not has_repd:
+            return {**empty, "warning": "REPD table not yet ingested."}
+
+        radius_m = radius_km * 1000.0
+        approved_rows = await pool.fetch("""
+            SELECT ref_id, site_name, planning_authority AS council,
+                   installed_capacity_mw AS capacity_mw, dev_status_short AS decision_status,
+                   COALESCE(operational, under_construction, planning_granted,
+                            planning_submitted) AS decision_date,
+                   ST_Y(ST_Transform(geometry, 4326)) AS lat,
+                   ST_X(ST_Transform(geometry, 4326)) AS lon,
+                   ST_Distance(ST_Transform(geometry, 4326)::geography,
+                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                   ) / 1000.0 AS distance_km
+            FROM repd_project
+            WHERE geometry IS NOT NULL
+              AND technology_type LIKE $3
+              AND dev_status_short IN ('Operational', 'Under Construction', 'Approved',
+                                       'Awaiting Construction', 'Application Approved')
+              AND ST_DWithin(ST_Transform(geometry, 4326)::geography,
+                             ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $4)
+            ORDER BY ST_Transform(geometry, 4326) <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)
+            LIMIT 5
+        """, lat, lon, tech_like, radius_m)
+        refused_rows = await pool.fetch("""
+            SELECT ref_id, site_name, planning_authority AS council,
+                   installed_capacity_mw AS capacity_mw, dev_status_short AS decision_status,
+                   COALESCE(planning_granted, planning_submitted) AS decision_date,
+                   ST_Y(ST_Transform(geometry, 4326)) AS lat,
+                   ST_X(ST_Transform(geometry, 4326)) AS lon,
+                   ST_Distance(ST_Transform(geometry, 4326)::geography,
+                               ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography
+                   ) / 1000.0 AS distance_km
+            FROM repd_project
+            WHERE geometry IS NOT NULL
+              AND technology_type LIKE $3
+              AND dev_status_short IN ('Refused', 'Application Refused', 'Withdrawn', 'Abandoned')
+              AND ST_DWithin(ST_Transform(geometry, 4326)::geography,
+                             ST_SetSRID(ST_MakePoint($2, $1), 4326)::geography, $4)
+            ORDER BY ST_Transform(geometry, 4326) <-> ST_SetSRID(ST_MakePoint($2, $1), 4326)
+            LIMIT 5
+        """, lat, lon, tech_like, radius_m)
+
+    def _fmt(r, include_reasons: bool = False) -> dict:
+        dd = r["decision_date"]
+        item = {
+            "id": r["ref_id"] or "",
+            "name": r["site_name"] or "",
+            "lat": float(r["lat"]) if r["lat"] is not None else None,
+            "lon": float(r["lon"]) if r["lon"] is not None else None,
+            "capacity_mw": float(r["capacity_mw"]) if r["capacity_mw"] is not None else None,
+            "council": r["council"] or "",
+            "decision_date": dd.strftime("%Y-%m-%d") if dd else None,
+            "distance_km": round(float(r["distance_km"]), 2),
+        }
+        if include_reasons:
+            raw = r.get("refusal_reasons") if tech == "dc" else None
+            if raw:
+                item["refusal_reasons"] = raw if isinstance(raw, list) else [str(raw)]
+            else:
+                item["refusal_reasons"] = [r.get("decision_status") or "Refused"]
+        return item
+
+    approved = [_fmt(r) for r in approved_rows]
+    refused = [_fmt(r, include_reasons=True) for r in refused_rows]
+    return {
+        "approved": approved,
+        "refused": refused,
+        "radius_km": radius_km,
+        "total_found": len(approved) + len(refused),
+    }
+
+
+# ─── Godmode #3 — G99 / planning acceptance heat layer ─────────────────────
+
+@router.get("/api/planning-ml/acceptance-heat")
+async def acceptance_heat(
+    lat: float = Query(..., ge=49, le=61),
+    lon: float = Query(..., ge=-8, le=2),
+    radius_km: float = Query(8.0, ge=1, le=50),
+    grid: int = Query(12, ge=4, le=24, description="Grid cells per side"),
+    tech: str = Query("bess", pattern="^(bess|solar|dc|wind|hybrid)$"),
+    capacity_mw: float = Query(50, ge=0.1, le=5000),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Grid of approval-probability samples rendered as a GeoJSON
+    FeatureCollection for a toggleable heat overlay on DesignCanvas.
+
+    Each cell carries `properties.p_approved` ∈ [0, 1] and a one-line
+    reasoning string (top driver from the REPD model). Designed for cheap
+    client-side colour interpolation in Mapbox.
+    """
+    import math as _m
+    from utils.planning_predictor import get_predictor
+
+    try:
+        predictor = await get_predictor(pool)
+    except Exception as e:
+        return {"type": "FeatureCollection", "features": [], "warning": f"model unavailable: {e}"}
+
+    m_lat = 111_320.0
+    m_lon = 111_320.0 * _m.cos(_m.radians(lat))
+    span_m = radius_km * 1000.0
+    step_m = (2 * span_m) / grid
+    features = []
+
+    for iy in range(grid):
+        for ix in range(grid):
+            dx_m = -span_m + (ix + 0.5) * step_m
+            dy_m = -span_m + (iy + 0.5) * step_m
+            clat = lat + dy_m / m_lat
+            clon = lon + dx_m / m_lon
+            try:
+                pred = await predictor.predict(pool, clat, clon, tech, capacity_mw)
+                p = float(pred.get("probability_approved") or pred.get("p_approved") or 0.5)
+                driver = pred.get("top_driver") or pred.get("summary") or ""
+            except Exception:
+                p = 0.5
+                driver = "model-offline fallback"
+
+            half_lat = (step_m / 2) / m_lat
+            half_lon = (step_m / 2) / m_lon
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
+                        [clon - half_lon, clat - half_lat],
+                        [clon + half_lon, clat - half_lat],
+                        [clon + half_lon, clat + half_lat],
+                        [clon - half_lon, clat + half_lat],
+                        [clon - half_lon, clat - half_lat],
+                    ]],
+                },
+                "properties": {
+                    "p_approved": round(p, 3),
+                    "tech": tech,
+                    "driver": driver,
+                },
+            })
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "centre": {"lat": lat, "lon": lon},
+        "radius_km": radius_km,
+        "grid": grid,
+    }

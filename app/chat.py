@@ -1034,6 +1034,49 @@ TOOLS: list[dict] = [
             "required": ["lat", "lon"],
         },
     },
+    {
+        "name": "mutate_design",
+        "description": "Edit a single capacity-mix field on a project and return the re-computed KPIs (capex, NPV, IRR, LCOE, utilisation, land usage). Persists to projects.metadata.design. Use when the user says things like 'bump solar to 80MW', 'set PPA price to 65', 'make the battery 20MW/4h'. Returns the new design state and derived KPIs immediately.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "UUID of the project"},
+                "field": {"type": "string", "description": "Field to set",
+                          "enum": ["solar_mw", "bess_mw", "bess_mw_mwh", "bess_hours",
+                                   "ppa_price_gbp_mwh", "ppa_share_pct", "workload_mw",
+                                   "site_area_ha"]},
+                "value": {"type": "number", "description": "New value"},
+            },
+            "required": ["project_id", "field", "value"],
+        },
+    },
+    {
+        "name": "optimize_design",
+        "description": "Run scipy SLSQP to find the optimal capacity mix (solar MW, BESS MW, BESS hours, PPA share) that maximises NPV / minimises LCOE / maximises grid utilisation for a project, subject to land area and grid headroom constraints. Returns best params + KPIs + provenance (scipy_slsqp or analytic_fallback).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "UUID of the project"},
+                "objective": {"type": "string", "enum": ["max_npv", "min_lcoe", "max_utilisation"], "default": "max_npv"},
+                "bounds": {
+                    "type": "object",
+                    "description": "Optional tighter bounds, e.g. {\"solar_mw\": [10, 60], \"bess_mw\": [0, 30]}",
+                },
+            },
+            "required": ["project_id"],
+        },
+    },
+    {
+        "name": "full_project_doc",
+        "description": "Fetch the full project document in one call: project record, current design state, derived KPIs, latest finance layout, nearest-substation grid snapshot, nearby planning applications, recent demand, and the last agent assessments. Use this instead of chaining many smaller tool calls when the user asks something broad like 'summarise the project' or 'what's the status?'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "UUID of the project"},
+            },
+            "required": ["project_id"],
+        },
+    },
 ]
 
 
@@ -2031,6 +2074,65 @@ async def execute_tool(
                 ],
                 "model_accuracy": result.get("model_stats", {}).get("accuracy"),
                 "training_samples": result.get("model_stats", {}).get("training_samples"),
+            }
+
+        elif name == "mutate_design":
+            from app.routers.design import apply_mutation
+            result = await apply_mutation(pool, args["project_id"], args["field"], float(args["value"]))
+            # Compact: drop the grid sub-object beyond headline, keep KPIs + design
+            return {
+                "project_id": result["project_id"],
+                "field": result["field"],
+                "value": result["value"],
+                "design": result["design"],
+                "derived_kpis": result["derived_kpis"],
+                "grid_headroom_mw": (result.get("grid") or {}).get("headroom_mw"),
+                "note": "Design updated in projects.metadata. KPIs recomputed.",
+            }
+
+        elif name == "optimize_design":
+            from app.routers.design import _load_project_row, _extract_design_state, _grid_snapshot
+            from utils.design_optimizer import optimise_capacity_mix
+            from uuid import UUID as _UUID
+            pid = _UUID(args["project_id"])
+            objective = args.get("objective", "max_npv")
+            raw_bounds = args.get("bounds") or {}
+            bounds = {k: tuple(v) for k, v in raw_bounds.items() if isinstance(v, (list, tuple)) and len(v) == 2}
+            async with pool.acquire() as conn:
+                proj = await _load_project_row(conn, pid)
+                if not proj:
+                    return {"error": f"Project {args['project_id']} not found"}
+                design = _extract_design_state(proj)
+                grid = await _grid_snapshot(conn, proj["lat"], proj["lon"])
+            return optimise_capacity_mix(
+                objective=objective,
+                bounds=bounds or None,
+                ppa_price_gbp_mwh=float(design.get("ppa_price_gbp_mwh", 68.0)),
+                site_area_ha=float(design.get("site_area_ha", 120.0)),
+                grid_headroom_mw=float((grid or {}).get("headroom_mw") or 50.0),
+                initial={
+                    "solar_mw": float(design.get("solar_mw", 20)),
+                    "bess_mw": float(design.get("bess_mw", 10)),
+                    "bess_hours": float(design.get("bess_hours", 2.0)),
+                    "ppa_share_pct": float(design.get("ppa_share_pct", 50.0)),
+                },
+            )
+
+        elif name == "full_project_doc":
+            from app.routers.design import full_project_doc as _full_doc
+            doc = await _full_doc(args["project_id"], pool)
+            # Compact: trim assessments + verbose finance kpis for chat history
+            return {
+                "project": {k: doc["project"].get(k) for k in
+                            ("project_id", "name", "technology", "capacity_mw",
+                             "stage", "verdict", "lat", "lon", "status")},
+                "design": doc["design"],
+                "derived_kpis": doc["derived_kpis"],
+                "finance_kpis": (doc.get("finance") or {}).get("kpis"),
+                "grid": doc["grid"],
+                "planning": doc["planning"],
+                "demand": doc["demand"],
+                "latest_assessments": doc["latest_assessments"][:3],
             }
 
         else:

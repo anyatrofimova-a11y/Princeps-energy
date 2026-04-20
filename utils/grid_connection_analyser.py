@@ -16,8 +16,13 @@ import logging
 import os
 import subprocess
 import time
+from datetime import datetime, timezone
 from math import atan2, cos, radians, sin, sqrt
 from typing import Any
+
+from utils.grid_provenance import (
+    SRC_DB_SNAPSHOT, SRC_SYNTHETIC, combine_provenance, make_provenance,
+)
 
 log = logging.getLogger("princeps.grid_connection_analyser")
 
@@ -115,6 +120,10 @@ async def assess_connection(
 
     elapsed = round(time.time() - t0, 3)
 
+    # Provenance: derive from oldest substation updated_at. If no substations
+    # were found we flag the whole result as synthetic_fallback with a reason.
+    provenance = _derive_provenance_from_subs(substations)
+
     result = {
         "location": {"lat": lat, "lon": lon},
         "capacity_mw": capacity_mw,
@@ -123,17 +132,51 @@ async def assess_connection(
         "verdict": verdict["verdict"],
         "confidence": verdict["confidence"],
         "summary": verdict["summary"],
-        "candidates": candidates,
-        "best_candidate": best,
+        "candidates": [_strip_internal(c) for c in candidates],
+        "best_candidate": _strip_internal(best) if best else None,
         "cost_estimate": cost_estimate,
         "risks": verdict["risks"],
         "tier": "data",
         "elapsed_s": elapsed,
+        **provenance,
     }
     if expanded_radius > search_radius_km:
         result["search_radius_km"] = expanded_radius
         result["note"] = f"No substations within {search_radius_km}km; expanded search to {expanded_radius}km"
     return result
+
+
+def _strip_internal(sub: dict | None) -> dict | None:
+    """Drop internal datetime fields from candidate payloads so the JSON
+    response stays serialisable without leaking implementation detail."""
+    if not sub:
+        return sub
+    out = dict(sub)
+    out.pop("updated_at", None)
+    return out
+
+
+def _derive_provenance_from_subs(subs: list[dict]) -> dict[str, Any]:
+    """Build a provenance block from the substations list."""
+    if not subs:
+        return make_provenance(
+            SRC_SYNTHETIC,
+            reason="no substations found within search radius — no live data to cite",
+        )
+    timestamps = [s.get("updated_at") for s in subs if s.get("updated_at")]
+    if not timestamps:
+        return make_provenance(
+            SRC_SYNTHETIC,
+            reason="substations exist but have no updated_at timestamps",
+        )
+    oldest = min(timestamps)
+    if oldest.tzinfo is None:
+        oldest = oldest.replace(tzinfo=timezone.utc)
+    return make_provenance(
+        SRC_DB_SNAPSHOT,
+        oldest,
+        extra={"table": "grid_substations", "rows": len(subs)},
+    )
 
 
 async def _find_nearest_substations(
@@ -145,7 +188,7 @@ async def _find_nearest_substations(
             id, external_id, name, dno, region, voltage_kv, site_type,
             demand_mw, generation_mw, demand_headroom_mw, gen_headroom_mw,
             fault_level_ka, transformer_rating_mva,
-            rag_demand, rag_generation,
+            rag_demand, rag_generation, updated_at,
             ST_Distance(
                 geom,
                 ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700)
@@ -184,6 +227,7 @@ async def _find_nearest_substations(
             "distance_km": round(float(r["distance_km"]), 2),
             "lat": float(r["sub_lat"]),
             "lon": float(r["sub_lon"]),
+            "updated_at": r["updated_at"],
         }
         for r in rows
     ]
@@ -789,6 +833,18 @@ async def tier2_power_flow(
         "substations": len(substations),
         "lines": len(lines),
     }
+
+    # Provenance: substations are DB; synthetic lines flag the result as
+    # mixed/synthetic because topology is inferred.
+    prov_blocks = [_derive_provenance_from_subs(substations)]
+    lines_synth = not await _fetch_grid_lines(conn, [s["id"] for s in substations])
+    if lines_synth:
+        prov_blocks.append(make_provenance(
+            SRC_SYNTHETIC,
+            reason="grid_lines DB table empty for these substations; "
+                   "topology was synthesised from nearest-neighbour",
+        ))
+    result.update(combine_provenance(prov_blocks))
 
     return result
 

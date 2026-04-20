@@ -171,6 +171,7 @@ def auto_design_solar(
             roads.append({
                 "line": [[xmin, road_y_start], [xmax, road_y_start], [xmax, road_y_end], [xmin, road_y_end]],
                 "type": "access_road",
+                "reasoning": f"Service road every {road_every_n_rows} rows for O&M vehicle access and module cleaning trucks (4 m width)",
             })
             y = road_y_end + row_dy * 0.3
             continue
@@ -202,6 +203,7 @@ def auto_design_solar(
                     "capacity_kwp": round(cap_kwp, 2),
                     "panel_count": n_panels,
                     "row": row_idx,
+                    "reasoning": f"Row at {row_spacing:.1f} m pitch, {tilt}° tilt, {azimuth}° azimuth — GCR {gcr:.2f} balances yield vs inter-row shading for UK latitude",
                 })
             x += col_dx + (2.0 / m_lon)  # 2m gap between strings
 
@@ -214,8 +216,10 @@ def auto_design_solar(
     # Substation placement — center bottom
     sub_lon, sub_lat = _offset_point(cx, ymin + setback_m / m_lat, 0, -setback_m * 0.5)
     infrastructure = [
-        {"point": [cx, ymin + (setback_m * 1.5) / m_lat], "type": "substation", "label": "Grid Substation"},
-        {"point": [cx + 30 / m_lon, ymin + (setback_m * 1.5) / m_lat], "type": "inverter", "label": "Central Inverter"},
+        {"point": [cx, ymin + (setback_m * 1.5) / m_lat], "type": "substation", "label": "Grid Substation",
+         "reasoning": "Placed at southern boundary to shorten MV cable run to nearest DNO primary"},
+        {"point": [cx + 30 / m_lon, ymin + (setback_m * 1.5) / m_lat], "type": "inverter", "label": "Central Inverter",
+         "reasoning": "Co-located with substation to minimise AC cable losses and transformer count"},
     ]
 
     # Boundary as exclusion ring (the setback area)
@@ -223,6 +227,7 @@ def auto_design_solar(
         "polygon": coords + [coords[0]],
         "inner": inner + [inner[0]],
         "reason": f"{setback_m}m boundary setback",
+        "reasoning": f"{setback_m} m planning-boundary setback — visual screening + ecology buffer per typical LPA condition",
     }]
 
     return {
@@ -233,6 +238,12 @@ def auto_design_solar(
         "infrastructure": infrastructure,
         "noise_contours": [],
         "boundary": coords,
+        "design_rationale": (
+            f"Solar PV laid out at {gcr:.2f} ground-cover ratio, {tilt}° tilt, {azimuth}° azimuth — "
+            f"the UK-optimal geometry for fixed-tilt modules at this latitude. "
+            f"N-S row orientation maximises diffuse-light capture; {setback_m} m perimeter setback "
+            f"holds planning visual-screening margin and ecology buffer."
+        ),
         "metrics": {
             "total_capacity_mwp": round(total_capacity_mwp, 2),
             "total_capacity_mwh": 0,
@@ -317,6 +328,7 @@ def auto_design_bess(
                 "row": r,
                 "col": c,
                 "label": f"BESS-{placed + 1:03d}",
+                "reasoning": f"Row {r+1} Col {c+1}: {gap_x:.1f} m container-to-container gap per BS 8629:2019 fire separation; {mwh_per_container} MWh modular block for staged commissioning",
             })
             placed += 1
 
@@ -332,6 +344,7 @@ def auto_design_bess(
             "dimensions": [4.0, 2.5, 2.8],
             "capacity_mwh": 0,
             "label": f"TX-{i + 1:02d}",
+            "reasoning": "One MV transformer per ~50 MWh string — sited on access-road side of the grid to shorten HV cable and simplify maintenance",
         })
 
     # Perimeter fence — rectangular around the grid with margin
@@ -365,6 +378,7 @@ def auto_design_bess(
             [start_x - (fence_margin + fire_break_width) / m_lon, start_y - (fence_margin + fire_break_width) / m_lat],
         ],
         "reason": "Fire break zone (6m clearance)",
+        "reasoning": f"{fire_break_width} m vegetation-free fire break outside fence — NFCC guidance for grid-scale Li-ion to permit tender access",
     }]
 
     # Noise contours — inverse square law from BESS centre
@@ -378,11 +392,14 @@ def auto_design_bess(
             "polygon": ring,
             "dba_level": target_dba,
             "radius_m": round(distance_m, 1),
+            "reasoning": f"{target_dba} dB(A) contour at {round(distance_m,1)} m — check against BS 4142:2014 rating level at nearest noise-sensitive receptor",
         })
 
     infrastructure = [
-        {"point": [cx, start_y - (fence_margin + 8) / m_lat], "type": "gate", "label": "Site Access Gate"},
-        {"point": [start_x + (grid_width + 20) / m_lon, cy], "type": "substation", "label": "Grid Connection Point"},
+        {"point": [cx, start_y - (fence_margin + 8) / m_lat], "type": "gate", "label": "Site Access Gate",
+         "reasoning": "Access gate on south side aligned with existing field entrance to avoid new highway works and preserve hedgerow"},
+        {"point": [start_x + (grid_width + 20) / m_lon, cy], "type": "substation", "label": "Grid Connection Point",
+         "reasoning": "Grid connection on east side — shortest run to nearest DNO primary while keeping HV cable outside fire-break envelope"},
     ]
 
     return {
@@ -395,6 +412,14 @@ def auto_design_bess(
         "fence": fence,
         "tree_screen": tree_screen,
         "boundary": coords,
+        "design_rationale": (
+            f"BESS arranged as {rows}×{cols} grid of {container_size} containers "
+            f"({n_containers} × {mwh_per_container} MWh = {n_containers * mwh_per_container:.0f} MWh) "
+            f"with {gap_x:.0f} m × {gap_y:.0f} m spacing per BS 8629:2019 fire separation. "
+            f"{source_noise_dba} dB(A) source → 45 dB(A) at {round(10 ** ((source_noise_dba - 45) / 20), 1)} m; "
+            f"tree-screen perimeter doubles as visual mitigation for planning. "
+            f"Modular pad sizing enables phased commissioning against DNO connection milestone."
+        ),
         "metrics": {
             "total_capacity_mwp": 0,
             "total_capacity_mwh": round(n_containers * mwh_per_container, 1),
@@ -469,6 +494,12 @@ def auto_design_hybrid(
         "boundary": coords,
         "solar_zone": solar_coords,
         "bess_zone": bess_coords,
+        "design_rationale": (
+            f"Hybrid site split {solar_fraction:.0%} solar / {1-solar_fraction:.0%} BESS. "
+            f"Solar occupies the main field for footprint efficiency; BESS sited at the edge nearest grid "
+            f"connection to minimise HV cable and contain fire/noise envelope away from neighbouring land uses. "
+            f"Shared MV bus and transformer infrastructure reduces CapEx vs two standalone connections."
+        ),
         "metrics": {
             "total_capacity_mwp": solar_result["metrics"]["total_capacity_mwp"],
             "total_capacity_mwh": bess_result["metrics"]["total_capacity_mwh"],

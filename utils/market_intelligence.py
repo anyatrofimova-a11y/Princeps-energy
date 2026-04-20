@@ -309,147 +309,161 @@ async def _send_webhook_alert(url: str, opportunities: list[dict]) -> bool:
 
 # ═══════════════════════════════════════════════════════════════
 #  2. AUTO-GENERATE G99 APPLICATION
+#  (thin passthrough to the canonical generator — BOT-T, 2026-04-19)
+#  COUNCIL-1 flagged three duplicate generate_g99_application functions
+#  with drifted output and deprecated issue numbers. The canonical
+#  implementation now lives in utils.g99_pack_generator; this wrapper
+#  exists only to keep the legacy `(project, grid_context, site_context)`
+#  call shape and the response keys that IntelligencePanel.jsx reads
+#  (form_type, ena_reference, applicant/site/generation/connection/...).
 # ═══════════════════════════════════════════════════════════════
 
 def generate_g99_application(project: dict, grid_context: dict, site_context: dict) -> dict:
-    """Pre-fill a G99/G100 grid connection application form.
+    """Pre-fill a G99/G100 grid connection application (legacy shape).
 
-    ENA Engineering Recommendation G99 (Issue 2, 2023) applies to all
-    generating plant connecting to distribution networks. G100 applies
-    to type-tested small-scale (<16A/phase) embedded generators.
-
-    Thresholds:
-      - <=3.68kW single-phase or <=11.04kW three-phase: G98 (notification only)
-      - >3.68kW (1ph) / >11.04kW (3ph) up to 50kW: G99 Stage 1
-      - >50kW: G99 full engineering study (Stage 2)
-
-    Returns a dict with all ENA G99 form fields pre-filled from Princeps data.
+    Delegates to `utils.g99_pack_generator.generate_g99_application_from_project`
+    for the canonical Issue 2 pack (sections A-I plus Annex C for storage),
+    then projects a subset of the canonical fields back into the legacy key
+    layout that `IntelligencePanel.jsx` expects. The ENA reference string and
+    G99 version metadata are always sourced from the canonical generator
+    (`ENA EREC G99 Issue 2, 10 March 2025`), never hard-coded here.
     """
-    capacity_kw = project.get("capacity_mw", 50) * 1000
-    technology = project.get("technology", "solar").lower()
-    lat = project.get("lat", 0)
-    lon = project.get("lon", 0)
+    from utils.g99_pack_generator import (
+        generate_g99_application_from_project, G99_VERSION,
+    )
 
-    # Determine connection voltage
-    if capacity_kw <= 1000:
-        voltage = "LV (400V)"
-        phases = "Three Phase"
-    elif capacity_kw <= 5000:
-        voltage = "11kV"
-        phases = "Three Phase"
-    elif capacity_kw <= 50000:
-        voltage = "33kV"
-        phases = "Three Phase"
-    else:
-        voltage = grid_context.get("recommended_voltage", "132kV")
-        phases = "Three Phase"
+    pack = generate_g99_application_from_project(
+        project or {}, grid_context or {}, site_context or {}
+    )
+    form = pack.get("form_data", {}) or {}
+    meta = form.get("meta", {}) or {}
+    sec_b = form.get("section_b_site", {}) or {}
+    sec_c = form.get("section_c_connection", {}) or {}
+    sec_d = form.get("section_d_generator", {}) or {}
+    sec_e = form.get("section_e_export_limits", {}) or {}
+    sec_h = form.get("section_h_commissioning", {}) or {}
 
-    # Estimate annual generation
-    from utils.uk_energy_assumptions import capacity_factor as get_cf
-    cf = get_cf(technology if technology != "bess" else "solar")
-    annual_mwh = project.get("capacity_mw", 50) * cf * 8760
+    capacity_kw = float(sec_d.get("total_capacity_kw") or 0)
+    annual_mwh = float(sec_d.get("estimated_annual_output_mwh") or 0)
 
-    # Determine form type
-    if capacity_kw <= 50:
-        form_type = "G99 Stage 1 — Simplified Application"
-        ena_ref = "ENA EREC G99 Issue 2 2023, Annex A2.1"
-    else:
-        form_type = "G99 Stage 2 — Full Application"
-        ena_ref = "ENA EREC G99 Issue 2 2023, Annex A2.2"
-
-    # Build commissioning estimate (12-24 months from now depending on capacity)
-    months_ahead = 12 if capacity_kw < 10000 else 18 if capacity_kw < 50000 else 24
-    commissioning = (datetime.now(timezone.utc) + timedelta(days=months_ahead * 30)).strftime("%B %Y")
-
-    # Connection cost estimate
-    from utils.uk_energy_assumptions import GRID_CONNECTION_COSTS_GBP_KM
-    distance_km = grid_context.get("nearest_substation_distance_km", 3.0)
-    voltage_key = voltage.lower().replace(" ", "").replace("(400v)", "11kv").replace("kv", "kv")
-    if voltage_key not in GRID_CONNECTION_COSTS_GBP_KM:
-        voltage_key = "33kv"
-    estimated_cost = distance_km * GRID_CONNECTION_COSTS_GBP_KM.get(voltage_key, 150_000)
+    form_type = (
+        "G99 Stage 1 — Simplified Application" if capacity_kw <= 50
+        else "G99 Stage 2 — Full Application"
+    )
 
     application = {
+        # Headline fields consumed by the frontend.
         "form_type": form_type,
-        "ena_reference": ena_ref,
+        "ena_reference": meta.get(
+            "ena_reference", G99_VERSION["citation"]
+        ),
+        "g99_version": G99_VERSION["version"],
+        "g99_published": G99_VERSION["published"],
+        "annex_c_effective": G99_VERSION["annex_c_effective"],
 
-        # Section 1 — Applicant
         "applicant": {
-            "company_name": project.get("developer", project.get("company_name", "")),
-            "contact_name": project.get("contact_name", ""),
-            "address": project.get("company_address", ""),
-            "phone": project.get("phone", ""),
-            "email": project.get("email", ""),
-            "company_registration": project.get("company_number", ""),
+            "company_name": (project or {}).get(
+                "developer", (project or {}).get("company_name", "")
+            ),
+            "contact_name": (project or {}).get("contact_name", ""),
+            "address": (project or {}).get("company_address", ""),
+            "phone": (project or {}).get("phone", ""),
+            "email": (project or {}).get("email", ""),
+            "company_registration": (project or {}).get("company_number", ""),
         },
 
-        # Section 2 — Site Details
         "site": {
-            "name": project.get("name", site_context.get("site_name", "")),
-            "address": site_context.get("address", ""),
-            "postcode": site_context.get("postcode", ""),
-            "grid_reference": _lat_lon_to_grid_ref(lat, lon),
-            "lat": lat,
-            "lon": lon,
-            "mpan": project.get("mpan", "To be confirmed"),
-            "land_area_ha": site_context.get("land_area_ha", project.get("land_area_ha")),
+            "name": sec_b.get("site_name") or (project or {}).get("name", ""),
+            "address": sec_b.get("site_address", ""),
+            "postcode": sec_b.get("postcode", ""),
+            "grid_reference": sec_b.get("grid_reference_os", ""),
+            "lat": sec_b.get("latitude"),
+            "lon": sec_b.get("longitude"),
+            "mpan": sec_c.get("mpan_core", "To be confirmed"),
+            "land_area_ha": sec_b.get("land_area_ha"),
         },
 
-        # Section 3 — Proposed Generation
         "generation": {
-            "technology": _technology_label(technology),
+            "technology": sec_d.get("technology"),
             "capacity_kw": capacity_kw,
-            "number_of_units": _estimate_units(technology, capacity_kw),
-            "unit_rating_kw": round(capacity_kw / max(1, _estimate_units(technology, capacity_kw)), 1),
-            "phases": phases,
-            "power_factor": 0.95 if technology in ("solar", "bess") else 0.98,
-            "inverter_type": "Four-quadrant" if technology in ("solar", "bess") else "N/A",
-            "export_limiting_proposed": capacity_kw > 50000,
-            "export_limit_kw": min(capacity_kw, grid_context.get("headroom_mw", 999) * 1000) if capacity_kw > 50000 else None,
-            "expected_annual_generation_mwh": round(annual_mwh, 1),
-            "expected_capacity_factor_pct": round(cf * 100, 1),
+            "number_of_units": sec_d.get("number_of_units"),
+            "unit_rating_kw": sec_d.get("unit_capacity_kw"),
+            "phases": sec_d.get("phase_configuration"),
+            "power_factor": sec_d.get("rated_power_factor"),
+            "inverter_type": (sec_d.get("inverter", {}) or {}).get("type"),
+            "export_limiting_proposed": bool(sec_e.get("export_limit_scheme")),
+            "export_limit_kw": (
+                (sec_e.get("requested_export_mw") or 0) * 1000
+                if sec_e.get("requested_export_mw") else None
+            ),
+            "expected_annual_mwh": annual_mwh,  # alias used by IntelligencePanel
+            "expected_annual_generation_mwh": annual_mwh,
+            "expected_capacity_factor_pct": (
+                round(annual_mwh / (capacity_kw / 1000.0 * 8760) * 100, 1)
+                if capacity_kw else None
+            ),
         },
 
-        # Section 4 — Connection
         "connection": {
-            "requested_voltage": voltage,
-            "connection_type": "New" if not project.get("mpan") else "Existing — modification",
-            "nearest_substation": grid_context.get("nearest_substation", ""),
-            "estimated_distance_km": round(distance_km, 1),
-            "estimated_connection_cost_gbp": round(estimated_cost),
-            "metering_arrangement": "Half-hourly export metering",
+            "requested_voltage": (
+                f"{sec_c.get('proposed_voltage_kv')}kV"
+                if sec_c.get("proposed_voltage_kv") else ""
+            ),
+            "voltage_requested": (
+                f"{sec_c.get('proposed_voltage_kv')}kV"
+                if sec_c.get("proposed_voltage_kv") else ""
+            ),  # alias used by IntelligencePanel
+            "connection_type": sec_c.get("connection_type"),
+            "nearest_substation": sec_c.get(
+                "point_of_connection_substation", ""
+            ),
+            "estimated_distance_km": sec_c.get(
+                "point_of_connection_distance_km"
+            ),
+            "metering_arrangement": sec_c.get("metering_arrangement"),
         },
 
-        # Section 5 — Commissioning
         "commissioning": {
-            "estimated_date": commissioning,
-            "construction_duration_months": months_ahead,
-            "phased_connection": capacity_kw > 100000,
-            "phases_description": f"Single phase — full {capacity_kw/1000:.0f} MW" if capacity_kw <= 100000 else f"Phased: {capacity_kw/2000:.0f} MW Phase 1, {capacity_kw/2000:.0f} MW Phase 2",
+            "estimated_date": sec_h.get("expected_commissioning_date"),
+            "witness_by_dno": sec_h.get("witness_by_dno"),
         },
 
-        # Section 6 — Emergency Contact
         "emergency_contact": {
-            "name": project.get("emergency_contact", project.get("contact_name", "")),
-            "phone": project.get("emergency_phone", project.get("phone", "")),
+            "name": (project or {}).get(
+                "emergency_contact", (project or {}).get("contact_name", "")
+            ),
+            "phone": (project or {}).get(
+                "emergency_phone", (project or {}).get("phone", "")
+            ),
             "available_24h": True,
         },
 
-        # Section 7 — Additional Information
-        "additional_information": _generate_additional_info(
-            project, grid_context, site_context, technology, capacity_kw, annual_mwh,
+        "single_line_diagram": _generate_sld_description(
+            (project or {}).get("technology", "solar").lower(),
+            capacity_kw,
+            f"{sec_c.get('proposed_voltage_kv','')}kV",
         ),
 
-        # Section 8 — Single-Line Diagram Description
-        "single_line_diagram": _generate_sld_description(technology, capacity_kw, voltage),
+        # Keep the full canonical pack alongside the legacy projection.
+        "_canonical_pack": pack,
 
-        # Princeps metadata
         "_princeps": {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": meta.get("generated_at", datetime.now(timezone.utc).isoformat()),
             "auto_filled": True,
-            "data_sources": ["princeps_grid_assessment", "princeps_site_analysis", "uk_energy_assumptions"],
+            "ena_reference": meta.get("ena_reference"),
+            "annex_c_applies": meta.get("annex_c_applies", False),
+            "data_sources": [
+                "princeps_grid_assessment",
+                "princeps_site_analysis",
+                "utils.g99_pack_generator (canonical, Issue 2)",
+            ],
             "review_required": True,
-            "note": "This application has been pre-filled by Princeps. All fields should be reviewed by a qualified engineer before submission to the DNO.",
+            "note": (
+                "Pre-filled by Princeps against ENA EREC G99 Issue 2 "
+                "(10 March 2025). Annex C (storage, effective "
+                "1 March 2026) applies to BESS/hybrid projects. Review with "
+                "a qualified engineer before submission to the DNO."
+            ),
         },
     }
 
@@ -483,12 +497,21 @@ def _estimate_units(tech: str, capacity_kw: float) -> int:
 
 
 def _lat_lon_to_grid_ref(lat: float, lon: float) -> str:
-    """Approximate OS grid reference from WGS84 (for form purposes only)."""
-    # Rough conversion — not survey-grade, just for application pre-fill
-    if not lat or not lon:
+    """Return a true OSGB36 National Grid reference via utils.osgb.
+
+    Retained as a thin wrapper for back-compat with anything that still
+    imports `_lat_lon_to_grid_ref` from this module. The previous linear
+    approximation was flagged by COUNCIL-1 as a fabrication (rejected by
+    DNOs/LPAs) and has been removed.
+    """
+    if lat is None or lon is None or (not lat and not lon):
         return "To be confirmed"
-    # Very simplified: real conversion needs full Helmert transformation
-    return f"{lat:.5f}N, {abs(lon):.5f}{'W' if lon < 0 else 'E'} (OS grid ref to be confirmed)"
+    try:
+        from utils.osgb import to_grid_ref
+        return to_grid_ref(lat, lon, precision=8)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("utils.osgb unavailable: %s", exc)
+        return f"[OSGB unavailable — WGS84 {lat:.5f}, {lon:.5f}]"
 
 
 def _generate_additional_info(project, grid_ctx, site_ctx, tech, cap_kw, annual_mwh) -> str:
@@ -552,111 +575,57 @@ def _generate_sld_description(tech: str, cap_kw: float, voltage: str) -> str:
 
 
 def g99_to_pdf_html(application: dict) -> str:
-    """Render the G99 application as HTML suitable for wkhtmltopdf or weasyprint.
+    """Render the G99 application as printable HTML.
 
-    Formatted to match the official ENA G99 application form layout.
+    Thin passthrough to the canonical generator's HTML renderer. If the
+    legacy payload already carries the canonical pack under
+    ``_canonical_pack`` (populated by `generate_g99_application` above) we
+    use that HTML directly. Otherwise we rebuild the canonical pack from the
+    legacy fields so the output still matches G99 Issue 2 (10 March 2025)
+    layout with Annex C where applicable.
     """
-    app = application.get("applicant", {})
-    site = application.get("site", {})
-    gen = application.get("generation", {})
-    conn = application.get("connection", {})
-    comm = application.get("commissioning", {})
-    emrg = application.get("emergency_contact", {})
+    if not isinstance(application, dict):
+        return "<!DOCTYPE html><html><body><p>No application data.</p></body></html>"
 
-    def _row(label, value):
-        v = value if value else "—"
-        return f'<tr><td style="padding:6px 12px;font-weight:600;color:#555;width:40%;border:1px solid #ddd;">{label}</td><td style="padding:6px 12px;border:1px solid #ddd;">{v}</td></tr>'
+    canonical = application.get("_canonical_pack")
+    if canonical and isinstance(canonical, dict) and canonical.get("html"):
+        return canonical["html"]
 
-    return f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8"/>
-<style>
-  body {{ font-family: Arial, sans-serif; font-size: 11pt; color: #333; margin: 40px; }}
-  h1 {{ color: #1a1a1a; font-size: 18pt; border-bottom: 3px solid #d4a017; padding-bottom: 8px; }}
-  h2 {{ color: #d4a017; font-size: 13pt; margin-top: 24px; border-bottom: 1px solid #eee; padding-bottom: 4px; }}
-  table {{ width: 100%; border-collapse: collapse; margin: 8px 0 16px; }}
-  .header {{ text-align: center; margin-bottom: 24px; }}
-  .ref {{ color: #999; font-size: 9pt; }}
-  .note {{ background: #fdf6e3; padding: 12px; border-left: 4px solid #d4a017; margin: 16px 0; font-size: 10pt; }}
-</style>
-</head>
-<body>
-<div class="header">
-    <h1>Application for Connection of Generation — {application.get('form_type', 'G99')}</h1>
-    <p class="ref">{application.get('ena_reference', '')}</p>
-</div>
+    # Fall back: rebuild canonical pack from the legacy projection.
+    from utils.g99_pack_generator import generate_g99_pack
 
-<h2>1. Applicant Details</h2>
-<table>
-    {_row("Company Name", app.get("company_name"))}
-    {_row("Contact Name", app.get("contact_name"))}
-    {_row("Address", app.get("address"))}
-    {_row("Phone", app.get("phone"))}
-    {_row("Email", app.get("email"))}
-    {_row("Company Registration", app.get("company_registration"))}
-</table>
+    site = application.get("site", {}) or {}
+    gen = application.get("generation", {}) or {}
+    conn = application.get("connection", {}) or {}
+    built = generate_g99_pack({
+        "site": {
+            "name": site.get("name"),
+            "address": site.get("address"),
+            "postcode": site.get("postcode"),
+            "lat": site.get("lat"),
+            "lon": site.get("lon"),
+            "area_ha": site.get("land_area_ha"),
+        },
+        "capacity": {"capacity_kw": gen.get("capacity_kw") or 0},
+        "grid": {
+            "voltage_kv": _parse_voltage_kv(
+                conn.get("requested_voltage") or conn.get("voltage_requested") or ""
+            ),
+            "nearest_substation": conn.get("nearest_substation", ""),
+            "distance_km": conn.get("estimated_distance_km"),
+        },
+        "technology": {"type": (gen.get("technology") or "solar").lower()},
+    })
+    return built.get("html", "")
 
-<h2>2. Site Details</h2>
-<table>
-    {_row("Site Name", site.get("name"))}
-    {_row("Address", site.get("address"))}
-    {_row("Postcode", site.get("postcode"))}
-    {_row("Grid Reference", site.get("grid_reference"))}
-    {_row("MPAN", site.get("mpan"))}
-    {_row("Site Area (ha)", site.get("land_area_ha"))}
-</table>
 
-<h2>3. Proposed Generation</h2>
-<table>
-    {_row("Technology", gen.get("technology"))}
-    {_row("Total Capacity (kW)", f'{gen.get("capacity_kw", 0):,.0f}')}
-    {_row("Number of Units", gen.get("number_of_units"))}
-    {_row("Unit Rating (kW)", gen.get("unit_rating_kw"))}
-    {_row("Phases", gen.get("phases"))}
-    {_row("Power Factor", gen.get("power_factor"))}
-    {_row("Inverter Type", gen.get("inverter_type"))}
-    {_row("Export Limiting", "Yes" if gen.get("export_limiting_proposed") else "No")}
-    {_row("Export Limit (kW)", f'{gen.get("export_limit_kw"):,.0f}' if gen.get("export_limit_kw") else "N/A")}
-    {_row("Annual Generation (MWh)", f'{gen.get("expected_annual_generation_mwh", 0):,.0f}')}
-    {_row("Capacity Factor", f'{gen.get("expected_capacity_factor_pct", 0):.1f}%')}
-</table>
-
-<h2>4. Connection Details</h2>
-<table>
-    {_row("Requested Voltage", conn.get("requested_voltage"))}
-    {_row("Connection Type", conn.get("connection_type"))}
-    {_row("Nearest Substation", conn.get("nearest_substation"))}
-    {_row("Estimated Distance (km)", conn.get("estimated_distance_km"))}
-    {_row("Metering", conn.get("metering_arrangement"))}
-</table>
-
-<h2>5. Commissioning</h2>
-<table>
-    {_row("Estimated Commissioning", comm.get("estimated_date"))}
-    {_row("Construction Duration", f'{comm.get("construction_duration_months")} months')}
-    {_row("Phased Connection", comm.get("phases_description"))}
-</table>
-
-<h2>6. Emergency Contact</h2>
-<table>
-    {_row("Name", emrg.get("name"))}
-    {_row("Phone", emrg.get("phone"))}
-    {_row("24h Availability", "Yes" if emrg.get("available_24h") else "No")}
-</table>
-
-<h2>7. Single-Line Diagram Description</h2>
-<p>{application.get("single_line_diagram", "")}</p>
-
-<h2>8. Additional Information</h2>
-<p>{application.get("additional_information", "")}</p>
-
-<div class="note">
-    <strong>Note:</strong> This application was pre-filled by Princeps Market Intelligence.
-    All fields should be reviewed by a qualified engineer before submission to the DNO.
-    Generated: {application.get("_princeps", {}).get("generated_at", "")}
-</div>
-</body></html>"""
+def _parse_voltage_kv(v: str) -> float:
+    """Extract the kV number from strings like '33kV' or '11 kV'. Returns 0 if none."""
+    if not v:
+        return 0.0
+    import re as _re
+    m = _re.search(r"(\d+(?:\.\d+)?)", str(v))
+    return float(m.group(1)) if m else 0.0
 
 
 # ═══════════════════════════════════════════════════════════════

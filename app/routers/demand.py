@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+import asyncpg
 
+from app.deps import get_pool
 from app.helpers import _run_forecast_subprocess, DEMAND_INGESTER_SCRIPT, CARBON_FORECAST_SCRIPT
 from utils.grid_data_platform import record_metric
 
@@ -11,11 +13,58 @@ router = APIRouter(tags=["demand"])
 
 
 @router.get("/api/demand/gsps")
-async def api_demand_gsps():
-    """List available GSPs with metadata."""
+async def api_demand_gsps(pool: asyncpg.Pool = Depends(get_pool)):
+    """List available GSPs. Reads from `gsp_catalog` (seeded from NESO CKAN
+    with all ~340 UK GSPs) when populated; falls back to the hardcoded
+    20-entry list from the subprocess ingester otherwise.
+
+    Counsel's fix for the "only 20 GSPs in the dropdown" gap.
+    """
+    try:
+        async with pool.acquire() as conn:
+            has_table = await conn.fetchval(
+                "SELECT to_regclass('public.gsp_catalog') IS NOT NULL"
+            )
+            if has_table:
+                rows = await conn.fetch(
+                    """
+                    SELECT gsp_id, gsp_name, gsp_group_id, dno, region,
+                           lat, lon, peak_demand_mw, min_demand_mw, capacity_mw
+                    FROM gsp_catalog
+                    ORDER BY gsp_name
+                    """
+                )
+                if rows:
+                    # Derive synthetic peak/min/capacity where real data is
+                    # absent so the UI / forecast pipeline never breaks.
+                    out = []
+                    for r in rows:
+                        peak = r["peak_demand_mw"]
+                        if peak is None:
+                            peak = 150  # national median GSP peak demand
+                        mn = r["min_demand_mw"] or round(peak * 0.35, 1)
+                        cap = r["capacity_mw"] or round(peak * 1.25, 1)
+                        out.append({
+                            "gsp_id": str(r["gsp_id"]),
+                            "gsp_name": r["gsp_name"] or str(r["gsp_id"]),
+                            "gsp_group_id": r["gsp_group_id"],
+                            "dno": r["dno"] or "unknown",
+                            "region": r["region"] or "",
+                            "peak_demand_mw": peak,
+                            "min_demand_mw": mn,
+                            "capacity_mw": cap,
+                            "lat": r["lat"],
+                            "lon": r["lon"],
+                        })
+                    return {"gsps": out, "source": "gsp_catalog", "count": len(out)}
+    except Exception:
+        pass
+    # Fallback to 20-entry hardcoded list via subprocess.
     result = await _run_forecast_subprocess(
         {"command": "list_gsps"}, script=DEMAND_INGESTER_SCRIPT,
     )
+    if isinstance(result, dict):
+        result["source"] = "hardcoded_fallback"
     return result
 
 

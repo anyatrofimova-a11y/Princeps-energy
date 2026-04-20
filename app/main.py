@@ -148,6 +148,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
+# Register audit-log middleware (Task #13) — opt-in via PRINCEPS_AUDIT_ENABLED.
+try:
+    from app.startup import register_audit_middleware  # noqa: E402
+    register_audit_middleware(app)
+except Exception as _exc:
+    log.warning("audit middleware registration failed: %s", _exc)
+
 # Register structured error handler
 app.add_exception_handler(APIError, api_error_handler)
 
@@ -222,6 +229,7 @@ async def readiness_endpoint():
 from app.graph import router as graph_router  # noqa: E402
 
 _ROUTER_MODULES = [
+    "alerts",
     "site", "geeflow", "grid", "demand", "strategy", "market",
     "legacy", "procurement", "grid_efficiency", "prospector", "scoring",
     "sustainability", "vision", "analytics", "retrofit",
@@ -229,7 +237,8 @@ _ROUTER_MODULES = [
     "chat", "jobs",
     "assessments", "workflows", "auth",
     "cim",
-    "datacentre", "reports",
+    "consultees",
+    "datacentre", "reports", "reports_fva",
     "hardware",
     "teaser",
     "dc_planner", "eurosat", "land", "projects", "finance",
@@ -237,13 +246,32 @@ _ROUTER_MODULES = [
     "terrain", "planning_ml", "live_grid", "construction",
     "prospector_v2", "ppa_origination", "dispatch_model", "bess_revenue",
     "cable_routing", "yield_assessment", "portfolio", "grid_queue",
+    "dockets",
     "documents", "dc_layout", "electrical", "yield_intel",
-    "solar_layout", "export_usd", "design", "analysis",
+    "solar_layout", "export_usd", "design", "design_extras",
+    "enrichment",  # must precede "analysis" — its catch-all /api/analysis/{name} shadows /api/analysis/enrich
+    "analysis",
+    "finance_extras",
     "neso", "dno", "market_data",
     "cluster", "events", "portfolio_delta", "nged", "curtailment",
     "dc_hyperscaler", "ltds_cim", "gu", "neso098",
     "portfolios_crud",
     "project_actions",
+    "settings",
+    "ontology",
+    "forecast",
+    "engineering_primitives",
+    "connectors",
+    "exports",
+    "twin_assets",
+    "twin_dynamic",
+    "parcel",
+    "agent_ops",
+    "substation_tracker",
+    "billing",
+    "enterprise_admin",
+    "substrate",
+    "project_memo",
 ]
 
 app.include_router(graph_router)
@@ -258,6 +286,14 @@ for _mod_name in _ROUTER_MODULES:
     except Exception as _exc:
         _skipped.append((_mod_name, f"{type(_exc).__name__}: {_exc}"))
         log.warning("router %s skipped: %s", _mod_name, _exc)
+
+# Trust Center lives under app/enterprise/ rather than app/routers/, so
+# register it directly rather than through _ROUTER_MODULES.
+try:
+    from app.enterprise.trust_center import router as _trust_router  # noqa: E402
+    app.include_router(_trust_router)
+except Exception as _exc:
+    log.warning("trust_center router skipped: %s", _exc)
 
 if _skipped:
     log.warning("Router load: %d of %d skipped — %s",
@@ -275,6 +311,17 @@ if _DIST_DIR.is_dir():
     from starlette.responses import FileResponse
 
     app.mount("/assets", StaticFiles(directory=_DIST_DIR / "assets"), name="static-assets")
+
+# Design exports (PDF / DWG / CSV) — served under /static/design_exports/
+_EXPORTS_DIR = pathlib.Path(__file__).resolve().parent.parent / "data" / "design_exports"
+_EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    from starlette.staticfiles import StaticFiles as _SF
+    app.mount("/static/design_exports",
+              _SF(directory=_EXPORTS_DIR),
+              name="design-exports")
+except Exception as _e:
+    log.warning("design_exports static mount failed: %s", _e)
 
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):

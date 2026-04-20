@@ -334,3 +334,33 @@ async def get_country(code: str):
     return {"code": a.code, "name": a.name, "currency": a.currency, "srid": a.srid,
             "voltage_levels": a.voltage_levels, "electricity_price_avg": a.electricity_price_avg,
             "grid_connection_costs": a.grid_connection_costs, "planning_constraints": a.planning_constraints}
+
+
+# ── Unified analysis dispatch: (object_id, horizon, scenario) -> Analysis ──
+
+@router.get("/api/analysis/{analysis_name}")
+async def run_analysis(
+    analysis_name: str,
+    object_id: str = Query(..., description="ontology object id, e.g. substation external_id or parcel inspire_id"),
+    horizon: str = Query("day_ahead"),
+    scenario: str = Query("central"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Dispatch to a unified analysis function and return an Analysis dict."""
+    from app.analysis import ANALYSES, Analysis
+
+    fn = ANALYSES.get(analysis_name)
+    if fn is None:
+        raise HTTPException(status_code=404, detail=f"unknown analysis '{analysis_name}'. Available: {list(ANALYSES)}")
+
+    try:
+        if analysis_name == "ownership":
+            result = await fn(object_id, pool=pool)
+        else:
+            result = await fn(object_id, horizon=horizon, scenario=scenario, pool=pool)
+    except TypeError:
+        result = await fn(object_id, pool=pool)
+
+    if isinstance(result, Analysis):
+        return result.to_dict()
+    return result

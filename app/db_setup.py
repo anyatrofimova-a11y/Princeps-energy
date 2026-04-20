@@ -61,6 +61,52 @@ async def setup_database(pool: asyncpg.Pool) -> None:
             except Exception:
                 log.exception("migrate_agent_tables.sql failed — agents may be degraded")
 
+        # ── Phase 7a Intelligence schema (alerts / dockets / data subs) ───
+        # Gate on existence of `documents` marker table. The migration file
+        # itself is fully idempotent, but skipping avoids catalog churn on
+        # warm starts. See app/migrations/README.md for conventions.
+        _intel_migration = pathlib.Path(__file__).parent / "migrations" / "0001_intelligence_schema.sql"
+        if _intel_migration.exists():
+            try:
+                _has_documents = await conn.fetchval(
+                    "SELECT to_regclass('public.documents') IS NOT NULL"
+                )
+                if not _has_documents:
+                    await conn.execute(_intel_migration.read_text())
+                    log.info("Applied 0001_intelligence_schema.sql")
+                else:
+                    log.info("0001_intelligence_schema.sql already applied — skipping")
+            except Exception:
+                log.exception(
+                    "0001_intelligence_schema.sql failed — alerts/dockets/data subs may be degraded"
+                )
+
+        # ── Phase 7a ingestion log (Task #5) ──────────────────────────────
+        # Separate from grid_ingestion_log so Intelligence workers can evolve
+        # their schema independently. Fully idempotent.
+        _intel_log_migration = pathlib.Path(__file__).parent / "migrations" / "0002_intelligence_ingestion_log.sql"
+        if _intel_log_migration.exists():
+            try:
+                await conn.execute(_intel_log_migration.read_text())
+                log.info("Applied 0002_intelligence_ingestion_log.sql")
+            except Exception:
+                log.exception(
+                    "0002_intelligence_ingestion_log.sql failed — intelligence workers may not log runs"
+                )
+
+        # ── BOT-CC substrate (OS MasterMap / EA LiDAR / OSM pylons) ────────
+        # Fully idempotent: all CREATE TABLE/INDEX/MATERIALIZED VIEW IF NOT
+        # EXISTS. Safe to re-run on warm starts.
+        _substrate_migration = pathlib.Path(__file__).parent / "migrations" / "0009_substrate_schema.sql"
+        if _substrate_migration.exists():
+            try:
+                await conn.execute(_substrate_migration.read_text())
+                log.info("Applied 0009_substrate_schema.sql")
+            except Exception:
+                log.exception(
+                    "0009_substrate_schema.sql failed — substrate layers may be degraded"
+                )
+
         # ── Planning applications + sample energy data ────────────────────
         await planning_setup(conn)
         await planning_seed(conn)
@@ -229,6 +275,20 @@ async def setup_database(pool: asyncpg.Pool) -> None:
         await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS blocker TEXT")
         await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS stage_entered_at TIMESTAMPTZ DEFAULT NOW()")
         await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS repd_id TEXT")
+        # UNIQUE so REPD bulk-import can ON CONFLICT safely (counsel's fix —
+        # without it, every bulk-import raised InvalidColumnReferenceError).
+        await conn.execute("""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'projects_repd_id_unique'
+                ) THEN
+                    ALTER TABLE projects ADD CONSTRAINT projects_repd_id_unique UNIQUE (repd_id);
+                END IF;
+            END
+            $$
+        """)
         await conn.execute("ALTER TABLE projects ADD COLUMN IF NOT EXISTS tec_id TEXT")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_stage ON projects(stage)")
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_technology ON projects(technology)")
@@ -363,6 +423,28 @@ async def setup_database(pool: asyncpg.Pool) -> None:
         """)
         await conn.execute("CREATE INDEX IF NOT EXISTS idx_projects_portfolio ON projects(portfolio_id)")
 
+        # ── Design layouts (versioned, one candidate → many layouts) ──────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS design_layouts (
+                layout_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                candidate_id      UUID REFERENCES project_candidate_sites(candidate_id) ON DELETE CASCADE,
+                project_id        UUID REFERENCES projects(project_id) ON DELETE CASCADE,
+                parent_layout_id  UUID REFERENCES design_layouts(layout_id) ON DELETE SET NULL,
+                workload          TEXT NOT NULL,
+                name              TEXT,
+                doc               JSONB NOT NULL DEFAULT '{}'::jsonb,
+                kpis              JSONB NOT NULL DEFAULT '{}'::jsonb,
+                status            TEXT DEFAULT 'draft',
+                is_preferred      BOOLEAN DEFAULT false,
+                created_by        UUID,
+                created_at        TIMESTAMPTZ DEFAULT NOW(),
+                updated_at        TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_design_layouts_candidate ON design_layouts(candidate_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_design_layouts_project ON design_layouts(project_id)")
+        await conn.execute("CREATE INDEX IF NOT EXISTS idx_design_layouts_parent ON design_layouts(parent_layout_id)")
+
         # ── Candidate sites for a project (distinct from junction project_sites) ─
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS project_candidate_sites (
@@ -395,8 +477,8 @@ async def setup_database(pool: asyncpg.Pool) -> None:
                 INSERT INTO projects (portfolio_id, name, description, technology, capacity_mw,
                                       stage, verdict, lat, lon, metadata)
                 VALUES ($1, 'Thames BESS Phase 1',
-                        '50 MW / 100 MWh grid-scale battery in Greater London.',
-                        'bess', 50.0, 'prospect', 'GO', 51.5074, -0.1278,
+                        '50 MW / 100 MWh grid-scale battery — Tilbury port brownfield, Thames Estuary.',
+                        'bess', 50.0, 'prospect', 'GO', 51.4650, 0.3600,
                         '{"energy_mwh": 100, "duration_h": 2, "chemistry": "LFP"}'::jsonb)
                 RETURNING project_id
             """, _pf_id)
@@ -418,8 +500,8 @@ async def setup_database(pool: asyncpg.Pool) -> None:
                 INSERT INTO projects (portfolio_id, name, description, technology, capacity_mw,
                                       stage, verdict, lat, lon, blocker, metadata)
                 VALUES ($1, 'Slough Hyperscale DC',
-                        '40 MW IT-load data centre with behind-the-meter generation.',
-                        'dc', 40.0, 'screened', 'CAUTION', 51.5105, -0.5950,
+                        '40 MW IT-load data centre, Slough Trading Estate cluster (Equinix LD4/LD5 neighbourhood).',
+                        'dc', 40.0, 'screened', 'CAUTION', 51.4974, -0.5683,
                         'Grid headroom marginal at summer peak — requires reinforcement',
                         '{"it_load_mw": 40, "pue_target": 1.2, "grid_headroom_mw": 15, "tier": "III"}'::jsonb)
                 RETURNING project_id

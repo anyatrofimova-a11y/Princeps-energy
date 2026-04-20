@@ -38,6 +38,8 @@ from typing import Any, Optional
 import numpy as np
 import pandas as pd
 
+from app.regulatory.versions import cite as _cite_reg, nppf_para as _nppf_para
+
 log = logging.getLogger("princeps.planning_intelligence")
 
 # ═══════════════════════════════════════════════════════════════
@@ -744,7 +746,7 @@ def engineer_features(
     """
     tech = project.get("technology", "Solar Photovoltaics")
     capacity = project.get("capacity_mw", 10)
-    land_area = project.get("land_area_ha", capacity * 2.0)
+    land_area = project.get("land_area_ha") or (capacity * 2.0)
     summary = constraints.get("summary", {}) if constraints else {}
     grid = grid_context or {}
 
@@ -1439,7 +1441,7 @@ def check_regulatory_compliance(project: dict, constraints: dict) -> dict:
     """
     tech = project.get("technology", "Solar Photovoltaics")
     capacity = project.get("capacity_mw", 10)
-    land_area = project.get("land_area_ha", capacity * 2.0)
+    land_area = project.get("land_area_ha") or (capacity * 2.0)
     summary = constraints.get("summary", {}) if constraints else {}
 
     checks = []
@@ -1518,10 +1520,10 @@ def check_regulatory_compliance(project: dict, constraints: dict) -> dict:
         "regulation": "Biodiversity Net Gain (Environment Act 2021)",
         "status": "ACTION_REQUIRED",
         "detail": "10% BNG mandatory for all developments since February 2024",
-        "action": "Commission BNG assessment using Defra Biodiversity Metric 4.0; secure 30-year management plan",
+        "action": f"Commission BNG assessment using {_cite_reg('statutory_biodiversity_metric')}; secure 30-year management plan",
         "reference": "Environment Act 2021 Schedule 7A; Town and Country Planning Act 1990 (as amended)",
     })
-    required_assessments.append("BNG Assessment (Metric 4.0)")
+    required_assessments.append(f"BNG Assessment ({_cite_reg('statutory_biodiversity_metric')})")
     total_cost += 8_000
 
     # --- 4. CDM 2015 ---
@@ -1717,7 +1719,7 @@ def check_regulatory_compliance(project: dict, constraints: dict) -> dict:
             "status": "ACTION_REQUIRED",
             "detail": "Within 5km of European site (SAC/SPA) — Habitats Regulations Assessment required",
             "action": "Commission HRA screening; LPA must consult Natural England",
-            "reference": "SI 2017/1012; NPPF para 186",
+            "reference": f"SI 2017/1012; {_nppf_para('SSSI')}",
         })
         required_assessments.append("Habitats Regulations Assessment")
         total_cost += 10_000
@@ -1729,7 +1731,7 @@ def check_regulatory_compliance(project: dict, constraints: dict) -> dict:
             "status": "ACTION_REQUIRED",
             "detail": f"Within {d_sssi:.0f}m of SSSI — in Impact Risk Zone",
             "action": "Consult Natural England; likely need SSSI assessment",
-            "reference": "Wildlife and Countryside Act 1981 s.28; NPPF para 186",
+            "reference": f"Wildlife and Countryside Act 1981 s.28; {_nppf_para('SSSI')}",
         })
         required_assessments.append("SSSI Impact Assessment")
         total_cost += 6_000
@@ -1740,7 +1742,7 @@ def check_regulatory_compliance(project: dict, constraints: dict) -> dict:
             "status": "HIGH_RISK",
             "detail": f"Within {d_aw:.0f}m of Ancient Woodland — irreplaceable habitat",
             "action": "Maintain minimum 15m buffer; ecological assessment required",
-            "reference": "NPPF para 186(c); Natural England/Forestry Commission Standing Advice",
+            "reference": f"{_nppf_para('ANCIENT_WOODLAND')}; Natural England/Forestry Commission Standing Advice",
         })
         required_assessments.append("Ancient Woodland Buffer Assessment")
         total_cost += 4_000
@@ -1782,9 +1784,11 @@ def check_regulatory_compliance(project: dict, constraints: dict) -> dict:
             "regulation": "NPPF Green Belt Policy",
             "status": "HIGH_RISK",
             "detail": "Site is within Green Belt — renewable energy is 'inappropriate development'",
-            "action": "Build 'very special circumstances' case under NPPF para 168; "
-                     "demonstrate renewable energy benefits outweigh Green Belt harm",
-            "reference": "NPPF paras 152-168",
+            "action": (
+                f"Build 'very special circumstances' case under {_nppf_para('GREEN_BELT_VSC')}; "
+                "demonstrate renewable energy benefits outweigh Green Belt harm"
+            ),
+            "reference": _nppf_para("range_planning"),
         })
         timeline_months = max(timeline_months, 10)
 

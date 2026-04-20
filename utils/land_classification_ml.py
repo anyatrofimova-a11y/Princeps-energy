@@ -28,6 +28,8 @@ from typing import Any, Optional
 
 import numpy as np
 
+from app.regulatory.versions import nppf_para as _nppf_para
+
 log = logging.getLogger("princeps.land_ml")
 DATA_DIR = Path(os.environ.get("PRINCEPS_DATA_DIR", "data"))
 
@@ -455,7 +457,7 @@ def predict_land_suitability(features: dict) -> dict:
     if features.get("green_belt", 0):
         constraints.append("Green Belt — Very Special Circumstances required")
     if features.get("alc_score", 50) < 15:
-        constraints.append("BMV agricultural land (Grade 1-3a) — NPPF para 174b protection")
+        constraints.append(f"BMV agricultural land (Grade 1-3a) — {_nppf_para('BMV_b')} protection")
 
     # SHAP
     top_factors = []

@@ -347,3 +347,49 @@ async def api_revenue_scenarios(
         "command": "scenario_comparison", "capacity_mw": capacity_mw,
         "technology": technology, "region": region,
     })
+
+
+# ─── Godmode-v2 #6 — Live market ribbon ────────────────────────────────────
+
+@router.get("/api/market/ribbon")
+async def market_ribbon():
+    """Aggregated live market pulse for the top-of-shell ribbon.
+
+    Returns today's wholesale £/MWh, latest DC/DM/DR clearing proxies, CfD
+    AR-round reference, capacity-market T-1/T-4 reference, gas-dark spread,
+    and system frequency. Best-effort composition — each field reports its
+    own source/warning so the UI can render chips independently.
+    """
+    from datetime import datetime as _dt
+    out: dict = {"generated_at": _dt.utcnow().isoformat() + "Z", "chips": []}
+
+    def chip(key, label, value, unit=None, source=None, warn=None):
+        out["chips"].append({
+            "key": key, "label": label, "value": value, "unit": unit,
+            "source": source, "warning": warn,
+        })
+
+    # Wholesale — reuse live_grid snapshot if available.
+    try:
+        from utils.national_grid_live import fetch_all_live
+        live = await fetch_all_live()
+        price = (live or {}).get("price", {}).get("market_index_gbp_mwh")
+        if price is not None:
+            chip("wholesale", "Wholesale", round(float(price), 1), "£/MWh", "Elexon/NESO")
+        freq = (live or {}).get("frequency", {}).get("hz")
+        if freq is not None:
+            chip("frequency", "Sys Freq", round(float(freq), 3), "Hz", "NESO")
+        carbon = (live or {}).get("carbon", {}).get("forecast_gco2_kwh")
+        if carbon is not None:
+            chip("carbon", "Carbon", int(carbon), "gCO₂/kWh", "NG-ESO")
+    except Exception as e:
+        chip("wholesale", "Wholesale", None, "£/MWh", None, f"live feed down ({e.__class__.__name__})")
+
+    # Static/reference chips (to be wired to real feeds in later sprints).
+    chip("cfd_strike", "CfD AR6", 70.4, "£/MWh 2012", "NESO AR6 result (static)")
+    chip("capacity_t1", "Cap T-1", 63.0, "£/kW", "T-1 2024/25 (static)")
+    chip("capacity_t4", "Cap T-4", 65.0, "£/kW", "T-4 2027/28 (static)")
+    chip("dark_spread", "Dark Spread", 38.5, "£/MWh", "OTC mid (static)")
+    chip("dc_clearing", "DC Clear", 6.8, "£/MW/h", "NESO DC daily (static)")
+
+    return out

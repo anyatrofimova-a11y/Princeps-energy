@@ -421,6 +421,21 @@ INTENT_PROMPTS: dict[str, str] = {
         "by 15-dimension DC-SCORE. Highlight Enterprise Zones, Freeports, and AI Growth Zones. "
         "Reference Google's target criteria: 100-500MW, 95% CFE, water-positive, low PUE."
     ),
+    "site_layout": (
+        "You are a senior UK data centre, BESS, and solar site engineer explaining the reasoning "
+        "behind an auto-generated site layout. Given the candidate site (lat, lon, area_ha, "
+        "headroom_mw) and workload (technology: dc, bess, or solar; capacity_mw; duration_h for "
+        "BESS; pad_count or hall_count), explain the layout rationale in 3-6 short engineering "
+        "bullets. No preamble, no marketing language, no markdown tables. Cover: pad/hall count "
+        "sizing vs modular commissioning, orientation (DC halls aligned to prevailing wind for "
+        "free-cooling; BESS rows N-S for fire-access alleys; solar azimuth 180 deg), fire "
+        "setbacks (NFPA 855 / BS 8629:2019: 3m inter-unit Li-ion, 6m property line; BS 9999 "
+        "for DC), cable routing (shortest MV run to substation, avoid road crossings), and "
+        "interaction with site constraints (slope >10 deg earthworks, flood zone exclusion, "
+        "ALC 1-3a avoidance, ancient woodland / SSSI buffers). Reference the headroom_mw vs "
+        "capacity_mw ratio when sizing the connection — flag if >0.8 utilisation. End with a "
+        "GO/CAUTION/NO-GO verdict on the layout as proposed."
+    ),
 }
 
 OUTPUT_SCHEMA = """\
@@ -1457,6 +1472,36 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
             {
                 "label": "View DC Capacity Map",
                 "endpoint": f"/api/dc/capacity-map?profile=google_hyperscale&min_headroom_mw={load_mw * 0.5}",
+                "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    if intent == "site_layout":
+        tech = (ctx.get("technology") or "bess").lower()
+        cap_mw = ctx.get("capacity_mw") or (cap / 1000)
+        actions = [
+            {
+                "label": "Open Design Canvas",
+                "action": "open_panel",
+                "panel": "design_canvas",
+                "payload": {"technology": tech, "capacity_mw": cap_mw},
+            },
+            {
+                "label": "Run Cable Routing",
+                "endpoint": "/api/cable-routing/route",
+                "method": "POST",
+                "payload": {"lat": lat, "lon": lon, "capacity_mw": cap_mw},
+            },
+            {
+                "label": "Nearby Planning Precedent",
+                "endpoint": f"/api/planning-ml/nearby-precedent?lat={lat}&lon={lon}&tech={tech}&radius_km=25",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Verify Grid Headroom",
+                "endpoint": f"/api/grid/nearest-substation?lat={lat}&lon={lon}",
                 "method": "GET",
                 "payload": {},
             },

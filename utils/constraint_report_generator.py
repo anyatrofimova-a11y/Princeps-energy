@@ -38,6 +38,8 @@ import matplotlib.patches as mpatches
 import numpy as np
 from jinja2 import Environment, FileSystemLoader
 
+from app.regulatory.versions import nppf_para as _nppf_para
+
 log = logging.getLogger("princeps.constraint_report")
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "report"
@@ -522,13 +524,13 @@ _CONSTRAINT_REPORT_HTML = """
               {% endif %}
             </td>
             <td class="text-xs text-muted">
-              {% if dtype == 'sssi' %}Hard constraint if overlap. NPPF para 180 protection.
+              {% if dtype == 'sssi' %}Hard constraint if overlap. {{ nppf.sssi }} protection.
               {% elif dtype == 'sac' %}Habitats Regulations Assessment required if likely significant effect.
               {% elif dtype == 'spa' %}HRA screening required. Wild bird protection under Birds Directive.
               {% elif dtype == 'ramsar' %}International wetland protection. Treated same as SAC/SPA.
-              {% elif dtype == 'aonb' %}Major development must demonstrate exceptional circumstances. NPPF para 177.
-              {% elif dtype == 'green_belt' %}Very special circumstances required. NPPF Section 13.
-              {% elif dtype == 'ancient_woodland' %}Irreplaceable habitat. NPPF para 180c &mdash; refusal unless wholly exceptional.
+              {% elif dtype == 'aonb' %}Major development must demonstrate exceptional circumstances. {{ nppf.aonb }}.
+              {% elif dtype == 'green_belt' %}Very special circumstances required. {{ nppf.green_belt_section }}.
+              {% elif dtype == 'ancient_woodland' %}Irreplaceable habitat. {{ nppf.ancient_woodland }} &mdash; refusal unless wholly exceptional.
               {% endif %}
             </td>
           </tr>
@@ -641,7 +643,7 @@ _CONSTRAINT_REPORT_HTML = """
         </div>
         <div class="text-xs text-muted mt-8">{{ alc.note }}</div>
         <div class="text-xs text-muted mt-4">
-          NPPF footnote 62: Development of BMV land (grades 1, 2, 3a) should be avoided
+          {{ nppf.bmv_footnote }}: Development of BMV land (grades 1, 2, 3a) should be avoided
           unless shown to be necessary. Grade 3b and below have fewer restrictions.
         </div>
       </div>
@@ -948,9 +950,23 @@ async def generate_constraint_report(
     except Exception as e:
         log.debug("Planning radar chart failed: %s", e)
 
+    # Current NPPF paragraph citations — resolved via
+    # app.regulatory.versions.nppf_para() so a future NPPF revision only
+    # needs to be updated in one place (the semantic para map).
+    nppf_refs = {
+        "sssi": _nppf_para("SSSI"),
+        "aonb": _nppf_para("AONB"),
+        "green_belt": _nppf_para("GREEN_BELT_VSC"),
+        "green_belt_section": _nppf_para("GREEN_BELT_SECTION"),
+        "ancient_woodland": _nppf_para("ANCIENT_WOODLAND"),
+        "bmv": _nppf_para("BMV"),
+        "bmv_footnote": _nppf_para("BMV_FOOTNOTE"),
+    }
+
     # 4. Render HTML
     ctx = {
         "site_name": site_name,
+        "nppf": nppf_refs,
         "lat": lat,
         "lon": lon,
         "capacity_mw": capacity_mw,

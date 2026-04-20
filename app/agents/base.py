@@ -55,7 +55,7 @@ log = logging.getLogger("princeps.agents")
 # ── Anthropic models ─────────────────────────────────────────────────────────
 MODEL_HAIKU  = "claude-haiku-4-5"
 MODEL_SONNET = "claude-sonnet-4-6"
-MODEL_OPUS   = "claude-opus-4-6"
+MODEL_OPUS   = "claude-opus-4-7"
 
 # Model tier ordering (cheapest → most expensive). Used for ceiling clamps.
 _MODEL_TIER = {MODEL_HAIKU: 0, MODEL_SONNET: 1, MODEL_OPUS: 2}

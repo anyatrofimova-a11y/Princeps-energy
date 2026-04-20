@@ -28,6 +28,43 @@ log = logging.getLogger("princeps.vision")
 
 router = APIRouter(tags=["vision"])
 
+OPUS_VISION_MODEL = "claude-opus-4-7"
+
+
+class VisionAnalyseRequest(BaseModel):
+    image_b64: str
+    question: str = "Describe this site for energy-infrastructure feasibility."
+    media_type: str = "image/jpeg"
+    max_tokens: int = 1024
+
+
+@router.post("/api/vision/analyse")
+async def vision_analyse_opus(req: VisionAnalyseRequest, client=Depends(get_claude)):
+    """Free-form vision Q&A on Opus 4.7. Accepts any base64 image + question."""
+    try:
+        resp = await client.messages.create(
+            model=OPUS_VISION_MODEL,
+            max_tokens=req.max_tokens,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {
+                        "type": "base64", "media_type": req.media_type, "data": req.image_b64,
+                    }},
+                    {"type": "text", "text": req.question},
+                ],
+            }],
+        )
+        text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        return {
+            "answer": text,
+            "model": OPUS_VISION_MODEL,
+            "tokens_in": resp.usage.input_tokens,
+            "tokens_out": resp.usage.output_tokens,
+        }
+    except anthropic.APIError as e:
+        raise HTTPException(status_code=502, detail=f"Anthropic API error: {e}")
+
 # ---------------------------------------------------------------------------
 # In-memory upload store
 # ---------------------------------------------------------------------------
