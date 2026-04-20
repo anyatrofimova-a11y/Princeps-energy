@@ -24,29 +24,60 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import mapboxgl from "mapbox-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
-import { PolygonLayer, PathLayer, ScatterplotLayer, TextLayer, IconLayer } from "@deck.gl/layers";
+import { PolygonLayer, PathLayer, ScatterplotLayer, TextLayer, IconLayer, SolidPolygonLayer } from "@deck.gl/layers";
+import { buildCampusLayout, ROLE_COLOURS } from "./dc/dcLayoutPresets";
+import { buildStructureLayers } from "./dc/DCFacilityStructure";
+import useBuildableMask from "../hooks/useBuildableMask";
+import useShellDragHandlers, { DRAG_STATUS_COLORS } from "./dc/DCShellDragHandler";
+import { useDCContext } from "../hooks/useDCContext";
+import {
+  buildUtilityOverlayLayers,
+  DCUtilityOverlayPanel,
+} from "./dc/DCUtilityOverlays";
+import {
+  buildContextOverlayLayers,
+  deriveBlockerFlags,
+  DCContextOverlayPanel,
+  DCConstraintBadge,
+} from "./dc/DCContextOverlays";
+/* ── Live-ops overlays — owned by BOT-DX.
+ *  Heatmap / Noise / Glint layers + PUE/IT/cooling/water live strip.
+ *  Each overlay exposes a hook that fetches its data + a pure builder
+ *  that returns deck.gl layers, so we can weave them into the existing
+ *  `deckLayers` memo without forking the render path. */
+import { useThermalField, thermalHeatmapLayers } from "./dc/DCThermalHeatmap";
+import { useNoiseContours, noiseContourLayers } from "./dc/DCNoiseContour";
+import { useGlintCones, glintConeLayers } from "./dc/DCGlintCone";
+import DCLiveOpsStrip from "./dc/DCLiveOpsStrip";
 
 /* ── Valid selection keys (anything else falls back to clearing selection).
- *  shell / cooling / substation / cable / road / nearbySub:<id>
- *  Kept as a small helper so we don't render an empty "Inspector" shell when
- *  stale or unknown state sneaks in. */
-const VALID_SELECTED = new Set(["shell", "cooling", "substation", "cable", "road"]);
+ *  Structure keys: shell / hall_* / spine / mvlv / genset_yard / gen_N
+ *                  / tank_N / tx_yard / tx_N / water / office / security
+ *                  / loading. Plus legacy: cable / road / nearbySub:<id>.
+ *  We accept any structure-style key prefix via the helper below. */
+const LEGACY_SELECTED = new Set(["shell", "cooling", "substation", "cable", "road"]);
+const STRUCT_PREFIXES = [
+  "shell", "hall_", "spine", "mvlv", "genset_yard", "gen_", "tank_",
+  "tx_yard", "tx_", "water", "office", "security", "loading",
+];
 function isValidSelection(s) {
   if (!s) return false;
-  if (VALID_SELECTED.has(s)) return true;
-  if (typeof s === "string" && s.startsWith("nearbySub:")) return true;
+  if (LEGACY_SELECTED.has(s)) return true;
+  if (typeof s === "string") {
+    if (s.startsWith("nearbySub:")) return true;
+    if (STRUCT_PREFIXES.some(p => s === p || s.startsWith(p))) return true;
+  }
   return false;
 }
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
 const C = {
-  shell:       [147, 51, 234, 230],   // purple — building shell
-  shellEdge:   [88, 28, 135, 255],
-  cooling:     [16, 185, 129, 220],   // green — cooling yard
-  coolingEdge: [4, 120, 87, 255],
-  substation:  [217, 119, 6, 230],    // amber — substation pad
-  subEdge:     [120, 53, 15, 255],
+  // NOTE: shell / hall / mvlv / genset / tx / water / office / security /
+  //       loading colours live in dcLayoutPresets.ROLE_COLOURS — the
+  //       DCFacilityStructure renderer reads them directly.  These kept-here
+  //       entries are only for the ancillary legacy layers (cable run, access
+  //       road, perimeter fence) that sit outside the campus layout.
   cable:       [239, 68, 68, 255],    // red — cable corridor
   road:        [100, 116, 139, 255],  // slate — access road
   fence:       [156, 163, 175, 200],  // grey — perimeter fence
@@ -76,61 +107,85 @@ function rectanglePolygon(lat, lon, widthM, depthM, rotationDeg = 0) {
   return ring;
 }
 
-/* Derive site geometry deterministically from IT load + a parcel area hint.
- * Cooling yard sits south, substation pad east, cable corridor connects them.
- * Access road is a 60 m spur off the NE corner. */
-function deriveSiteGeometry({ lat, lon, itLoadMw, parcelHa }) {
+/* Derive site geometry deterministically from IT load + Tier + cooling type.
+ *
+ * The CAMPUS structure (halls, MV/LV, genset yard, TX yard, water plant,
+ * office, gatehouse, loading bay) is built by `buildCampusLayout(...)` and
+ * stored on the returned object as `layout`. The lighter legacy fields
+ * (`shell` / `cooling` / `substation` / `cable` / `road` / `fence`) are
+ * preserved so the existing InspectorPane + drag handler keep working.
+ *
+ * Convention: layout.* uses a local-metres frame with shell centroid at (0,0);
+ * the legacy polygon-shaped fields are in WGS84 lon/lat. */
+function deriveSiteGeometry({ lat, lon, itLoadMw, parcelHa, tier, redundancy, coolingType }) {
   const safeMw = Math.max(1, itLoadMw || 50);
-  const shellArea = safeMw * 600;            // m²
-  const shellSide = Math.sqrt(shellArea);     // square shell (a hyperscale hall is closer to 100×120 m, but square is fine for visualisation)
-  const shellWidth = shellSide;
-  const shellDepth = shellSide;
-  const shellHeight = Math.min(24, 12 + 0.4 * safeMw);
+  const layout = buildCampusLayout({
+    itLoadMw: safeMw,
+    tier,
+    redundancy,
+    coolingType: coolingType || "hybrid",
+  });
 
-  const coolingArea = shellArea * 0.35;
-  const coolingWidth = Math.sqrt(coolingArea * 1.4);
-  const coolingDepth = coolingArea / coolingWidth;
-  // cooling yard sits south of shell, with 8 m corridor between
-  const [coolLon, coolLat] = offsetMeters(lat, lon, 0, -(shellDepth / 2 + 8 + coolingDepth / 2));
+  // Legacy "shell" facade — now represents the outer envelope footprint
+  // (halls + MVLV + spine all sit inside). Keeps InspectorPane + drag working.
+  const shellWidth = layout.shell.width;
+  const shellDepth = layout.shell.depth;
+  const shellHeight = layout.shell.height;
+  // Shell in the campus frame is centred at (0, layout.shell.cy) — so when
+  // projecting the drag-anchor polygon we offset by cy.
+  const shellLocalDy = layout.shell.cy;
+  const shellWgsCentroid = offsetMeters(lat, lon, 0, shellLocalDy);
+  const shellLon = shellWgsCentroid[0];
+  const shellLat = shellWgsCentroid[1];
 
-  const subSide = safeMw <= 50 ? 78 : safeMw <= 200 ? 110 : 140;   // m
-  // substation pad sits east of shell, 25 m gap
-  const [subLon, subLat] = offsetMeters(lat, lon, shellWidth / 2 + 25 + subSide / 2, 0);
+  // Legacy "cooling" — now points at the water/chiller plant.
+  const coolingCentroid = offsetMeters(lat, lon, layout.water.cx, layout.water.cy);
+  const coolingLon = coolingCentroid[0];
+  const coolingLat = coolingCentroid[1];
 
-  // perimeter fence: shell + 12 m offset
-  const fenceWidth = shellWidth + 24;
-  const fenceDepth = shellDepth + 24 + coolingDepth + 16;
-  const [fenceLon, fenceLat] = offsetMeters(lat, lon, 0, -(coolingDepth + 16) / 2);
+  // Legacy "substation" — now points at the TX yard (which is the DC's on-site substation).
+  const subCentroid = offsetMeters(lat, lon, layout.tx.cx, layout.tx.cy);
+  const subLon = subCentroid[0];
+  const subLat = subCentroid[1];
+  const subSide = Math.max(layout.tx.width, layout.tx.depth);
 
-  // access road spur: from NE fence corner outward 60 m
-  const fenceNE = offsetMeters(fenceLat, fenceLon, fenceWidth / 2, fenceDepth / 2);
+  // Site fence polygon in WGS84 — derived from layout.fence.
+  const fenceCentroid = offsetMeters(lat, lon, layout.fence.cx, layout.fence.cy);
+  const fenceLon = fenceCentroid[0];
+  const fenceLat = fenceCentroid[1];
+
+  // Access road spur: from NE fence corner outward 60 m.
+  const fenceNE = offsetMeters(fenceLat, fenceLon, layout.fence.width / 2, layout.fence.depth / 2);
   const roadEnd = offsetMeters(fenceNE[1], fenceNE[0], 60, 60);
 
-  // cable corridor: from shell east edge mid → sub west edge mid
-  const cableStart = offsetMeters(lat, lon, shellWidth / 2, 0);
-  const cableEnd   = offsetMeters(subLat, subLon, -subSide / 2, 0);
+  // Cable corridor: from MVLV building east edge → TX yard west edge.
+  const cableStart = offsetMeters(lat, lon, layout.mvlv.cx + layout.mvlv.width / 2, layout.mvlv.cy);
+  const cableEnd   = offsetMeters(lat, lon, layout.tx.cx + layout.tx.width / 2,     layout.tx.cy);
 
   return {
     parcelArea: parcelHa ? parcelHa * 10000 : null,
+    // Campus layout recipe (local metres frame) — consumed by DCFacilityStructure.
+    layout,
+    // Legacy fields (WGS84 polygons) — kept for InspectorPane + drag handler.
     shell: {
-      polygon: rectanglePolygon(lat, lon, shellWidth, shellDepth, 0),
+      polygon: rectanglePolygon(shellLat, shellLon, shellWidth, shellDepth, 0),
       heightM: shellHeight,
-      widthM: shellWidth, depthM: shellDepth, areaM2: shellArea,
-      lat, lon,
+      widthM: shellWidth, depthM: shellDepth, areaM2: shellWidth * shellDepth,
+      lat: shellLat, lon: shellLon,
     },
     cooling: {
-      polygon: rectanglePolygon(coolLat, coolLon, coolingWidth, coolingDepth, 0),
-      heightM: 5,
-      widthM: coolingWidth, depthM: coolingDepth, areaM2: coolingArea,
+      polygon: rectanglePolygon(coolingLat, coolingLon, layout.water.width, layout.water.depth, 0),
+      heightM: layout.water.height,
+      widthM: layout.water.width, depthM: layout.water.depth, areaM2: layout.water.area,
     },
     substation: {
-      polygon: rectanglePolygon(subLat, subLon, subSide, subSide, 0),
+      polygon: rectanglePolygon(subLat, subLon, layout.tx.width, layout.tx.depth, 0),
       heightM: 8,
-      sideM: subSide,
+      sideM: Math.round(subSide),
     },
     fence: {
-      polygon: rectanglePolygon(fenceLat, fenceLon, fenceWidth, fenceDepth, 0),
-      widthM: fenceWidth, depthM: fenceDepth,
+      polygon: rectanglePolygon(fenceLat, fenceLon, layout.fence.width, layout.fence.depth, 0),
+      widthM: layout.fence.width, depthM: layout.fence.depth,
     },
     cable: { start: cableStart, end: cableEnd },
     road:  { start: fenceNE, end: roadEnd },
@@ -148,8 +203,15 @@ export default function DCDesignTwin({
   lon: initialLon = -0.5683,
   itLoadMw = 50,
   parcelHa = null,
+  parcelId = null,           // optional HMLR INSPIRE id — plumbed for BOT-G
   tier = 3,
   redundancy = "N+1",
+  coolingType = "hybrid",
+  /* Buildable mask — if provided, the layout recipe tries to fit inside it.
+   * Contract (rectangular form, local metres frame centred on shell):
+   *   { minX, maxX, minY, maxY }
+   * When null, structures arrange relative to the shell position. */
+  buildableMask = null,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -162,6 +224,14 @@ export default function DCDesignTwin({
   const [showFence, setShowFence] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
   const [showContext, setShowContext] = useState(true);
+  /* ── BOT-DX live-ops toggles. Heatmap / Noise / Glint toggles add/remove
+   *  their deck.gl sub-layers; showLive mounts the floating DCLiveOpsStrip
+   *  (PUE / IT load % / cooling MW / water makeup rate). All four are
+   *  independent so an operator can isolate the consequence they care about. */
+  const [showHeatmap, setShowHeatmap] = useState(false);
+  const [showNoise,   setShowNoise]   = useState(false);
+  const [showGlint,   setShowGlint]   = useState(false);
+  const [showLive,    setShowLive]    = useState(false);
   // Drag-moveable site centroid — initialised from props, then user-controlled
   const [lat, setLat] = useState(initialLat);
   const [lon, setLon] = useState(initialLon);
@@ -176,12 +246,73 @@ export default function DCDesignTwin({
   const [inspectorTab, setInspectorTab] = useState("spec");
   // Continuous orbit flag (driven by the "Orbit" camera preset button).
   const [orbiting, setOrbiting] = useState(false);
+  // Has the user touched the site centroid? If not we recentre on new site
+  // selection; once they've dragged we preserve their position.
+  const snappedOnceRef = useRef(false);
 
-  useEffect(() => { setLat(initialLat); setLon(initialLon); }, [initialLat, initialLon]);
+  // ── Utility + context overlay toggles (BOT-DU) ─────────────────────
+  //   Defaults: substation POC + planning red-line ON, rest OFF.
+  const [utilityToggles, setUtilityToggles] = useState({
+    substation: true, fiber: false, water: false, gas: false, road: false,
+  });
+  const [contextToggles, setContextToggles] = useState({
+    redline: true, designations: false, flood: false, alc: false,
+  });
+  const [utilitySelected, setUtilitySelected] = useState(null);
+
+  const handleUtilityToggle = useCallback((key, val) => {
+    setUtilityToggles((s) => ({ ...s, [key]: val }));
+  }, []);
+  const handleContextToggle = useCallback((key, val) => {
+    setContextToggles((s) => ({ ...s, [key]: val }));
+  }, []);
+
+  useEffect(() => {
+    setLat(initialLat);
+    setLon(initialLon);
+    snappedOnceRef.current = false;   // new site → allow auto-snap to centroid
+  }, [initialLat, initialLon]);
+
+  /* ── Buildable-area mask for this site ────────────────────────────────── */
+  const mask = useBuildableMask({ lat: initialLat, lon: initialLon, radiusM: 1500 });
+
+  /* ── BOT-DU context: substation POC + designations + utility routes ──── */
+  const dcContext = useDCContext({ lat, lon, enabled: true, radiusM: 2000 });
+  // blockerFlags is declared below after `geom` (needs shell polygon).
+
+  /* ── Initial snap to buildable centroid (once per new site) ───────────── */
+  useEffect(() => {
+    if (snappedOnceRef.current) return;
+    if (!mask.buildableCentroid) return;
+    const [cLon, cLat] = mask.buildableCentroid;
+    // Only snap if the centroid moves us by ≥30 m — otherwise initialLat/Lon
+    // is already close to the buildable centre and we save a visual jump.
+    const dxm = (cLon - initialLon) * mPerDegLon(initialLat);
+    const dym = (cLat - initialLat) * M_PER_DEG_LAT;
+    if (Math.hypot(dxm, dym) > 30) {
+      setLat(cLat);
+      setLon(cLon);
+    }
+    snappedOnceRef.current = true;
+  }, [mask.buildableCentroid, initialLat, initialLon]);
+
+  /* ── Drag handlers with buildable-mask constraint ─────────────────────── */
+  const drag = useShellDragHandlers({
+    lat, lon, setLat, setLon, mapRef,
+    isBuildable: mask.isBuildable,
+    parcelContains: mask.parcelContains,
+    restrictionAt: mask.restrictionAt,
+  });
 
   const geom = useMemo(
-    () => deriveSiteGeometry({ lat, lon, itLoadMw, parcelHa }),
-    [lat, lon, itLoadMw, parcelHa]
+    () => deriveSiteGeometry({ lat, lon, itLoadMw, parcelHa, tier, redundancy, coolingType }),
+    [lat, lon, itLoadMw, parcelHa, tier, redundancy, coolingType]
+  );
+
+  /* ── Blocker detection based on buildable-mask + flood designations ──── */
+  const blockerFlags = useMemo(
+    () => deriveBlockerFlags({ ctx: dcContext, shellPolygon: geom?.shell?.polygon }),
+    [dcContext, geom]
   );
 
   /* ── Mount Mapbox ── */
@@ -318,31 +449,20 @@ export default function DCDesignTwin({
   /* ── Drag handler: middle-click or alt+left-drag on the shell moves the
         centroid. Plain left-drag still pans Mapbox. We consume pointer
         events at the deck.gl layer level via onDragStart/onDrag/onDragEnd. ── */
+  // Thin shims that delegate to useShellDragHandlers (buildable-mask-aware).
+  // The legacy dragStateRef is kept alive so other hover/tooltip logic that
+  // reads dragStateRef.current.active keeps working.
   const handleShellDragStart = useCallback((info, event) => {
-    if (!info?.coordinate) return;
-    event?.stopPropagation?.();
-    dragStateRef.current = {
-      active: true,
-      startLonLat: [lon, lat],
-      startPointerLonLat: info.coordinate,
-    };
-    if (mapRef.current) mapRef.current.dragPan.disable();
-  }, [lat, lon]);
-
+    dragStateRef.current.active = true;
+    drag.onDragStart(info, event);
+  }, [drag]);
   const handleShellDrag = useCallback((info, event) => {
-    const st = dragStateRef.current;
-    if (!st.active || !info?.coordinate) return;
-    event?.stopPropagation?.();
-    const dLon = info.coordinate[0] - st.startPointerLonLat[0];
-    const dLat = info.coordinate[1] - st.startPointerLonLat[1];
-    setLon(st.startLonLat[0] + dLon);
-    setLat(st.startLonLat[1] + dLat);
-  }, []);
-
+    drag.onDrag(info, event);
+  }, [drag]);
   const handleShellDragEnd = useCallback(() => {
-    dragStateRef.current = { active: false, startLonLat: null, startPointerLonLat: null };
-    if (mapRef.current) mapRef.current.dragPan.enable();
-  }, []);
+    drag.onDragEnd();
+    dragStateRef.current.active = false;
+  }, [drag]);
 
   /* ── Escape clears selection; click outside the inspector clears too.
         (The inspector pane has pointer-events, so a click inside it won't
@@ -430,86 +550,80 @@ export default function DCDesignTwin({
     } catch { /* noop */ }
   }, []);
 
+  /* ── BOT-DX: live-ops overlay data. Fetched lazily — each hook returns
+   *  null when its toggle is off and fires a client-side (or /api/dc/*)
+   *  request when it flips on. Receptors are synthesised from the nearest
+   *  5 OSM substations as proxy "sensitive" points — once the backend
+   *  ships /api/dc/receptors, feed that in its place. */
+  const receptors = useMemo(() => (nearbySubs || []).slice(0, 5).map((s, i) => ({
+    lat: s.lat, lon: s.lon, label: s.name || `Receptor ${i + 1}`, kind: "infra",
+  })), [nearbySubs]);
+  // Emitter positions derived from the campus layout — genset yard + chiller plant.
+  const genLat = geom?.layout?.genset_yard
+    ? lat + geom.layout.genset_yard.cy / M_PER_DEG_LAT : lat;
+  const genLon = geom?.layout?.genset_yard
+    ? lon + geom.layout.genset_yard.cx / mPerDegLon(lat) : lon;
+  const chillLat = geom?.cooling?.polygon?.[0]?.[1] ?? lat;
+  const chillLon = geom?.cooling?.polygon?.[0]?.[0] ?? lon;
+  const coolingLat = geom?.cooling?.lat
+    ?? (geom?.cooling?.polygon?.[0]?.[1] ?? lat);
+  const coolingLon = geom?.cooling?.lon
+    ?? (geom?.cooling?.polygon?.[0]?.[0] ?? lon);
+
+  const { field: thermalField } = useThermalField({
+    itLoadMw, enabled: showHeatmap,
+  });
+  const noiseData = useNoiseContours({
+    lat, lon, itLoadMw, genLat, genLon, chillLat, chillLon, receptors,
+    enabled: showNoise,
+  });
+  const glintData = useGlintCones({
+    lat, lon, coolingLat, coolingLon, receptors,
+    enabled: showGlint,
+  });
+
   /* ── Build deck.gl layers from derived geometry ── */
   const deckLayers = useMemo(() => {
     if (!mapReady) return [];
     const layers = [];
 
-    // Building shell — extruded purple polygon. Drag to move the site;
-    // click to open the inspector.
-    layers.push(new PolygonLayer({
-      id: "dc-shell",
-      data: [{ polygon: geom.shell.polygon, ...geom.shell }],
-      getPolygon: d => d.polygon,
-      getElevation: () => geom.shell.heightM,
-      getFillColor: selected === "shell" ? [168, 85, 247, 240] : C.shell,
-      getLineColor: selected === "shell" ? [255, 215, 0, 255] : C.shellEdge,
-      lineWidthMinPixels: selected === "shell" ? 4 : 2,
-      extruded: true,
-      pickable: true,
-      updateTriggers: { getFillColor: [selected], getLineColor: [selected] },
-      onClick: ({ object }) => { if (object) setSelected("shell"); },
-      onDragStart: handleShellDragStart,
-      onDrag: handleShellDrag,
-      onDragEnd: handleShellDragEnd,
-      onHover: ({ object, x, y }) => setHoverInfo(object && !dragStateRef.current.active ? {
-        x, y,
-        title: "Building shell · drag to move",
-        rows: [
-          ["Footprint", fmtArea(geom.shell.areaM2)],
-          ["Height", `${geom.shell.heightM.toFixed(1)} m`],
-          ["IT load", `${itLoadMw} MW`],
-          ["GFA (2-storey)", fmtArea(geom.shell.areaM2 * 2)],
-        ],
-      } : null),
-    }));
+    // Buildable-area overlay — semi-transparent gold polygon with restricted
+    // designations (SSSI / AONB / flood / ALC / steep slope) punched out as
+    // interior rings. Rendered first so it sits UNDER the extruded structures.
+    if (mask.buildablePolygon) {
+      layers.push(new SolidPolygonLayer({
+        id: "buildable-overlay",
+        data: [{ polygon: mask.buildablePolygon.coordinates }],
+        getPolygon: d => d.polygon,
+        getFillColor: [245, 183, 49, 55],       // gold @ ~22%
+        getLineColor: [245, 183, 49, 160],
+        stroked: true,
+        filled: true,
+        extruded: false,
+        pickable: false,
+        lineWidthMinPixels: 1,
+      }));
+    }
 
-    // Cooling yard
-    layers.push(new PolygonLayer({
-      id: "dc-cooling",
-      data: [{ polygon: geom.cooling.polygon }],
-      getPolygon: d => d.polygon,
-      getElevation: () => geom.cooling.heightM,
-      getFillColor: selected === "cooling" ? [34, 197, 110, 240] : C.cooling,
-      getLineColor: selected === "cooling" ? [255, 215, 0, 255] : C.coolingEdge,
-      lineWidthMinPixels: selected === "cooling" ? 4 : 1.5,
-      extruded: true,
-      pickable: true,
-      updateTriggers: { getFillColor: [selected], getLineColor: [selected] },
-      onClick: ({ object }) => { if (object) setSelected("cooling"); },
-      onHover: ({ object, x, y }) => setHoverInfo(object ? {
-        x, y,
-        title: "Cooling yard",
-        rows: [
-          ["Area", fmtArea(geom.cooling.areaM2)],
-          ["Height", `${geom.cooling.heightM} m`],
-          ["Modules", redundancy === "2N" || redundancy === "2N+1" ? "Dual-side, redundant" : "Single-side, N+1"],
-        ],
-      } : null),
-    }));
-
-    // Substation pad
-    layers.push(new PolygonLayer({
-      id: "dc-substation",
-      data: [{ polygon: geom.substation.polygon }],
-      getPolygon: d => d.polygon,
-      getElevation: () => geom.substation.heightM,
-      getFillColor: selected === "substation" ? [245, 158, 11, 240] : C.substation,
-      getLineColor: selected === "substation" ? [255, 215, 0, 255] : C.subEdge,
-      lineWidthMinPixels: selected === "substation" ? 4 : 1.5,
-      extruded: true,
-      pickable: true,
-      updateTriggers: { getFillColor: [selected], getLineColor: [selected] },
-      onClick: ({ object }) => { if (object) setSelected("substation"); },
-      onHover: ({ object, x, y }) => setHoverInfo(object ? {
-        x, y,
-        title: "On-site substation",
-        rows: [
-          ["Pad", `${geom.substation.sideM} × ${geom.substation.sideM} m`],
-          ["Plant", "GIS switchgear · 33/132 kV"],
-          ["Tier path", tier >= 3 ? "Dual feed" : "Single feed"],
-        ],
-      } : null),
+    // ── Campus structure stack ──
+    // Replaces the monolithic purple shell with a structured hyperscaler
+    // campus: shell outline (charcoal) + data halls (pale gold) + MEP spine
+    // + MV/LV switchgear (blue-grey) + genset yard (dark green, with
+    // individual gensets + diesel tanks) + TX yard (orange-brown, with
+    // individual transformers) + water/cooling plant (blue) + office/NOC
+    // (cream) + security gatehouse (amber) + loading bay + dashed perimeter
+    // fence. Shell drag-handlers from BOT-DP's useShellDragHandlers so the
+    // whole campus moves as a unit with green/amber/red mask feedback.
+    layers.push(...buildStructureLayers({
+      layout: geom.layout,
+      lat, lon,
+      selected,
+      showFence,
+      onSelect: (item) => setSelected(item.key),
+      onHover: (info) => setHoverInfo(info),
+      onShellDragStart: drag?.onDragStart,
+      onShellDrag:      drag?.onDrag,
+      onShellDragEnd:   drag?.onDragEnd,
     }));
 
     // Cable corridor — pickable so clicking opens the cable schedule drawer.
@@ -557,21 +671,10 @@ export default function DCDesignTwin({
       } : null),
     }));
 
-    // Perimeter fence as polygon outline
-    if (showFence) {
-      layers.push(new PolygonLayer({
-        id: "dc-fence",
-        data: [{ polygon: geom.fence.polygon }],
-        getPolygon: d => d.polygon,
-        getFillColor: [0, 0, 0, 0],
-        getLineColor: C.fence,
-        lineWidthMinPixels: 2,
-        getDashArray: [6, 4],
-        extruded: false,
-        stroked: true,
-        filled: false,
-      }));
-    }
+    // Perimeter fence is now rendered inside buildStructureLayers (above)
+    // wrapping the entire campus — including the genset + TX + water + office
+    // compounds — rather than just the shell. Kept as a no-op block so the
+    // showFence toggle still functions via the `showFence` prop passed in.
 
     // Ambient context — nearby grid substations. Thin dashed line from each
     // to the DC site for quick distance read.
@@ -637,15 +740,34 @@ export default function DCDesignTwin({
       }));
     }
 
-    // Labels
+    // Labels — one per structure in the campus. Positions are projected
+    // from the layout's local-metres centroids into WGS84.
     if (showLabels) {
+      const mLon = mPerDegLon(lat);
+      const offsetLL = (cx, cy) => [lon + cx / mLon, lat + cy / M_PER_DEG_LAT];
+      const labelData = [];
+      const layoutMeta = geom.layout;
+      if (layoutMeta) {
+        const [shellLon, shellLat] = offsetLL(layoutMeta.shell.cx, layoutMeta.shell.cy);
+        const [mvlvLon, mvlvLat]   = offsetLL(layoutMeta.mvlv.cx,  layoutMeta.mvlv.cy);
+        const [gLon, gLat]         = offsetLL(layoutMeta.genset.cx, layoutMeta.genset.cy);
+        const [txLon, txLat]       = offsetLL(layoutMeta.tx.cx,    layoutMeta.tx.cy);
+        const [wLon, wLat]         = offsetLL(layoutMeta.water.cx, layoutMeta.water.cy);
+        const [oLon, oLat]         = offsetLL(layoutMeta.office.cx, layoutMeta.office.cy);
+        const [sLon, sLat]         = offsetLL(layoutMeta.security.cx, layoutMeta.security.cy);
+        labelData.push(
+          { lon: shellLon, lat: shellLat, text: `Shell · ${layoutMeta.meta.hallCount} halls` },
+          { lon: mvlvLon,  lat: mvlvLat,  text: "MV / LV" },
+          { lon: gLon,     lat: gLat,     text: `Genset · ${layoutMeta.meta.genCount} × 5 MW` },
+          { lon: txLon,    lat: txLat,    text: `TX · ${layoutMeta.meta.txCount} × 20 MVA` },
+          { lon: wLon,     lat: wLat,     text: "Water plant" },
+          { lon: oLon,     lat: oLat,     text: "Office / NOC" },
+          { lon: sLon,     lat: sLat,     text: "Gatehouse" },
+        );
+      }
       layers.push(new TextLayer({
         id: "dc-labels",
-        data: [
-          { lon: geom.shell.lon, lat: geom.shell.lat, text: "Building shell" },
-          { lon: geom.cooling.polygon[0][0], lat: geom.cooling.polygon[0][1], text: "Cooling yard" },
-          { lon: geom.substation.polygon[0][0], lat: geom.substation.polygon[0][1], text: "On-site sub" },
-        ],
+        data: labelData,
         getPosition: d => [d.lon, d.lat],
         getText: d => d.text,
         getSize: 13,
@@ -659,8 +781,57 @@ export default function DCDesignTwin({
       }));
     }
 
+    /* ── BOT-DX live-ops overlay layers. Each builder returns [] when
+     *  its toggle is off so they're cheap to leave on the render path. */
+    if (showHeatmap && thermalField && geom?.shell) {
+      layers.push(...thermalHeatmapLayers({
+        shell: geom.shell,
+        field: thermalField,
+        visible: true,
+        showArrows: true,
+      }));
+    }
+    if (showNoise && noiseData) {
+      layers.push(...noiseContourLayers({ data: noiseData, visible: true }));
+    }
+    if (showGlint && glintData) {
+      layers.push(...glintConeLayers({ data: glintData, visible: true }));
+    }
+
+    // ── BOT-DU utility overlays (substation POC, fibre, water, gas, road)
+    //     Anchor point is the east-edge midpoint of the shell — that's where
+    //     the cable corridor leaves the building in the legacy geometry.
+    if (geom?.shell) {
+      const shellEdge = [
+        geom.shell.lon + (geom.shell.widthM / 2) / mPerDegLon(geom.shell.lat),
+        geom.shell.lat,
+      ];
+      layers.push(...buildUtilityOverlayLayers({
+        ctx: dcContext,
+        shellEdge,
+        toggles: utilityToggles,
+        selected: utilitySelected,
+        onSelect: (id) => setUtilitySelected(id),
+        onHover: (info) => setHoverInfo(info),
+      }));
+
+      // ── BOT-DU context overlays (red-line, designations, flood, ALC)
+      layers.push(...buildContextOverlayLayers({
+        ctx: dcContext,
+        shellPolygon: geom.shell.polygon,
+        toggles: contextToggles,
+      }));
+    }
+
     return layers;
-  }, [geom, mapReady, showFence, showLabels, showContext, selected, nearbySubs, itLoadMw, redundancy, tier, lat, lon, handleShellDragStart, handleShellDrag, handleShellDragEnd]);
+  }, [
+    geom, mapReady, showFence, showLabels, showContext, selected, nearbySubs,
+    itLoadMw, redundancy, tier, lat, lon,
+    handleShellDragStart, handleShellDrag, handleShellDragEnd,
+    showHeatmap, thermalField, showNoise, noiseData, showGlint, glintData,
+    dcContext, utilityToggles, contextToggles, utilitySelected,
+    mask.buildablePolygon, drag.status,
+  ]);
 
   useEffect(() => {
     if (overlayRef.current) overlayRef.current.setProps({ layers: deckLayers });
@@ -704,6 +875,19 @@ export default function DCDesignTwin({
           <button onClick={() => setShowLabels(s => !s)} style={chipBtn(showLabels)}>Labels</button>
           <button onClick={() => setShowContext(s => !s)} style={chipBtn(showContext)}>Grid ({nearbySubs.length})</button>
         </div>
+        {/* Row 1b — BOT-DX live-ops overlays. Heatmap wires the top-bar
+         *  "Heatmap" button (previously dead) to an actual thermal layer.
+         *  All four toggles are independent. */}
+        <div style={{
+          display: "flex", gap: 6,
+          background: "rgba(15,23,42,0.85)", padding: "6px 8px", borderRadius: 8,
+          backdropFilter: "blur(6px)",
+        }}>
+          <button onClick={() => setShowHeatmap(s => !s)} style={chipBtn(showHeatmap)} title="Hall thermal heatmap (CFD-lite)">Heatmap</button>
+          <button onClick={() => setShowNoise(s => !s)}   style={chipBtn(showNoise)}   title="ISO 9613-2 noise contours (genset + chillers)">Noise</button>
+          <button onClick={() => setShowGlint(s => !s)}   style={chipBtn(showGlint)}   title="Solar-noon glint cones (summer + winter)">Glint</button>
+          <button onClick={() => setShowLive(s => !s)}    style={chipBtn(showLive)}    title="Live PUE / IT / cooling / water makeup">Live</button>
+        </div>
         {/* Row 2 — camera presets */}
         <div style={{
           display: "flex", gap: 6,
@@ -719,10 +903,34 @@ export default function DCDesignTwin({
         </div>
       </div>
 
-      {/* Drag hint — only on first paint until the user has moved the shell */}
+      {/* BOT-DU — constraint badge (top-centre, blockers first) */}
+      <DCConstraintBadge
+        blockers={blockerFlags.blockers}
+        nearMisses={blockerFlags.nearMisses}
+        overallRisk={blockerFlags.overallRisk}
+      />
+
+      {/* BOT-DU — utility overlay toggles (top-right, slot 1) */}
+      <DCUtilityOverlayPanel
+        toggles={utilityToggles}
+        onToggle={handleUtilityToggle}
+        fallbacks={dcContext.fallbacks || []}
+        ctx={dcContext}
+      />
+
+      {/* BOT-DU — context overlay toggles (top-right, slot 2 below utility) */}
+      <DCContextOverlayPanel
+        toggles={contextToggles}
+        onToggle={handleContextToggle}
+        ctx={dcContext}
+        topOffset={188}
+      />
+
+      {/* Drag hint — only on first paint until the user has moved the shell.
+           Pushed down-left so it doesn't collide with the utility/context panels. */}
       {!dragStateRef.current.active && (
         <div style={{
-          position: "absolute", top: 12, right: 12,
+          position: "absolute", bottom: 12, right: 12,
           background: "rgba(15,23,42,0.85)", color: "#e2e8f0",
           padding: "6px 10px", borderRadius: 6,
           fontFamily: '"DM Sans", sans-serif', fontSize: 10, letterSpacing: 0.4,
@@ -730,6 +938,23 @@ export default function DCDesignTwin({
         }}>
           Drag shell to reposition · Click any element to inspect
         </div>
+      )}
+
+      {/* Real-time constraint readout — visible while dragging. Shows the
+          pointer's current status + distances to nearest substation, the
+          inverse nearest flood buffer, and the current restriction if any.
+          Background tint mirrors drag.status for instant feedback. */}
+      {drag.status !== "idle" && (
+        <ConstraintReadout
+          status={drag.status}
+          hint={drag.pointerHint}
+          pointerLonLat={drag.pointerLonLat}
+          siteLonLat={[lon, lat]}
+          nearbySubs={nearbySubs}
+          nearestFloodBufferM={mask.nearestFloodBufferM}
+          restrictionAt={mask.restrictionAt}
+          mapLoading={mask.loading}
+        />
       )}
 
       {/* Inspector pane — shows click-selected element detail
@@ -777,11 +1002,64 @@ export default function DCDesignTwin({
         <div style={{ fontWeight: 700, marginBottom: 4, letterSpacing: 0.4, textTransform: "uppercase", fontSize: 9, color: "#94a3b8" }}>
           Pre-FID layout · {itLoadMw} MW · Tier {tier} · {redundancy}
         </div>
-        <Swatch c={C.shell}      label={`Shell ${(geom.shell.areaM2 / 10_000).toFixed(2)} ha · ${geom.shell.heightM.toFixed(0)} m`} active={selected === "shell"}      onClick={() => setSelected("shell")} />
-        <Swatch c={C.cooling}    label={`Cooling ${(geom.cooling.areaM2 / 10_000).toFixed(2)} ha`}                                active={selected === "cooling"}    onClick={() => setSelected("cooling")} />
-        <Swatch c={C.substation} label={`On-site sub ${geom.substation.sideM} × ${geom.substation.sideM} m`}                      active={selected === "substation"} onClick={() => setSelected("substation")} />
-        <Swatch c={C.cable}      label="Cable corridor"                                                                           active={selected === "cable"}      onClick={() => setSelected("cable")} />
-        <Swatch c={C.road}       label="Access road"                                                                              active={selected === "road"}       onClick={() => setSelected("road")} />
+        {/* Campus structure roster — one swatch per dominant role, each
+            showing area and (where useful) count. Click to focus. */}
+        <Swatch
+          c={ROLE_COLOURS.shell}
+          label={`Shell ${(geom.layout.shell.area / 10_000).toFixed(2)} ha · ${geom.layout.meta.shellHeight.toFixed(0)} m · ${geom.layout.meta.hallCount} halls`}
+          active={selected === "shell"}
+          onClick={() => setSelected("shell")}
+        />
+        <Swatch
+          c={ROLE_COLOURS.hall}
+          label={`Halls · IT white space ${(geom.layout.shell.itAreaM2 / 10_000).toFixed(2)} ha`}
+          active={selected?.startsWith("hall_")}
+          onClick={() => setSelected("hall_0_0")}
+        />
+        <Swatch
+          c={ROLE_COLOURS.mvlv}
+          label={`MV/LV · ${Math.round(geom.layout.mvlv.width * geom.layout.mvlv.depth).toLocaleString()} m² · switchgear + UPS`}
+          active={selected === "mvlv"}
+          onClick={() => setSelected("mvlv")}
+        />
+        <Swatch
+          c={ROLE_COLOURS.genset}
+          label={`Genset yard · ${geom.layout.meta.genCount} × 5 MW · ${(geom.layout.genset.area / 10_000).toFixed(2)} ha`}
+          active={selected === "genset_yard" || selected?.startsWith("gen_")}
+          onClick={() => setSelected("genset_yard")}
+        />
+        <Swatch
+          c={ROLE_COLOURS.tx}
+          label={`TX yard · ${geom.layout.meta.txCount} × 20 MVA · ${(geom.layout.tx.area / 10_000).toFixed(2)} ha`}
+          active={selected === "tx_yard" || selected?.startsWith("tx_")}
+          onClick={() => setSelected("tx_yard")}
+        />
+        <Swatch
+          c={ROLE_COLOURS.water}
+          label={`Water plant · ${(geom.layout.water.area / 10_000).toFixed(2)} ha · ${coolingType}`}
+          active={selected === "water"}
+          onClick={() => setSelected("water")}
+        />
+        <Swatch
+          c={ROLE_COLOURS.office}
+          label={`Office / NOC · ${Math.round(geom.layout.office.area).toLocaleString()} m² · 2-storey`}
+          active={selected === "office"}
+          onClick={() => setSelected("office")}
+        />
+        <Swatch
+          c={ROLE_COLOURS.security}
+          label={`Gatehouse · ${Math.round(geom.layout.security.area).toLocaleString()} m² · access control`}
+          active={selected === "security"}
+          onClick={() => setSelected("security")}
+        />
+        <Swatch
+          c={ROLE_COLOURS.loading}
+          label={`Loading bay · ${Math.round(geom.layout.loading.area).toLocaleString()} m² · HGV dock`}
+          active={selected === "loading"}
+          onClick={() => setSelected("loading")}
+        />
+        <Swatch c={C.cable} label="Cable corridor · MV/LV → TX yard"  active={selected === "cable"} onClick={() => setSelected("cable")} />
+        <Swatch c={C.road}  label="Access road · HGV spur"            active={selected === "road"}  onClick={() => setSelected("road")} />
       </div>
 
       {/* Hover tip */}
@@ -802,6 +1080,108 @@ export default function DCDesignTwin({
           ))}
         </div>
       )}
+
+      {/* BOT-DX — floating live-ops strip. Toggled by the "Live" chip.
+       *  Ticks every 5s via WS when /ws/dc-ops is available, else falls
+       *  back to 30s polling of /api/dc/ops (or a deterministic simulator
+       *  when VITE_MOCK_DC_OPS is truthy). */}
+      {showLive && (
+        <DCLiveOpsStrip
+          itLoadMw={itLoadMw}
+          visible={showLive}
+          onClose={() => setShowLive(false)}
+        />
+      )}
+
+      {/* BOT-DX — Heatmap legend. Shows when Heatmap is on so the operator
+       *  can read the cold→hot scale and hotspot count at a glance. */}
+      {showHeatmap && thermalField && (
+        <div style={{
+          position: "absolute", bottom: 12, left: "50%", transform: "translateX(-50%)",
+          background: "rgba(15,23,42,0.92)", color: "#f1f5f9",
+          borderRadius: 8, padding: "8px 14px",
+          fontFamily: '"DM Sans", sans-serif', fontSize: 11,
+          display: "flex", alignItems: "center", gap: 12,
+          border: "1px solid rgba(245,183,49,0.35)",
+          zIndex: 5,
+        }}>
+          <span style={{ fontSize: 9, color: "#fca5a5", fontWeight: 800, letterSpacing: 0.8, textTransform: "uppercase" }}>
+            Thermal
+          </span>
+          <div style={{
+            width: 120, height: 10, borderRadius: 5,
+            background: "linear-gradient(90deg, rgb(0,120,255), rgb(40,200,120), rgb(250,200,40), rgb(239,68,68))",
+          }} />
+          <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 10, color: "#cbd5e1" }}>
+            {thermalField.min_inlet_temp_c ?? 18}° → {thermalField.max_inlet_temp_c ?? 35}°C
+          </span>
+          {thermalField.hotspot_count > 0 && (
+            <span style={{
+              padding: "2px 8px", borderRadius: 10,
+              background: "rgba(239,68,68,0.25)", color: "#fca5a5",
+              fontWeight: 700, fontSize: 10,
+            }}>
+              {thermalField.hotspot_count} hotspot{thermalField.hotspot_count === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConstraintReadout({ status, hint, pointerLonLat, siteLonLat, nearbySubs, nearestFloodBufferM, restrictionAt, mapLoading }) {
+  const MPERLAT = 111_320;
+  const mPerLon = (la) => MPERLAT * Math.cos((la * Math.PI) / 180);
+  const [lon, lat] = pointerLonLat || siteLonLat || [0, 0];
+  let nearestSubDist = Infinity;
+  for (const s of nearbySubs || []) {
+    const dxm = (s.lon - lon) * mPerLon(lat);
+    const dym = (s.lat - lat) * MPERLAT;
+    const d = Math.hypot(dxm, dym);
+    if (d < nearestSubDist) nearestSubDist = d;
+  }
+  const floodM = typeof nearestFloodBufferM === "function" ? nearestFloodBufferM(lon, lat) : Infinity;
+  const restriction = typeof restrictionAt === "function" ? restrictionAt(lon, lat) : null;
+  const palette = {
+    ok:      { bg: "rgba(22,101,52,0.95)",  accent: "#86efac" },
+    warn:    { bg: "rgba(120,53,15,0.95)",  accent: "#fbbf24" },
+    blocked: { bg: "rgba(127,29,29,0.95)",  accent: "#fca5a5" },
+  }[status] || { bg: "rgba(15,23,42,0.94)", accent: "#e2e8f0" };
+  const fmtM = (m) => !isFinite(m) ? "—" : m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(2)} km`;
+  const headline = status === "ok" ? "Buildable"
+                 : status === "warn" ? "In restriction zone"
+                 : status === "blocked" ? "Outside parcel" : "—";
+  return (
+    <div style={{
+      position: "absolute", bottom: 120, left: "50%", transform: "translateX(-50%)",
+      background: palette.bg, color: "#f1f5f9",
+      padding: "10px 16px", borderRadius: 10,
+      fontFamily: '"DM Sans", sans-serif', fontSize: 11,
+      boxShadow: "0 8px 28px rgba(0,0,0,0.45)",
+      backdropFilter: "blur(8px)",
+      border: `1px solid ${palette.accent}`,
+      zIndex: 7, pointerEvents: "none",
+      minWidth: 280, textAlign: "center",
+    }}>
+      <div style={{ fontSize: 10, letterSpacing: 1.2, textTransform: "uppercase", fontWeight: 800, color: palette.accent, marginBottom: 4 }}>
+        {headline}{mapLoading ? " · loading mask" : ""}
+      </div>
+      <div style={{ display: "flex", gap: 18, justifyContent: "center", fontSize: 11 }}>
+        <Readout label="Sub" value={isFinite(nearestSubDist) ? fmtM(nearestSubDist) : "—"} />
+        <Readout label="Flood" value={isFinite(floodM) ? fmtM(floodM) : "clear"} />
+        <Readout label="Layer" value={restriction ? restriction.class.replace("restricted_", "") : "—"} />
+      </div>
+      {hint && <div style={{ fontSize: 10, marginTop: 6, color: palette.accent, opacity: 0.92 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function Readout({ label, value }) {
+  return (
+    <div>
+      <div style={{ fontSize: 9, opacity: 0.7, textTransform: "uppercase", letterSpacing: 0.6 }}>{label}</div>
+      <div style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 12, fontWeight: 700 }}>{value}</div>
     </div>
   );
 }
@@ -910,6 +1290,72 @@ function InspectorPane({ selected, geom, itLoadMw, tier, redundancy, nearbySubs,
       actions = [
         { label: "Snap DC to this substation", onClick: () => onSnapToSub(sub) },
       ];
+    }
+  } else if (geom?.layout) {
+    // Generic handler for every campus structure keyed through
+    // dcLayoutPresets. We look up the hit item in the layout, then
+    // produce a uniform rows[] from its dimensions + role meta.
+    const L = geom.layout;
+    const candidates = [
+      L.shell, L.spine, L.mvlv, L.genset, L.tx, L.water, L.office,
+      L.security, L.loading, L.fence,
+      ...(L.halls || []), ...(L.gensets || []), ...(L.transformers || []),
+      ...(L.dieselTanks || []),
+    ];
+    const hit = candidates.find(c => c && c.key === selected);
+    if (hit) {
+      title = hit.label || hit.key;
+      rows = [
+        ["Role", hit.role],
+        ["Size", `${hit.width.toFixed(0)} × ${hit.depth.toFixed(0)} m`],
+        ["Height", `${(hit.height || 0).toFixed(1)} m`],
+        ["Area", `${Math.round(hit.width * hit.depth).toLocaleString()} m²`],
+      ];
+      if (hit.role === "shell") {
+        rows.push(
+          ["Data halls", `${L.meta.hallCount}`],
+          ["IT white space", fmtArea(L.shell.itAreaM2)],
+          ["IT load", `${itLoadMw} MW`],
+          ["Tier", `${tier} · ${redundancy}`],
+        );
+      } else if (hit.role === "hall") {
+        rows.push(
+          ["Siblings", `${L.halls.length} halls total`],
+          ["Fire cell", "2-hour rated (BS 9999)"],
+          ["Raised floor", "600 mm access void"],
+        );
+      } else if (hit.role === "mvlv") {
+        rows.push(
+          ["Plant", "MV switchgear + UPS + LV distribution"],
+          ["Redundancy", redundancy],
+          ["Standard", "IEC 61936 / EN 50600-2-2"],
+        );
+      } else if (hit.role === "genset") {
+        rows.push(
+          ["Total units", `${L.meta.genCount} × 5 MW`],
+          ["Tier fuel", tier >= 3 ? "72-96 h on-site" : "24-48 h"],
+          ["Buffer to shell", "50 m"],
+        );
+      } else if (hit.role === "tx") {
+        rows.push(
+          ["Total units", `${L.meta.txCount} × 20 MVA`],
+          ["Voltage path", tier >= 3 ? "Dual 33/132 kV feed" : "Single 33 kV feed"],
+          ["Fire walls", "8 m separation (BS 7671)"],
+        );
+      } else if (hit.role === "water") {
+        rows.push(
+          ["Cooling type", L.meta.coolingType],
+          ["Topology", redundancy === "2N" || redundancy === "2N+1" ? "Dual-side, concurrent-maintainable" : "N+1"],
+        );
+      } else if (hit.role === "office") {
+        rows.push(["Storeys", "2"], ["Function", "NOC + admin + visitor reception"]);
+      } else if (hit.role === "security") {
+        rows.push(["Features", "ANPR · crash-rated bollards · airlock"], ["Staffing", "24/7 manned"]);
+      } else if (hit.role === "loading") {
+        rows.push(["Dock", "HGV dock leveller × 2"], ["Turning", "16.5 m articulated swept path"]);
+      } else if (hit.role === "diesel") {
+        rows.push(["Content", "Red diesel (off-road)"], ["Bund", "110% secondary containment"]);
+      }
     }
   }
 
