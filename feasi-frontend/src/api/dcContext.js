@@ -2,24 +2,26 @@
  * dcContext — aggregates the various data fetchers needed to layer real
  * site context on top of the DC Twin.
  *
- * Sources wired:
- *   - /api/grid/nearest-substation         (POC selection + headroom)
- *   - /api/grid/substation/{id}/detail     (enriched sub detail for drawer)
- *   - /api/environment/constraints         (SSSI / AONB / flood / heritage)
- *   - /api/design/buildable-mask           (FC of restricted-area polygons)
- *   - /api/ea/flood/{2|3}                  (EA Flood Zones where ingested)
- *   - /grid/osm/substations                (bbox ambient sub context)
+ * Primary endpoints (real DB data):
+ *   - /api/grid/nearest-substation
+ *   - /api/grid/substation/{id}/detail
+ *   - /api/environment/constraints
+ *   - /api/design/buildable-mask
+ *   - /api/ea/flood/{2|3}
+ *   - /grid/osm/substations
  *
- * Heuristic fallbacks (flagged `_heuristic: true` on the returned block):
- *   - Fiber route  — no real carrier map in backend. Heuristic: nearest
- *                    settlement from Overpass API (place=town|city) within
- *                    25 km. Flagged as follow-up.
- *   - Water intake — no OSM waterway endpoint in backend. Heuristic: direct
- *                    Overpass API call for waterway=river|canal nearest to
- *                    lat/lon. Flagged as follow-up.
- *   - Gas main     — no ingester anywhere. Heuristic: Overpass API for
- *                    man_made=pipeline with substance=gas in bbox, else None.
- *                    Flagged as follow-up.
+ * Utility layers (BOT-B3, 2026-04-20) — previously browser-direct Overpass:
+ *   - /api/utilities/waterways  — rivers / canals / streams
+ *   - /api/utilities/roads      — highway network with access_class
+ *   - /api/utilities/gas        — gas pipelines
+ *   - /api/utilities/fibre      — carrier POP seed
+ *
+ * The nearest-X helpers below prefer the backend routes. If backend returns
+ * no features (empty DB for that bbox → lazy ingest fires server-side), they
+ * fall back to a direct Overpass browser call so the twin still renders
+ * something immediately. Each returned object carries a `_source` and a
+ * `fallbacks: [...]` list so we can surface observability (e.g. "fibre POP
+ * is stubbed — not a real carrier map") in the UI.
  *
  * All fetchers are defensive — any 404/500 returns `null` rather than throw.
  */
@@ -75,9 +77,38 @@ export async function fetchOsmSubstations(bbox) {
   return safeJson(`${API_BASE}/grid/osm/substations?west=${w}&south=${s}&east=${e}&north=${n}`);
 }
 
-/* ── Heuristic fallbacks (flagged as follow-up) ───────────────────────── */
+/* ── Utility layers — backend-first, Overpass as fallback ─────────────── */
 
-const overpassQuery = async (body) => {
+const _bboxStr = (lat, lon, radiusM) => {
+  // Convert a (lat, lon, radiusM) ask into a coarse WGS84 bbox.
+  const dLat = radiusM / 111_320;
+  const dLon = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
+  const w = lon - dLon, e = lon + dLon;
+  const s = lat - dLat, n = lat + dLat;
+  return `${w},${s},${e},${n}`;
+};
+
+const _distMeters = (lat, lon, lat2, lon2) => {
+  const dLat = (lat2 - lat) * 111_320;
+  const dLon = (lon2 - lon) * 111_320 * Math.cos((lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLon);
+};
+
+const _featureLineNearest = (feature, lat, lon) => {
+  const geom = feature?.geometry;
+  if (!geom) return null;
+  const rings = geom.type === "MultiLineString" ? geom.coordinates : [geom.coordinates || []];
+  let best = null;
+  for (const ring of rings) {
+    for (const [lo, la] of ring || []) {
+      const d = _distMeters(lat, lon, la, lo);
+      if (!best || d < best.distanceM) best = { distanceM: d, lat: la, lon: lo };
+    }
+  }
+  return best;
+};
+
+const _overpassQuery = async (body) => {
   try {
     const res = await fetch(OVERPASS_URL, {
       method: "POST",
@@ -91,8 +122,32 @@ const overpassQuery = async (body) => {
   }
 };
 
-/** Nearest waterway (river/canal/stream) — Overpass, 5 km search radius. */
+/** Nearest waterway (river/canal/stream). Backend first, Overpass fallback. */
 export async function fetchNearestWaterway(lat, lon, radiusM = 5000) {
+  const fallbacks = [];
+
+  // 1) Backend /api/utilities/waterways
+  const fc = await safeJson(
+    `${API_BASE}/api/utilities/waterways?bbox=${encodeURIComponent(_bboxStr(lat, lon, radiusM))}&limit=1000`
+  );
+  if (fc?.features?.length) {
+    let best = null;
+    for (const f of fc.features) {
+      const near = _featureLineNearest(f, lat, lon);
+      if (near && (!best || near.distanceM < best.distanceM)) {
+        best = {
+          ...near,
+          name: f.properties?.name || f.properties?.waterway || "unnamed waterway",
+          waterway: f.properties?.waterway || null,
+          osmId: f.properties?.osm_id || f.id,
+        };
+      }
+    }
+    if (best) return { ...best, _source: "backend/utility_waterways", fallbacks };
+  }
+  fallbacks.push("backend:empty");
+
+  // 2) Overpass direct (legacy)
   const query = `
     [out:json][timeout:15];
     (
@@ -100,17 +155,13 @@ export async function fetchNearestWaterway(lat, lon, radiusM = 5000) {
     );
     out geom 12;
   `;
-  const data = await overpassQuery(query);
+  const data = await _overpassQuery(query);
   if (!data?.elements?.length) return null;
-
-  // Pick the element with the closest point to (lat, lon) as the "intake".
   let best = null;
   for (const el of data.elements) {
     if (!el.geometry?.length) continue;
     for (const pt of el.geometry) {
-      const dLat = (pt.lat - lat) * 111_320;
-      const dLon = (pt.lon - lon) * 111_320 * Math.cos((lat * Math.PI) / 180);
-      const d = Math.hypot(dLat, dLon);
+      const d = _distMeters(lat, lon, pt.lat, pt.lon);
       if (!best || d < best.distanceM) {
         best = {
           distanceM: d,
@@ -123,15 +174,50 @@ export async function fetchNearestWaterway(lat, lon, radiusM = 5000) {
       }
     }
   }
-  return best ? { ...best, _heuristic: true, _source: "overpass" } : null;
+  return best
+    ? { ...best, _heuristic: true, _source: "overpass", fallbacks: [...fallbacks, "overpass"] }
+    : null;
 }
 
-/** Nearest settlement centroid — heuristic proxy for "fiber meet-me-room".
- *  Carrier-neutral data centre POPs cluster near large towns/cities in the
- *  UK; a 25 km search for place=city|town is a conservative fallback until
- *  a real carrier-map ingester lands.
- */
+/** Nearest fibre POP. Backend carrier seed first, Overpass city fallback. */
 export async function fetchNearestFiberPOP(lat, lon, radiusM = 25000) {
+  const fallbacks = [];
+
+  // 1) Backend /api/utilities/fibre
+  const fc = await safeJson(
+    `${API_BASE}/api/utilities/fibre?bbox=${encodeURIComponent(_bboxStr(lat, lon, radiusM))}&limit=50`
+  );
+  if (fc?.features?.length) {
+    let best = null;
+    for (const f of fc.features) {
+      const [lo, la] = f.geometry?.coordinates || [];
+      if (lo == null || la == null) continue;
+      const d = _distMeters(lat, lon, la, lo);
+      if (!best || d < best.distanceM) {
+        best = {
+          distanceM: d,
+          lat: la,
+          lon: lo,
+          name: f.properties?.name || "POP",
+          carrier: f.properties?.carrier || null,
+          popClass: f.properties?.pop_class || null,
+          osmId: null,
+        };
+      }
+    }
+    if (best) {
+      return {
+        ...best,
+        _source: "backend/fibre_pops",
+        _stubbed: fc._stubbed === true,
+        _note: fc._note,
+        fallbacks,
+      };
+    }
+  }
+  fallbacks.push("backend:empty");
+
+  // 2) Overpass fallback (nearest town/city — conservative fibre proxy)
   const query = `
     [out:json][timeout:15];
     (
@@ -139,14 +225,11 @@ export async function fetchNearestFiberPOP(lat, lon, radiusM = 25000) {
     );
     out 8;
   `;
-  const data = await overpassQuery(query);
+  const data = await _overpassQuery(query);
   if (!data?.elements?.length) return null;
-
   let best = null;
   for (const el of data.elements) {
-    const dLat = (el.lat - lat) * 111_320;
-    const dLon = (el.lon - lon) * 111_320 * Math.cos((lat * Math.PI) / 180);
-    const d = Math.hypot(dLat, dLon);
+    const d = _distMeters(lat, lon, el.lat, el.lon);
     if (!best || d < best.distanceM) {
       best = {
         distanceM: d,
@@ -163,15 +246,36 @@ export async function fetchNearestFiberPOP(lat, lon, radiusM = 25000) {
         ...best,
         _heuristic: true,
         _source: "overpass/place-as-fiber-proxy",
-        _note: "No carrier meet-me-room dataset ingested — using nearest city centre as a conservative proxy for the fibre POP.",
+        _note: "No backend POP in radius — using nearest city centre as a conservative proxy.",
+        fallbacks: [...fallbacks, "overpass"],
       }
     : null;
 }
 
-/** Nearest gas main — Overpass man_made=pipeline + substance=gas. Coverage
- *  in OSM is patchy; often returns null, in which case the overlay renders
- *  an "unavailable" pill rather than a fake line. */
+/** Nearest gas main. Backend first, Overpass fallback. */
 export async function fetchNearestGasMain(lat, lon, radiusM = 5000) {
+  const fallbacks = [];
+
+  const fc = await safeJson(
+    `${API_BASE}/api/utilities/gas?bbox=${encodeURIComponent(_bboxStr(lat, lon, radiusM))}&limit=500`
+  );
+  if (fc?.features?.length) {
+    let best = null;
+    for (const f of fc.features) {
+      const near = _featureLineNearest(f, lat, lon);
+      if (near && (!best || near.distanceM < best.distanceM)) {
+        best = {
+          ...near,
+          name: f.properties?.name || "Gas pipeline",
+          operator: f.properties?.operator || null,
+          osmId: f.properties?.osm_id || f.id,
+        };
+      }
+    }
+    if (best) return { ...best, _source: "backend/utility_gas_pipelines", fallbacks };
+  }
+  fallbacks.push("backend:empty");
+
   const query = `
     [out:json][timeout:15];
     (
@@ -179,15 +283,13 @@ export async function fetchNearestGasMain(lat, lon, radiusM = 5000) {
     );
     out geom 10;
   `;
-  const data = await overpassQuery(query);
+  const data = await _overpassQuery(query);
   if (!data?.elements?.length) return null;
   let best = null;
   for (const el of data.elements) {
     if (!el.geometry?.length) continue;
     for (const pt of el.geometry) {
-      const dLat = (pt.lat - lat) * 111_320;
-      const dLon = (pt.lon - lon) * 111_320 * Math.cos((lat * Math.PI) / 180);
-      const d = Math.hypot(dLat, dLon);
+      const d = _distMeters(lat, lon, pt.lat, pt.lon);
       if (!best || d < best.distanceM) {
         best = {
           distanceM: d,
@@ -200,11 +302,41 @@ export async function fetchNearestGasMain(lat, lon, radiusM = 5000) {
       }
     }
   }
-  return best ? { ...best, _heuristic: true, _source: "overpass" } : null;
+  return best
+    ? {
+        ...best,
+        _heuristic: true,
+        _source: "overpass",
+        fallbacks: [...fallbacks, "overpass"],
+      }
+    : null;
 }
 
-/** Nearest road — access road heuristic. */
+/** Nearest road. Backend first, Overpass fallback. */
 export async function fetchNearestRoad(lat, lon, radiusM = 800) {
+  const fallbacks = [];
+
+  const fc = await safeJson(
+    `${API_BASE}/api/utilities/roads?bbox=${encodeURIComponent(_bboxStr(lat, lon, radiusM))}&limit=500`
+  );
+  if (fc?.features?.length) {
+    let best = null;
+    for (const f of fc.features) {
+      const near = _featureLineNearest(f, lat, lon);
+      if (near && (!best || near.distanceM < best.distanceM)) {
+        best = {
+          ...near,
+          name: f.properties?.name || f.properties?.ref || "road",
+          highway: f.properties?.highway || null,
+          accessClass: f.properties?.access_class || null,
+          osmId: f.properties?.osm_id || f.id,
+        };
+      }
+    }
+    if (best) return { ...best, _source: "backend/utility_roads", fallbacks };
+  }
+  fallbacks.push("backend:empty");
+
   const query = `
     [out:json][timeout:10];
     (
@@ -212,15 +344,13 @@ export async function fetchNearestRoad(lat, lon, radiusM = 800) {
     );
     out geom 6;
   `;
-  const data = await overpassQuery(query);
+  const data = await _overpassQuery(query);
   if (!data?.elements?.length) return null;
   let best = null;
   for (const el of data.elements) {
     if (!el.geometry?.length) continue;
     for (const pt of el.geometry) {
-      const dLat = (pt.lat - lat) * 111_320;
-      const dLon = (pt.lon - lon) * 111_320 * Math.cos((lat * Math.PI) / 180);
-      const d = Math.hypot(dLat, dLon);
+      const d = _distMeters(lat, lon, pt.lat, pt.lon);
       if (!best || d < best.distanceM) {
         best = {
           distanceM: d,
@@ -233,5 +363,12 @@ export async function fetchNearestRoad(lat, lon, radiusM = 800) {
       }
     }
   }
-  return best ? { ...best, _heuristic: true, _source: "overpass" } : null;
+  return best
+    ? {
+        ...best,
+        _heuristic: true,
+        _source: "overpass",
+        fallbacks: [...fallbacks, "overpass"],
+      }
+    : null;
 }

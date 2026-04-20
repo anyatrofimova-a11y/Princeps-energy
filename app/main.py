@@ -241,7 +241,7 @@ _ROUTER_MODULES = [
     "datacentre", "reports", "reports_fva",
     "hardware",
     "teaser",
-    "dc_planner", "eurosat", "land", "projects", "finance",
+    "dc_planner", "dc_ops", "eurosat", "land", "projects", "finance",
     "site_design", "environment", "land_management",
     "terrain", "planning_ml", "live_grid", "construction",
     "prospector_v2", "ppa_origination", "dispatch_model", "bess_revenue",
@@ -274,6 +274,7 @@ _ROUTER_MODULES = [
     "ea_layers",
     "lccc",
     "project_memo",
+    "utilities",
 ]
 
 app.include_router(graph_router)

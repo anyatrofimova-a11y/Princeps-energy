@@ -109,6 +109,12 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
     # ── Grid GSP seed — reliable baseline BEFORE DNO API ingestion ────
     await _safe_bg("grid_gsp_seed", seed_real_substations, pool)
 
+    # ── Utility context layers (waterways / roads / gas / fibre POPs) ─
+    # Table creation + one-shot fibre POP seed. OSM ingestion is on-demand
+    # (bbox-scoped) via /api/utilities/*; running nationwide at boot would
+    # hammer Overpass. See utils/utility_ingesters/.
+    asyncio.create_task(_safe_bg("utility_layers_setup", _ensure_utility_layers, pool))
+
     # ── Grid Connection module — ingest all DNO data ──────────────────
     asyncio.create_task(_safe_bg("grid_connection_ingest", ingest_all_dnos, pool, subsystem="grid_data"))
 
@@ -694,6 +700,34 @@ async def _ensure_enterprise_audit_log(pool: asyncpg.Pool) -> None:
         log.warning("enterprise audit-log schema skipped — not importable: %s", e)
         return
     await ensure_schema(pool)
+
+
+async def _ensure_utility_layers(pool: asyncpg.Pool) -> None:
+    """Create utility_waterways / utility_roads / utility_gas_pipelines /
+    fibre_pops tables and seed fibre_pops from the hand-curated list.
+
+    Idempotent — the migration is CREATE ... IF NOT EXISTS and the seed
+    ON CONFLICT DO UPDATE. Safe to re-run on every boot.
+    """
+    try:
+        from utils.utility_ingesters import ensure_schema
+        from utils.utility_ingesters.fibre_pop import ingest as seed_fibre
+    except Exception as e:
+        log.warning("utility_layers setup skipped (import failed): %s", e)
+        return
+
+    async with pool.acquire() as conn:
+        try:
+            await ensure_schema(conn)
+        except Exception as e:
+            log.warning("utility_layers migration failed: %s", e)
+            return
+
+    try:
+        summary = await seed_fibre(pool)
+        log.info("utility_layers: fibre POP seed -> %s", summary)
+    except Exception as e:
+        log.warning("utility_layers fibre seed failed: %s", e)
 
 
 def register_audit_middleware(app) -> bool:
