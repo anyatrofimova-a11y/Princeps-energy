@@ -1,0 +1,6 @@
+{
+  "type": "FeatureCollection",
+  "name": "LAD24_simplified_placeholder",
+  "_note": "Placeholder fixture. Replace with the real ONS LAD24 simplified polygons (tolerance ~0.001 deg) to enable offline LPA bootstrap. Source: Open Geography Portal — Local Authority Districts (December 2024) Boundaries UK.",
+  "features": []
+}
