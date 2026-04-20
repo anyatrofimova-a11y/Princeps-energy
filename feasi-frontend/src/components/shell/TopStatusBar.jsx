@@ -286,7 +286,7 @@ function MoreMenu({ items }) {
   );
 }
 
-export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence, onSiteDesigner }) {
+export default function TopStatusBar({ onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence }) {
   const {
     solarYield, gridContext, explain,
     agentResult, workflowSummary,

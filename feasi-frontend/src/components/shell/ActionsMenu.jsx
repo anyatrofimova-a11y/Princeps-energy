@@ -26,7 +26,8 @@ const GROUPS = [
       { key: "digitalTwin",     label: "Unified Site Twin", hint: "Site + terrain unified" },
       { key: "terrainTwin",     label: "Terrain Twin",      hint: "NASADEM + shading" },
       { key: "asset3d",         label: "Asset 3D Modeller", hint: "Gemini-generated 3D" },
-      { key: "assetInspector",  label: "Asset Inspector",   hint: "Drill into placed assets" },
+      // assetInspector archived 2026-04-19 — utility-pole demo not relevant to DC/BESS.
+      // BESS+DC asset inspection lives in BESSFacilityTwin / DataCentreTwin.
     ],
   },
   {
@@ -43,7 +44,6 @@ const GROUPS = [
   {
     label: "Design",
     items: [
-      { key: "siteDesigner",    label: "Site Designer 3D",  hint: "Layout + component placement" },
       { key: "hwConfig",        label: "Hardware Configurator", hint: "Spec modules + inverters" },
       { key: "thermalModel",    label: "Thermal Model",     hint: "Heat loss + gain" },
       { key: "dashboardBuilder", label: "Dashboard Builder", hint: "Custom live dashboards" },

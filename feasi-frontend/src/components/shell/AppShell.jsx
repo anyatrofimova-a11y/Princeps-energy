@@ -2,9 +2,18 @@ import React, { useEffect } from "react";
 import { useWorkspace, WORKSPACES, WORKSPACE_VIEWS } from "../../contexts/WorkspaceContext";
 import Sidebar from "./Sidebar";
 import LiveDataStrip from "./LiveDataStrip";
+import HeadroomTicker from "./HeadroomTicker";
 
-export default function AppShell({ children, onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onCapabilities, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence, onSiteDesigner }) {
-  const { toggleBrowser, toggleDetail, setActiveWorkspace, activeWorkspace, setActiveViewMode } = useWorkspace();
+// Project-detail view ("projects") owns its own KPI surface (project hero,
+// HeroMetricStrip, StageRibbon). The global LiveDataStrip becomes ambient
+// noise on top of project-specific numbers and previously fought with the
+// MarketRibbon for attention. Hide it there. (BOT-VV, 2026-04-19)
+const HIDE_LIVE_STRIP_VIEWS = new Set(["projects"]);
+
+export default function AppShell({ children, onGridTwin, onBems, onAssetInspect, onGridGraph, onBessFacility, onHardware, onThermal, onPitch, onCapabilities, onNomExplorer, onSettings, onCommandPalette, onDcTwin, onPipeline, onIntelligence }) {
+  const { toggleBrowser, toggleDetail, setActiveWorkspace, activeWorkspace, activeViewMode, setActiveViewMode } = useWorkspace();
+
+  const hideLiveStrip = HIDE_LIVE_STRIP_VIEWS.has(activeViewMode);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -46,7 +55,6 @@ export default function AppShell({ children, onGridTwin, onBems, onAssetInspect,
         onDcTwin={onDcTwin}
         onBessFacility={onBessFacility}
         onPipeline={onPipeline}
-        onSiteDesigner={onSiteDesigner}
       />
       <div style={{
         flex: 1,
@@ -55,69 +63,22 @@ export default function AppShell({ children, onGridTwin, onBems, onAssetInspect,
         overflow: "hidden",
         minWidth: 0,
       }}>
-        {/* Breadcrumb bar */}
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          padding: "10px 24px",
-          background: "#FFFFFF",
-          borderBottom: "1px solid #E8E5DF",
-          flexShrink: 0,
-          gap: 12,
-        }}>
-          <span style={{ fontSize: 13, color: "#6B6560" }}>Portfolio</span>
-          <span style={{ fontSize: 13, color: "#9C9590" }}>&gt;</span>
-          <span style={{ fontSize: 13, color: "#E8A012", fontWeight: 600 }}>Dashboard</span>
-          <div style={{ flex: 1 }} />
-          <button
-            style={{
-              padding: "7px 16px",
-              fontSize: 12,
-              fontWeight: 600,
-              background: "#F5B731",
-              color: "#fff",
-              border: "none",
-              borderRadius: 8,
-              cursor: "pointer",
-              fontFamily: "'DM Sans', sans-serif",
-              display: "flex",
-              alignItems: "center",
-              gap: 5,
-            }}
-          >
-            + New Project
-          </button>
-          <div style={{ position: "relative", cursor: "pointer", padding: 4 }}>
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#6B6560" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M7.5 15.5a1.5 1.5 0 003 0M9 2a5 5 0 00-5 5c0 2.5-1 4-1.5 4.5h13c-.5-.5-1.5-2-1.5-4.5a5 5 0 00-5-5z" />
-            </svg>
-            <span style={{
-              position: "absolute",
-              top: 0,
-              right: 0,
-              width: 16,
-              height: 16,
-              borderRadius: "50%",
-              background: "#B5432A",
-              color: "#fff",
-              fontSize: 9,
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}>
-              3
-            </span>
-          </div>
-        </div>
+        {/* Godmode #1 — Headroom-Now ticker (auto-hides while connecting) */}
+        <HeadroomTicker />
+
+        {/* COUNCIL-5 / BOT-RR: hard-coded "Portfolio > Dashboard" breadcrumb +
+            New Project button + bell removed. The dynamic Breadcrumb in
+            ProjectPage.jsx is the single source of truth on project views;
+            other views own their own header chrome. */}
 
         {/* Main content */}
         <div style={{ flex: 1, overflow: "auto", position: "relative" }}>
           {children}
         </div>
 
-        {/* Live data strip */}
-        <LiveDataStrip />
+        {/* Live data strip — global ambient context. Hidden on project-detail
+            views (own KPI surface dominates). See HIDE_LIVE_STRIP_VIEWS. */}
+        {!hideLiveStrip && <LiveDataStrip />}
       </div>
     </div>
   );

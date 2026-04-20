@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import DesignCanvas from "./DesignCanvas";
 
 const SCORE_KEYS = [
   { key: "resource", label: "Resource" },
@@ -51,12 +52,15 @@ function DeltaCell({ value, unit }) {
 
 export default function SitesTab({
   sites = DEFAULT_SITES,
+  project = null,
   onAddCandidate = () => {},
   onExport = () => {},
   onSelectSite = () => {},
+  onSiteUpdated = () => {},
 }) {
   const [whatIfActive, setWhatIfActive] = useState(false);
   const [whatIfBy, setWhatIfBy] = useState(10); // +MW hypothetical
+  const [designingSite, setDesigningSite] = useState(null);
 
   const proposals = useMemo(() => {
     if (!whatIfActive) return {};
@@ -115,6 +119,7 @@ export default function SitesTab({
               {SCORE_KEYS.map((k) => <th key={k.key} className="st-th">{k.label}</th>)}
               <th className="st-th">LCOE</th>
               <th className="st-th">Verdict</th>
+              <th className="st-th"></th>
             </tr>
           </thead>
           <tbody>
@@ -153,6 +158,11 @@ export default function SitesTab({
                       £{s.lcoe?.toFixed(1) ?? "—"}<span className="st-unit">/MWh</span>
                     </td>
                     <td className="st-td"><Pill verdict={s.verdict} /></td>
+                    <td className="st-td st-td-action" onClick={(e) => e.stopPropagation()}>
+                      <button className="st-design-btn" onClick={() => setDesigningSite(s)} title="Open design canvas">
+                        Design →
+                      </button>
+                    </td>
                   </tr>
                   {proposal && (
                     <tr className="st-proposal-row">
@@ -193,6 +203,14 @@ export default function SitesTab({
         </table>
       </div>
 
+      <DesignCanvas
+        isOpen={!!designingSite}
+        site={designingSite}
+        project={project}
+        onClose={() => setDesigningSite(null)}
+        onSave={() => { setDesigningSite(null); onSiteUpdated(); }}
+      />
+
       <div className="st-legend">
         <div className="st-legend-item"><span className="st-chip-sm" style={{ background: "rgba(22,163,74,0.15)" }} /> ≥ 70 good</div>
         <div className="st-legend-item"><span className="st-chip-sm" style={{ background: "rgba(232,160,18,0.15)" }} /> 40–69 marginal</div>
@@ -205,6 +223,22 @@ export default function SitesTab({
           padding: 20px 24px;
           font-family: "DM Sans", -apple-system, sans-serif;
           color: var(--cds-text-primary);
+          position: relative;
+        }
+        .st-td-action { text-align: right; }
+        .st-design-btn {
+          background: rgba(var(--accent-rgb), 0.12);
+          color: var(--gold-dark);
+          border: 1px solid transparent;
+          padding: 4px 10px; border-radius: 6px;
+          font-family: inherit; font-size: 11px; font-weight: 700;
+          cursor: pointer;
+          transition: all 120ms;
+        }
+        .st-design-btn:hover {
+          background: var(--gold);
+          color: #fff;
+          border-color: var(--gold);
         }
         .st-toolbar {
           display: flex; justify-content: space-between; align-items: flex-end;

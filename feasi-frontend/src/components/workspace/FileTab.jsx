@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { WhenWorkload } from "../../lib/workload";
+import FilingsTimeline from "../FilingsTimeline";
 
 /**
  * FileTab — output queue. Surfaces every artefact the project can emit
@@ -151,6 +152,22 @@ export default function FileTab({ project }) {
   const update = (key, patch) =>
     setState((s) => ({ ...s, [key]: { ...(s[key] || {}), ...patch } }));
 
+  // Listen for deep-link requests from StageRibbon — clicking the CTA tile
+  // for a stage that targets { artefact: "<key>" } fires this event.
+  React.useEffect(() => {
+    const handler = (e) => {
+      const key = e.detail?.artefact;
+      if (!key) return;
+      const art = ARTEFACTS.find((a) => a.key === key);
+      if (!art) return;
+      // Defer one tick so ARTEFACTS card mount + project data settle.
+      setTimeout(() => { onGenerateRef.current?.(art); }, 50);
+    };
+    window.addEventListener("princeps-file-generate", handler);
+    return () => window.removeEventListener("princeps-file-generate", handler);
+  }, []);
+  const onGenerateRef = React.useRef(null);
+
   const onGenerate = async (art) => {
     if (art.status !== "ready") return;
     if (!project?.project_id && art.needsProjectId) return;
@@ -184,6 +201,7 @@ export default function FileTab({ project }) {
       update(art.key, { generating: false, error: e.message || "Generation failed" });
     }
   };
+  onGenerateRef.current = onGenerate;
 
   return (
     <div className="file-tab">
@@ -194,6 +212,12 @@ export default function FileTab({ project }) {
           Generate, download, and submit the artefacts your project needs.
         </p>
       </header>
+
+      {project && (
+        <section className="file-timeline">
+          <FilingsTimeline project={project} projectId={project.project_id} />
+        </section>
+      )}
 
       <section className="file-grid">
         {ARTEFACTS.map((art) => {
@@ -299,6 +323,14 @@ export default function FileTab({ project }) {
           letter-spacing: -0.5px; }
         .file-lede { font-size: 15px; line-height: 1.55; color: var(--cds-text-secondary);
           max-width: 640px; margin: 0; }
+
+        .file-timeline {
+          margin-bottom: 32px;
+          padding: 20px 24px;
+          background: var(--cds-layer-01);
+          border: 1px solid var(--cds-border-subtle);
+          border-radius: 10px;
+        }
 
         .file-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
           margin-bottom: 36px; }

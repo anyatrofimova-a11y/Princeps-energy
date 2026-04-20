@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
+
+const GridCanvas = lazy(() => import("../GridCanvas"));
 
 const TOOL_LABELS = {
   run_solar_yield: "Solar simulation",
@@ -70,8 +72,12 @@ export default function ChatRail({
   onMapLayer = null,
   onZoomTo = null,
   defaultCollapsed = false,
+  // Inline mode: stay expanded inside the parent container, no floating
+  // bubble. Used by DocRail on the Intelligence pages so we don't get a
+  // tautological second "Ask Princeps" bubble alongside the inline chat.
+  inline = false,
 }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [collapsed, setCollapsed] = useState(inline ? false : defaultCollapsed);
   const [sessionId, setSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -258,17 +264,24 @@ export default function ChatRail({
     }
   };
 
-  if (collapsed) {
+  // COLLAPSED — small floating bubble bottom-right, like the original
+  // CopilotWidget. Click to expand into a floating chat card.
+  // Skipped entirely in inline mode (the parent container hosts the chat).
+  if (collapsed && !inline) {
     return (
-      <aside className="cr-root cr-collapsed" role="complementary">
-        <button className="cr-expand" onClick={() => setCollapsed(false)} title="Open chat (⌘K)">
-          ◂
+      <>
+        <button
+          className="cr-bubble"
+          onClick={() => setCollapsed(false)}
+          title="Open chat (⌘K)"
+          aria-label="Open chat"
+        >
+          <span className="cr-bubble-dot" />
+          <span className="cr-bubble-icon">◆</span>
+          <span className="cr-bubble-lbl">Ask Princeps</span>
         </button>
-        <button className="cr-icon" onClick={() => setCollapsed(false)} title="Chat">💬</button>
-        <div className="cr-icon cr-icon-dim" title="History">⊙</div>
-        <div className="cr-icon cr-icon-dim" title="Settings">⚙</div>
         <style>{baseCSS}</style>
-      </aside>
+      </>
     );
   }
 
@@ -285,9 +298,14 @@ export default function ChatRail({
       <div className="cr-list">
         {messages.length === 0 && (
           <div className="cr-empty">
-            <div className="cr-empty-title">How can I help?</div>
-            <div className="cr-empty-sub">Ask about grid connection, site scoring, demand, planning.</div>
-            <div className="cr-hint">⌘K to focus input</div>
+            <Suspense fallback={null}>
+              <GridCanvas className="cr-empty-bg" />
+            </Suspense>
+            <div className="cr-empty-fg">
+              <div className="cr-empty-title">How can I help?</div>
+              <div className="cr-empty-sub">Ask about grid connection, site scoring, demand, planning.</div>
+              <div className="cr-hint">⌘K to focus input</div>
+            </div>
           </div>
         )}
         {messages.map((m, i) => (
@@ -323,42 +341,59 @@ export default function ChatRail({
 }
 
 const baseCSS = `
+  /* EXPANDED — floating card bottom-right, not a full-height rail. */
   .cr-root {
+    position: fixed;
+    right: 20px; bottom: 52px;
+    width: 380px; height: 560px;
+    max-height: calc(100vh - 80px);
     display: flex; flex-direction: column;
-    height: 100%;
     background: var(--cds-layer-01);
-    border-left: 1px solid var(--cds-border-subtle);
-    box-shadow: -4px 0 16px rgba(0,0,0,0.04);
-    font-family: "DM Sans", -apple-system, sans-serif;
-    transition: width 240ms ease;
-    flex-shrink: 0;
-  }
-  .cr-expanded { width: 360px; }
-  .cr-collapsed {
-    width: 48px;
-    align-items: center;
-    padding-top: 12px;
-    gap: 14px;
-  }
-  .cr-expand {
-    background: var(--cds-layer-02);
     border: 1px solid var(--cds-border-subtle);
-    width: 32px; height: 32px; border-radius: 8px;
-    font-family: var(--mono); font-size: 13px;
-    color: var(--cds-text-secondary);
-    cursor: pointer;
+    border-radius: 14px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08);
+    font-family: "DM Sans", -apple-system, sans-serif;
+    z-index: 990;
+    animation: cr-slide-in 180ms ease-out;
+    overflow: hidden;
   }
-  .cr-expand:hover { border-color: var(--gold); color: var(--gold-dark); }
-  .cr-icon {
-    font-size: 18px;
-    width: 32px; height: 32px;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--cds-text-secondary);
-    cursor: pointer;
-    border-radius: 8px;
+  @keyframes cr-slide-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
   }
-  .cr-icon:hover { background: rgba(var(--accent-rgb), 0.08); }
-  .cr-icon-dim { color: var(--cds-text-helper); cursor: default; }
+
+  /* COLLAPSED — floating pill bubble bottom-right. */
+  .cr-bubble {
+    position: fixed;
+    right: 20px; bottom: 52px;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    background: var(--ink);
+    color: #fff;
+    border: none; border-radius: 999px;
+    font-family: "DM Sans", -apple-system, sans-serif;
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.12);
+    transition: transform 140ms, box-shadow 140ms;
+    z-index: 990;
+  }
+  .cr-bubble:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.22), 0 3px 8px rgba(0,0,0,0.14);
+  }
+  .cr-bubble-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--gold);
+    box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.35);
+    animation: cr-pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes cr-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.35); }
+    50%      { box-shadow: 0 0 0 7px rgba(var(--accent-rgb), 0.08); }
+  }
+  .cr-bubble-icon { font-size: 12px; color: var(--gold); }
+  .cr-bubble-lbl { font-size: 13px; }
 
   .cr-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -390,20 +425,42 @@ const baseCSS = `
     display: flex; flex-direction: column; gap: 10px;
   }
   .cr-empty {
-    text-align: center;
-    padding: 40px 16px;
+    position: relative;
+    flex: 1;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 40px 20px 0 20px;
     color: var(--cds-text-helper);
+    overflow: hidden;
+    min-height: 320px;
+  }
+  .cr-empty-bg {
+    position: absolute !important;
+    inset: 0; width: 100%; height: 100%;
+    opacity: 0.65;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .cr-empty-fg {
+    position: relative; z-index: 1;
+    text-align: center;
+    padding-top: 24px;
   }
   .cr-empty-title {
-    font-size: 15px; font-weight: 600;
-    color: var(--cds-text-secondary);
+    font-size: 16px; font-weight: 700;
+    color: var(--ink);
     margin-bottom: 6px;
+    letter-spacing: -0.01em;
   }
-  .cr-empty-sub { font-size: 12px; line-height: 1.5; }
+  .cr-empty-sub {
+    font-size: 12px; line-height: 1.5;
+    color: var(--cds-text-secondary);
+    max-width: 260px; margin: 0 auto;
+  }
   .cr-hint {
     font-family: var(--mono); font-size: 10px;
-    margin-top: 16px;
+    margin-top: 18px;
     color: var(--cds-text-helper);
+    letter-spacing: 0.04em;
   }
 
   .cr-msg { display: flex; }

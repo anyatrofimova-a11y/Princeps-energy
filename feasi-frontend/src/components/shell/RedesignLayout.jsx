@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import ProjectTree from "./ProjectTree";
 // ChatRail moved to global mount in App.jsx (2026-04-19 chat consolidation)
 import ProjectPage from "../workspace/ProjectPage";
@@ -99,6 +99,8 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
   const [sites, setSites] = useState([]);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardPortfolioId, setWizardPortfolioId] = useState(null);
+  // Ref holds the latest tree so event handlers (attached once) read fresh data.
+  const treeRef = useRef([]);
 
   const reloadTree = useCallback(async () => {
     setLoading(true); setLoadError(null);
@@ -106,7 +108,23 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
       const data = await getPortfolioTree();
       const list = data.portfolios || [];
       setTree(list);
-      // Auto-select first portfolio + first project on initial load
+      treeRef.current = list;
+      // Resolve any existing selection (URL ?project= or a runtime pick) against
+      // the loaded tree so we land on the right portfolio. Only fall back to
+      // auto-selecting the first project when no selection is in flight.
+      const urlPid = new URLSearchParams(window.location.search).get("project");
+      const targetPid = selectedProjectId || urlPid;
+      if (targetPid) {
+        for (const pf of list) {
+          const hit = (pf.projects || []).find((p) => p.project_id === targetPid);
+          if (hit) {
+            setSelectedPortfolioId(pf.portfolio_id);
+            setSelectedProjectId(targetPid);
+            return;
+          }
+        }
+      }
+      // No matching selection — auto-select the first portfolio's first project.
       if (list.length > 0 && !selectedPortfolioId) {
         const pf = list[0];
         setSelectedPortfolioId(pf.portfolio_id);
@@ -119,7 +137,7 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
     } finally {
       setLoading(false);
     }
-  }, [selectedPortfolioId]);
+  }, [selectedPortfolioId, selectedProjectId]);
 
   useEffect(() => { reloadTree(); }, []); // eslint-disable-line
 
@@ -133,22 +151,54 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
       setSelectedProjectId(pid);
       setActiveTab("overview");
     }
+    // Pick up a pending selection stashed by CenterCanvas before mount.
+    try {
+      const pending = sessionStorage.getItem("princeps.pendingProjectId");
+      if (pending) {
+        sessionStorage.removeItem("princeps.pendingProjectId");
+        setSelectedProjectId(pending);
+        setActiveTab("overview");
+      }
+      const pendingNew = sessionStorage.getItem("princeps.pendingNewProject");
+      if (pendingNew) {
+        sessionStorage.removeItem("princeps.pendingNewProject");
+        setWizardPortfolioId(selectedPortfolioId);
+        setWizardOpen(true);
+      }
+    } catch {}
     const onSelect = (e) => {
       const id = e.detail?.projectId;
-      if (id) {
-        setSelectedProjectId(id);
-        setActiveTab("overview");
+      if (!id) return;
+      setSelectedProjectId(id);
+      setActiveTab("overview");
+      // Resolve portfolio from the latest tree (via ref to avoid stale closure).
+      for (const pf of treeRef.current) {
+        if ((pf.projects || []).some((p) => p.project_id === id)) {
+          setSelectedPortfolioId(pf.portfolio_id);
+          break;
+        }
       }
     };
     const onNew = (e) => {
       setWizardPortfolioId(selectedPortfolioId);
       setWizardOpen(true);
     };
+    // DC twin "Draw polygon in Site Designer →" CTA — switch to Discover tab
+    // where DesignCanvas is mounted; coords ride along on the event so the
+    // canvas can seed itself with the picked location.
+    const onOpenDesigner = (e) => {
+      setActiveTab("discover");
+      try {
+        sessionStorage.setItem("princeps.designSeed", JSON.stringify(e.detail || {}));
+      } catch {}
+    };
     window.addEventListener("princeps-redesign-select-project", onSelect);
     window.addEventListener("princeps-redesign-new-project", onNew);
+    window.addEventListener("princeps-open-site-designer", onOpenDesigner);
     return () => {
       window.removeEventListener("princeps-redesign-select-project", onSelect);
       window.removeEventListener("princeps-redesign-new-project", onNew);
+      window.removeEventListener("princeps-open-site-designer", onOpenDesigner);
     };
   }, [selectedPortfolioId]);
 
@@ -258,7 +308,7 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
             onAddCandidate={() => onNewProject(selectedPortfolioId)}
             onSelectSite={(s) => setSelectedCandidateId(s.candidate_id)}
             actions={actions}
-            mapSlot={(activeTab === "overview" || activeTab === "discover") ? mapSlot : null}
+            mapSlot={activeTab === "overview" ? mapSlot : null}
             onViewMap={onViewMap || (() => {})}
             onNavigate={(href) => {
               if (!href) return;

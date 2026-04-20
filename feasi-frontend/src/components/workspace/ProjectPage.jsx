@@ -1,6 +1,9 @@
 import React, { Suspense, lazy } from "react";
 import Breadcrumb from "../shell/Breadcrumb";
 import ProjectHeader from "../shell/ProjectHeader";
+// MarketRibbon import removed (BOT-VV 2026-04-19) — duplicate live-data strip on project view. Component still lives at shell/MarketRibbon.jsx for Pulse / Markets surfaces.
+import HeroMetricStrip from "../HeroMetricStrip";
+import StageRibbon from "../StageRibbon";
 import OverviewTab from "./OverviewTab";
 import DiscoverTab from "./DiscoverTab";
 import AssessTab from "./AssessTab";
@@ -56,8 +59,22 @@ export default function ProjectPage({
 
   return (
     <div className="pp-root">
+      {/* MarketRibbon removed (BOT-VV 2026-04-19) — duplicate of global LiveDataStrip. */}
       <Breadcrumb items={breadcrumbItems} currentTab={activeTab} onNavigate={onNavigate} />
       {project && <ProjectHeader project={projectWithCount} actions={actions} />}
+      {project && <HeroMetricStrip project={project} projectId={project.project_id} />}
+      {project && (
+        <StageRibbon
+          project={project}
+          onTabChange={(t) => onTabChange(t)}
+          onDispatchChat={(prompt) => {
+            if (prompt) window.dispatchEvent(new CustomEvent("princeps-chat", { detail: { text: prompt } }));
+          }}
+          onOpenArtefact={(key) => {
+            if (key) window.dispatchEvent(new CustomEvent("princeps-file-generate", { detail: { artefact: key } }));
+          }}
+        />
+      )}
 
       <nav className="pp-tabs" role="tablist">
         {TABS.map((t) => (
@@ -82,7 +99,7 @@ export default function ProjectPage({
         ) : activeTab === "overview" ? (
           <OverviewTab project={project} mapSlot={mapSlot} onViewTab={onTabChange} onViewMap={onViewMap} />
         ) : activeTab === "discover" ? (
-          <DiscoverTab project={project} mapSlot={mapSlot} />
+          <DiscoverTab project={project} sites={sites} mapSlot={mapSlot} />
         ) : activeTab === "assess" ? (
           <AssessTab project={project} onPopOutTwin={onPopOutTwin} subTabHint={activeSubTab} />
         ) : activeTab === "decide" ? (

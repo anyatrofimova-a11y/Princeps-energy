@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { WhenWorkload } from "../../lib/workload";
+import DesignCanvas from "./DesignCanvas";
 
 /**
  * DiscoverTab — map-first canvas for finding and screening candidate sites
@@ -21,28 +22,37 @@ function compositeColor(score) {
   return "var(--cds-support-error, #da1e28)";
 }
 
-function deriveRows(project) {
-  const sites = project?.sites;
-  if (Array.isArray(sites) && sites.length > 0) {
-    return sites.map((s, i) => ({
+function deriveRows(sitesProp, project) {
+  // Prefer the explicit `sites` prop (real candidate data from the API).
+  // Fall back to `project.sites`, then stubs. Keep the raw record so row
+  // actions (e.g. Design) have access to lat/lon/candidate_id.
+  const source = Array.isArray(sitesProp) && sitesProp.length > 0
+    ? sitesProp
+    : (Array.isArray(project?.sites) ? project.sites : null);
+  if (source && source.length > 0) {
+    return source.map((s, i) => ({
+      raw: s,
       name: s.name || s.label || `Site ${i + 1}`,
-      area_ha: s.area_ha ?? s.area_hectares ?? "—",
-      resource_score: s.resource_score ?? "—",
-      headroom: s.grid_headroom || s.headroom || "—",
-      planning_risk: s.planning_risk || "—",
-      composite: s.composite_score ?? s.score ?? null,
+      area_ha: s.scores?.area_ha ?? s.area_ha ?? s.area_hectares ?? "—",
+      resource_score: s.scores?.resource ?? s.resource_score ?? "—",
+      headroom: s.grid_headroom || s.headroom || (s.scores?.grid != null ? `${s.scores.grid}` : "—"),
+      planning_risk: s.planning_risk || (s.scores?.planning != null ? `${s.scores.planning}` : "—"),
+      composite: s.composite_score ?? s.score ?? (s.scores ?
+        Math.round(Object.values(s.scores).filter((v) => typeof v === "number").reduce((a, b) => a + b, 0) /
+          Math.max(1, Object.values(s.scores).filter((v) => typeof v === "number").length)) : null),
     }));
   }
-  return STUB_SITES;
+  return STUB_SITES.map((s) => ({ ...s, raw: null }));
 }
 
-export default function DiscoverTab({ project, mapSlot = null }) {
+export default function DiscoverTab({ project, sites = null, mapSlot = null }) {
   const [region, setRegion] = useState(project?.region || "");
   const [minCapacity, setMinCapacity] = useState(project?.min_capacity_mw || "");
   const workload = project?.workload_type || project?.technology || "bess";
   const [scanning, setScanning] = useState(false);
 
-  const rows = useMemo(() => deriveRows(project), [project]);
+  const rows = useMemo(() => deriveRows(sites, project), [sites, project]);
+  const [designingSite, setDesigningSite] = useState(null);
 
   const onAddSite = () => {
     // Placeholder — real wiring will open the Add Site modal.
@@ -116,6 +126,7 @@ export default function DiscoverTab({ project, mapSlot = null }) {
                   <th>Grid headroom</th>
                   <th>Planning risk</th>
                   <th className="dsc-num">Composite</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -134,10 +145,19 @@ export default function DiscoverTab({ project, mapSlot = null }) {
                         {r.composite ?? "—"}
                       </span>
                     </td>
+                    <td className="dsc-design-cell">
+                      {r.raw && r.raw.lat != null && r.raw.lon != null ? (
+                        <button
+                          className="dsc-design-btn"
+                          onClick={() => setDesigningSite(r.raw)}
+                          title="Open design canvas"
+                        >Design →</button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
                 {rows.length === 0 && (
-                  <tr><td colSpan={6} className="dsc-empty">No candidate sites yet.</td></tr>
+                  <tr><td colSpan={7} className="dsc-empty">No candidate sites yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -186,7 +206,27 @@ export default function DiscoverTab({ project, mapSlot = null }) {
         </span>
       </div>
 
+      <DesignCanvas
+        isOpen={!!designingSite}
+        site={designingSite}
+        project={project}
+        onClose={() => setDesigningSite(null)}
+      />
+
       <style>{`
+        .dsc-design-cell { text-align: right; padding-right: 12px; }
+        .dsc-design-btn {
+          background: rgba(245,183,49,0.14);
+          color: #E8A012;
+          border: 1px solid transparent;
+          padding: 4px 10px; border-radius: 6px;
+          font-family: inherit; font-size: 11px; font-weight: 700;
+          cursor: pointer;
+          transition: all 120ms;
+        }
+        .dsc-design-btn:hover {
+          background: #F5B731; color: #fff; border-color: #F5B731;
+        }
         .dsc-tab { padding: 32px 40px; max-width: 1100px;
           font-family: "DM Sans", -apple-system, sans-serif; color: var(--cds-text-primary); }
         .dsc-head { margin-bottom: 28px; }

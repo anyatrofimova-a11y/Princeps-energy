@@ -17,17 +17,23 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import api from "../../services/api";
 import { useSite } from "../../SiteContext";
-import GridIntelPanel from "../pulse/GridIntelPanel";
+import GridAssetDrawer from "./GridAssetDrawer";
 
-/* ─────────── Theme ─────────── */
+/* ─────────── Theme — light-gold palette (2026-04 redesign) ─────────── */
 const C = {
-  bg:       "#f9fafb",
+  bg:       "#faf9f6",   // warm cream — whitespace IS the feature
   card:     "#ffffff",
-  border:   "#e5e7eb",
-  text:     "#0f172a",
-  textDim:  "#64748b",
-  textMuted:"#94a3b8",
-  gold:     "#f5b731",
+  border:   "#e8e5df",
+  borderSoft: "#f0ece4",
+  text:     "#1a1a1a",   // --ink
+  textDim:  "#4a4a4a",   // --ink-muted
+  textMuted:"#9c9590",
+  // Gold scale
+  gold:     "#C9A64B",   // --gold
+  goldDark: "#A88732",   // --gold-dark
+  goldLight:"#F5E9C8",   // --gold-light
+  goldSoft: "rgba(201,166,75,0.10)",
+  // Semantic
   blue:     "#2563eb",
   green:    "#16a34a",
   red:      "#dc2626",
@@ -35,12 +41,15 @@ const C = {
   purple:   "#7c3aed",
 };
 
-const TABS = [
-  { id: "browse",    label: "Browse" },
-  { id: "map",       label: "Map" },
-  { id: "graph",     label: "Graph" },
-  { id: "table",     label: "Table" },
-  { id: "resources", label: "Resources" },
+/* Internal views of the Grid Graph page. Exposed via a small segmented
+   control in the left rail, NOT as a tab strip — the app-level ViewTabs
+   strip is already the only horizontal nav this page needs. */
+const SUBVIEWS = [
+  { id: "map",       label: "Map",       hint: "Geo map" },
+  { id: "graph",     label: "Graph",     hint: "Topology" },
+  { id: "table",     label: "Table",     hint: "Ranked rows" },
+  { id: "browse",    label: "Browse",    hint: "By DNO" },
+  { id: "resources", label: "Resources", hint: "Data sources" },
 ];
 
 const VOLTAGE_BUCKETS = [400, 275, 132, 66, 33, 22, 11];
@@ -48,63 +57,196 @@ const DNOS = ["UKPN", "NGED", "SSEN", "SPEN", "ENWL", "NPG"];
 
 /* ─────────── Styles ─────────── */
 const S = {
-  root: { height: "100%", background: C.bg, fontFamily: "'DM Sans', 'Inter', system-ui, sans-serif",
-          color: C.text, display: "flex", flexDirection: "column", overflow: "hidden" },
-  topBar: { flexShrink: 0, background: C.card, borderBottom: `1px solid ${C.border}` },
-  tabRow:  { display: "flex", alignItems: "center", padding: "10px 20px", gap: 10 },
-  filterRow: {
-    display: "flex", alignItems: "center", padding: "8px 20px",
-    borderTop: `1px solid ${C.border}`, background: "#fafbfc", gap: 18, flexWrap: "wrap",
+  root: {
+    height: "100%",
+    background: C.bg,
+    fontFamily: "'DM Sans', 'Inter', system-ui, sans-serif",
+    color: C.text,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
   },
-  tabStrip: { display: "flex", gap: 4 },
-  tab: (active) => ({
-    padding: "7px 16px", fontSize: 12, fontWeight: 600,
-    background: active ? C.text : "transparent",
-    color: active ? "#fff" : C.textDim,
-    border: "none", borderRadius: 6, cursor: "pointer", letterSpacing: 0.3,
-  }),
-  filterBar: { display: "flex", gap: 14, alignItems: "center", flex: 1, flexWrap: "wrap" },
-  filterGroup: { display: "flex", gap: 4, alignItems: "center" },
-  filterLabel: { fontSize: 10, color: C.textMuted, fontWeight: 700,
-                 textTransform: "uppercase", letterSpacing: 0.5, marginRight: 6 },
-  pill: (active, colour = C.blue) => ({
-    padding: "3px 10px", fontSize: 10, fontWeight: 700,
-    background: active ? colour : "#eef2f7",
-    color: active ? "#fff" : C.textDim,
-    border: "none", borderRadius: 10, cursor: "pointer",
-    transition: "all 0.15s",
-  }),
+  /* ONE unified top bar: title · search · count. No breadcrumb, no tab
+     strip, no filter band. All secondary controls live in the left rail. */
+  topBar: {
+    flexShrink: 0,
+    background: C.card,
+    borderBottom: `1px solid ${C.border}`,
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    padding: "10px 20px",
+    minHeight: 48,
+  },
+  title: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: C.text,
+    letterSpacing: "-0.01em",
+  },
+  titleMuted: {
+    fontSize: 11,
+    fontWeight: 500,
+    color: C.textMuted,
+    fontFamily: "'JetBrains Mono', monospace",
+  },
+  searchWrap: {
+    position: "relative",
+    flex: 1,
+    maxWidth: 520,
+    display: "flex",
+    alignItems: "center",
+  },
+  searchIcon: {
+    position: "absolute",
+    left: 12,
+    color: C.textMuted,
+    pointerEvents: "none",
+    display: "flex",
+  },
+  searchInputTop: {
+    width: "100%",
+    padding: "8px 12px 8px 34px",
+    border: `1px solid ${C.border}`,
+    borderRadius: 8,
+    fontSize: 12,
+    fontFamily: "inherit",
+    background: C.bg,
+    color: C.text,
+    outline: "none",
+  },
+  countBadge: {
+    fontSize: 11,
+    color: C.textDim,
+    fontFamily: "'JetBrains Mono', monospace",
+    whiteSpace: "nowrap",
+  },
   body: { flex: 1, display: "flex", minHeight: 0 },
+  /* Left rail: quiet sub-view picker on top, Grid Assets list below.
+     No second "visual competition" sidebar. The portfolio tree lives in
+     the global Sidebar and is now auto-collapsed on non-Projects routes. */
   sidebar: {
-    width: 280, flexShrink: 0, borderRight: `1px solid ${C.border}`,
-    background: C.card, display: "flex", flexDirection: "column", overflow: "hidden",
+    width: 280,
+    flexShrink: 0,
+    borderRight: `1px solid ${C.border}`,
+    background: C.card,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
   },
-  sbHeader: { padding: "12px 14px", borderBottom: `1px solid ${C.border}` },
-  sbTitle: { fontSize: 11, fontWeight: 700, letterSpacing: 0.5, color: C.textDim,
-             textTransform: "uppercase" },
-  sbCount: { fontSize: 20, fontWeight: 800, color: C.text, marginTop: 4 },
-  searchInput: {
-    width: "100%", padding: "7px 10px", border: `1px solid ${C.border}`,
-    borderRadius: 6, fontSize: 12, fontFamily: "'DM Sans', sans-serif", marginTop: 8,
+  subviewPicker: {
+    display: "flex",
+    padding: "10px 12px",
+    gap: 4,
+    borderBottom: `1px solid ${C.borderSoft}`,
+    flexShrink: 0,
+  },
+  subviewBtn: (active) => ({
+    flex: 1,
+    padding: "6px 4px",
+    background: active ? C.goldSoft : "transparent",
+    border: "none",
+    borderRadius: 6,
+    color: active ? C.goldDark : C.textDim,
+    fontSize: 10,
+    fontWeight: active ? 700 : 500,
+    letterSpacing: 0.3,
+    cursor: "pointer",
+    textTransform: "uppercase",
+    fontFamily: "inherit",
+  }),
+  sbHeader: {
+    padding: "12px 14px 10px",
+    borderBottom: `1px solid ${C.borderSoft}`,
+    flexShrink: 0,
+  },
+  sbTitleRow: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+  },
+  sbTitle: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: 0.6,
+    color: C.textMuted,
+    textTransform: "uppercase",
+  },
+  sbCount: {
+    fontSize: 22,
+    fontWeight: 700,
+    color: C.text,
+    fontFamily: "'JetBrains Mono', monospace",
+    letterSpacing: "-0.02em",
+    marginTop: 2,
+  },
+  filterBlock: {
+    marginTop: 10,
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+  },
+  filterLabel: {
+    fontSize: 9,
+    color: C.textMuted,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+  },
+  pillRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 4,
+  },
+  pill: (active, colour = C.gold) => ({
+    padding: "3px 9px",
+    fontSize: 10,
+    fontWeight: 700,
+    background: active ? colour : "transparent",
+    color: active ? "#fff" : C.textDim,
+    border: `1px solid ${active ? colour : C.border}`,
+    borderRadius: 10,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    letterSpacing: 0.3,
+    transition: "all 0.12s",
+  }),
+  resetBtn: {
+    marginTop: 8,
+    padding: "4px 10px",
+    fontSize: 10,
+    background: "transparent",
+    border: `1px dashed ${C.border}`,
+    color: C.textDim,
+    borderRadius: 6,
+    cursor: "pointer",
+    alignSelf: "flex-start",
+    fontFamily: "inherit",
   },
   list: { flex: 1, overflowY: "auto", position: "relative" },
   listItem: (selected) => ({
-    padding: "6px 14px",
-    borderBottom: `1px solid ${C.border}`,
+    padding: "8px 14px",
+    borderBottom: `1px solid ${C.borderSoft}`,
     cursor: "pointer",
-    background: selected ? "#fef3c7" : "transparent",
+    background: selected ? C.goldSoft : "transparent",
+    borderLeft: selected ? `3px solid ${C.gold}` : "3px solid transparent",
     display: "flex", alignItems: "center", gap: 10,
     fontSize: 11,
   }),
   listDot: (colour) => ({
-    width: 8, height: 8, borderRadius: 4, background: colour || "#94a3b8", flexShrink: 0,
+    width: 8, height: 8, borderRadius: 4, background: colour || C.textMuted, flexShrink: 0,
   }),
   listName: {
     color: C.text, overflow: "hidden", textOverflow: "ellipsis",
     whiteSpace: "nowrap", fontWeight: 600, maxWidth: 180,
   },
-  listBadge: { fontSize: 9, padding: "1px 6px", background: "#eef2f7",
-               color: C.textDim, borderRadius: 8, fontFamily: "'JetBrains Mono', monospace" },
+  listBadge: {
+    fontSize: 9, padding: "1px 6px",
+    background: C.bg,
+    color: C.textDim, borderRadius: 8,
+    fontFamily: "'JetBrains Mono', monospace",
+    marginLeft: "auto",
+  },
   center: { flex: 1, position: "relative", overflow: "hidden", background: C.bg },
 };
 
@@ -182,81 +324,124 @@ export default function GridGraphContainer({ mapContent }) {
     }
   };
 
+  const hasFilters = voltageFilter.size > 0 || dnoFilter.size > 0 || search;
+  const resetFilters = () => {
+    setVoltageFilter(new Set()); setDnoFilter(new Set()); setSearch("");
+  };
+
   return (
     <div style={S.root}>
-      {/* ── Top bar (tabs on row 1, filters on row 2) ── */}
+      {/* ═══ ONE unified top bar ═══════════════════════════════════════════
+          • title + "/ Map" contextual sub-view tag
+          • primary action: Find-a-Site search (replaces the floating modal)
+          • quiet count badge on the right
+          No breadcrumb here — AppShell already hides its breadcrumb on
+          grid-native routes. The workspace tab strip (Dashboard / Projects /
+          Pulse / Grid Graph / Curtailment) lives in CenterCanvas/ViewTabs.
+          ══════════════════════════════════════════════════════════════════ */}
       <div style={S.topBar}>
-        <div style={S.tabRow}>
-          <div style={S.tabStrip}>
-            {TABS.map(t => (
-              <button key={t.id} style={S.tab(t.id === activeTab)} onClick={() => setActiveTab(t.id)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div style={{ marginLeft: "auto", fontSize: 11, color: C.textDim }}>
-            <b style={{ color: C.text }}>{filtered.length.toLocaleString()}</b>
-            {substations.length > 0 && filtered.length !== substations.length && (
-              <span style={{ color: C.textMuted }}> / {substations.length.toLocaleString()}</span>
-            )} substations
-          </div>
+        <div style={S.title}>Grid Graph</div>
+        <div style={S.titleMuted}>
+          &#47;&nbsp;{SUBVIEWS.find(s => s.id === activeTab)?.label || activeTab}
         </div>
-        <div style={S.filterRow}>
-          <div style={S.filterGroup}>
-            <span style={S.filterLabel}>Voltage</span>
-            {VOLTAGE_BUCKETS.map(v => (
-              <button key={v} style={S.pill(voltageFilter.has(v), C.blue)} onClick={() => toggleVoltage(v)}>
-                {v}kV
-              </button>
-            ))}
-          </div>
-          <div style={S.filterGroup}>
-            <span style={S.filterLabel}>DNO</span>
-            {DNOS.map(d => (
-              <button key={d} style={S.pill(dnoFilter.has(d), C.purple)} onClick={() => toggleDno(d)}>
-                {d}
-              </button>
-            ))}
-          </div>
-          {(voltageFilter.size > 0 || dnoFilter.size > 0 || search) && (
-            <button
-              style={{ ...S.pill(false), marginLeft: "auto" }}
-              onClick={() => { setVoltageFilter(new Set()); setDnoFilter(new Set()); setSearch(""); }}
-            >
-              Reset filters
-            </button>
-          )}
+        <div style={S.searchWrap}>
+          <span style={S.searchIcon}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="2"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <path d="M21 21l-4.35-4.35" />
+            </svg>
+          </span>
+          <input
+            style={S.searchInputTop}
+            type="search"
+            placeholder="Find a substation, postcode, or DNO…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search grid assets"
+          />
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={S.countBadge}>
+          <b style={{ color: C.text }}>{filtered.length.toLocaleString()}</b>
+          {substations.length > 0 && filtered.length !== substations.length && (
+            <span style={{ color: C.textMuted }}> / {substations.length.toLocaleString()}</span>
+          )}&nbsp;sites
         </div>
       </div>
 
-      {/* ── 3-column body ── */}
+      {/* ═══ 3-column body ═══════════════════════════════════════════════ */}
       <div style={S.body}>
-        {/* LEFT — asset browser */}
-        <div style={S.sidebar}>
-          <div style={S.sbHeader}>
-            <div style={S.sbTitle}>Grid Assets</div>
-            <div style={S.sbCount}>
-              {loading ? "—" : filtered.length.toLocaleString()}
-              <span style={{ fontSize: 10, fontWeight: 500, color: C.textMuted, marginLeft: 6 }}>
-                {substations.length > 0 && filtered.length !== substations.length && `of ${substations.length.toLocaleString()}`}
-              </span>
-            </div>
-            <input
-              style={S.searchInput}
-              placeholder="Search substations…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+        {/* LEFT — sub-view picker + filtered Grid Assets list */}
+        <aside style={S.sidebar} aria-label="Grid Assets">
+          <div style={S.subviewPicker} role="tablist" aria-label="Grid Graph view">
+            {SUBVIEWS.map(v => (
+              <button
+                key={v.id}
+                role="tab"
+                aria-selected={activeTab === v.id}
+                title={v.hint}
+                style={S.subviewBtn(activeTab === v.id)}
+                onClick={() => setActiveTab(v.id)}
+              >
+                {v.label}
+              </button>
+            ))}
           </div>
+
+          <div style={S.sbHeader}>
+            <div style={S.sbTitleRow}>
+              <span style={S.sbTitle}>Grid Assets</span>
+              {hasFilters && (
+                <button style={S.resetBtn} onClick={resetFilters}>Reset</button>
+              )}
+            </div>
+            <div style={S.sbCount}>
+              {loading ? "…" : filtered.length.toLocaleString()}
+            </div>
+
+            {/* Voltage + DNO filters moved INSIDE the Grid Assets header.
+                No separate horizontal filter band above the content. */}
+            <div style={S.filterBlock}>
+              <span style={S.filterLabel}>Voltage</span>
+              <div style={S.pillRow}>
+                {VOLTAGE_BUCKETS.map(v => (
+                  <button
+                    key={v}
+                    style={S.pill(voltageFilter.has(v), C.gold)}
+                    onClick={() => toggleVoltage(v)}
+                  >
+                    {v}kV
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={S.filterBlock}>
+              <span style={S.filterLabel}>DNO</span>
+              <div style={S.pillRow}>
+                {DNOS.map(d => (
+                  <button
+                    key={d}
+                    style={S.pill(dnoFilter.has(d), C.goldDark)}
+                    onClick={() => toggleDno(d)}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <VirtualList
             items={filtered}
             selection={selection}
             onSelect={handleRowClick}
             loading={loading}
           />
-        </div>
+        </aside>
 
-        {/* CENTER — active sub-view */}
+        {/* CENTER — active sub-view; map is the hero when active */}
         <div style={S.center}>
           {activeTab === "browse"    && <BrowseView substations={substations} filtered={filtered} onSelect={handleRowClick} />}
           {activeTab === "map"       && mapContent}
@@ -265,9 +450,12 @@ export default function GridGraphContainer({ mapContent }) {
           {activeTab === "resources" && <ResourcesView />}
         </div>
 
-        {/* RIGHT — detail panel */}
+        {/* RIGHT — full-height drawer shell (clearly-marked slots for BOT-Z3) */}
         {selection && (
-          <GridIntelPanel selection={selection} onClose={() => setSelection(null)} />
+          <GridAssetDrawer
+            selection={selection}
+            onClose={() => setSelection(null)}
+          />
         )}
       </div>
     </div>

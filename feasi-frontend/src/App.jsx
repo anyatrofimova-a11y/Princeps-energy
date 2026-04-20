@@ -7,7 +7,6 @@ import api from "./services/api";
 import AppShell from "./components/shell/AppShell";
 import WorkspaceRouter from "./components/workspace/WorkspaceRouter";
 import MapView from "./components/MapView";
-import CopilotWidget from "./components/CopilotWidget";
 import OnboardingDemo from "./components/OnboardingDemo";
 import ErrorBoundary from "./components/ErrorBoundary";
 import LayerRail from "./components/LayerRail";
@@ -15,7 +14,6 @@ import MapLegend from "./components/MapLegend";
 import MapAssetLayer from "./components/MapAssetLayer";
 import DCMapOverlay from "./components/DCMapOverlay";
 import PortfolioMapOverlay from "./components/PortfolioMapOverlay";
-import FinancialStrip from "./components/FinancialStrip";
 import IntelligencePanel from "./components/IntelligencePanel";
 import Asset3DOverlay from "./components/Asset3DOverlay";
 import Google3DTilesOverlay from "./components/Google3DTilesOverlay";
@@ -26,14 +24,7 @@ import GridIntelPanel from "./components/pulse/GridIntelPanel";
 const CesiumMapOverlay = lazy(() => import("./components/CesiumMapOverlay"));
 import CameraToolbar from "./components/CameraToolbar";
 import SitePicker from "./components/SitePicker";
-import LiveStrip from "./components/LiveStrip";
 import ConstraintTimeline from "./components/ConstraintTimeline";
-import ThemeToggle from "./components/ThemeToggle";
-// SmartOverlays removed — replaced by copilot auto-suggestions
-import ActionSidebar from "./components/ActionSidebar";
-import AIOrb from "./components/AIOrb";
-import NotificationCentre from "./components/NotificationCentre";
-import StartupOverlay, { saveRecentSite } from "./components/StartupOverlay";
 import MissionControl from "./components/MissionControl";
 import ChatRail from "./components/shell/ChatRail";
 import InboxBridge from "./components/InboxBridge";
@@ -72,8 +63,6 @@ const ComponentPalette = lazy(() => import("./components/ComponentPalette"));
 const AssetDock = lazy(() => import("./components/AssetDock"));
 const EnergyFlowPanel = lazy(() => import("./components/EnergyFlowPanel"));
 const ScenarioCompare = lazy(() => import("./components/ScenarioCompare"));
-const SiteDesigner3D = lazy(() => import("./components/SiteDesigner3D"));
-
 const LazyFallback = () => <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", zIndex: 9999, color: "#fff", fontSize: 13 }}>Loading...</div>;
 import {
   MODES, createDrawState, handleClick as drawHandleClick, handleDoubleClick as drawHandleDoubleClick,
@@ -121,11 +110,10 @@ export default function App() {
     solarYield, gridContext,
   } = useSite();
 
-  const { activeWorkspace, setActiveWorkspace, navigateToIntent, activeViewMode } = useWorkspace();
+  const { activeWorkspace, setActiveWorkspace, activeViewMode, setActiveViewMode } = useWorkspace();
 
   const [mapInstance, setMapInstance] = useState(null);
   const [devConsoleOpen, setDevConsoleOpen] = useState(false);
-  const [pipelineOpen, setPipelineOpen] = useState(false);
   const [dashV2Closed, setDashV2Closed] = useState(false);
   // Pulse · right-hand grid intel panel selection (substation / ECR / GSP / licence area)
   const [pulseSelection, setPulseSelection] = useState(null);
@@ -136,7 +124,6 @@ export default function App() {
   useEffect(() => { if (pickedLocation) setDashV2Closed(false); }, [pickedLocation]);
   const [scenarioCompareOpen, setScenarioCompareOpen] = useState(false);
   const [dashboardBuilderOpen, setDashboardBuilderOpen] = useState(false);
-  const [siteDesignerOpen, setSiteDesignerOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [demoOpen, setDemoOpen] = useState(() => !localStorage.getItem("princeps_onboarded"));
   const [backendReady, setBackendReady] = useState(false);
@@ -170,40 +157,6 @@ export default function App() {
     window.addEventListener("princeps-run-intent", handler);
     return () => window.removeEventListener("princeps-run-intent", handler);
   }, [parcelId, samCapacity, samDay]);
-
-  // Handle intent selection from StartupOverlay
-  const handleStartupIntent = useCallback((intentId, siteData) => {
-    switch (intentId) {
-      case "find":
-        setActiveWorkspace("analyse");
-        setPickMode(true);
-        break;
-      case "assess":
-        setActiveWorkspace("analyse");
-        navigateToIntent("feasibility");
-        break;
-      case "grid":
-        setActiveWorkspace("analyse");
-        navigateToIntent("grid_connection");
-        break;
-      case "portfolio":
-        setActiveWorkspace("home");
-        setPipelineOpen(true);
-        break;
-      case "recent":
-        if (siteData?.lat && siteData?.lon) {
-          setPickedLocation({ lat: siteData.lat, lon: siteData.lon });
-          if (siteData.parcelId) {
-            setParcelId(siteData.parcelId);
-            loadSite(siteData.parcelId, samCapacity, samDay);
-          }
-          setActiveWorkspace("analyse");
-        }
-        break;
-      default:
-        break;
-    }
-  }, [setActiveWorkspace, navigateToIntent, setPickMode, setPickedLocation, setParcelId, loadSite, samCapacity, samDay]);
 
   // ── Map drop handler: place asset at lat/lon ──
   const handleMapDrop = useCallback((e) => {
@@ -561,11 +514,13 @@ export default function App() {
         </ErrorBoundary>
       )}
 
-      {/* Portfolio pins — all pipeline projects on map */}
+      {/* Portfolio pins — all pipeline projects on map. Always visible so the
+          229-prospect / 188-energised pipeline shown in the header has a
+          spatial counterpart on the Map tab (2026-04-19). */}
       <ErrorBoundary name="PortfolioMapOverlay" fallback={null}>
         <PortfolioMapOverlay
           map={mapInstance}
-          visible={workflowStage === "site" || !parcelId}
+          visible={true}
           onSelectProject={(p) => {
             if (p.lat && p.lon) {
               setPickedLocation({ lat: p.lat, lon: p.lon });
@@ -608,8 +563,11 @@ export default function App() {
         />
       </Suspense>
 
-      {/* Site picker — SITE stage floating search */}
-      {workflowStage === "site" && (
+      {/* Site picker — SITE stage floating search.
+          Suppressed on grid-native views (Grid Graph, Pulse, Twin, …) which
+          ship their own search in a quiet inner toolbar; a floating modal
+          over the map just competes with the map. */}
+      {workflowStage === "site" && !["grid_graph", "pulse", "neso098", "dc_twin", "dc_connection", "network", "circuit", "data", "forecast", "compare"].includes(activeViewMode) && (
         <SitePicker map={mapInstance} onPick={handleMapPick} />
       )}
 
@@ -674,7 +632,6 @@ export default function App() {
       case "dc-twin": setDcTwinOpen(true); break;
       case "dc-landing": setDcLandingOpen(true); break;
       case "dc-compare": setDcComparisonOpen(true); break;
-      case "site-designer": setSiteDesignerOpen(true); break;
       case "dc-score": {
         // Score the current site for DC feasibility
         const lat = pickedLocation?.lat;
@@ -710,12 +667,6 @@ export default function App() {
   const _redesignActive = typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("redesign") === "1";
 
-  // Nav reduction: when the user is on the redesigned Projects view (Home →
-  // Projects), suppress the legacy AIOrb + CopilotWidget so ChatRail is the
-  // only chat surface. Approved in 2026-04-19 redesign brief.
-  const _projectsViewActive = activeWorkspace === "home" && activeViewMode === "projects";
-  const _suppressLegacyChat = _redesignActive || _projectsViewActive;
-
   const _redesignActions = {
     gridTwin:        () => setGridTwinOpen(true),
     dcTwin:          () => setDcTwinOpen(true),
@@ -731,7 +682,6 @@ export default function App() {
     dcLanding:       () => setDcLandingOpen(true),
     dcCompare:       () => setDcComparisonOpen(true),
     intelligence:    () => setIntelligenceOpen(true),
-    siteDesigner:    () => setSiteDesignerOpen(true),
     hwConfig:        () => setHwConfigOpen(true),
     thermalModel:    () => setThermalModelOpen(true),
     dashboardBuilder: () => setDashboardBuilderOpen(true),
@@ -756,7 +706,6 @@ export default function App() {
       onDcTwin={() => setDcTwinOpen(true)}
       onDcLanding={() => setDcLandingOpen(true)}
       onDcCompare={() => setDcComparisonOpen(true)}
-      onSiteDesigner={() => setSiteDesignerOpen(true)}
       onPipeline={() => setActiveWorkspace("pipeline")}
       onPitch={() => setPitchMode(true)}
       onCapabilities={() => setCapabilitiesMode(true)}
@@ -821,16 +770,6 @@ export default function App() {
         <Suspense fallback={<LazyFallback />}>
           <ErrorBoundary name="GridTwin" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>Grid Twin failed to load</h2><button onClick={()=>setGridTwinOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
             <GridTwin onClose={() => setGridTwinOpen(false)} />
-          </ErrorBoundary>
-        </Suspense>
-      )}
-      {siteDesignerOpen && (
-        <Suspense fallback={<LazyFallback />}>
-          <ErrorBoundary name="SiteDesigner3D" fallback={<div style={{position:"fixed",inset:0,zIndex:9999,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}><h2>Site Designer failed to load</h2><button onClick={()=>setSiteDesignerOpen(false)} style={{padding:"8px 16px",cursor:"pointer"}}>Close</button></div>}>
-            <SiteDesigner3D
-              onClose={() => setSiteDesignerOpen(false)}
-              initialLocation={pickedLocation ? [pickedLocation.lon, pickedLocation.lat] : null}
-            />
           </ErrorBoundary>
         </Suspense>
       )}

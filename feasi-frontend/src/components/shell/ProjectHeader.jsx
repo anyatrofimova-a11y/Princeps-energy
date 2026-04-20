@@ -2,45 +2,32 @@ import React from "react";
 import ActionsMenu from "./ActionsMenu";
 import { WorkloadBadge } from "../../lib/workload.jsx";
 
+/**
+ * ProjectHeader — slim project hero block.
+ *
+ * Restructure 2026-04-19 (BOT-TT): killed the right vertical KPI column.
+ * Numeric KPIs now live solely in HeroMetricStrip (IT LOAD · PUE · GRID
+ * HEADROOM · IRR · PLANNING · LCOE · NPV). Stage already lives in the
+ * StageRibbon + breadcrumb so we don't restate it as a metric here. The
+ * verdict drives the colour/state of the warning banner that already sits
+ * in this hero, so we don't show the word twice.
+ *
+ * What stays: title · workload badge · coordinates · stage pill (textual
+ * context, not a metric tile) · verdict-tinted blocker banner.
+ */
+
 const STAGE_LABEL = {
   prospect: "Prospect", screened: "Screened", grid_applied: "Grid applied",
   grid_offer: "Grid offer", planning: "Planning", fid: "FID",
   construction: "Construction", energised: "Energised",
 };
 
-const VERDICT_STYLE = {
-  "GO": { bg: "rgba(22,163,74,0.12)", fg: "var(--cds-support-success)" },
-  "CAUTION": { bg: "rgba(232,160,18,0.14)", fg: "var(--cds-support-warning)" },
-  "NO-GO": { bg: "rgba(220,38,38,0.12)", fg: "var(--cds-support-error)" },
+// Verdict drives the blocker banner colour so the warning IS the verdict.
+const VERDICT_BANNER_STYLE = {
+  "GO":      { bg: "rgba(22,163,74,0.10)",  fg: "var(--cds-support-success)", border: "rgba(22,163,74,0.40)",  glyph: "\u2713" },
+  "CAUTION": { bg: "rgba(232,160,18,0.12)", fg: "var(--cds-support-warning)", border: "rgba(232,160,18,0.45)", glyph: "\u26A0" },
+  "NO-GO":   { bg: "rgba(220,38,38,0.10)",  fg: "var(--cds-support-error)",   border: "rgba(220,38,38,0.45)",  glyph: "\u2716" },
 };
-
-function Pill({ verdict }) {
-  const s = VERDICT_STYLE[verdict] || { bg: "var(--cds-layer-03)", fg: "var(--cds-text-secondary)" };
-  return (
-    <span
-      className="ph-pill"
-      style={{ background: s.bg, color: s.fg }}
-    >
-      {verdict || "—"}
-    </span>
-  );
-}
-
-function Metric({ label, value, unit, valueColor, valueNode }) {
-  return (
-    <div className="ph-metric">
-      <div className="ph-metric-label">{label}</div>
-      <div className="ph-metric-value" style={valueColor ? { color: valueColor } : undefined}>
-        {valueNode ?? (
-          <>
-            <span className="ph-metric-num">{value ?? "—"}</span>
-            {unit && <span className="ph-metric-unit">{unit}</span>}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function ProjectHeader({
   project = {
@@ -55,79 +42,84 @@ export default function ProjectHeader({
   },
   actions = null,
 }) {
-  const tech = project.technology;
-  const meta = project.metadata || {};
   const coord = project.lat != null && project.lon != null
     ? `${project.lat.toFixed(4)}°, ${project.lon.toFixed(4)}°`
     : null;
 
-  const metrics = (() => {
-    if (tech === "bess") {
-      return [
-        { label: "Capacity", value: project.capacity_mw, unit: "MW" },
-        { label: "Energy", value: meta.energy_mwh, unit: "MWh" },
-        { label: "Verdict", valueNode: <Pill verdict={project.verdict} /> },
-        { label: "Stage", value: STAGE_LABEL[project.stage] || project.stage || "—" },
-        { label: "Sites", value: project.sites_count ?? 0 },
-      ];
-    }
-    if (tech === "dc") {
-      return [
-        { label: "IT Load", value: meta.it_load_mw ?? project.capacity_mw, unit: "MW" },
-        { label: "PUE Target", value: meta.pue_target },
-        { label: "Grid Headroom", value: meta.grid_headroom_mw, unit: "MW" },
-        { label: "Verdict", valueNode: <Pill verdict={project.verdict} /> },
-        { label: "Stage", value: STAGE_LABEL[project.stage] || project.stage || "—" },
-      ];
-    }
-    return [
-      { label: "Capacity", value: project.capacity_mw, unit: "MW" },
-      { label: "Verdict", valueNode: <Pill verdict={project.verdict} /> },
-      { label: "Stage", value: STAGE_LABEL[project.stage] || project.stage || "—" },
-      { label: "Sites", value: project.sites_count ?? 0 },
-    ];
-  })();
+  const verdict = project.verdict || null;
+  const verdictStyle = VERDICT_BANNER_STYLE[verdict] || null;
+  const stageLabel = project.stage ? (STAGE_LABEL[project.stage] || project.stage) : null;
+  const blocker = project.blocker || null;
+
+  // Banner appears whenever there's a blocker OR an explicit verdict.
+  // Banner text = blocker if present, else a short verdict statement.
+  const bannerText = blocker
+    || (verdict === "GO"      ? "All gating checks passing — proceed"
+      : verdict === "CAUTION" ? "Open risks — review before progressing"
+      : verdict === "NO-GO"   ? "Hard blocker — do not progress"
+      : null);
 
   return (
     <header className="ph-root">
-      <div className="ph-left">
+      <div className="ph-hero">
         <div className="ph-title-row">
           <h1 className="ph-title">{project.name}</h1>
           {project.workload_type && <WorkloadBadge workloadType={project.workload_type} />}
         </div>
         <div className="ph-sub">
           {coord && <span className="ph-coord">{coord}</span>}
-          {project.stage && (
-            <span className="ph-stage-badge">
-              {STAGE_LABEL[project.stage] || project.stage}
+          {stageLabel && (
+            <span className="ph-stage-badge" title="Lifecycle stage">
+              {stageLabel}
             </span>
           )}
-          {project.blocker && (
-            <span className="ph-blocker" title={project.blocker}>
-              ⚠ {project.blocker.slice(0, 60)}{project.blocker.length > 60 ? "…" : ""}
+          {verdict && (
+            <span
+              className="ph-verdict-pill"
+              style={verdictStyle ? { background: verdictStyle.bg, color: verdictStyle.fg, borderColor: verdictStyle.border } : undefined}
+              title="Agent verdict"
+            >
+              {verdict}
             </span>
           )}
         </div>
+
+        {bannerText && verdictStyle && (
+          <div
+            className="ph-banner"
+            style={{
+              background: verdictStyle.bg,
+              borderColor: verdictStyle.border,
+              color: verdictStyle.fg,
+            }}
+            title={bannerText}
+          >
+            <span className="ph-banner-glyph" aria-hidden="true">{verdictStyle.glyph}</span>
+            <span className="ph-banner-text">{bannerText}</span>
+          </div>
+        )}
       </div>
-      <div className="ph-metrics">
-        {metrics.map((m, i) => <Metric key={i} {...m} />)}
-      </div>
+
       {actions && (
         <div className="ph-actions">
           <ActionsMenu actions={actions} />
         </div>
       )}
+
       <style>{`
         .ph-root {
-          display: flex; align-items: center; justify-content: space-between;
-          gap: 24px;
+          display: flex; align-items: flex-start; justify-content: space-between;
+          gap: 16px;
           min-height: 92px;
-          padding: 16px 24px;
+          padding: 14px 24px;
           background: var(--cds-layer-01);
           border-bottom: 1px solid var(--cds-border-subtle);
           font-family: "DM Sans", -apple-system, sans-serif;
         }
-        .ph-left { flex-shrink: 0; min-width: 0; }
+        .ph-hero {
+          flex: 1; min-width: 0;
+          display: flex; flex-direction: column; gap: 8px;
+        }
         .ph-title-row { display: flex; align-items: center; gap: 10px; }
         .ph-title {
           margin: 0; padding: 0;
@@ -135,11 +127,11 @@ export default function ProjectHeader({
           color: var(--ink);
           line-height: 1.2;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          max-width: 420px;
+          max-width: 100%;
         }
         .ph-sub {
           display: flex; align-items: center; gap: 10px;
-          margin-top: 6px;
+          flex-wrap: wrap;
           font-size: 12px;
           color: var(--cds-text-helper);
         }
@@ -152,57 +144,37 @@ export default function ProjectHeader({
           font-weight: 700; letter-spacing: 0.04em;
           text-transform: uppercase;
         }
-        .ph-blocker {
-          color: var(--cds-support-warning);
-          font-size: 11px;
-          max-width: 340px;
-          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        .ph-verdict-pill {
+          padding: 2px 10px;
+          border-radius: 999px;
+          border: 1px solid transparent;
+          font-size: 10px; font-family: var(--mono);
+          font-weight: 700; letter-spacing: 0.06em;
+          text-transform: uppercase;
         }
-        .ph-metrics {
-          display: flex; gap: 0;
+        .ph-banner {
+          display: inline-flex; align-items: center; gap: 8px;
+          padding: 6px 12px;
+          border: 1px solid;
+          border-radius: 6px;
+          font-size: 12px; line-height: 1.35;
+          max-width: 100%;
+          align-self: flex-start;
+        }
+        .ph-banner-glyph {
+          font-size: 12px; line-height: 1;
           flex-shrink: 0;
         }
-        .ph-metric {
-          padding: 8px 20px;
-          border-left: 1px solid var(--cds-border-subtle);
-          min-width: 120px;
-        }
-        .ph-metric:first-child { border-left: none; }
-        .ph-metric-label {
-          font-size: 10px;
-          color: var(--cds-text-helper);
-          font-weight: 600;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-          margin-bottom: 6px;
-        }
-        .ph-metric-value {
-          display: flex; align-items: baseline; gap: 4px;
-          color: var(--ink);
-        }
-        .ph-metric-num {
-          font-family: var(--mono);
-          font-size: 22px; font-weight: 700;
-          line-height: 1;
-        }
-        .ph-metric-unit {
-          font-family: var(--mono);
-          font-size: 12px; font-weight: 500;
-          color: var(--cds-text-helper);
-        }
-        .ph-pill {
-          display: inline-flex; align-items: center;
-          padding: 3px 10px;
-          border-radius: 6px;
-          font-size: 12px; font-weight: 700;
-          letter-spacing: 0.04em;
-          font-family: var(--mono);
+        .ph-banner-text {
+          overflow: hidden; text-overflow: ellipsis;
+          display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
         }
         .ph-actions {
-          margin-left: 12px;
-          padding-left: 20px;
+          padding-left: 16px;
           border-left: 1px solid var(--cds-border-subtle);
           flex-shrink: 0;
+          align-self: stretch;
+          display: flex; align-items: center;
         }
       `}</style>
     </header>

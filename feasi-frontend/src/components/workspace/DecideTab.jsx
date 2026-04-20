@@ -1,8 +1,13 @@
-import React, { useMemo, useState, lazy, Suspense } from "react";
+import React, { useMemo, useState, useEffect, lazy, Suspense } from "react";
 import COAMatrix from "../COAMatrix";
 import { WhenWorkload } from "../../lib/workload";
+import { listLayouts } from "../../services/design";
 
 const FinancialModelPanel = lazy(() => import("../FinancialModelPanel"));
+const DesignCompare = lazy(() => import("./DesignCompare"));
+const MonteCarloCard = lazy(() => import("./MonteCarloCard"));
+const DCFinanceCard = lazy(() => import("./DCFinanceCard"));
+const NegotiationCockpit = lazy(() => import("./NegotiationCockpit"));
 
 /**
  * DecideTab — courses-of-action comparison for a project.
@@ -16,8 +21,42 @@ export default function DecideTab({ project }) {
   const workload = (project?.workload_type || "solar").toString().toUpperCase();
   const projectName = project?.name || "Project";
 
-  const scenarios = useMemo(() => buildScenarios(projectName, workload, baseCapacity), [projectName, workload, baseCapacity]);
+  // Stub scenarios from the hardcoded builder — still useful as placeholders
+  // when no real design_layouts exist yet.
+  const stubScenarios = useMemo(
+    () => buildScenarios(projectName, workload, baseCapacity),
+    [projectName, workload, baseCapacity],
+  );
+
+  // Real saved layouts from design_layouts — each becomes a COA row.
+  const [savedLayouts, setSavedLayouts] = useState([]);
+  const [compareOpen, setCompareOpen] = useState(false);
+  useEffect(() => {
+    if (!project?.project_id) return;
+    listLayouts({ project_id: project.project_id })
+      .then((res) => setSavedLayouts(res.layouts || []))
+      .catch(() => {});
+  }, [project?.project_id]);
+
+  const layoutScenarios = useMemo(
+    () => savedLayouts.map((l) => ({
+      id: `layout:${l.layout_id}`,
+      layout_id: l.layout_id,
+      name: l.name || `${l.workload?.toUpperCase()} design`,
+      is_preferred: l.is_preferred,
+      capacity: l.kpis?.effective_capacity_mw,
+      lcoe: l.kpis?.lcoe_gbp_per_mwh,
+      irr: l.kpis?.irr_pct,
+      grid_cost: (l.doc?.substation?.distance_km || 0) * 250,
+      planning_risk: l.kpis?.planning_pct || 70,
+      capex: l.kpis?.capex_gbp_m,
+    })),
+    [savedLayouts],
+  );
+
+  const scenarios = layoutScenarios.length > 0 ? layoutScenarios : stubScenarios;
   const [selectedId, setSelectedId] = useState(scenarios[0]?.id || null);
+  useEffect(() => { setSelectedId(scenarios[0]?.id || null); }, [scenarios.length]); // eslint-disable-line
 
   const columns = [
     { key: "capacity", label: "Capacity" },
@@ -43,6 +82,18 @@ export default function DecideTab({ project }) {
       </header>
 
       <section className="dc-section">
+        {savedLayouts.length > 0 && (
+          <div className="dc-layouts-hdr">
+            <span className="dc-layouts-src">
+              {savedLayouts.length} saved layout{savedLayouts.length > 1 ? "s" : ""} from Design canvas
+            </span>
+            {savedLayouts.length >= 2 && (
+              <button className="dc-layouts-cmp" onClick={() => setCompareOpen(true)}>
+                Compare two designs →
+              </button>
+            )}
+          </div>
+        )}
         <COAMatrix
           rows={scenarios}
           columns={columns}
@@ -50,6 +101,14 @@ export default function DecideTab({ project }) {
           selectedRowId={selectedId}
         />
       </section>
+
+      <Suspense fallback={null}>
+        <DesignCompare
+          isOpen={compareOpen}
+          projectId={project?.project_id}
+          onClose={() => setCompareOpen(false)}
+        />
+      </Suspense>
 
       <section className="dc-section">
         <div className="dc-subhead">
@@ -71,6 +130,82 @@ export default function DecideTab({ project }) {
         <Suspense fallback={<div className="dc-loading">Loading financial model…</div>}>
           <FinancialModelPanel project={project} />
         </Suspense>
+      </section>
+
+      {/* Monte Carlo distribution — every KPI becomes a band, not a point. */}
+      <section className="dc-section">
+        <div className="dc-subhead">
+          <div className="dc-eyebrow">Risk-adjusted returns</div>
+          <h3 className="dc-subtitle">Monte Carlo · 1000 correlated draws</h3>
+        </div>
+        <Suspense fallback={<div className="dc-loading">Loading Monte Carlo…</div>}>
+          <MonteCarloCard
+            capex_gbp_m={baseCapacity * 0.66}
+            opex_gbp_m_yr={baseCapacity * 0.045}
+            revenue_gbp_m_yr={baseCapacity * 0.12}
+            curtail_pct={2.0}
+            timeline_months={24}
+            discount_rate_pct={8.0}
+            life_years={15}
+          />
+        </Suspense>
+      </section>
+
+      {/* DC-native finance — only surfaces for DC workload. */}
+      <WhenWorkload project={project} only="dc">
+        <section className="dc-section">
+          <div className="dc-subhead">
+            <div className="dc-eyebrow">DC tenant finance</div>
+            <h3 className="dc-subtitle">Capacity charge + energy passthrough + ramp</h3>
+          </div>
+          <Suspense fallback={<div className="dc-loading">Loading DC model…</div>}>
+            <DCFinanceCard it_load_mw={baseCapacity} pue_target={Number(project?.metadata?.pue_target) || 1.2} />
+          </Suspense>
+        </section>
+      </WhenWorkload>
+
+      {/* Negotiation cockpit — sliders for PPA terms with DSCR covenant test. */}
+      <section className="dc-section">
+        <div className="dc-subhead">
+          <div className="dc-eyebrow">Negotiation</div>
+          <h3 className="dc-subtitle">PPA term sweep · live IRR/DSCR response</h3>
+        </div>
+        <Suspense fallback={<div className="dc-loading">Loading negotiation cockpit…</div>}>
+          <NegotiationCockpit
+            capex_gbp_m={baseCapacity * 0.66}
+            opex_gbp_m_yr={baseCapacity * 0.045}
+            base_revenue_gbp_m_yr={baseCapacity * 0.12}
+          />
+        </Suspense>
+      </section>
+
+      {/* Lender pack — single CTA to generate the full bank-ready PDF. */}
+      <section className="dc-section">
+        <div className="dc-subhead">
+          <div className="dc-eyebrow">Bankability</div>
+          <h3 className="dc-subtitle">One-click lender pack</h3>
+        </div>
+        <button
+          className="dc-lender-btn"
+          onClick={async () => {
+            if (!project?.project_id) return;
+            const res = await fetch("/api/finance/lender-pack", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ project_id: project.project_id, format: "pdf" }),
+            });
+            const j = await res.json();
+            if (j.url) window.open(j.url, "_blank");
+            else alert("Lender pack generation: " + (j.note || JSON.stringify(j).slice(0, 200)));
+          }}
+        >
+          Generate lender pack — PDF →
+        </button>
+        <div className="dc-lender-note">
+          Executive summary · DSCR covenant table · sensitivity tornado · Monte Carlo histograms ·
+          revenue-stack breakdown · cashflow waterfall · technical DD · commercial DD. Cuts
+          external advisory spend by £30-80k per project.
+        </div>
       </section>
 
       <section className="dc-section dc-wl-section">
@@ -102,6 +237,26 @@ export default function DecideTab({ project }) {
       <style>{`
         .dc-tab { padding: 32px 40px; max-width: 1200px; }
         .dc-head { margin-bottom: 28px; }
+        .dc-layouts-hdr { display: flex; justify-content: space-between; align-items: center;
+          margin-bottom: 10px; padding: 8px 12px; background: rgba(245,183,49,0.08);
+          border: 1px solid rgba(245,183,49,0.25); border-radius: 8px; }
+        .dc-layouts-src { font-size: 11px; color: var(--gold-dark); font-weight: 600; }
+        .dc-layouts-cmp { background: var(--gold); color: #fff; border: none;
+          padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700;
+          font-family: inherit; cursor: pointer; }
+        .dc-layouts-cmp:hover { background: var(--gold-dark); }
+        .dc-lender-btn {
+          background: var(--ink); color: #fff; border: none;
+          padding: 12px 22px; border-radius: 10px;
+          font-family: inherit; font-size: 14px; font-weight: 700;
+          cursor: pointer; transition: all 160ms;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        .dc-lender-btn:hover { background: var(--gold); color: #fff; transform: translateY(-1px); }
+        .dc-lender-note {
+          font-size: 11px; color: var(--cds-text-helper);
+          margin-top: 10px; line-height: 1.5; max-width: 640px;
+        }
         .dc-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase;
           color: var(--cds-text-helper); margin-bottom: 8px; }
         .dc-title { font-size: 32px; font-weight: 600; color: var(--ink); margin: 0 0 12px 0;

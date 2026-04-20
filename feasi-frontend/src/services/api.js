@@ -106,6 +106,7 @@ const api = {
     ngedOpportunities: (bbox, minMw = 1) => get(`/nged/opportunities?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}&min_headroom_mw=${minMw}`),
     ngedSummary: () => get("/nged/summary"),
     ngedSubstation: (id) => get(`/nged/substation/${enc(id)}`),
+    substationDetail: (id) => get(`/api/grid/substation/${enc(id)}/detail`),
     circuit: (subId, depth = 3) => get(`/grid/cim/circuit/${enc(subId)}?depth=${depth}`),
     circuitSearch: (q) => get(`/grid/cim/search?q=${enc(q)}`),
     circuitPath: (fromId, toId) => get(`/grid/cim/path?from_id=${enc(fromId)}&to_id=${enc(toId)}`),
@@ -391,8 +392,8 @@ const api = {
       post("/api/planning/predict", { lat, lon, capacity_mw: mw, technology, land_area_ha: landHa, is_greenfield: isGreenfield }),
     constraints: (lat, lon, radius = 2000) =>
       get(`/api/planning/constraints?lat=${lat}&lon=${lon}&radius_m=${radius}`),
-    compliance: (lat, lon, mw = 50, technology = "solar") =>
-      get(`/api/planning/compliance?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(technology)}`),
+    compliance: (lat, lon, mw = 50, technology = "solar", landAreaHa) =>
+      get(`/api/planning/compliance?lat=${lat}&lon=${lon}&capacity_mw=${mw}&technology=${enc(technology)}${landAreaHa != null ? `&land_area_ha=${landAreaHa}` : ""}`),
     authorityProfile: (name, technology = "solar") =>
       get(`/api/planning/authority-profile?name=${enc(name)}&technology=${enc(technology)}`),
     comparable: (lat, lon, mw = 50, technology = "solar", radiusKm = 20) =>

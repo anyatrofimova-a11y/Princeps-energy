@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef, useMemo } from "react";
+import React, { createContext, useContext, useState, useCallback, useRef, useMemo, useEffect } from "react";
 import api from "./services/api";
 
 const SiteContext = createContext(null);
@@ -366,11 +366,11 @@ export function SiteProvider({ children }) {
     gibsCloudFraction: false,
     gibsFire: false,
     gridConstraints: false,
-    envConstraints: false,
+    envConstraints: true,        // Default-on 2026-04-19 — flood/SSSI/AONB are first-pass feasibility filters
     queueDepth: false,
-    landParcels: true,   // Default-on per 2026-04-19 UX feedback — parcels are a primary discovery surface, not a buried opt-in
+    landParcels: true,           // Default-on — HMLR parcels are a primary discovery surface
     planningDensity: false,
-    planningConstraints: false,
+    planningConstraints: true,   // Default-on 2026-04-19 — LPA constraints visible on Map without opt-in
     // Pulse · NGED live-intelligence layers
     nged_headroom: false,
     nged_ecr: false,
@@ -380,6 +380,79 @@ export function SiteProvider({ children }) {
   const toggleLayer = useCallback((id) => {
     setLayers(l => ({ ...l, [id]: !l[id] }));
   }, []);
+
+  // Bridge "Show on Map" deep-links from the Intelligence Datasets page.
+  // The Datasets browser uses backend slugs (tec_register, land_parcels,
+  // dno_capacity, repd, nsip, flood_zones, ...) which differ from the
+  // SiteContext's internal layer ids (tecPipeline, landParcels, gridCapacity,
+  // repdProjects, ...). Map both, accept either via URL query (?layer= or
+  // ?layer= + ?dataset=) AND via the runtime CustomEvent fired by
+  // useDatasetLayer for in-app transitions.
+  useEffect(() => {
+    const SLUG_TO_LAYER = {
+      // Backend slug → SiteContext layer id
+      tec_register:  "tecPipeline",
+      tecpipeline:   "tecPipeline",
+      land_parcels:  "landParcels",
+      landparcels:   "landParcels",
+      dno_capacity:  "gridCapacity",
+      gridcapacity:  "gridCapacity",
+      repd:          "repdProjects",
+      repdprojects:  "repdProjects",
+      nsip:          "repdProjects",          // fallback — best surface today
+      flood_zones:   "envConstraints",
+      floodzones:    "envConstraints",
+      flood:         "envConstraints",
+      planning:      "planningConstraints",
+      lpa:           "planningConstraints",
+      grid_lines:    "osmPower",
+      osm_power:     "osmPower",
+      substations:   "gridFlow",
+      gridflow:      "gridFlow",
+    };
+    const resolve = (raw) => {
+      if (!raw) return null;
+      const k = String(raw).toLowerCase();
+      if (k in SLUG_TO_LAYER) return SLUG_TO_LAYER[k];
+      // Allow callers to pass the camelCase id directly
+      return raw;
+    };
+    const activate = (rawIds) => {
+      const ids = rawIds.map(resolve).filter(Boolean);
+      if (ids.length === 0) return;
+      setLayers(l => {
+        const next = { ...l };
+        ids.forEach(id => { if (id in next) next[id] = true; });
+        return next;
+      });
+    };
+
+    // 1. URL params on mount
+    try {
+      const url = new URL(window.location.href);
+      const single = url.searchParams.get("layer");
+      const multi = url.searchParams.get("layers");
+      const raw = [
+        ...(single ? [single] : []),
+        ...(multi ? multi.split(",").map(s => s.trim()).filter(Boolean) : []),
+      ];
+      if (raw.length > 0) {
+        activate(raw);
+        url.searchParams.delete("layer");
+        url.searchParams.delete("layers");
+        url.searchParams.delete("dataset");
+        window.history.replaceState({}, "", url);
+      }
+    } catch {}
+
+    // 2. Runtime event from useDatasetLayer (in-app transitions)
+    const onActivate = (e) => {
+      const layer = e.detail?.layer;
+      if (layer) activate([layer]);
+    };
+    window.addEventListener("princeps-activate-dataset-layer", onActivate);
+    return () => window.removeEventListener("princeps-activate-dataset-layer", onActivate);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Tab selection ──
   const selectTab = useCallback((id) => {

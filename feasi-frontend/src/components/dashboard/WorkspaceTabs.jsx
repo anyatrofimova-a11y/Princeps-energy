@@ -1,15 +1,12 @@
-import React, { useState, useRef, useEffect, lazy, Suspense } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import ProjectPipelineTable from "./ProjectPipelineTable";
 import KanbanPipeline from "./KanbanPipeline";
 import SiteSearchPanel from "./SiteSearchPanel";
 import RegulatoryFeed from "./RegulatoryFeed";
 
-const UnifiedSiteDesigner = lazy(() => import("../designer/UnifiedSiteDesigner"));
-
 const TABS = [
   { key: "projects", label: "Projects" },
   { key: "pipeline", label: "Pipeline" },
-  { key: "designer", label: "Designer" },
   { key: "search", label: "Site Search" },
   { key: "regulations", label: "Regulations" },
   { key: "scenarios", label: "Scenarios" },
@@ -49,14 +46,6 @@ export default function WorkspaceTabs({
         );
       case "pipeline":
         return <KanbanPipeline projects={projects} />;
-      case "designer":
-        return (
-          <Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "var(--muted)" }}>Loading designer...</div>}>
-            <div style={{ height: 600 }}>
-              <UnifiedSiteDesigner />
-            </div>
-          </Suspense>
-        );
       case "search":
         return (
           <SiteSearchPanel

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useWorkspace, WORKSPACES, WORKSPACE_INTENTS } from "../../contexts/WorkspaceContext";
 import { useSite } from "../../SiteContext";
 import api from "../../services/api";
+import ReverseSearchBar from "./ReverseSearchBar";
 
 
 /* ── Capability cards (unchanged) ─────────────────────────────────────────── */
@@ -781,6 +782,9 @@ export default function WorkspaceHome() {
           <h2 className="wh-ws-title">{meta.title}</h2>
           <p className="wh-ws-desc">{meta.desc}</p>
         </div>
+        <ReverseSearchBar onResults={(data) => {
+          window.dispatchEvent(new CustomEvent("princeps-reverse-search-results", { detail: data }));
+        }} />
 
         {/* Quick Actions */}
         {quickActions.length > 0 && (

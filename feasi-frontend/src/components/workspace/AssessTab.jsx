@@ -5,6 +5,8 @@ import { matchesWorkload } from "../../lib/workload";
 
 const DemandForecastPanel = lazy(() => import("../DemandForecastPanel"));
 const PlanningIntelligencePanel = lazy(() => import("../PlanningIntelligencePanel"));
+// Lazy-loaded so deck.gl + Mapbox bundles only hydrate when Assess is active.
+const AssessProjectTwin = lazy(() => import("../assess/AssessProjectTwin"));
 
 const BASE_SUBTABS = [
   { key: "grid",     label: "Grid" },
@@ -64,6 +66,17 @@ export default function AssessTab({ project, onPopOutTwin = () => {}, subTabHint
         </p>
       </header>
 
+      <section className="as-twin-wrap" aria-label="Project twin">
+        <Suspense fallback={<div className="as-loading">Loading project twin…</div>}>
+          <AssessProjectTwin
+            projectId={project?.project_id || project?.id}
+            polygon_wkt={project?.polygon_wkt || project?.metadata?.polygon_wkt || null}
+            tech={project?.workload_type || project?.tech || null}
+            capacity_mw={project?.capacity_mw || project?.target_capacity_mw || null}
+          />
+        </Suspense>
+      </section>
+
       <nav className="as-subnav" role="tablist">
         {subtabs.map((t) => (
           <button
@@ -104,6 +117,7 @@ export default function AssessTab({ project, onPopOutTwin = () => {}, subTabHint
           letter-spacing: -0.5px; }
         .as-lede { font-size: 15px; line-height: 1.55; color: var(--cds-text-secondary);
           max-width: 640px; margin: 0; }
+        .as-twin-wrap { padding: 8px 40px 16px 40px; }
         .as-subnav { display: flex; gap: 2px; padding: 0 40px;
           border-bottom: 1px solid var(--cds-border-subtle); }
         .as-subtab { background: none; border: none; padding: 10px 14px;

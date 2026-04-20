@@ -1,6 +1,7 @@
 import React, { useState, lazy, Suspense } from "react";
 
 const GridTwinCesium = lazy(() => import("../GridTwinCesium"));
+const ProjectTwinEmbed = lazy(() => import("../assess/ProjectTwinEmbed"));
 
 const PATHWAYS = [
   { key: "CT", label: "Consumer Transformation" },
@@ -35,22 +36,14 @@ export default function GridTab({
           <div className="gt-twin-label">
             Newton–Raphson · 60 Hz · N-1 ready
           </div>
-          <button className="gt-popout" onClick={onPopOut} title="Open full-screen twin">
-            ⇱ Pop out
-          </button>
           {embedTwin ? (
             <Suspense fallback={<div className="gt-placeholder-text">Loading grid twin…</div>}>
               <GridTwinCesium embedded project={project} />
             </Suspense>
           ) : (
-            <div className="gt-placeholder">
-              <div className="gt-placeholder-text">
-                Grid twin embed
-                <div className="gt-placeholder-sub">
-                  Click "Pop out" for full-screen Cesium view
-                </div>
-              </div>
-            </div>
+            <Suspense fallback={<div className="gt-placeholder"><div className="gt-placeholder-text">Loading project twin…</div></div>}>
+              <ProjectTwinEmbed project={project} />
+            </Suspense>
           )}
         </div>
 

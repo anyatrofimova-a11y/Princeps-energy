@@ -24,7 +24,64 @@ const ViewLoading = () => (
 );
 
 export default function CenterCanvas({ children, dashboardView }) {
-  const { activeViewMode } = useWorkspace();
+  const { activeViewMode, setActiveViewMode } = useWorkspace();
+
+  // Dashboard project-row clicks → open the real project page (RedesignLayout).
+  // 1. Flip view mode to "projects" so RedesignLayout mounts.
+  // 2. Dispatch the event RedesignLayout already listens to with projectId.
+  const goToProject = React.useCallback((projectId) => {
+    // Persist the pending selection so RedesignLayout can pick it up on
+    // mount (the lazy-loaded Suspense fallback can take hundreds of ms, so
+    // a fixed setTimeout is race-prone). RedesignLayout reads + clears
+    // sessionStorage on mount.
+    try { sessionStorage.setItem("princeps.pendingProjectId", String(projectId)); } catch {}
+    setActiveViewMode("projects");
+    // Also dispatch the event on a short and long timeout — covers warm
+    // (already mounted) and cold (lazy-load) cases.
+    [30, 400, 1200].forEach((ms) => setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("princeps-redesign-select-project", {
+        detail: { projectId },
+      }));
+    }, ms));
+  }, [setActiveViewMode]);
+
+  const goToNewProject = React.useCallback(() => {
+    try { sessionStorage.setItem("princeps.pendingNewProject", "1"); } catch {}
+    setActiveViewMode("projects");
+    [30, 400, 1200].forEach((ms) => setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("princeps-redesign-new-project"));
+    }, ms));
+  }, [setActiveViewMode]);
+
+  // Dispatcher for activity-feed rows: route per entity_type so every row
+  // opens a real thing — projects → project page, substations → grid view +
+  // focus event, memos → project page with an intent hint the project page
+  // picks up to open the IC memo tab.
+  const goToEntity = React.useCallback(({ entity_type, entity_id, project_id }) => {
+    if (entity_type === "substation" && entity_id) {
+      setActiveViewMode("grid_network");
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("princeps-focus-substation", {
+          detail: { substationId: entity_id },
+        }));
+      }, 30);
+      return;
+    }
+    if (entity_type === "memo") {
+      const pid = entity_id || project_id;
+      if (!pid) return;
+      setActiveViewMode("projects");
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("princeps-redesign-select-project", {
+          detail: { projectId: pid, tab: "ic_memo" },
+        }));
+      }, 30);
+      return;
+    }
+    // default: project
+    const pid = entity_id || project_id;
+    if (pid) goToProject(pid);
+  }, [goToProject, setActiveViewMode]);
 
   // Map stays mounted across view switches — unmounting Mapbox on every toggle
   // destroys zoom/pan state and is slow. We hide the map with CSS instead so its
@@ -51,9 +108,10 @@ export default function CenterCanvas({ children, dashboardView }) {
         {activeViewMode === "dashboard" && (dashboardView || (
           <Suspense fallback={<ViewLoading />}>
             <MissionControl
-              onSelectProject={(pid) => window.dispatchEvent(new CustomEvent("princeps-set-view", { detail: { view: "projects", projectId: pid } }))}
-              onNewProject={() => window.dispatchEvent(new CustomEvent("princeps-set-view", { detail: { view: "projects" } }))}
-              onPickWorkload={(w) => window.dispatchEvent(new CustomEvent("princeps-set-view", { detail: { view: "projects", workload: w } }))}
+              onSelectProject={goToProject}
+              onSelectEntity={goToEntity}
+              onNewProject={goToNewProject}
+              onPickWorkload={() => goToNewProject()}
             />
           </Suspense>
         ))}
