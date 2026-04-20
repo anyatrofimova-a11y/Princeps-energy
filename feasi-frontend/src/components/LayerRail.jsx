@@ -76,6 +76,27 @@ const SECTIONS = [
     ],
   },
   {
+    id: "substrate",
+    label: "Substrate",
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="3" y="14" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+      </svg>
+    ),
+    layers: [
+      { id: "substrateBuildings",     label: "OS Buildings",   color: "#D4A018" },
+      { id: "substrateRoads",         label: "OS Roads",       color: "#282624" },
+      { id: "substrateWater",         label: "OS Water",       color: "#608EB8" },
+      { id: "substrateWoodland",      label: "OS Woodland",    color: "#A8BA94" },
+      { id: "substratePylons",        label: "Pylons",         color: "#282828" },
+      { id: "substrateOverheadLines", label: "Overhead Lines", color: "#D4A018" },
+      { id: "substrateLidar",         label: "LiDAR Terrain",  color: "#8D6E63" },
+    ],
+  },
+  {
     id: "gibs",
     label: "GIBS",
     icon: (

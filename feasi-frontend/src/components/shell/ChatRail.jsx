@@ -286,13 +286,18 @@ export default function ChatRail({
   }
 
   return (
-    <aside className="cr-root cr-expanded" role="complementary">
+    <aside
+      className={"cr-root cr-expanded" + (inline ? " cr-inline" : "")}
+      role="complementary"
+    >
       <div className="cr-header">
         <div className="cr-title">
           <span className="cr-dot" />
           Princeps AI
         </div>
-        <button className="cr-collapse" onClick={() => setCollapsed(true)} title="Collapse">▸</button>
+        {!inline && (
+          <button className="cr-collapse" onClick={() => setCollapsed(true)} title="Collapse">▸</button>
+        )}
       </div>
 
       <div className="cr-list">
@@ -360,6 +365,23 @@ const baseCSS = `
   @keyframes cr-slide-in {
     from { opacity: 0; transform: translateY(12px) scale(0.98); }
     to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* INLINE — fill the parent container instead of floating bottom-right.
+     Used by IntelligenceShell's right-rail "Chat" tab so the chat lives
+     inside the panel rather than on top of it. */
+  .cr-root.cr-inline {
+    position: relative;
+    inset: auto;
+    right: auto; bottom: auto;
+    width: 100%; height: 100%;
+    max-height: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    z-index: auto;
+    animation: none;
+    background: transparent;
   }
 
   /* COLLAPSED — floating pill bubble bottom-right. */

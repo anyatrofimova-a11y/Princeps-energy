@@ -376,6 +376,14 @@ export function SiteProvider({ children }) {
     nged_ecr: false,
     nged_gsp: false,
     nged_licence: false,
+    // BOT-CC substrate — OS MasterMap / EA LiDAR / OSM pylons
+    substrateBuildings: false,
+    substrateRoads: false,
+    substrateWater: false,
+    substrateWoodland: false,
+    substratePylons: false,
+    substrateOverheadLines: false,
+    substrateLidar: false,
   });
   const toggleLayer = useCallback((id) => {
     setLayers(l => ({ ...l, [id]: !l[id] }));
