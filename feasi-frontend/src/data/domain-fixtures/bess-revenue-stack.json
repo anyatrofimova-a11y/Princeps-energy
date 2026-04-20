@@ -1,0 +1,65 @@
+{
+  "meta": {
+    "source": "MOCK — BMRS imbalance + wholesale arb + FFR composite (synthetic)",
+    "units": "£/kW/yr revenue stack",
+    "note": "Real data later — merge BMRS N2EX + Modo BM intel + NESO constraint payments",
+    "generated": "2026-04-19"
+  },
+  "zones": [
+    { "lon": -1.56, "lat": 53.80, "zone_id": "N_YORKS", "imbalance_rev": 42, "wholesale_arb": 58, "ffr_rev": 28, "total": 128, "curtailment_risk": 0.68 },
+    { "lon": -1.95, "lat": 55.02, "zone_id": "NE_ENG",  "imbalance_rev": 48, "wholesale_arb": 62, "ffr_rev": 31, "total": 141, "curtailment_risk": 0.78 },
+    { "lon": -3.20, "lat": 55.95, "zone_id": "S_SCOT",  "imbalance_rev": 52, "wholesale_arb": 68, "ffr_rev": 34, "total": 154, "curtailment_risk": 0.85 },
+    { "lon": -4.25, "lat": 57.48, "zone_id": "N_SCOT",  "imbalance_rev": 58, "wholesale_arb": 72, "ffr_rev": 38, "total": 168, "curtailment_risk": 0.92 },
+    { "lon": -2.25, "lat": 53.48, "zone_id": "NW_ENG",  "imbalance_rev": 35, "wholesale_arb": 52, "ffr_rev": 24, "total": 111, "curtailment_risk": 0.42 },
+    { "lon": -2.99, "lat": 53.04, "zone_id": "MERSEY",  "imbalance_rev": 32, "wholesale_arb": 50, "ffr_rev": 22, "total": 104, "curtailment_risk": 0.38 },
+    { "lon": -1.50, "lat": 52.48, "zone_id": "W_MIDS",  "imbalance_rev": 28, "wholesale_arb": 46, "ffr_rev": 20, "total": 94,  "curtailment_risk": 0.28 },
+    { "lon": -0.48, "lat": 52.25, "zone_id": "E_MIDS",  "imbalance_rev": 26, "wholesale_arb": 44, "ffr_rev": 19, "total": 89,  "curtailment_risk": 0.24 },
+    { "lon":  1.12, "lat": 52.62, "zone_id": "E_ANGLIA","imbalance_rev": 30, "wholesale_arb": 48, "ffr_rev": 21, "total": 99,  "curtailment_risk": 0.32 },
+    { "lon": -0.13, "lat": 51.51, "zone_id": "LONDON",  "imbalance_rev": 22, "wholesale_arb": 42, "ffr_rev": 18, "total": 82,  "curtailment_risk": 0.15 },
+    { "lon": -0.42, "lat": 51.29, "zone_id": "SE_ENG",  "imbalance_rev": 24, "wholesale_arb": 43, "ffr_rev": 18, "total": 85,  "curtailment_risk": 0.18 },
+    { "lon": -1.31, "lat": 51.06, "zone_id": "S_CENTRAL","imbalance_rev": 25,"wholesale_arb": 44, "ffr_rev": 19, "total": 88,  "curtailment_risk": 0.20 },
+    { "lon": -2.58, "lat": 51.03, "zone_id": "SW_ENG",  "imbalance_rev": 27, "wholesale_arb": 45, "ffr_rev": 20, "total": 92,  "curtailment_risk": 0.22 },
+    { "lon": -3.18, "lat": 51.48, "zone_id": "S_WALES", "imbalance_rev": 31, "wholesale_arb": 49, "ffr_rev": 22, "total": 102, "curtailment_risk": 0.40 },
+    { "lon": -3.90, "lat": 52.07, "zone_id": "MID_WALES","imbalance_rev": 44,"wholesale_arb": 60, "ffr_rev": 30, "total": 134, "curtailment_risk": 0.72 },
+    { "lon": -4.15, "lat": 51.68, "zone_id": "SW_WALES","imbalance_rev": 34, "wholesale_arb": 51, "ffr_rev": 23, "total": 108, "curtailment_risk": 0.45 },
+    { "lon": -4.50, "lat": 52.90, "zone_id": "NW_WALES","imbalance_rev": 46, "wholesale_arb": 62, "ffr_rev": 32, "total": 140, "curtailment_risk": 0.75 },
+    { "lon": -1.90, "lat": 50.78, "zone_id": "WESSEX",  "imbalance_rev": 26, "wholesale_arb": 44, "ffr_rev": 19, "total": 89,  "curtailment_risk": 0.22 },
+    { "lon":  0.30, "lat": 51.28, "zone_id": "KENT",    "imbalance_rev": 23, "wholesale_arb": 42, "ffr_rev": 18, "total": 83,  "curtailment_risk": 0.16 },
+    { "lon": -1.48, "lat": 53.38, "zone_id": "S_YORKS", "imbalance_rev": 38, "wholesale_arb": 54, "ffr_rev": 26, "total": 118, "curtailment_risk": 0.55 },
+    { "lon": -0.62, "lat": 53.52, "zone_id": "HUMBER",  "imbalance_rev": 40, "wholesale_arb": 56, "ffr_rev": 27, "total": 123, "curtailment_risk": 0.62 },
+    { "lon": -2.46, "lat": 54.05, "zone_id": "CUMBRIA", "imbalance_rev": 50, "wholesale_arb": 65, "ffr_rev": 33, "total": 148, "curtailment_risk": 0.82 },
+    { "lon": -3.00, "lat": 55.10, "zone_id": "BORDERS", "imbalance_rev": 54, "wholesale_arb": 69, "ffr_rev": 35, "total": 158, "curtailment_risk": 0.88 },
+    { "lon": -4.25, "lat": 55.85, "zone_id": "C_SCOT",  "imbalance_rev": 56, "wholesale_arb": 70, "ffr_rev": 36, "total": 162, "curtailment_risk": 0.90 },
+    { "lon": -2.60, "lat": 56.32, "zone_id": "E_SCOT",  "imbalance_rev": 55, "wholesale_arb": 70, "ffr_rev": 35, "total": 160, "curtailment_risk": 0.89 },
+    { "lon": -5.10, "lat": 57.28, "zone_id": "NW_HILAND","imbalance_rev": 62,"wholesale_arb": 76, "ffr_rev": 40, "total": 178, "curtailment_risk": 0.95 },
+    { "lon": -3.10, "lat": 58.45, "zone_id": "CAITHNESS","imbalance_rev": 65,"wholesale_arb": 78, "ffr_rev": 42, "total": 185, "curtailment_risk": 0.97 },
+    { "lon":  0.15, "lat": 52.20, "zone_id": "CAMBS",   "imbalance_rev": 29, "wholesale_arb": 47, "ffr_rev": 21, "total": 97,  "curtailment_risk": 0.30 },
+    { "lon": -1.13, "lat": 52.63, "zone_id": "LEICS",   "imbalance_rev": 27, "wholesale_arb": 45, "ffr_rev": 20, "total": 92,  "curtailment_risk": 0.26 },
+    { "lon": -2.24, "lat": 52.19, "zone_id": "COTSWOLD","imbalance_rev": 26, "wholesale_arb": 44, "ffr_rev": 19, "total": 89,  "curtailment_risk": 0.24 }
+  ],
+  "comah_sites": [
+    { "lon": -3.01, "lat": 51.56, "name": "Tata Steel Port Talbot", "tier": "upper" },
+    { "lon":  0.12, "lat": 51.48, "name": "Thames Oilport",          "tier": "upper" },
+    { "lon": -0.41, "lat": 53.58, "name": "Humber Refinery",         "tier": "upper" },
+    { "lon": -2.97, "lat": 53.42, "name": "Stanlow Refinery",        "tier": "upper" },
+    { "lon": -3.12, "lat": 55.98, "name": "Grangemouth Complex",     "tier": "upper" },
+    { "lon":  1.42, "lat": 52.07, "name": "Felixstowe Storage",      "tier": "lower" },
+    { "lon": -2.85, "lat": 54.65, "name": "Heysham Nuclear",         "tier": "upper" },
+    { "lon": -1.51, "lat": 54.68, "name": "Teesside Chem Cluster",   "tier": "upper" }
+  ],
+  "bess_precedents": [
+    { "lon": -1.51, "lat": 52.48, "name": "Minety BESS",       "capacity_mw": 100, "status": "approved" },
+    { "lon": -2.25, "lat": 53.48, "name": "Carrington BESS",   "capacity_mw": 50,  "status": "approved" },
+    { "lon": -0.62, "lat": 53.52, "name": "Hams Hall BESS",    "capacity_mw": 200, "status": "approved" },
+    { "lon": -3.20, "lat": 55.95, "name": "Blackhillock BESS", "capacity_mw": 300, "status": "approved" },
+    { "lon": -1.56, "lat": 53.80, "name": "Pillswood BESS",    "capacity_mw": 196, "status": "approved" },
+    { "lon":  0.30, "lat": 51.28, "name": "Richborough BESS",  "capacity_mw": 99,  "status": "pending" },
+    { "lon": -0.48, "lat": 52.25, "name": "Rushden BESS",      "capacity_mw": 40,  "status": "refused" },
+    { "lon": -4.25, "lat": 55.85, "name": "Coalburn BESS",     "capacity_mw": 500, "status": "approved" },
+    { "lon":  1.22, "lat": 52.33, "name": "Bramford BESS",     "capacity_mw": 150, "status": "pending" }
+  ],
+  "aonb_exclusions": [
+    { "name": "Cotswolds AONB", "polygon": [[-2.20, 51.55], [-1.55, 51.78], [-1.62, 52.10], [-2.35, 51.95], [-2.20, 51.55]] },
+    { "name": "Peak District NP","polygon": [[-2.10, 53.20], [-1.50, 53.22], [-1.55, 53.50], [-2.15, 53.45], [-2.10, 53.20]] }
+  ]
+}

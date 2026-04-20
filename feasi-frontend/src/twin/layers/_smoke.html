@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Princeps Twin — smoke harness</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <style>
+      html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; background: #0c0c0e; }
+      .legend {
+        position: absolute; top: 12px; left: 12px; z-index: 2;
+        background: rgba(12,12,14,0.85); color: #e6e1d4; font: 12px/1.4 ui-sans-serif, system-ui;
+        padding: 10px 12px; border: 1px solid #2c2a24; border-radius: 6px; max-width: 260px;
+      }
+      .legend b { color: #d9c590; }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+    <div class="legend">
+      <b>Princeps twin — smoke test</b><br/>
+      Drakelow, Derbyshire (SK26).<br/>
+      Expected: EA LiDAR terrain under extruded OS buildings, a strip of
+      lattice pylons south-east of the old power-station site with 132 kV
+      blue catenary OHL conductors sagging between them.
+    </div>
+    <script type="module">
+      /*
+       * Minimal harness — imports the registered twin layers from the
+       * barrel and renders them over a Mapbox basemap. Run with:
+       *   cd feasi-frontend && npx vite --open src/twin/layers/_smoke.html
+       * (Vite resolves the sibling .js imports as modules.)
+       *
+       * Drakelow bbox: -1.64 .. -1.58 lon, 52.77 .. 52.80 lat.
+       */
+      import mapboxgl from "https://esm.sh/mapbox-gl@3.9.0";
+      import { MapboxOverlay } from "https://esm.sh/@deck.gl/mapbox@9.2.10";
+      import { TWIN_LAYERS } from "./index.js";
+
+      const token = (new URLSearchParams(location.search)).get("token")
+        || window.MAPBOX_TOKEN
+        || "";
+      if (!token) {
+        document.body.innerHTML = "<pre style='color:#eee;padding:24px'>Pass ?token=pk.xxx or set window.MAPBOX_TOKEN</pre>";
+        throw new Error("mapbox token required");
+      }
+      mapboxgl.accessToken = token;
+
+      const map = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [-1.61, 52.785],
+        zoom: 14,
+        pitch: 55,
+        bearing: -24,
+      });
+
+      // Fake pylon + OHL fixtures so the layer renders without a backend.
+      const base = [-1.615, 52.784];
+      const towers = Array.from({ length: 8 }, (_, i) => ({
+        id: "T" + i,
+        lon: base[0] + i * 0.003,
+        lat: base[1] + (i % 2) * 0.0004,
+        voltage_kv: 132,
+      }));
+      const lines = [{
+        id: "L1",
+        voltage_kv: 132,
+        towers: towers.map((t) => [t.lon, t.lat]),
+      }];
+
+      const ctx = {
+        towers,
+        lines,
+        // EA LiDAR & OS Buildings will run in fallback/disabled mode unless
+        // VITE_OS_API_KEY and the EA proxy are present — that is expected
+        // in the smoke harness; we are mainly verifying pylons + catenary.
+      };
+
+      const overlay = new MapboxOverlay({
+        layers: TWIN_LAYERS.map((d) => d.layerFactory(ctx)).filter(Boolean),
+      });
+      map.on("load", () => map.addControl(overlay));
+    </script>
+  </body>
+</html>

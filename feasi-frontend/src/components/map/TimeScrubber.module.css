@@ -1,0 +1,252 @@
+/* TimeScrubber — docked at map footer, 64px tall, full width.
+   Ivory base + subtle ink gradient track, gold thumb with soft glow.
+*/
+
+.root {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 64px;
+  padding: 8px 16px 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(180deg, rgba(248, 245, 237, 0.78) 0%, rgba(248, 245, 237, 0.96) 100%);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(15, 19, 24, 0.08);
+  box-shadow: 0 -6px 20px rgba(15, 19, 24, 0.05);
+  z-index: 40;
+  font-family: "DM Sans", -apple-system, BlueprintJS, sans-serif;
+  color: #0F1318;
+  user-select: none;
+}
+
+/* ── Play / Pause button ──────────────────────────────────────────────── */
+.playBtn {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #0F1318;
+  background: transparent;
+  color: #0F1318;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  padding: 0;
+}
+
+.playBtn:hover {
+  background: rgba(245, 183, 49, 0.12);
+}
+
+.playBtn:focus-visible {
+  outline: 2px solid #F5B731;
+  outline-offset: 2px;
+}
+
+.playBtnPlaying {
+  background: #F5B731;
+  border-color: #F5B731;
+  color: #0F1318;
+  box-shadow: 0 0 0 4px rgba(245, 183, 49, 0.18), 0 2px 10px rgba(245, 183, 49, 0.35);
+}
+
+.playIcon {
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+/* ── Speed selector ───────────────────────────────────────────────────── */
+.speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(15, 19, 24, 0.55);
+}
+
+.speedSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(15, 19, 24, 0.18);
+  background: #fffdf5;
+  border-radius: 6px;
+  padding: 4px 22px 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0F1318;
+  cursor: pointer;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #0F1318 50%),
+    linear-gradient(135deg, #0F1318 50%, transparent 50%);
+  background-position:
+    calc(100% - 10px) 50%,
+    calc(100% - 6px) 50%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+
+.speedSelect:focus-visible {
+  outline: 2px solid #F5B731;
+  outline-offset: 1px;
+}
+
+/* ── Track container ──────────────────────────────────────────────────── */
+.trackWrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 48px;
+  justify-content: center;
+  position: relative;
+  min-width: 0;
+}
+
+.track {
+  position: relative;
+  height: 14px;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(15, 19, 24, 0.04) 0%, rgba(15, 19, 24, 0.09) 100%);
+  box-shadow: inset 0 1px 2px rgba(15, 19, 24, 0.06);
+  cursor: pointer;
+  overflow: visible;
+  touch-action: none;
+}
+
+/* Reserved zones (absolute-positioned inside the track) */
+.zoneHistoric {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(248, 245, 237, 0.9) 0%, rgba(233, 226, 205, 0.85) 100%);
+  border-radius: 8px 0 0 8px;
+}
+
+.zoneNearTerm {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, rgba(245, 183, 49, 0.18) 0%, rgba(245, 183, 49, 0.45) 100%);
+}
+
+.zoneFes {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, rgba(15, 19, 24, 0.15) 0%, rgba(15, 19, 24, 0.42) 100%);
+  border-radius: 0 8px 8px 0;
+}
+
+/* Ticks */
+.ticks {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.tickMinor {
+  position: absolute;
+  top: 3px;
+  width: 1px;
+  height: 4px;
+  background: rgba(15, 19, 24, 0.22);
+}
+
+.tickMajor {
+  position: absolute;
+  top: 1px;
+  width: 1px;
+  height: 8px;
+  background: rgba(15, 19, 24, 0.55);
+}
+
+.tickLabel {
+  position: absolute;
+  top: 16px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(15, 19, 24, 0.55);
+  white-space: nowrap;
+}
+
+/* Progress fill */
+.progress {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: linear-gradient(90deg, rgba(245, 183, 49, 0.35) 0%, rgba(245, 183, 49, 0.7) 100%);
+  border-radius: 8px 0 0 8px;
+  pointer-events: none;
+}
+
+/* Thumb */
+.thumb {
+  position: absolute;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #FDD85D 0%, #F5B731 55%, #E8A012 100%);
+  border: 1.5px solid #0F1318;
+  box-shadow:
+    0 0 0 3px rgba(245, 183, 49, 0.25),
+    0 2px 8px rgba(245, 183, 49, 0.55),
+    0 4px 14px rgba(15, 19, 24, 0.2);
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  transition: box-shadow 120ms ease, transform 120ms ease;
+  z-index: 3;
+}
+
+.thumb:active,
+.thumbDragging {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.08);
+  box-shadow:
+    0 0 0 5px rgba(245, 183, 49, 0.32),
+    0 4px 14px rgba(245, 183, 49, 0.6),
+    0 6px 22px rgba(15, 19, 24, 0.22);
+}
+
+/* ── Readout ──────────────────────────────────────────────────────────── */
+.readout {
+  min-width: 120px;
+  text-align: right;
+  font-family: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 500;
+  color: #0F1318;
+  letter-spacing: 0.02em;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(245, 183, 49, 0.08);
+  border: 1px solid rgba(245, 183, 49, 0.35);
+}
+
+.readoutAccent {
+  color: #E8A012;
+  font-weight: 600;
+}
+
+/* ── Accessibility: focus ring on track ────────────────────────────── */
+.track:focus-visible {
+  outline: 2px solid #F5B731;
+  outline-offset: 3px;
+}

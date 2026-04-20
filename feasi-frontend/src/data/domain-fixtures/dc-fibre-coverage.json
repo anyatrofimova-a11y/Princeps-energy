@@ -1,0 +1,74 @@
+{
+  "meta": {
+    "source": "MOCK — Openreach FTTP + alt-net overlays + hyperscaler estate (synthetic)",
+    "units": "fibre score (0-1) / latency ms to LINX / water stress index",
+    "note": "Real data later — pull Openreach FTTP exchange map + Thinkbroadband + EA CAMS",
+    "generated": "2026-04-19"
+  },
+  "fibre_points": [
+    { "lon": -0.13, "lat": 51.51, "fibre_score": 0.98, "dark_fibre": true,  "latency_ms": 0.5,  "water_stress": "serious" },
+    { "lon": -0.48, "lat": 51.45, "fibre_score": 0.96, "dark_fibre": true,  "latency_ms": 2.1,  "water_stress": "serious" },
+    { "lon": -0.76, "lat": 51.52, "fibre_score": 0.92, "dark_fibre": true,  "latency_ms": 3.8,  "water_stress": "serious" },
+    { "lon":  0.08, "lat": 51.35, "fibre_score": 0.88, "dark_fibre": true,  "latency_ms": 4.2,  "water_stress": "serious" },
+    { "lon": -0.28, "lat": 52.10, "fibre_score": 0.75, "dark_fibre": false, "latency_ms": 9.1,  "water_stress": "moderate" },
+    { "lon": -1.13, "lat": 52.63, "fibre_score": 0.82, "dark_fibre": true,  "latency_ms": 7.5,  "water_stress": "low" },
+    { "lon": -1.90, "lat": 52.48, "fibre_score": 0.85, "dark_fibre": true,  "latency_ms": 8.2,  "water_stress": "low" },
+    { "lon": -2.25, "lat": 53.48, "fibre_score": 0.88, "dark_fibre": true,  "latency_ms": 10.4, "water_stress": "low" },
+    { "lon": -2.99, "lat": 53.42, "fibre_score": 0.78, "dark_fibre": false, "latency_ms": 11.2, "water_stress": "low" },
+    { "lon": -1.55, "lat": 53.80, "fibre_score": 0.72, "dark_fibre": false, "latency_ms": 11.8, "water_stress": "moderate" },
+    { "lon": -1.61, "lat": 54.97, "fibre_score": 0.70, "dark_fibre": false, "latency_ms": 14.5, "water_stress": "low" },
+    { "lon": -3.19, "lat": 55.95, "fibre_score": 0.80, "dark_fibre": true,  "latency_ms": 15.8, "water_stress": "low" },
+    { "lon": -4.25, "lat": 55.85, "fibre_score": 0.78, "dark_fibre": true,  "latency_ms": 16.5, "water_stress": "low" },
+    { "lon": -1.31, "lat": 51.06, "fibre_score": 0.68, "dark_fibre": false, "latency_ms": 6.5,  "water_stress": "moderate" },
+    { "lon": -1.40, "lat": 50.90, "fibre_score": 0.65, "dark_fibre": false, "latency_ms": 7.2,  "water_stress": "moderate" },
+    { "lon": -2.58, "lat": 51.45, "fibre_score": 0.72, "dark_fibre": false, "latency_ms": 8.8,  "water_stress": "moderate" },
+    { "lon": -3.18, "lat": 51.48, "fibre_score": 0.68, "dark_fibre": false, "latency_ms": 10.1, "water_stress": "low" },
+    { "lon":  1.28, "lat": 52.62, "fibre_score": 0.58, "dark_fibre": false, "latency_ms": 9.5,  "water_stress": "moderate" },
+    { "lon":  0.40, "lat": 52.19, "fibre_score": 0.62, "dark_fibre": false, "latency_ms": 7.8,  "water_stress": "moderate" },
+    { "lon": -0.40, "lat": 51.29, "fibre_score": 0.85, "dark_fibre": true,  "latency_ms": 2.8,  "water_stress": "serious" },
+    { "lon": -0.73, "lat": 52.24, "fibre_score": 0.62, "dark_fibre": false, "latency_ms": 9.0,  "water_stress": "moderate" },
+    { "lon": -3.53, "lat": 50.72, "fibre_score": 0.52, "dark_fibre": false, "latency_ms": 11.5, "water_stress": "low" },
+    { "lon": -2.24, "lat": 52.19, "fibre_score": 0.65, "dark_fibre": false, "latency_ms": 8.5,  "water_stress": "low" },
+    { "lon": -1.50, "lat": 52.41, "fibre_score": 0.70, "dark_fibre": false, "latency_ms": 8.0,  "water_stress": "low" },
+    { "lon": -0.62, "lat": 53.52, "fibre_score": 0.60, "dark_fibre": false, "latency_ms": 11.0, "water_stress": "low" },
+    { "lon": -2.10, "lat": 57.15, "fibre_score": 0.55, "dark_fibre": false, "latency_ms": 19.8, "water_stress": "low" },
+    { "lon": -2.46, "lat": 54.05, "fibre_score": 0.45, "dark_fibre": false, "latency_ms": 13.5, "water_stress": "low" },
+    { "lon": -4.15, "lat": 51.68, "fibre_score": 0.50, "dark_fibre": false, "latency_ms": 11.2, "water_stress": "low" },
+    { "lon": -3.00, "lat": 55.10, "fibre_score": 0.48, "dark_fibre": false, "latency_ms": 15.0, "water_stress": "low" },
+    { "lon": -0.98, "lat": 54.36, "fibre_score": 0.55, "dark_fibre": false, "latency_ms": 13.8, "water_stress": "low" }
+  ],
+  "hyperscaler_sites": [
+    { "lon": -0.46, "lat": 51.46, "operator": "AWS",    "name": "AWS London (eu-west-2)",  "status": "live" },
+    { "lon": -0.68, "lat": 51.52, "operator": "AWS",    "name": "AWS Slough Campus",       "status": "live" },
+    { "lon": -0.59, "lat": 51.50, "operator": "Microsoft","name": "Azure UK South",        "status": "live" },
+    { "lon": -0.08, "lat": 53.47, "operator": "Microsoft","name": "Azure Leeds (Oct 2024)","status": "planned" },
+    { "lon": -0.62, "lat": 51.52, "operator": "Google", "name": "Google Slough",           "status": "live" },
+    { "lon":  0.00, "lat": 51.51, "operator": "Google", "name": "Google Waltham Cross",    "status": "planned" },
+    { "lon": -0.78, "lat": 51.58, "operator": "Meta",   "name": "Meta Slough",             "status": "live" },
+    { "lon": -0.45, "lat": 51.41, "operator": "Oracle", "name": "Oracle London Heathrow",  "status": "live" },
+    { "lon": -2.99, "lat": 53.40, "operator": "Equinix","name": "Equinix MA1 Manchester",  "status": "live" },
+    { "lon":  1.12, "lat": 51.35, "operator": "Virtus", "name": "Virtus LONDON3",          "status": "planned" }
+  ],
+  "ea_cams_zones": [
+    { "name": "Thames",    "stress": "serious",  "polygon": [[-0.85, 51.35], [ 0.25, 51.35], [ 0.25, 51.75], [-0.85, 51.75], [-0.85, 51.35]] },
+    { "name": "Lee",       "stress": "serious",  "polygon": [[-0.20, 51.58], [ 0.10, 51.58], [ 0.10, 51.88], [-0.20, 51.88], [-0.20, 51.58]] },
+    { "name": "Severn",    "stress": "moderate", "polygon": [[-2.80, 51.50], [-1.90, 51.50], [-1.90, 52.20], [-2.80, 52.20], [-2.80, 51.50]] },
+    { "name": "Humber",    "stress": "moderate", "polygon": [[-0.90, 53.30], [ 0.15, 53.30], [ 0.15, 53.80], [-0.90, 53.80], [-0.90, 53.30]] },
+    { "name": "Anglian",   "stress": "moderate", "polygon": [[ 0.10, 52.00], [ 1.40, 52.00], [ 1.40, 52.80], [ 0.10, 52.80], [ 0.10, 52.00]] }
+  ],
+  "linx_isochrones": [
+    { "latency_ms": 2,  "polygon": [[-0.40, 51.38], [ 0.20, 51.38], [ 0.20, 51.65], [-0.40, 51.65], [-0.40, 51.38]] },
+    { "latency_ms": 5,  "polygon": [[-0.85, 51.20], [ 0.55, 51.20], [ 0.55, 51.80], [-0.85, 51.80], [-0.85, 51.20]] },
+    { "latency_ms": 10, "polygon": [[-1.80, 50.85], [ 1.35, 50.85], [ 1.35, 52.25], [-1.80, 52.25], [-1.80, 50.85]] },
+    { "latency_ms": 20, "polygon": [[-3.50, 50.00], [ 2.00, 50.00], [ 2.00, 53.50], [-3.50, 53.50], [-3.50, 50.00]] }
+  ],
+  "dc_precedents": [
+    { "lon": -0.58, "lat": 51.52, "name": "Slough DC05",         "capacity_mw": 72, "status": "approved" },
+    { "lon": -0.12, "lat": 51.52, "name": "Docklands DC",        "capacity_mw": 45, "status": "approved" },
+    { "lon": -2.99, "lat": 53.42, "name": "Stanlow DC Campus",   "capacity_mw": 180,"status": "pending" },
+    { "lon": -1.08, "lat": 52.30, "name": "Ansty Park DC",       "capacity_mw": 120,"status": "approved" },
+    { "lon": -0.48, "lat": 52.25, "name": "Coltishall Green DC", "capacity_mw": 35, "status": "refused" },
+    { "lon": -3.20, "lat": 55.95, "name": "Edinburgh DC Campus", "capacity_mw": 60, "status": "approved" },
+    { "lon": -0.78, "lat": 51.58, "name": "Iver Green Belt DC",  "capacity_mw": 220,"status": "refused" }
+  ]
+}
