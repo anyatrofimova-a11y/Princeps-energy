@@ -1,0 +1,33 @@
+{
+  "_meta": {
+    "description": "REPD planning applications — 25 apps. submission_date marker appears; decision_date + decision=approved|refused drives colour transition.",
+    "generated_for": "BOT-EE time scrubber"
+  },
+  "applications": [
+    { "id": "REPD-0001", "name": "Botley West Solar",   "tech": "solar",  "mw": 840, "lon": -1.334, "lat": 51.799, "lpa": "West Oxfordshire",  "submission_date": "2023-09-12", "decision_date": "2025-04-30", "decision": "approved" },
+    { "id": "REPD-0002", "name": "Mallard Pass Solar",  "tech": "solar",  "mw": 350, "lon": -0.505, "lat": 52.691, "lpa": "Rutland",           "submission_date": "2022-11-04", "decision_date": "2024-07-10", "decision": "approved" },
+    { "id": "REPD-0003", "name": "Sunnica Solar",       "tech": "solar",  "mw": 500, "lon":  0.530, "lat": 52.328, "lpa": "West Suffolk",      "submission_date": "2021-07-22", "decision_date": "2024-07-04", "decision": "approved" },
+    { "id": "REPD-0004", "name": "Gate Burton Solar",   "tech": "solar",  "mw": 500, "lon": -0.730, "lat": 53.355, "lpa": "West Lindsey",      "submission_date": "2022-04-18", "decision_date": "2024-04-25", "decision": "approved" },
+    { "id": "REPD-0005", "name": "Cleve Hill Solar",    "tech": "solar",  "mw": 373, "lon":  0.905, "lat": 51.357, "lpa": "Swale",             "submission_date": "2018-06-28", "decision_date": "2020-05-28", "decision": "approved" },
+    { "id": "REPD-0006", "name": "Longfield Solar",     "tech": "solar",  "mw": 500, "lon":  0.685, "lat": 51.748, "lpa": "Chelmsford",        "submission_date": "2022-09-02", "decision_date": "2024-06-12", "decision": "approved" },
+    { "id": "REPD-0007", "name": "Sheaf Energy BESS",   "tech": "bess",   "mw": 249, "lon":  1.055, "lat": 51.310, "lpa": "Canterbury",        "submission_date": "2022-03-15", "decision_date": "2022-11-28", "decision": "approved" },
+    { "id": "REPD-0008", "name": "Kemsley BESS",        "tech": "bess",   "mw": 100, "lon":  0.740, "lat": 51.376, "lpa": "Swale",             "submission_date": "2023-02-09", "decision_date": "2023-11-03", "decision": "refused" },
+    { "id": "REPD-0009", "name": "Branston BESS",       "tech": "bess",   "mw": 150, "lon": -0.530, "lat": 52.990, "lpa": "North Kesteven",    "submission_date": "2024-01-20", "decision_date": "2024-11-18", "decision": "approved" },
+    { "id": "REPD-0010", "name": "Byers Gill Solar",    "tech": "solar",  "mw": 180, "lon": -1.440, "lat": 54.540, "lpa": "Stockton-on-Tees",  "submission_date": "2023-06-12", "decision_date": "2025-02-28", "decision": "approved" },
+    { "id": "REPD-0011", "name": "Hinkley BESS",        "tech": "bess",   "mw": 400, "lon": -3.130, "lat": 51.210, "lpa": "Sedgemoor",         "submission_date": "2024-04-08", "decision_date": "2025-06-20", "decision": "approved" },
+    { "id": "REPD-0012", "name": "Wetwang Wind",        "tech": "wind",   "mw":  20, "lon": -0.590, "lat": 54.000, "lpa": "East Riding",       "submission_date": "2021-10-30", "decision_date": "2022-09-14", "decision": "refused" },
+    { "id": "REPD-0013", "name": "Tillbridge Solar",    "tech": "solar",  "mw": 500, "lon": -0.760, "lat": 53.440, "lpa": "West Lindsey",      "submission_date": "2023-11-10", "decision_date": "2025-08-22", "decision": "approved" },
+    { "id": "REPD-0014", "name": "Cottam Solar",        "tech": "solar",  "mw": 600, "lon": -0.790, "lat": 53.370, "lpa": "West Lindsey",      "submission_date": "2023-03-24", "decision_date": "2025-09-10", "decision": "approved" },
+    { "id": "REPD-0015", "name": "Springwell Solar",    "tech": "solar",  "mw": 800, "lon": -0.400, "lat": 53.320, "lpa": "North Kesteven",    "submission_date": "2024-02-14", "decision_date": null,           "decision": null       },
+    { "id": "REPD-0016", "name": "Rosefield Solar",     "tech": "solar",  "mw": 250, "lon": -0.120, "lat": 52.770, "lpa": "South Kesteven",    "submission_date": "2024-08-05", "decision_date": null,           "decision": null       },
+    { "id": "REPD-0017", "name": "Hindlow BESS",        "tech": "bess",   "mw": 200, "lon": -1.850, "lat": 53.220, "lpa": "Derbyshire Dales",  "submission_date": "2025-01-18", "decision_date": null,           "decision": null       },
+    { "id": "REPD-0018", "name": "Fenland BESS",        "tech": "bess",   "mw": 300, "lon":  0.155, "lat": 52.585, "lpa": "Fenland",           "submission_date": "2024-11-12", "decision_date": null,           "decision": null       },
+    { "id": "REPD-0019", "name": "Oakham Solar",        "tech": "solar",  "mw": 320, "lon": -0.732, "lat": 52.670, "lpa": "Rutland",           "submission_date": "2025-03-07", "decision_date": null,           "decision": null       },
+    { "id": "REPD-0020", "name": "Helios Solar Extn",   "tech": "solar",  "mw": 120, "lon": -2.500, "lat": 51.900, "lpa": "Wiltshire",         "submission_date": "2025-05-22", "decision_date": "2026-03-04", "decision": "approved" },
+    { "id": "REPD-0021", "name": "Fosse Solar",         "tech": "solar",  "mw": 400, "lon": -0.510, "lat": 52.580, "lpa": "South Kesteven",    "submission_date": "2025-09-30", "decision_date": null,           "decision": null       },
+    { "id": "REPD-0022", "name": "Ironbridge BESS",     "tech": "bess",   "mw": 250, "lon": -2.485, "lat": 52.630, "lpa": "Shropshire",        "submission_date": "2025-11-14", "decision_date": "2026-10-02", "decision": "approved" },
+    { "id": "REPD-0023", "name": "Morecambe Tidal",     "tech": "tidal",  "mw": 180, "lon": -3.000, "lat": 54.070, "lpa": "Lancaster",         "submission_date": "2026-02-25", "decision_date": null,           "decision": null       },
+    { "id": "REPD-0024", "name": "Humber H2 Hub",       "tech": "hydrogen","mw": 350,"lon": -0.200, "lat": 53.600, "lpa": "North Lincolnshire","submission_date": "2026-04-08", "decision_date": null,           "decision": null       },
+    { "id": "REPD-0025", "name": "Sizewell C Array",    "tech": "solar",  "mw": 280, "lon":  1.620, "lat": 52.210, "lpa": "East Suffolk",      "submission_date": "2026-06-19", "decision_date": null,           "decision": null       }
+  ]
+}

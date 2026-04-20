@@ -1,0 +1,39 @@
+{
+  "_meta": {
+    "description": "TEC register — 30 connection queue projects across 2020-2035. State lifecycle: offered_date → accepted_date → commissioned_date.",
+    "generated_for": "BOT-EE time scrubber",
+    "crs": "WGS84"
+  },
+  "projects": [
+    { "id": "TEC-0001", "name": "Abingdon Solar",          "tech": "solar",   "mw":  49, "lon": -1.272, "lat": 51.671, "offered_date": "2020-03-12", "accepted_date": "2020-09-04", "commissioned_date": "2022-11-18", "decommissioned_date": null },
+    { "id": "TEC-0002", "name": "Drax BESS 1",             "tech": "bess",    "mw": 100, "lon": -0.999, "lat": 53.744, "offered_date": "2020-05-20", "accepted_date": "2021-02-10", "commissioned_date": "2023-01-22", "decommissioned_date": null },
+    { "id": "TEC-0003", "name": "Pen y Cymoedd Ext",       "tech": "wind",    "mw":  90, "lon": -3.570, "lat": 51.680, "offered_date": "2020-06-01", "accepted_date": "2021-05-30", "commissioned_date": "2024-02-14", "decommissioned_date": null },
+    { "id": "TEC-0004", "name": "Minety BESS 2",           "tech": "bess",    "mw": 150, "lon": -1.945, "lat": 51.598, "offered_date": "2020-08-17", "accepted_date": "2021-06-22", "commissioned_date": "2023-09-05", "decommissioned_date": null },
+    { "id": "TEC-0005", "name": "Cleve Hill Solar",        "tech": "solar",   "mw": 373, "lon":  0.905, "lat": 51.357, "offered_date": "2020-11-03", "accepted_date": "2021-11-20", "commissioned_date": "2025-03-30", "decommissioned_date": null },
+    { "id": "TEC-0006", "name": "Hornsea Three",           "tech": "offshore","mw":2852, "lon":  1.850, "lat": 53.900, "offered_date": "2021-01-12", "accepted_date": "2022-04-18", "commissioned_date": "2027-10-01", "decommissioned_date": null },
+    { "id": "TEC-0007", "name": "Dogger Bank A",           "tech": "offshore","mw":1200, "lon":  1.707, "lat": 54.781, "offered_date": "2021-02-25", "accepted_date": "2022-06-09", "commissioned_date": "2024-12-15", "decommissioned_date": null },
+    { "id": "TEC-0008", "name": "Pillswood BESS",          "tech": "bess",    "mw":  98, "lon": -0.305, "lat": 53.830, "offered_date": "2021-04-19", "accepted_date": "2022-01-11", "commissioned_date": "2022-12-02", "decommissioned_date": null },
+    { "id": "TEC-0009", "name": "Sunnica Solar",           "tech": "solar",   "mw": 500, "lon":  0.530, "lat": 52.328, "offered_date": "2021-07-08", "accepted_date": "2023-03-14", "commissioned_date": "2026-05-20", "decommissioned_date": null },
+    { "id": "TEC-0010", "name": "Viking Wind",             "tech": "wind",    "mw": 443, "lon": -1.268, "lat": 60.227, "offered_date": "2021-09-27", "accepted_date": "2022-10-04", "commissioned_date": "2024-08-22", "decommissioned_date": null },
+    { "id": "TEC-0011", "name": "Moray West",              "tech": "offshore","mw": 882, "lon": -3.054, "lat": 58.221, "offered_date": "2022-01-15", "accepted_date": "2023-02-02", "commissioned_date": "2025-06-30", "decommissioned_date": null },
+    { "id": "TEC-0012", "name": "Hunterston BESS",         "tech": "bess",    "mw": 400, "lon": -4.901, "lat": 55.722, "offered_date": "2022-03-08", "accepted_date": "2023-08-11", "commissioned_date": "2026-01-14", "decommissioned_date": null },
+    { "id": "TEC-0013", "name": "Longfield Solar",         "tech": "solar",   "mw": 500, "lon":  0.685, "lat": 51.748, "offered_date": "2022-05-14", "accepted_date": "2024-02-19", "commissioned_date": "2027-04-05", "decommissioned_date": null },
+    { "id": "TEC-0014", "name": "Sheaf Energy BESS",       "tech": "bess",    "mw": 249, "lon":  1.055, "lat": 51.310, "offered_date": "2022-07-22", "accepted_date": "2023-04-27", "commissioned_date": "2024-11-10", "decommissioned_date": null },
+    { "id": "TEC-0015", "name": "Inch Cape OWF",           "tech": "offshore","mw":1080, "lon": -2.295, "lat": 56.465, "offered_date": "2022-09-30", "accepted_date": "2024-03-06", "commissioned_date": "2027-09-20", "decommissioned_date": null },
+    { "id": "TEC-0016", "name": "Berwick Bank",            "tech": "offshore","mw":4100, "lon": -2.080, "lat": 56.020, "offered_date": "2023-01-18", "accepted_date": "2024-11-22", "commissioned_date": "2029-03-14", "decommissioned_date": null },
+    { "id": "TEC-0017", "name": "Botley West Solar",       "tech": "solar",   "mw": 840, "lon": -1.334, "lat": 51.799, "offered_date": "2023-03-24", "accepted_date": "2025-04-30", "commissioned_date": "2028-10-12", "decommissioned_date": null },
+    { "id": "TEC-0018", "name": "Gate Burton Solar",       "tech": "solar",   "mw": 500, "lon": -0.730, "lat": 53.355, "offered_date": "2023-05-02", "accepted_date": "2024-12-18", "commissioned_date": "2027-02-22", "decommissioned_date": null },
+    { "id": "TEC-0019", "name": "Mallard Pass Solar",      "tech": "solar",   "mw": 350, "lon": -0.505, "lat": 52.691, "offered_date": "2023-07-11", "accepted_date": "2025-03-03", "commissioned_date": "2027-08-18", "decommissioned_date": null },
+    { "id": "TEC-0020", "name": "Coire Glas Pumped",       "tech": "storage", "mw":1500, "lon": -4.935, "lat": 57.001, "offered_date": "2023-09-05", "accepted_date": "2025-06-10", "commissioned_date": "2031-06-01", "decommissioned_date": null },
+    { "id": "TEC-0021", "name": "Whitelee BESS Ext",       "tech": "bess",    "mw": 200, "lon": -4.273, "lat": 55.672, "offered_date": "2024-01-22", "accepted_date": "2025-08-15", "commissioned_date": "2027-01-30", "decommissioned_date": null },
+    { "id": "TEC-0022", "name": "East Anglia TWO",         "tech": "offshore","mw": 960, "lon":  2.005, "lat": 52.650, "offered_date": "2024-04-06", "accepted_date": "2026-02-18", "commissioned_date": "2029-11-08", "decommissioned_date": null },
+    { "id": "TEC-0023", "name": "Norfolk Boreas",          "tech": "offshore","mw":1400, "lon":  2.150, "lat": 53.150, "offered_date": "2024-06-19", "accepted_date": "2026-05-24", "commissioned_date": "2030-04-22", "decommissioned_date": null },
+    { "id": "TEC-0024", "name": "Oakham Solar",            "tech": "solar",   "mw": 320, "lon": -0.732, "lat": 52.670, "offered_date": "2024-09-11", "accepted_date": "2026-08-30", "commissioned_date": "2028-12-02", "decommissioned_date": null },
+    { "id": "TEC-0025", "name": "Fenland BESS",            "tech": "bess",    "mw": 300, "lon":  0.155, "lat": 52.585, "offered_date": "2025-02-14", "accepted_date": "2026-11-05", "commissioned_date": "2029-03-18", "decommissioned_date": null },
+    { "id": "TEC-0026", "name": "Wales Tidal Lagoon",      "tech": "tidal",   "mw": 320, "lon": -3.950, "lat": 51.570, "offered_date": "2025-05-20", "accepted_date": "2027-07-08", "commissioned_date": "2032-01-15", "decommissioned_date": null },
+    { "id": "TEC-0027", "name": "Keadby 3 CCGT+CCS",       "tech": "gas_ccs", "mw": 910, "lon": -0.755, "lat": 53.595, "offered_date": "2025-08-01", "accepted_date": "2027-04-12", "commissioned_date": "2030-06-28", "decommissioned_date": null },
+    { "id": "TEC-0028", "name": "HyNet H2 Plant",          "tech": "hydrogen","mw": 350, "lon": -2.700, "lat": 53.300, "offered_date": "2026-03-15", "accepted_date": "2028-02-05", "commissioned_date": "2031-10-20", "decommissioned_date": null },
+    { "id": "TEC-0029", "name": "Teesside H2 Hub",         "tech": "hydrogen","mw": 500, "lon": -1.156, "lat": 54.585, "offered_date": "2026-10-11", "accepted_date": "2028-09-22", "commissioned_date": "2032-05-14", "decommissioned_date": null },
+    { "id": "TEC-0030", "name": "SSW Offshore 2035",       "tech": "offshore","mw":2000, "lon":  1.250, "lat": 51.350, "offered_date": "2028-05-04", "accepted_date": "2030-11-30", "commissioned_date": "2034-12-01", "decommissioned_date": null }
+  ]
+}

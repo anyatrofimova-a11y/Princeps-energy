@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ memo.title }} — Princeps AI Site Memo</title>
+  <style>
+    /* =============================================================
+       Princeps AI Site Memo — 1-page A4 portrait investment memo.
+       Palette: gold #F5B731 / ink #0F1318 / DM Sans + JetBrains Mono.
+       ============================================================= */
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm 10mm 12mm;
+    }
+
+    :root {
+      --gold: #F5B731;
+      --gold-dark: #E8A012;
+      --gold-soft: #FEF4DA;
+      --ink: #0F1318;
+      --ink-mid: #3D434C;
+      --ink-soft: #6B727C;
+      --rule: #E5E7EB;
+      --go: #3B8A5A;
+      --caution: #E89A2A;
+      --nogo: #B84A4A;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      font-size: 9.5pt;
+      line-height: 1.35;
+      -webkit-font-smoothing: antialiased;
+    }
+    .mono {
+      font-family: "JetBrains Mono", "SF Mono", "Fira Code", monospace;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.01em;
+    }
+
+    /* --- Header bar --------------------------------------------------- */
+    .hdr {
+      display: flex; align-items: stretch;
+      margin-bottom: 6mm;
+      border-left: 4mm solid var(--gold);
+      padding: 3mm 4mm 3mm 4mm;
+      background: var(--gold-soft);
+      border-radius: 1mm;
+    }
+    .hdr-main { flex: 1; min-width: 0; }
+    .hdr-mark {
+      font-size: 7.5pt; letter-spacing: 0.16em; font-weight: 700;
+      text-transform: uppercase; color: var(--gold-dark);
+      margin-bottom: 1mm;
+    }
+    .hdr-title {
+      font-size: 15pt; font-weight: 700; color: var(--ink);
+      line-height: 1.15; margin: 0;
+    }
+    .hdr-one {
+      font-size: 9.5pt; color: var(--ink-mid); margin-top: 1.5mm;
+      max-width: 130mm;
+    }
+    .verdict {
+      align-self: center;
+      padding: 2mm 4mm;
+      border-radius: 3mm;
+      font-size: 10.5pt;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #fff;
+      min-width: 24mm; text-align: center;
+    }
+    .verdict.GO      { background: var(--go); }
+    .verdict.CAUTION { background: var(--caution); }
+    .verdict.NOGO    { background: var(--nogo); }
+
+    /* --- Three headline cards ---------------------------------------- */
+    .cards {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 3mm; margin-bottom: 5mm;
+    }
+    .card {
+      border: 1px solid var(--rule);
+      border-radius: 2mm;
+      padding: 3mm 3.5mm;
+      min-height: 26mm;
+    }
+    .card-kicker {
+      font-size: 7.5pt; letter-spacing: 0.12em;
+      color: var(--ink-soft); text-transform: uppercase;
+      font-weight: 600;
+    }
+    .card-title {
+      font-size: 10pt; font-weight: 700; color: var(--ink);
+      margin: 0.5mm 0 2mm 0;
+    }
+    .card-rows { display: flex; flex-direction: column; gap: 1mm; }
+    .card-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-size: 9pt;
+    }
+    .card-row .lbl { color: var(--ink-soft); }
+    .card-row .val { font-weight: 700; color: var(--ink); }
+
+    /* --- Strengths / Risks body -------------------------------------- */
+    .body2 {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 5mm;
+      margin-bottom: 5mm;
+    }
+    .col-title {
+      font-size: 9pt; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--ink);
+      padding-bottom: 1.5mm;
+      border-bottom: 1px solid var(--rule);
+      margin-bottom: 2.5mm;
+    }
+    .col-title.strengths::before { content: "+ "; color: var(--go); }
+    .col-title.risks::before { content: "! "; color: var(--nogo); }
+    .bullet-list { margin: 0; padding: 0; list-style: none; }
+    .bullet-list li {
+      position: relative;
+      padding-left: 4mm;
+      margin-bottom: 2mm;
+      font-size: 9pt;
+      color: var(--ink-mid);
+      line-height: 1.4;
+    }
+    .bullet-list.strengths li::before {
+      content: ""; position: absolute; left: 0; top: 2.4mm;
+      width: 2.2mm; height: 2.2mm; background: var(--go); border-radius: 0.5mm;
+    }
+    .bullet-list.risks li::before {
+      content: ""; position: absolute; left: 0; top: 2.4mm;
+      width: 2.2mm; height: 2.2mm; background: var(--nogo); border-radius: 0.5mm;
+    }
+
+    /* --- Timeline band ----------------------------------------------- */
+    .timeline {
+      margin-bottom: 4mm;
+      border: 1px solid var(--rule); border-radius: 2mm;
+      padding: 3mm 3.5mm;
+      background: #FAFAF8;
+    }
+    .timeline-title {
+      font-size: 8pt; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--gold-dark); font-weight: 700;
+      margin-bottom: 2mm;
+    }
+    .timeline-items {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3mm;
+    }
+    .tl-item {
+      border-left: 2px solid var(--gold);
+      padding-left: 3mm;
+    }
+    .tl-date {
+      font-size: 8.5pt; color: var(--ink); font-weight: 700;
+    }
+    .tl-action {
+      font-size: 8.5pt; color: var(--ink-mid); margin-top: 0.8mm;
+    }
+
+    /* --- Regulatory flags row ---------------------------------------- */
+    .flags {
+      margin-bottom: 4mm;
+      display: flex; flex-wrap: wrap; gap: 2mm;
+    }
+    .pill {
+      display: inline-flex; align-items: center;
+      padding: 1.2mm 2.5mm;
+      border-radius: 100px;
+      background: var(--gold-soft);
+      color: var(--ink);
+      border: 1px solid var(--gold);
+      font-size: 7.8pt;
+      font-weight: 600;
+    }
+
+    /* --- Footer ------------------------------------------------------- */
+    .foot {
+      border-top: 1px solid var(--rule);
+      padding-top: 2mm;
+      font-size: 7.5pt;
+      color: var(--ink-soft);
+      line-height: 1.35;
+    }
+    .foot-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 4mm;
+    }
+    .foot-ev {
+      flex: 1; min-width: 0;
+    }
+    .foot-ev-title {
+      font-weight: 700; color: var(--ink-mid); text-transform: uppercase;
+      letter-spacing: 0.1em; font-size: 7.2pt; margin-bottom: 1mm;
+    }
+    .foot-ev ul { margin: 0; padding: 0; list-style: none; }
+    .foot-ev li {
+      display: inline; font-size: 7.5pt;
+    }
+    .foot-ev li + li::before { content: " · "; color: var(--rule); }
+    .foot-doc-id {
+      color: var(--gold-dark);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 7pt;
+    }
+    .foot-mark {
+      flex-shrink: 0;
+      text-align: right;
+    }
+    .foot-mark b { color: var(--ink); letter-spacing: 0.12em; }
+    .foot-reliance {
+      margin-top: 2mm;
+      font-size: 6.8pt; color: var(--ink-soft);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+  {% set verdict_raw = (memo.investment_verdict or 'CAUTION') | upper %}
+  {% set verdict_class = 'NOGO' if verdict_raw == 'NO-GO' else verdict_raw %}
+
+  <!-- ============================ HEADER ============================ -->
+  <div class="hdr">
+    <div class="hdr-main">
+      <div class="hdr-mark">PRINCEPS · AI Site Memo</div>
+      <h1 class="hdr-title">{{ memo.title }}</h1>
+      <div class="hdr-one">{{ memo.one_liner }}</div>
+    </div>
+    <div class="verdict {{ verdict_class }}">{{ verdict_raw }}</div>
+  </div>
+
+  <!-- ========================== CARDS =============================== -->
+  <div class="cards">
+    <!-- Grid -->
+    <div class="card">
+      <div class="card-kicker">Grid</div>
+      <div class="card-title">{{ memo.grid_headline.poc or '—' }}</div>
+      <div class="card-rows">
+        <div class="card-row">
+          <span class="lbl">Firm capacity</span>
+          <span class="val mono">{{ memo.grid_headline.firm_mw | fnum(1) }} MW</span>
+        </div>
+        <div class="card-row">
+          <span class="lbl">Connection cost</span>
+          <span class="val mono">£{{ memo.grid_headline.estimated_cost_gbp_m | fnum(2) }}m</span>
+        </div>
+        <div class="card-row">
+          <span class="lbl">Timeline</span>
+          <span class="val mono">{{ memo.grid_headline.timeline_months | fint }} mo</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Planning -->
+    <div class="card">
+      <div class="card-kicker">Planning</div>
+      <div class="card-title">{{ memo.planning_headline.lpa or '—' }}</div>
+      <div class="card-rows">
+        <div class="card-row">
+          <span class="lbl">Approval prob.</span>
+          <span class="val mono">{{ memo.planning_headline.approval_pct | fint }}%</span>
+        </div>
+        <div class="card-row">
+          <span class="lbl">Precedents</span>
+          <span class="val mono">{{ memo.planning_headline.precedent_count | fint }}</span>
+        </div>
+        <div class="card-row">
+          <span class="lbl">Verdict</span>
+          <span class="val">{{ verdict_raw }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Financial -->
+    <div class="card">
+      <div class="card-kicker">Financial</div>
+      <div class="card-title">Base case DCF</div>
+      <div class="card-rows">
+        <div class="card-row">
+          <span class="lbl">NPV</span>
+          <span class="val mono">£{{ memo.financial_headline.npv_gbp_m | fnum(1) }}m</span>
+        </div>
+        <div class="card-row">
+          <span class="lbl">IRR</span>
+          <span class="val mono">{{ memo.financial_headline.irr_pct | fnum(1) }}%</span>
+        </div>
+        <div class="card-row">
+          <span class="lbl">DSCR</span>
+          <span class="val mono">{{ memo.financial_headline.dscr | fnum(2) }}x</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= STRENGTHS / RISKS ====================== -->
+  <div class="body2">
+    <div>
+      <div class="col-title strengths">Key Strengths</div>
+      <ul class="bullet-list strengths">
+        {% for s in memo.key_strengths %}
+        <li>{{ s }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div>
+      <div class="col-title risks">Critical Risks</div>
+      <ul class="bullet-list risks">
+        {% for r in memo.critical_risks %}
+        <li>{{ r }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <!-- =========================== TIMELINE =========================== -->
+  <div class="timeline">
+    <div class="timeline-title">Next Milestones</div>
+    <div class="timeline-items">
+      {% for m in memo.next_milestones[:3] %}
+      <div class="tl-item">
+        <div class="tl-date mono">{{ m.date | fdate }}</div>
+        <div class="tl-action">{{ m.action }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ========================= REGULATORY =========================== -->
+  {% if memo.regulatory_flags %}
+  <div class="flags">
+    {% for f in memo.regulatory_flags %}
+    <span class="pill">{{ f }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- =========================== FOOTER ============================= -->
+  <div class="foot">
+    <div class="foot-row">
+      <div class="foot-ev">
+        <div class="foot-ev-title">Source Evidence</div>
+        <ul>
+          {% for e in memo.source_evidence %}
+          <li>{{ e.label }} <span class="foot-doc-id">[{{ e.doc_id }}]</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+      <div class="foot-mark">
+        <b>PRINCEPS</b><br>
+        <span class="mono">{{ generated_at | fdate }}</span>
+      </div>
+    </div>
+    <div class="foot-reliance">
+      This memo synthesises live data and AI judgement as of generation time and is not advice.
+      Figures in italics are modelled outputs; confirm independently before investment decisions.
+    </div>
+  </div>
+
+</body>
+</html>
