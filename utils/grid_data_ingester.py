@@ -669,14 +669,20 @@ async def upsert_substations(conn, substations: list[dict]) -> int:
 
 
 async def upsert_ecr(conn, entries: list[dict]) -> int:
-    """Insert ECR entries into grid_ecr table."""
+    """Insert ECR entries into grid_ecr table.
+
+    NB: previously built a single SQL with conditionally-inlined geom and
+    jumped from $9 to $11/$12 (when geom present) or skipped $10-$12
+    entirely (when absent), leaving gaps in the positional sequence.
+    asyncpg requires sequential $1..$N with no gaps — every call raised
+    "bind message supplies N parameters, but prepared statement requires
+    up to parameter M". Fixed by branching into two statements, each with
+    a contiguous placeholder run.
+    """
     count = 0
     for entry in entries:
         lat, lon = entry.get("lat"), entry.get("lon")
-        geom_expr = (
-            "ST_Transform(ST_SetSRID(ST_MakePoint($11, $12), 4326), 27700)"
-            if lat and lon else "NULL"
-        )
+        has_geom = lat is not None and lon is not None
 
         # Link to substation if possible
         sub_link = None
@@ -686,25 +692,47 @@ async def upsert_ecr(conn, entries: list[dict]) -> int:
                 f"%{entry['substation_name']}%", entry["dno"],
             )
 
-        await conn.execute(f"""
-            INSERT INTO grid_ecr (
-                external_id, site_name, dno, technology, capacity_mw,
-                voltage_kv, substation_name, substation_id, status,
-                geom, raw_data, updated_at
-            ) VALUES (
-                $1, $2, $3, $4, $5,
-                $6, $7, $8, $9,
-                {geom_expr}, $13, NOW()
-            )
-            ON CONFLICT DO NOTHING
-        """,
+        raw_json = json.dumps(entry.get("raw_data", {}), default=str)
+        common_args = (
             entry.get("external_id"), entry.get("site_name"), entry["dno"],
             entry.get("technology"), entry.get("capacity_mw"),
             entry.get("voltage_kv"), entry.get("substation_name"), sub_link,
             entry.get("status"),
-            *([lon, lat] if lat and lon else []),
-            json.dumps(entry.get("raw_data", {}), default=str),
         )
+
+        if has_geom:
+            await conn.execute(
+                """
+                INSERT INTO grid_ecr (
+                    external_id, site_name, dno, technology, capacity_mw,
+                    voltage_kv, substation_name, substation_id, status,
+                    geom, raw_data, updated_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5,
+                    $6, $7, $8, $9,
+                    ST_Transform(ST_SetSRID(ST_MakePoint($10, $11), 4326), 27700),
+                    $12, NOW()
+                )
+                ON CONFLICT DO NOTHING
+                """,
+                *common_args, lon, lat, raw_json,
+            )
+        else:
+            await conn.execute(
+                """
+                INSERT INTO grid_ecr (
+                    external_id, site_name, dno, technology, capacity_mw,
+                    voltage_kv, substation_name, substation_id, status,
+                    geom, raw_data, updated_at
+                ) VALUES (
+                    $1, $2, $3, $4, $5,
+                    $6, $7, $8, $9,
+                    NULL, $10, NOW()
+                )
+                ON CONFLICT DO NOTHING
+                """,
+                *common_args, raw_json,
+            )
         count += 1
 
     return count
