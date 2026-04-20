@@ -134,12 +134,19 @@ async def _enqueue(redis_pool, name: str, payload: dict) -> None:
 
     The ``_agent`` key in the payload names the worker service; we route the
     job to that worker's queue. Other workers never see it.
+
+    NB: read `_agent` non-destructively. APScheduler holds the same payload
+    dict reference across all fires, so a `.pop()` here would only work on
+    the first fire and silently fall through to the default ("prospector")
+    on every subsequent fire — the bug that black-holed every queue except
+    arq:prospector between 2026-04-17 and 2026-04-20.
     """
-    agent = payload.pop("_agent", "prospector")
+    agent = payload.get("_agent", "prospector")
     queue = f"arq:{agent}"
+    out_payload = {k: v for k, v in payload.items() if k != "_agent"}
     try:
-        await redis_pool.enqueue_job("dispatch", payload, _queue_name=queue)
-        log.info("scheduler.enqueue name=%s queue=%s payload=%s", name, queue, payload)
+        await redis_pool.enqueue_job("dispatch", out_payload, _queue_name=queue)
+        log.info("scheduler.enqueue name=%s queue=%s payload=%s", name, queue, out_payload)
     except Exception:
         log.exception("scheduler.enqueue_failed name=%s", name)
 
