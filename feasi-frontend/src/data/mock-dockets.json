@@ -1,0 +1,977 @@
+{
+  "dockets": [
+    {
+      "id": "dck_en010130",
+      "docket_number": "EN010130",
+      "case_type": "NSIP_DCO",
+      "publisher": "PINS",
+      "title": "Sunnica Energy Farm",
+      "status": "open",
+      "stage": "Examination",
+      "industry": "energy",
+      "technology": "solar",
+      "capacity_mw": 500,
+      "region": "East of England",
+      "applicant": "Sunnica Ltd",
+      "site": "Cambridgeshire / West Suffolk",
+      "home_url": "https://infrastructure.planninginspectorate.gov.uk/projects/eastern/sunnica-energy-farm/",
+      "date_opened": "2022-11-21",
+      "days_in_examination": 180,
+      "n_stakeholders": 34,
+      "n_documents": 412,
+      "last_activity": "2026-04-15",
+      "pinned": false,
+      "watched": true,
+      "summary": "Sunnica Ltd's 500 MW solar + BESS NSIP is now in examination [1]. National Grid ESO conditions focus on connection queue position and reactive-power compliance [2]. East Cambridgeshire District Council has objected on heritage grounds, citing impact on Grade II listed assets [3]. Natural England requires mitigation for breeding stone-curlew [4]. Examining Authority has issued ExQ1 with responses due Q3 2026 [5].",
+      "citations": [
+        { "n": 1, "doc_id": "doc_001", "title": "Rule 6 letter — examination timetable", "date": "2025-09-12" },
+        { "n": 2, "doc_id": "doc_014", "title": "National Grid ESO Rep Rep", "date": "2026-01-22" },
+        { "n": 3, "doc_id": "doc_023", "title": "ECDC Local Impact Report", "date": "2025-12-08" },
+        { "n": 4, "doc_id": "doc_031", "title": "Natural England WR", "date": "2026-02-14" },
+        { "n": 5, "doc_id": "doc_055", "title": "ExQ1 — Examining Authority", "date": "2026-03-04" }
+      ],
+      "questions": [
+        {
+          "q": "Who supports/opposes, on what grounds?",
+          "bullets": [
+            "SUPPORT — National Grid ESO (connection secured) [2]; Solar Energy UK (decarbonisation benefits)",
+            "CONDITIONS — Natural England (stone-curlew mitigation) [4]; Environment Agency (flood resilience)",
+            "OPPOSE — East Cambridgeshire DC [3]; Say No To Sunnica campaign; West Suffolk Heritage Society"
+          ]
+        },
+        {
+          "q": "Financial and timeline risks?",
+          "bullets": [
+            "ExQ1 responses due Q3 2026 — compressed 8-week window [5]",
+            "Consent decision expected Mar 2027; 6-month JR window extends to Sep 2027",
+            "Connection offer dated Feb 2024 (milestone: energisation Q4 2028) — slippage risk"
+          ]
+        },
+        {
+          "q": "Planning/grid/environmental growth opportunities?",
+          "bullets": [
+            "10% Biodiversity Net Gain baseline sets precedent for adjacent schemes",
+            "Bury St Edmunds 400 kV node would accept up to 300 MW of co-located BESS",
+            "Burwell substation spare capacity visible on ECR within 5 km"
+          ]
+        }
+      ],
+      "next_deadline": { "label": "ExQ2 Deadline", "date": "2026-05-09", "days_left": 20 },
+      "stakeholders": [
+        { "id": "sh_001", "name": "Sunnica Ltd", "role": "applicant", "position": "for", "submission_count": 148, "logo_initials": "SL" },
+        { "id": "sh_002", "name": "National Grid ESO", "role": "dno_to", "position": "conditions", "submission_count": 6, "logo_initials": "NG" },
+        { "id": "sh_003", "name": "UK Power Networks", "role": "dno_to", "position": "conditions", "submission_count": 3, "logo_initials": "UK" },
+        { "id": "sh_004", "name": "East Cambridgeshire DC", "role": "lpa", "position": "against", "submission_count": 14, "logo_initials": "EC" },
+        { "id": "sh_005", "name": "West Suffolk Council", "role": "lpa", "position": "against", "submission_count": 11, "logo_initials": "WS" },
+        { "id": "sh_006", "name": "Natural England", "role": "statutory", "position": "conditions", "submission_count": 8, "logo_initials": "NE" },
+        { "id": "sh_007", "name": "Environment Agency", "role": "statutory", "position": "conditions", "submission_count": 5, "logo_initials": "EA" },
+        { "id": "sh_008", "name": "Historic England", "role": "statutory", "position": "against", "submission_count": 4, "logo_initials": "HE" },
+        { "id": "sh_009", "name": "Marine Management Org", "role": "statutory", "position": "silent", "submission_count": 0, "logo_initials": "MM" },
+        { "id": "sh_010", "name": "Cambridgeshire CC", "role": "lpa", "position": "conditions", "submission_count": 3, "logo_initials": "CC" },
+        { "id": "sh_011", "name": "Suffolk CC", "role": "lpa", "position": "conditions", "submission_count": 3, "logo_initials": "SC" },
+        { "id": "sh_012", "name": "Say No To Sunnica", "role": "objector", "position": "against", "submission_count": 42, "logo_initials": "SN" },
+        { "id": "sh_013", "name": "West Suffolk Heritage Soc", "role": "objector", "position": "against", "submission_count": 9, "logo_initials": "WH" },
+        { "id": "sh_014", "name": "Solar Energy UK", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "SE" },
+        { "id": "sh_015", "name": "RSPB", "role": "supporter", "position": "conditions", "submission_count": 3, "logo_initials": "RS" },
+        { "id": "sh_016", "name": "CPRE Cambs", "role": "objector", "position": "against", "submission_count": 5, "logo_initials": "CP" },
+        { "id": "sh_017", "name": "Rt Hon M Spencer MP", "role": "political", "position": "against", "submission_count": 4, "logo_initials": "MS" },
+        { "id": "sh_018", "name": "Lucy Frazer MP", "role": "political", "position": "against", "submission_count": 3, "logo_initials": "LF" },
+        { "id": "sh_019", "name": "Ofgem", "role": "regulator", "position": "neutral", "submission_count": 1, "logo_initials": "OF" },
+        { "id": "sh_020", "name": "NESO", "role": "regulator", "position": "conditions", "submission_count": 4, "logo_initials": "NS" },
+        { "id": "sh_021", "name": "Health & Safety Exec", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "HS" },
+        { "id": "sh_022", "name": "CAA", "role": "statutory", "position": "neutral", "submission_count": 1, "logo_initials": "CA" },
+        { "id": "sh_023", "name": "MoD DIO", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "MD" },
+        { "id": "sh_024", "name": "Network Rail", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "NR" },
+        { "id": "sh_025", "name": "Highways England", "role": "statutory", "position": "neutral", "submission_count": 1, "logo_initials": "HW" },
+        { "id": "sh_026", "name": "Freshwater Habitats Trust", "role": "supporter", "position": "conditions", "submission_count": 3, "logo_initials": "FH" },
+        { "id": "sh_027", "name": "Fens Biosphere", "role": "objector", "position": "against", "submission_count": 2, "logo_initials": "FB" },
+        { "id": "sh_028", "name": "NFU East", "role": "objector", "position": "against", "submission_count": 6, "logo_initials": "NF" },
+        { "id": "sh_029", "name": "CLA", "role": "objector", "position": "against", "submission_count": 4, "logo_initials": "CL" },
+        { "id": "sh_030", "name": "Mildenhall Parish Council", "role": "lpa", "position": "against", "submission_count": 8, "logo_initials": "MP" },
+        { "id": "sh_031", "name": "Worlington PC", "role": "lpa", "position": "against", "submission_count": 5, "logo_initials": "WP" },
+        { "id": "sh_032", "name": "Red Lodge PC", "role": "lpa", "position": "against", "submission_count": 4, "logo_initials": "RL" },
+        { "id": "sh_033", "name": "Friends of the Earth", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "FE" },
+        { "id": "sh_034", "name": "Greenpeace UK", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "GP" }
+      ],
+      "timeline": [
+        { "id": "ev_01", "date": "2022-11-21", "type": "past", "label": "Pre-application notification", "stage": "Pre-app" },
+        { "id": "ev_02", "date": "2023-05-15", "type": "past", "label": "Statutory consultation opened", "stage": "Pre-app" },
+        { "id": "ev_03", "date": "2023-11-28", "type": "past", "label": "DCO application submitted", "stage": "Acceptance" },
+        { "id": "ev_04", "date": "2023-12-22", "type": "past", "label": "Application accepted", "stage": "Acceptance" },
+        { "id": "ev_05", "date": "2024-03-14", "type": "past", "label": "Relevant Reps closed", "stage": "Pre-examination" },
+        { "id": "ev_06", "date": "2024-10-22", "type": "past", "label": "Examination opened", "stage": "Examination" },
+        { "id": "ev_07", "date": "2025-09-12", "type": "past", "label": "Rule 6 letter", "stage": "Examination" },
+        { "id": "ev_08", "date": "2026-01-22", "type": "past", "label": "NG ESO Written Rep", "stage": "Examination" },
+        { "id": "ev_09", "date": "2026-03-04", "type": "past", "label": "ExQ1 issued", "stage": "Examination" },
+        { "id": "ev_10", "date": "2026-05-09", "type": "upcoming", "label": "ExQ2 deadline", "stage": "Examination" },
+        { "id": "ev_11", "date": "2026-07-18", "type": "upcoming", "label": "Issue-specific hearings", "stage": "Examination" },
+        { "id": "ev_12", "date": "2026-10-22", "type": "upcoming", "label": "Examination closes", "stage": "Examination" },
+        { "id": "ev_13", "date": "2027-03-22", "type": "upcoming", "label": "SoS decision due", "stage": "Decision" }
+      ],
+      "documents": [
+        { "id": "doc_001", "stage": "Examination", "title": "Rule 6 letter — examination timetable", "date": "2025-09-12", "author": "Examining Authority", "pages": 14 },
+        { "id": "doc_002", "stage": "Pre-app", "title": "Scoping Opinion", "date": "2023-02-04", "author": "PINS", "pages": 22 },
+        { "id": "doc_003", "stage": "Pre-app", "title": "PEIR Vol 1", "date": "2023-05-12", "author": "Sunnica Ltd", "pages": 340 },
+        { "id": "doc_004", "stage": "Pre-app", "title": "PEIR Vol 2 — Heritage", "date": "2023-05-12", "author": "Sunnica Ltd", "pages": 280 },
+        { "id": "doc_005", "stage": "Acceptance", "title": "Application Form", "date": "2023-11-28", "author": "Sunnica Ltd", "pages": 52 },
+        { "id": "doc_006", "stage": "Acceptance", "title": "Draft DCO", "date": "2023-11-28", "author": "Sunnica Ltd", "pages": 180 },
+        { "id": "doc_007", "stage": "Acceptance", "title": "Environmental Statement Ch 1-6", "date": "2023-11-28", "author": "Sunnica Ltd", "pages": 820 },
+        { "id": "doc_008", "stage": "Acceptance", "title": "Acceptance decision", "date": "2023-12-22", "author": "PINS", "pages": 8 },
+        { "id": "doc_009", "stage": "Pre-examination", "title": "Relevant Representations register", "date": "2024-03-14", "author": "PINS", "pages": 142 },
+        { "id": "doc_010", "stage": "Examination", "title": "Preliminary Meeting note", "date": "2024-10-22", "author": "Examining Authority", "pages": 18 },
+        { "id": "doc_011", "stage": "Examination", "title": "Applicant Opening Statement", "date": "2024-11-05", "author": "Sunnica Ltd", "pages": 32 },
+        { "id": "doc_012", "stage": "Examination", "title": "Issues-Specific Hearing agenda", "date": "2025-02-18", "author": "Examining Authority", "pages": 6 },
+        { "id": "doc_013", "stage": "Examination", "title": "Applicant response to ISH1", "date": "2025-03-22", "author": "Sunnica Ltd", "pages": 96 },
+        { "id": "doc_014", "stage": "Examination", "title": "National Grid ESO Rep Rep", "date": "2026-01-22", "author": "National Grid ESO", "pages": 24 },
+        { "id": "doc_015", "stage": "Examination", "title": "UKPN Statement of Common Ground", "date": "2026-01-28", "author": "UK Power Networks", "pages": 12 },
+        { "id": "doc_023", "stage": "Examination", "title": "ECDC Local Impact Report", "date": "2025-12-08", "author": "East Cambridgeshire DC", "pages": 64 },
+        { "id": "doc_031", "stage": "Examination", "title": "Natural England WR", "date": "2026-02-14", "author": "Natural England", "pages": 18 },
+        { "id": "doc_055", "stage": "Examination", "title": "ExQ1 — Examining Authority", "date": "2026-03-04", "author": "Examining Authority", "pages": 42 }
+      ],
+      "exposure": {
+        "distance_km": 3.2,
+        "dno_area_overlap": "UKPN East",
+        "grid_queue_impact": "Burwell 400 kV +300 MW upstream of applicant",
+        "timeline_impact_days": 42,
+        "delta_irr_bps": -35,
+        "delta_npv_kgbp": -1240
+      }
+    },
+    {
+      "id": "dck_en010140",
+      "docket_number": "EN010140",
+      "case_type": "NSIP_DCO",
+      "publisher": "PINS",
+      "title": "Bramford 700 MW BESS",
+      "status": "open",
+      "stage": "Pre-examination",
+      "industry": "energy",
+      "technology": "bess",
+      "capacity_mw": 700,
+      "region": "East of England",
+      "applicant": "Statera Energy",
+      "site": "Bramford, Suffolk",
+      "home_url": "https://infrastructure.planninginspectorate.gov.uk/projects/eastern/bramford-bess/",
+      "date_opened": "2025-08-19",
+      "days_in_examination": 0,
+      "n_stakeholders": 18,
+      "n_documents": 84,
+      "last_activity": "2026-04-11",
+      "pinned": true,
+      "watched": true,
+      "summary": "Statera Energy's 700 MW / 2800 MWh BESS at Bramford is at Pre-examination [1]. Connection to Bramford 400 kV substation is secured via NGET connection offer [2]. Suffolk CC has issued a neutral LIR pending environmental clarifications [3]. HSE has requested additional DSEAR and P28/P29 compliance detail [4].",
+      "citations": [
+        { "n": 1, "doc_id": "doc_101", "title": "Acceptance decision", "date": "2026-02-12" },
+        { "n": 2, "doc_id": "doc_103", "title": "NGET connection agreement summary", "date": "2024-11-04" },
+        { "n": 3, "doc_id": "doc_108", "title": "Suffolk CC LIR", "date": "2026-03-29" },
+        { "n": 4, "doc_id": "doc_112", "title": "HSE Rep Rep", "date": "2026-04-02" }
+      ],
+      "questions": [
+        {
+          "q": "Who supports/opposes, on what grounds?",
+          "bullets": [
+            "SUPPORT — NGET (connection in place) [2]; National Grid ESO",
+            "CONDITIONS — HSE (DSEAR / thermal runaway) [4]; Environment Agency (bund capacity)",
+            "OPPOSE — Bramford Action Group; Local residents (noise + fire safety)"
+          ]
+        },
+        {
+          "q": "Financial and timeline risks?",
+          "bullets": [
+            "Examination opens Q3 2026 — 6-month window",
+            "HSE conditions may require battery-room redesign (capex +5-8%)",
+            "Cap Market T-4 2027 bid cut-off is Sep 2026 — tight"
+          ]
+        },
+        {
+          "q": "Planning/grid/environmental growth opportunities?",
+          "bullets": [
+            "Bramford 400 kV has residual headroom for further BESS co-location",
+            "Pairing with upstream solar NSIPs unlocks system-value premium",
+            "P28/P29 compliance template transferable to Dinorwig / Drax adjacents"
+          ]
+        }
+      ],
+      "next_deadline": { "label": "Relevant Reps deadline", "date": "2026-04-25", "days_left": 6 },
+      "stakeholders": [
+        { "id": "sh_101", "name": "Statera Energy", "role": "applicant", "position": "for", "submission_count": 38, "logo_initials": "ST" },
+        { "id": "sh_102", "name": "NGET", "role": "dno_to", "position": "for", "submission_count": 4, "logo_initials": "NG" },
+        { "id": "sh_103", "name": "National Grid ESO", "role": "dno_to", "position": "for", "submission_count": 3, "logo_initials": "NE" },
+        { "id": "sh_104", "name": "UK Power Networks", "role": "dno_to", "position": "neutral", "submission_count": 1, "logo_initials": "UK" },
+        { "id": "sh_105", "name": "Suffolk CC", "role": "lpa", "position": "conditions", "submission_count": 5, "logo_initials": "SC" },
+        { "id": "sh_106", "name": "Mid Suffolk DC", "role": "lpa", "position": "conditions", "submission_count": 4, "logo_initials": "MS" },
+        { "id": "sh_107", "name": "HSE", "role": "statutory", "position": "conditions", "submission_count": 6, "logo_initials": "HS" },
+        { "id": "sh_108", "name": "Environment Agency", "role": "statutory", "position": "conditions", "submission_count": 4, "logo_initials": "EA" },
+        { "id": "sh_109", "name": "Natural England", "role": "statutory", "position": "conditions", "submission_count": 3, "logo_initials": "NE" },
+        { "id": "sh_110", "name": "Bramford Action Group", "role": "objector", "position": "against", "submission_count": 28, "logo_initials": "BA" },
+        { "id": "sh_111", "name": "Bramford Parish Council", "role": "lpa", "position": "against", "submission_count": 7, "logo_initials": "BP" },
+        { "id": "sh_112", "name": "Jo Churchill MP", "role": "political", "position": "conditions", "submission_count": 2, "logo_initials": "JC" },
+        { "id": "sh_113", "name": "RSPB", "role": "supporter", "position": "neutral", "submission_count": 1, "logo_initials": "RS" },
+        { "id": "sh_114", "name": "Solar Energy UK", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "SE" },
+        { "id": "sh_115", "name": "REA", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "RE" },
+        { "id": "sh_116", "name": "Network Rail", "role": "statutory", "position": "neutral", "submission_count": 1, "logo_initials": "NR" },
+        { "id": "sh_117", "name": "Anglian Water", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "AW" },
+        { "id": "sh_118", "name": "Suffolk Fire & Rescue", "role": "statutory", "position": "conditions", "submission_count": 3, "logo_initials": "SF" }
+      ],
+      "timeline": [
+        { "id": "ev_101", "date": "2025-02-14", "type": "past", "label": "Pre-application notification", "stage": "Pre-app" },
+        { "id": "ev_102", "date": "2025-06-22", "type": "past", "label": "Statutory consultation", "stage": "Pre-app" },
+        { "id": "ev_103", "date": "2025-12-18", "type": "past", "label": "DCO application submitted", "stage": "Acceptance" },
+        { "id": "ev_104", "date": "2026-02-12", "type": "past", "label": "Application accepted", "stage": "Acceptance" },
+        { "id": "ev_105", "date": "2026-03-29", "type": "past", "label": "Suffolk CC LIR", "stage": "Pre-examination" },
+        { "id": "ev_106", "date": "2026-04-25", "type": "upcoming", "label": "Relevant Reps deadline", "stage": "Pre-examination" },
+        { "id": "ev_107", "date": "2026-06-18", "type": "upcoming", "label": "Preliminary meeting", "stage": "Pre-examination" },
+        { "id": "ev_108", "date": "2026-08-14", "type": "upcoming", "label": "Examination opens", "stage": "Examination" }
+      ],
+      "documents": [
+        { "id": "doc_101", "stage": "Acceptance", "title": "Acceptance decision", "date": "2026-02-12", "author": "PINS", "pages": 8 },
+        { "id": "doc_102", "stage": "Acceptance", "title": "Draft DCO", "date": "2025-12-18", "author": "Statera Energy", "pages": 156 },
+        { "id": "doc_103", "stage": "Acceptance", "title": "NGET connection agreement summary", "date": "2024-11-04", "author": "NGET", "pages": 14 },
+        { "id": "doc_104", "stage": "Pre-app", "title": "PEIR", "date": "2025-05-12", "author": "Statera Energy", "pages": 420 },
+        { "id": "doc_105", "stage": "Pre-app", "title": "Consultation Report", "date": "2025-12-18", "author": "Statera Energy", "pages": 240 },
+        { "id": "doc_106", "stage": "Acceptance", "title": "Environmental Statement", "date": "2025-12-18", "author": "Statera Energy", "pages": 780 },
+        { "id": "doc_107", "stage": "Acceptance", "title": "DSEAR hazard assessment", "date": "2025-12-18", "author": "Statera Energy", "pages": 96 },
+        { "id": "doc_108", "stage": "Pre-examination", "title": "Suffolk CC LIR", "date": "2026-03-29", "author": "Suffolk CC", "pages": 42 },
+        { "id": "doc_112", "stage": "Pre-examination", "title": "HSE Rep Rep", "date": "2026-04-02", "author": "HSE", "pages": 18 }
+      ],
+      "exposure": {
+        "distance_km": 8.4,
+        "dno_area_overlap": "UKPN East / NGET",
+        "grid_queue_impact": "Bramford 400 kV — applicant holds upstream position",
+        "timeline_impact_days": 90,
+        "delta_irr_bps": -80,
+        "delta_npv_kgbp": -3100
+      }
+    },
+    {
+      "id": "dck_en020027",
+      "docket_number": "EN020027",
+      "case_type": "NSIP_DCO",
+      "publisher": "PINS",
+      "title": "Norwich to Tilbury 400 kV reinforcement",
+      "status": "open",
+      "stage": "Pre-application",
+      "industry": "transmission",
+      "technology": "transmission",
+      "capacity_mw": 3600,
+      "region": "East of England",
+      "applicant": "National Grid Electricity Transmission",
+      "site": "Norfolk / Suffolk / Essex",
+      "home_url": "https://infrastructure.planninginspectorate.gov.uk/projects/eastern/norwich-to-tilbury/",
+      "date_opened": "2024-06-01",
+      "days_in_examination": 0,
+      "n_stakeholders": 26,
+      "n_documents": 62,
+      "last_activity": "2026-04-09",
+      "pinned": false,
+      "watched": false,
+      "summary": "NGET's Norwich-to-Tilbury (part of Great Grid Upgrade) is in second statutory consultation [1]. Route refinements follow ESO NOA 2024 [2]. High political opposition along pylon corridor [3]. DC and offshore wind projects along East Anglian coast rely on delivery for export capacity [4].",
+      "citations": [
+        { "n": 1, "doc_id": "doc_201", "title": "Statutory Consultation 2 document", "date": "2026-02-20" },
+        { "n": 2, "doc_id": "doc_202", "title": "NOA 2024 findings", "date": "2024-10-15" },
+        { "n": 3, "doc_id": "doc_203", "title": "Essex CC response", "date": "2026-03-14" },
+        { "n": 4, "doc_id": "doc_204", "title": "East Anglia offshore cluster letter", "date": "2026-01-30" }
+      ],
+      "questions": [
+        {
+          "q": "Who supports/opposes, on what grounds?",
+          "bullets": [
+            "SUPPORT — NESO [2]; East Anglia offshore cluster [4]; Data centre developers",
+            "CONDITIONS — Natural England; EA",
+            "OPPOSE — Essex CC [3]; Suffolk CC; Pylons-Off campaign; DEFRA farming lobby"
+          ]
+        },
+        {
+          "q": "Financial and timeline risks?",
+          "bullets": [
+            "2030 delivery target at risk if JR post-consent",
+            "Undergrounding cost uplift +£1.2bn if conceded — downstream CM/GCA effects",
+            "Application submission slipped Q1 2027 → Q3 2027"
+          ]
+        },
+        {
+          "q": "Planning/grid/environmental growth opportunities?",
+          "bullets": [
+            "3.6 GW of new export capacity unlocks BESS co-siting along route",
+            "Bramford and Tilbury nodes become first-tier connection targets",
+            "Dogger Bank / EA1N windfarm export dependency reinforces political durability"
+          ]
+        }
+      ],
+      "next_deadline": { "label": "Stat Consult 2 closes", "date": "2026-04-22", "days_left": 3 },
+      "stakeholders": [
+        { "id": "sh_201", "name": "NGET", "role": "applicant", "position": "for", "submission_count": 22, "logo_initials": "NG" },
+        { "id": "sh_202", "name": "NESO", "role": "regulator", "position": "for", "submission_count": 4, "logo_initials": "NS" },
+        { "id": "sh_203", "name": "Ofgem", "role": "regulator", "position": "conditions", "submission_count": 2, "logo_initials": "OF" },
+        { "id": "sh_204", "name": "UK Power Networks", "role": "dno_to", "position": "for", "submission_count": 1, "logo_initials": "UK" },
+        { "id": "sh_205", "name": "Essex CC", "role": "lpa", "position": "against", "submission_count": 9, "logo_initials": "EC" },
+        { "id": "sh_206", "name": "Suffolk CC", "role": "lpa", "position": "against", "submission_count": 7, "logo_initials": "SC" },
+        { "id": "sh_207", "name": "Norfolk CC", "role": "lpa", "position": "conditions", "submission_count": 5, "logo_initials": "NC" },
+        { "id": "sh_208", "name": "Dedham Vale AONB", "role": "statutory", "position": "against", "submission_count": 4, "logo_initials": "DV" },
+        { "id": "sh_209", "name": "Natural England", "role": "statutory", "position": "conditions", "submission_count": 3, "logo_initials": "NE" },
+        { "id": "sh_210", "name": "Historic England", "role": "statutory", "position": "conditions", "submission_count": 3, "logo_initials": "HE" },
+        { "id": "sh_211", "name": "Environment Agency", "role": "statutory", "position": "conditions", "submission_count": 4, "logo_initials": "EA" },
+        { "id": "sh_212", "name": "Pylons-Off East Anglia", "role": "objector", "position": "against", "submission_count": 38, "logo_initials": "PO" },
+        { "id": "sh_213", "name": "CPRE East", "role": "objector", "position": "against", "submission_count": 8, "logo_initials": "CP" },
+        { "id": "sh_214", "name": "NFU", "role": "objector", "position": "against", "submission_count": 6, "logo_initials": "NF" },
+        { "id": "sh_215", "name": "East Anglia Wind Cluster", "role": "supporter", "position": "for", "submission_count": 3, "logo_initials": "EA" },
+        { "id": "sh_216", "name": "Orsted", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "OR" },
+        { "id": "sh_217", "name": "SSE Renewables", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "SS" },
+        { "id": "sh_218", "name": "Tilbury DC Consortium", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "TD" },
+        { "id": "sh_219", "name": "Priti Patel MP", "role": "political", "position": "against", "submission_count": 4, "logo_initials": "PP" },
+        { "id": "sh_220", "name": "James Cartlidge MP", "role": "political", "position": "against", "submission_count": 3, "logo_initials": "JC" },
+        { "id": "sh_221", "name": "Network Rail", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "NR" },
+        { "id": "sh_222", "name": "CAA", "role": "statutory", "position": "neutral", "submission_count": 1, "logo_initials": "CA" },
+        { "id": "sh_223", "name": "MoD DIO", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "MD" },
+        { "id": "sh_224", "name": "Thames Water", "role": "statutory", "position": "conditions", "submission_count": 1, "logo_initials": "TW" },
+        { "id": "sh_225", "name": "Anglian Water", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "AW" },
+        { "id": "sh_226", "name": "Forestry England", "role": "statutory", "position": "conditions", "submission_count": 1, "logo_initials": "FE" }
+      ],
+      "timeline": [
+        { "id": "ev_201", "date": "2024-04-01", "type": "past", "label": "Project initiation", "stage": "Pre-app" },
+        { "id": "ev_202", "date": "2024-10-15", "type": "past", "label": "NOA 2024 findings", "stage": "Pre-app" },
+        { "id": "ev_203", "date": "2025-06-10", "type": "past", "label": "Statutory Consultation 1", "stage": "Pre-app" },
+        { "id": "ev_204", "date": "2026-02-20", "type": "past", "label": "Statutory Consultation 2 launched", "stage": "Pre-app" },
+        { "id": "ev_205", "date": "2026-04-22", "type": "upcoming", "label": "Stat Consult 2 closes", "stage": "Pre-app" },
+        { "id": "ev_206", "date": "2026-11-15", "type": "upcoming", "label": "Pre-app final consultation", "stage": "Pre-app" },
+        { "id": "ev_207", "date": "2027-09-30", "type": "upcoming", "label": "DCO application target", "stage": "Acceptance" }
+      ],
+      "documents": [
+        { "id": "doc_201", "stage": "Pre-app", "title": "Statutory Consultation 2 document", "date": "2026-02-20", "author": "NGET", "pages": 280 },
+        { "id": "doc_202", "stage": "Pre-app", "title": "NOA 2024 findings", "date": "2024-10-15", "author": "NESO", "pages": 140 },
+        { "id": "doc_203", "stage": "Pre-app", "title": "Essex CC response", "date": "2026-03-14", "author": "Essex CC", "pages": 34 },
+        { "id": "doc_204", "stage": "Pre-app", "title": "East Anglia offshore cluster letter", "date": "2026-01-30", "author": "Offshore Wind Cluster", "pages": 6 },
+        { "id": "doc_205", "stage": "Pre-app", "title": "Habitats Regulations Assessment", "date": "2026-02-20", "author": "NGET", "pages": 220 },
+        { "id": "doc_206", "stage": "Pre-app", "title": "Route options appraisal", "date": "2025-11-04", "author": "NGET", "pages": 180 }
+      ],
+      "exposure": {
+        "distance_km": 28.1,
+        "dno_area_overlap": "UKPN East / NGET",
+        "grid_queue_impact": "Unlocks 3.6 GW export — applicant benefits downstream",
+        "timeline_impact_days": -60,
+        "delta_irr_bps": 45,
+        "delta_npv_kgbp": 2800
+      }
+    },
+    {
+      "id": "dck_lpa_bess_01",
+      "docket_number": "DC/2026/0421/MAJ",
+      "case_type": "LPA_PLANNING",
+      "publisher": "Cambridgeshire CC",
+      "title": "Linton 49.9 MW BESS",
+      "status": "open",
+      "stage": "Determination",
+      "industry": "energy",
+      "technology": "bess",
+      "capacity_mw": 49.9,
+      "region": "East of England",
+      "applicant": "Fidra Energy",
+      "site": "Linton, Cambridgeshire",
+      "home_url": "https://www.cambridgeshire.gov.uk/planning/DC-2026-0421",
+      "date_opened": "2026-01-14",
+      "days_in_examination": 0,
+      "n_stakeholders": 12,
+      "n_documents": 28,
+      "last_activity": "2026-04-17",
+      "pinned": false,
+      "watched": false,
+      "summary": "49.9 MW BESS at Linton — sized just below the 50 MW NSIP threshold [1]. UKPN connection offer secured at Sawston Grid (33 kV) [2]. HSE consultation under Section 38 with conditions around thermal runaway [3]. Parish objection on noise and emergency access [4].",
+      "citations": [
+        { "n": 1, "doc_id": "doc_301", "title": "Planning Statement", "date": "2026-01-14" },
+        { "n": 2, "doc_id": "doc_302", "title": "UKPN connection offer summary", "date": "2025-11-22" },
+        { "n": 3, "doc_id": "doc_303", "title": "HSE consultation response", "date": "2026-03-08" },
+        { "n": 4, "doc_id": "doc_304", "title": "Linton Parish Council objection", "date": "2026-02-11" }
+      ],
+      "questions": [
+        {
+          "q": "Who supports/opposes, on what grounds?",
+          "bullets": [
+            "SUPPORT — UKPN (connection live) [2]",
+            "CONDITIONS — HSE (DSEAR) [3]; EA (SuDS)",
+            "OPPOSE — Linton Parish Council [4]; local residents"
+          ]
+        },
+        {
+          "q": "Financial and timeline risks?",
+          "bullets": [
+            "Committee date 22 May 2026 — 3-week hearing window",
+            "If called in: +12 month delay",
+            "Connection offer milestone triggers Sep 2026"
+          ]
+        },
+        {
+          "q": "Planning/grid/environmental growth opportunities?",
+          "bullets": [
+            "Sawston Grid 33 kV has additional BESS capacity visible on ECR",
+            "49.9 MW sizing template — replicable across CCG cluster",
+            "BNG 10% template being pre-agreed with Cambridgeshire CC"
+          ]
+        }
+      ],
+      "next_deadline": { "label": "Planning Committee", "date": "2026-05-22", "days_left": 33 },
+      "stakeholders": [
+        { "id": "sh_301", "name": "Fidra Energy", "role": "applicant", "position": "for", "submission_count": 12, "logo_initials": "FE" },
+        { "id": "sh_302", "name": "UK Power Networks", "role": "dno_to", "position": "for", "submission_count": 2, "logo_initials": "UK" },
+        { "id": "sh_303", "name": "Cambridgeshire CC", "role": "lpa", "position": "conditions", "submission_count": 4, "logo_initials": "CC" },
+        { "id": "sh_304", "name": "South Cambs DC", "role": "lpa", "position": "conditions", "submission_count": 3, "logo_initials": "SC" },
+        { "id": "sh_305", "name": "HSE", "role": "statutory", "position": "conditions", "submission_count": 3, "logo_initials": "HS" },
+        { "id": "sh_306", "name": "Environment Agency", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "EA" },
+        { "id": "sh_307", "name": "Natural England", "role": "statutory", "position": "conditions", "submission_count": 1, "logo_initials": "NE" },
+        { "id": "sh_308", "name": "Linton Parish Council", "role": "lpa", "position": "against", "submission_count": 6, "logo_initials": "LP" },
+        { "id": "sh_309", "name": "Cambs Fire & Rescue", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "CF" },
+        { "id": "sh_310", "name": "Historic England", "role": "statutory", "position": "neutral", "submission_count": 1, "logo_initials": "HE" },
+        { "id": "sh_311", "name": "REA", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "RE" },
+        { "id": "sh_312", "name": "Lucy Frazer MP", "role": "political", "position": "neutral", "submission_count": 1, "logo_initials": "LF" }
+      ],
+      "timeline": [
+        { "id": "ev_301", "date": "2025-11-22", "type": "past", "label": "Connection offer", "stage": "Pre-app" },
+        { "id": "ev_302", "date": "2026-01-14", "type": "past", "label": "Application submitted", "stage": "Acceptance" },
+        { "id": "ev_303", "date": "2026-02-11", "type": "past", "label": "Parish objection", "stage": "Determination" },
+        { "id": "ev_304", "date": "2026-03-08", "type": "past", "label": "HSE response", "stage": "Determination" },
+        { "id": "ev_305", "date": "2026-04-17", "type": "past", "label": "S106 heads of terms circulated", "stage": "Determination" },
+        { "id": "ev_306", "date": "2026-05-22", "type": "upcoming", "label": "Planning Committee", "stage": "Determination" },
+        { "id": "ev_307", "date": "2026-06-19", "type": "upcoming", "label": "Decision notice", "stage": "Decision" }
+      ],
+      "documents": [
+        { "id": "doc_301", "stage": "Acceptance", "title": "Planning Statement", "date": "2026-01-14", "author": "Fidra Energy", "pages": 62 },
+        { "id": "doc_302", "stage": "Acceptance", "title": "UKPN connection offer summary", "date": "2025-11-22", "author": "UKPN", "pages": 8 },
+        { "id": "doc_303", "stage": "Determination", "title": "HSE consultation response", "date": "2026-03-08", "author": "HSE", "pages": 14 },
+        { "id": "doc_304", "stage": "Determination", "title": "Linton Parish Council objection", "date": "2026-02-11", "author": "Linton PC", "pages": 6 }
+      ],
+      "exposure": {
+        "distance_km": 1.1,
+        "dno_area_overlap": "UKPN East",
+        "grid_queue_impact": "Sawston Grid — residual headroom post-consent",
+        "timeline_impact_days": 14,
+        "delta_irr_bps": -10,
+        "delta_npv_kgbp": -180
+      }
+    },
+    {
+      "id": "dck_lpa_solar_01",
+      "docket_number": "DC/2026/0512/MAJ",
+      "case_type": "LPA_PLANNING",
+      "publisher": "North Yorkshire C",
+      "title": "Thirsk 48 MW Solar Farm",
+      "status": "open",
+      "stage": "Determination",
+      "industry": "energy",
+      "technology": "solar",
+      "capacity_mw": 48,
+      "region": "Yorkshire & The Humber",
+      "applicant": "Low Carbon",
+      "site": "Thirsk, North Yorkshire",
+      "home_url": "https://www.northyorks.gov.uk/planning/DC-2026-0512",
+      "date_opened": "2026-02-03",
+      "days_in_examination": 0,
+      "n_stakeholders": 10,
+      "n_documents": 22,
+      "last_activity": "2026-04-10",
+      "pinned": false,
+      "watched": false,
+      "summary": "48 MW solar farm at Thirsk [1]. NPg connection offer at Thirsk Grid (33 kV) [2]. CPRE and agricultural land objections [3]. Natural England conditional on BNG + hedgerow protection [4].",
+      "citations": [
+        { "n": 1, "doc_id": "doc_401", "title": "Planning Statement", "date": "2026-02-03" },
+        { "n": 2, "doc_id": "doc_402", "title": "NPg connection offer", "date": "2025-10-14" },
+        { "n": 3, "doc_id": "doc_403", "title": "CPRE North Yorks objection", "date": "2026-03-05" },
+        { "n": 4, "doc_id": "doc_404", "title": "Natural England response", "date": "2026-03-18" }
+      ],
+      "questions": [
+        {
+          "q": "Who supports/opposes, on what grounds?",
+          "bullets": [
+            "SUPPORT — Northern Powergrid [2]",
+            "CONDITIONS — Natural England (BNG) [4]; EA",
+            "OPPOSE — CPRE [3]; NFU; Sowerby PC"
+          ]
+        },
+        {
+          "q": "Financial and timeline risks?",
+          "bullets": [
+            "BMV land classification (Grade 3a) — risk of refusal",
+            "Committee 28 May 2026",
+            "AR7 allocation window closes Jun 2026"
+          ]
+        },
+        {
+          "q": "Planning/grid/environmental growth opportunities?",
+          "bullets": [
+            "Thirsk Grid has headroom for co-located BESS",
+            "Adjacent 22 MW portfolio makes cluster-grade DNO negotiation",
+            "BNG uplift to 20% under voluntary scheme — ESG premium"
+          ]
+        }
+      ],
+      "next_deadline": { "label": "Planning Committee", "date": "2026-05-28", "days_left": 39 },
+      "stakeholders": [
+        { "id": "sh_401", "name": "Low Carbon", "role": "applicant", "position": "for", "submission_count": 9, "logo_initials": "LC" },
+        { "id": "sh_402", "name": "Northern Powergrid", "role": "dno_to", "position": "for", "submission_count": 2, "logo_initials": "NP" },
+        { "id": "sh_403", "name": "North Yorkshire C", "role": "lpa", "position": "conditions", "submission_count": 3, "logo_initials": "NY" },
+        { "id": "sh_404", "name": "Sowerby Parish Council", "role": "lpa", "position": "against", "submission_count": 4, "logo_initials": "SP" },
+        { "id": "sh_405", "name": "Natural England", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "NE" },
+        { "id": "sh_406", "name": "Environment Agency", "role": "statutory", "position": "conditions", "submission_count": 2, "logo_initials": "EA" },
+        { "id": "sh_407", "name": "CPRE North Yorks", "role": "objector", "position": "against", "submission_count": 5, "logo_initials": "CP" },
+        { "id": "sh_408", "name": "NFU Yorkshire", "role": "objector", "position": "against", "submission_count": 3, "logo_initials": "NF" },
+        { "id": "sh_409", "name": "Historic England", "role": "statutory", "position": "neutral", "submission_count": 1, "logo_initials": "HE" },
+        { "id": "sh_410", "name": "Kevin Hollinrake MP", "role": "political", "position": "neutral", "submission_count": 1, "logo_initials": "KH" }
+      ],
+      "timeline": [
+        { "id": "ev_401", "date": "2025-10-14", "type": "past", "label": "NPg connection offer", "stage": "Pre-app" },
+        { "id": "ev_402", "date": "2026-02-03", "type": "past", "label": "Application submitted", "stage": "Acceptance" },
+        { "id": "ev_403", "date": "2026-03-05", "type": "past", "label": "CPRE objection", "stage": "Determination" },
+        { "id": "ev_404", "date": "2026-03-18", "type": "past", "label": "NE response", "stage": "Determination" },
+        { "id": "ev_405", "date": "2026-05-28", "type": "upcoming", "label": "Planning Committee", "stage": "Determination" },
+        { "id": "ev_406", "date": "2026-06-25", "type": "upcoming", "label": "Decision notice", "stage": "Decision" }
+      ],
+      "documents": [
+        { "id": "doc_401", "stage": "Acceptance", "title": "Planning Statement", "date": "2026-02-03", "author": "Low Carbon", "pages": 58 },
+        { "id": "doc_402", "stage": "Acceptance", "title": "NPg connection offer", "date": "2025-10-14", "author": "Northern Powergrid", "pages": 12 },
+        { "id": "doc_403", "stage": "Determination", "title": "CPRE North Yorks objection", "date": "2026-03-05", "author": "CPRE", "pages": 8 },
+        { "id": "doc_404", "stage": "Determination", "title": "Natural England response", "date": "2026-03-18", "author": "Natural England", "pages": 14 }
+      ],
+      "exposure": {
+        "distance_km": 42.6,
+        "dno_area_overlap": "Northern Powergrid",
+        "grid_queue_impact": "Thirsk Grid — minimal",
+        "timeline_impact_days": 5,
+        "delta_irr_bps": -3,
+        "delta_npv_kgbp": -40
+      }
+    },
+    {
+      "id": "dck_cmp0428",
+      "docket_number": "CMP0428",
+      "case_type": "OFGEM_CODE_MOD",
+      "publisher": "Ofgem",
+      "title": "CMP428 — Queue Management Reform",
+      "status": "open",
+      "stage": "Consultation",
+      "industry": "energy",
+      "technology": "grid",
+      "capacity_mw": null,
+      "region": "GB",
+      "applicant": "NESO (proposer)",
+      "site": "GB-wide",
+      "home_url": "https://www.neso.energy/industry-information/codes/cusc/modifications/cmp428",
+      "date_opened": "2025-06-10",
+      "days_in_examination": 0,
+      "n_stakeholders": 22,
+      "n_documents": 36,
+      "last_activity": "2026-04-14",
+      "pinned": false,
+      "watched": true,
+      "summary": "CMP428 — CUSC modification reforming queue management and TMO4+ methodology [1]. NESO has proposed Gate 2 criteria tied to land rights and planning submission [2]. Energy UK and REA are split on criteria thresholds [3]. Ofgem consultation closes 2026-05-15 [4].",
+      "citations": [
+        { "n": 1, "doc_id": "doc_501", "title": "CMP428 Workgroup Consultation", "date": "2026-01-20" },
+        { "n": 2, "doc_id": "doc_502", "title": "Gate 2 criteria draft", "date": "2026-02-04" },
+        { "n": 3, "doc_id": "doc_503", "title": "Energy UK response", "date": "2026-03-22" },
+        { "n": 4, "doc_id": "doc_504", "title": "Ofgem consultation notice", "date": "2026-03-30" }
+      ],
+      "questions": [
+        {
+          "q": "Who supports/opposes, on what grounds?",
+          "bullets": [
+            "SUPPORT — NESO [1]; Octopus Energy; Centrica",
+            "CONDITIONS — Energy UK [3]; SSE; Ørsted",
+            "OPPOSE — REA (SME burden); Independent developers"
+          ]
+        },
+        {
+          "q": "Financial and timeline risks?",
+          "bullets": [
+            "Gate 2 bar raises land/planning evidence threshold Jan 2026",
+            "Speculative projects at risk of queue expulsion — secondary market effect",
+            "Decision implementation Q4 2026"
+          ]
+        },
+        {
+          "q": "Planning/grid/environmental growth opportunities?",
+          "bullets": [
+            "Shovel-ready portfolios gain queue position",
+            "M&A opportunity around orphan queue-entrants",
+            "Connection dates move forward by 12-36 months for top-quartile projects"
+          ]
+        }
+      ],
+      "next_deadline": { "label": "Ofgem consultation closes", "date": "2026-05-15", "days_left": 26 },
+      "stakeholders": [
+        { "id": "sh_501", "name": "NESO", "role": "applicant", "position": "for", "submission_count": 18, "logo_initials": "NS" },
+        { "id": "sh_502", "name": "Ofgem", "role": "regulator", "position": "neutral", "submission_count": 4, "logo_initials": "OF" },
+        { "id": "sh_503", "name": "NGET", "role": "dno_to", "position": "for", "submission_count": 3, "logo_initials": "NG" },
+        { "id": "sh_504", "name": "SPEN", "role": "dno_to", "position": "for", "submission_count": 2, "logo_initials": "SP" },
+        { "id": "sh_505", "name": "SSEN Transmission", "role": "dno_to", "position": "conditions", "submission_count": 2, "logo_initials": "SS" },
+        { "id": "sh_506", "name": "Energy UK", "role": "supporter", "position": "conditions", "submission_count": 6, "logo_initials": "EU" },
+        { "id": "sh_507", "name": "REA", "role": "objector", "position": "against", "submission_count": 5, "logo_initials": "RE" },
+        { "id": "sh_508", "name": "Solar Energy UK", "role": "supporter", "position": "conditions", "submission_count": 4, "logo_initials": "SE" },
+        { "id": "sh_509", "name": "RenewableUK", "role": "supporter", "position": "conditions", "submission_count": 4, "logo_initials": "RU" },
+        { "id": "sh_510", "name": "Octopus Energy", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "OE" },
+        { "id": "sh_511", "name": "Centrica", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "CE" },
+        { "id": "sh_512", "name": "SSE plc", "role": "supporter", "position": "conditions", "submission_count": 3, "logo_initials": "SS" },
+        { "id": "sh_513", "name": "Ørsted UK", "role": "supporter", "position": "conditions", "submission_count": 2, "logo_initials": "OR" },
+        { "id": "sh_514", "name": "Statera Energy", "role": "objector", "position": "against", "submission_count": 2, "logo_initials": "ST" },
+        { "id": "sh_515", "name": "Fidra Energy", "role": "objector", "position": "against", "submission_count": 1, "logo_initials": "FE" },
+        { "id": "sh_516", "name": "ScottishPower", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "SP" },
+        { "id": "sh_517", "name": "EDF UK", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "ED" },
+        { "id": "sh_518", "name": "National Grid ESO", "role": "applicant", "position": "for", "submission_count": 4, "logo_initials": "NE" },
+        { "id": "sh_519", "name": "BEIS / DESNZ", "role": "political", "position": "for", "submission_count": 3, "logo_initials": "DE" },
+        { "id": "sh_520", "name": "CMA", "role": "regulator", "position": "neutral", "submission_count": 1, "logo_initials": "CM" },
+        { "id": "sh_521", "name": "Elexon", "role": "statutory", "position": "conditions", "submission_count": 1, "logo_initials": "EL" },
+        { "id": "sh_522", "name": "Code Admin Code of Practice", "role": "statutory", "position": "neutral", "submission_count": 1, "logo_initials": "CA" }
+      ],
+      "timeline": [
+        { "id": "ev_501", "date": "2025-06-10", "type": "past", "label": "CMP428 raised", "stage": "Consultation" },
+        { "id": "ev_502", "date": "2025-09-12", "type": "past", "label": "Workgroup formed", "stage": "Consultation" },
+        { "id": "ev_503", "date": "2026-01-20", "type": "past", "label": "Workgroup consultation", "stage": "Consultation" },
+        { "id": "ev_504", "date": "2026-02-04", "type": "past", "label": "Gate 2 criteria draft", "stage": "Consultation" },
+        { "id": "ev_505", "date": "2026-03-22", "type": "past", "label": "Energy UK response", "stage": "Consultation" },
+        { "id": "ev_506", "date": "2026-03-30", "type": "past", "label": "Ofgem consultation opens", "stage": "Consultation" },
+        { "id": "ev_507", "date": "2026-05-15", "type": "upcoming", "label": "Ofgem consultation closes", "stage": "Consultation" },
+        { "id": "ev_508", "date": "2026-07-30", "type": "upcoming", "label": "Ofgem decision", "stage": "Decision" },
+        { "id": "ev_509", "date": "2026-11-01", "type": "upcoming", "label": "Implementation", "stage": "Post-consent" }
+      ],
+      "documents": [
+        { "id": "doc_501", "stage": "Consultation", "title": "CMP428 Workgroup Consultation", "date": "2026-01-20", "author": "NESO", "pages": 98 },
+        { "id": "doc_502", "stage": "Consultation", "title": "Gate 2 criteria draft", "date": "2026-02-04", "author": "NESO", "pages": 22 },
+        { "id": "doc_503", "stage": "Consultation", "title": "Energy UK response", "date": "2026-03-22", "author": "Energy UK", "pages": 14 },
+        { "id": "doc_504", "stage": "Consultation", "title": "Ofgem consultation notice", "date": "2026-03-30", "author": "Ofgem", "pages": 8 }
+      ],
+      "exposure": {
+        "distance_km": null,
+        "dno_area_overlap": "GB",
+        "grid_queue_impact": "Net positive — raises bar on speculative entrants",
+        "timeline_impact_days": -180,
+        "delta_irr_bps": 90,
+        "delta_npv_kgbp": 4200
+      }
+    },
+    {
+      "id": "dck_ar7_2026",
+      "docket_number": "AR7-2026",
+      "case_type": "AR_ROUND",
+      "publisher": "DESNZ",
+      "title": "CfD Allocation Round 7",
+      "status": "open",
+      "stage": "Application",
+      "industry": "energy",
+      "technology": "mixed",
+      "capacity_mw": null,
+      "region": "GB",
+      "applicant": "DESNZ / LCCC",
+      "site": "GB-wide",
+      "home_url": "https://www.gov.uk/government/publications/contracts-for-difference-ar7",
+      "date_opened": "2026-01-15",
+      "days_in_examination": 0,
+      "n_stakeholders": 14,
+      "n_documents": 19,
+      "last_activity": "2026-04-16",
+      "pinned": false,
+      "watched": true,
+      "summary": "AR7 opens Jan 2026 with reformed methodology [1]. Solar / onshore wind / offshore wind / floating offshore eligible [2]. Budget framework £1.6bn for Pot 1, £1.0bn for Pot 2, £2.4bn for Pot 3 [3]. Windows close 30 May 2026 [4].",
+      "citations": [
+        { "n": 1, "doc_id": "doc_601", "title": "AR7 Allocation Framework", "date": "2026-01-15" },
+        { "n": 2, "doc_id": "doc_602", "title": "Eligibility Criteria", "date": "2026-01-15" },
+        { "n": 3, "doc_id": "doc_603", "title": "Budget Notice", "date": "2026-02-18" },
+        { "n": 4, "doc_id": "doc_604", "title": "Round Timetable", "date": "2026-03-04" }
+      ],
+      "questions": [
+        {
+          "q": "Who supports/opposes, on what grounds?",
+          "bullets": [
+            "SUPPORT — Offshore wind sector (ScotWind pipeline) [3]",
+            "CONDITIONS — Solar Energy UK (Pot 1 budget adequacy)",
+            "OPPOSE — Independents on planning-maturity requirement uplift"
+          ]
+        },
+        {
+          "q": "Financial and timeline risks?",
+          "bullets": [
+            "Applications due 30 May 2026 — tight window [4]",
+            "Administrative strike price not yet final",
+            "Connection date pre-requisite 2030 (Pot 1/2)"
+          ]
+        },
+        {
+          "q": "Planning/grid/environmental growth opportunities?",
+          "bullets": [
+            "Solar up to £1.6bn Pot 1 — strong pipeline absorption [3]",
+            "Reference price floor protects downside for BESS co-siting",
+            "Onshore wind returns — first competition since AR4"
+          ]
+        }
+      ],
+      "next_deadline": { "label": "AR7 applications close", "date": "2026-05-30", "days_left": 41 },
+      "stakeholders": [
+        { "id": "sh_601", "name": "DESNZ", "role": "applicant", "position": "for", "submission_count": 8, "logo_initials": "DE" },
+        { "id": "sh_602", "name": "LCCC", "role": "regulator", "position": "for", "submission_count": 5, "logo_initials": "LC" },
+        { "id": "sh_603", "name": "Ofgem", "role": "regulator", "position": "neutral", "submission_count": 2, "logo_initials": "OF" },
+        { "id": "sh_604", "name": "NESO", "role": "regulator", "position": "conditions", "submission_count": 3, "logo_initials": "NS" },
+        { "id": "sh_605", "name": "Solar Energy UK", "role": "supporter", "position": "conditions", "submission_count": 2, "logo_initials": "SE" },
+        { "id": "sh_606", "name": "RenewableUK", "role": "supporter", "position": "for", "submission_count": 3, "logo_initials": "RU" },
+        { "id": "sh_607", "name": "REA", "role": "supporter", "position": "conditions", "submission_count": 2, "logo_initials": "RE" },
+        { "id": "sh_608", "name": "Scottish Renewables", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "SR" },
+        { "id": "sh_609", "name": "Ørsted UK", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "OR" },
+        { "id": "sh_610", "name": "SSE Renewables", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "SS" },
+        { "id": "sh_611", "name": "EDF Renewables", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "ED" },
+        { "id": "sh_612", "name": "Equinor", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "EQ" },
+        { "id": "sh_613", "name": "Low Carbon", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "LC" },
+        { "id": "sh_614", "name": "Independent SME devs", "role": "objector", "position": "against", "submission_count": 2, "logo_initials": "ID" }
+      ],
+      "timeline": [
+        { "id": "ev_601", "date": "2025-10-10", "type": "past", "label": "AR7 parameters consulted", "stage": "Pre-app" },
+        { "id": "ev_602", "date": "2026-01-15", "type": "past", "label": "Allocation framework published", "stage": "Application" },
+        { "id": "ev_603", "date": "2026-02-18", "type": "past", "label": "Budget notice issued", "stage": "Application" },
+        { "id": "ev_604", "date": "2026-03-04", "type": "past", "label": "Round timetable published", "stage": "Application" },
+        { "id": "ev_605", "date": "2026-05-30", "type": "upcoming", "label": "Applications close", "stage": "Application" },
+        { "id": "ev_606", "date": "2026-09-15", "type": "upcoming", "label": "Results announced", "stage": "Decision" }
+      ],
+      "documents": [
+        { "id": "doc_601", "stage": "Application", "title": "AR7 Allocation Framework", "date": "2026-01-15", "author": "DESNZ", "pages": 112 },
+        { "id": "doc_602", "stage": "Application", "title": "Eligibility Criteria", "date": "2026-01-15", "author": "DESNZ", "pages": 48 },
+        { "id": "doc_603", "stage": "Application", "title": "Budget Notice", "date": "2026-02-18", "author": "DESNZ", "pages": 18 },
+        { "id": "doc_604", "stage": "Application", "title": "Round Timetable", "date": "2026-03-04", "author": "LCCC", "pages": 6 }
+      ],
+      "exposure": {
+        "distance_km": null,
+        "dno_area_overlap": "GB",
+        "grid_queue_impact": "AR7 winners jump queue position",
+        "timeline_impact_days": 0,
+        "delta_irr_bps": 120,
+        "delta_npv_kgbp": 6500
+      }
+    },
+    {
+      "id": "dck_cm_t4_2026",
+      "docket_number": "CM-T-4-2026",
+      "case_type": "CAPACITY_MARKET",
+      "publisher": "NESO / DESNZ",
+      "title": "Capacity Market T-4 2026/27",
+      "status": "open",
+      "stage": "Prequalification",
+      "industry": "energy",
+      "technology": "mixed",
+      "capacity_mw": null,
+      "region": "GB",
+      "applicant": "NESO / DESNZ",
+      "site": "GB-wide",
+      "home_url": "https://www.neso.energy/industry-information/capacity-market-cm",
+      "date_opened": "2026-03-03",
+      "days_in_examination": 0,
+      "n_stakeholders": 16,
+      "n_documents": 24,
+      "last_activity": "2026-04-12",
+      "pinned": false,
+      "watched": false,
+      "summary": "T-4 auction for delivery year 2030/31 [1]. Battery de-rating factor set per 2025 Tech Params [2]. Prequal window 3 Mar - 30 May 2026 [3]. Auction provisional 2 Feb 2027 [4].",
+      "citations": [
+        { "n": 1, "doc_id": "doc_701", "title": "T-4 Auction Guidelines", "date": "2026-03-03" },
+        { "n": 2, "doc_id": "doc_702", "title": "De-rating Factors 2026", "date": "2025-11-22" },
+        { "n": 3, "doc_id": "doc_703", "title": "Prequal Timetable", "date": "2026-03-03" },
+        { "n": 4, "doc_id": "doc_704", "title": "Auction Provisional Dates", "date": "2026-03-15" }
+      ],
+      "questions": [
+        {
+          "q": "Who supports/opposes, on what grounds?",
+          "bullets": [
+            "SUPPORT — Gas peaker operators; BESS developers with Cap Market reg 7 maturity",
+            "CONDITIONS — DSR aggregators on reliability standard",
+            "OPPOSE — Emissions pressure groups (gas de-rating)"
+          ]
+        },
+        {
+          "q": "Financial and timeline risks?",
+          "bullets": [
+            "Clearing price uncertain post-REMA — £ /kW/year range £20-£50",
+            "Prequal deadline 30 May 2026 [3]",
+            "Delivery year 2030/31 — 4-year commitment"
+          ]
+        },
+        {
+          "q": "Planning/grid/environmental growth opportunities?",
+          "bullets": [
+            "BESS de-rating updates advantage 4-hour duration [2]",
+            "Multi-year CM stacking with NGET reactive services",
+            "DSR aggregation opens consumer-led plays"
+          ]
+        }
+      ],
+      "next_deadline": { "label": "Prequalification closes", "date": "2026-05-30", "days_left": 41 },
+      "stakeholders": [
+        { "id": "sh_701", "name": "NESO", "role": "applicant", "position": "for", "submission_count": 12, "logo_initials": "NS" },
+        { "id": "sh_702", "name": "DESNZ", "role": "applicant", "position": "for", "submission_count": 6, "logo_initials": "DE" },
+        { "id": "sh_703", "name": "Ofgem", "role": "regulator", "position": "neutral", "submission_count": 2, "logo_initials": "OF" },
+        { "id": "sh_704", "name": "EMR Settlement", "role": "statutory", "position": "neutral", "submission_count": 2, "logo_initials": "EM" },
+        { "id": "sh_705", "name": "Energy UK", "role": "supporter", "position": "conditions", "submission_count": 3, "logo_initials": "EU" },
+        { "id": "sh_706", "name": "REA", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "RE" },
+        { "id": "sh_707", "name": "Centrica", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "CE" },
+        { "id": "sh_708", "name": "Drax", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "DR" },
+        { "id": "sh_709", "name": "Statera Energy", "role": "supporter", "position": "for", "submission_count": 2, "logo_initials": "ST" },
+        { "id": "sh_710", "name": "Flexitricity", "role": "supporter", "position": "conditions", "submission_count": 2, "logo_initials": "FL" },
+        { "id": "sh_711", "name": "SSE Thermal", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "SS" },
+        { "id": "sh_712", "name": "Habitat Energy", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "HE" },
+        { "id": "sh_713", "name": "EDF UK", "role": "supporter", "position": "for", "submission_count": 1, "logo_initials": "ED" },
+        { "id": "sh_714", "name": "NGET", "role": "dno_to", "position": "neutral", "submission_count": 1, "logo_initials": "NG" },
+        { "id": "sh_715", "name": "Possible (NGO)", "role": "objector", "position": "against", "submission_count": 2, "logo_initials": "PO" },
+        { "id": "sh_716", "name": "Green Alliance", "role": "objector", "position": "conditions", "submission_count": 1, "logo_initials": "GA" }
+      ],
+      "timeline": [
+        { "id": "ev_701", "date": "2025-11-22", "type": "past", "label": "De-rating factors published", "stage": "Pre-app" },
+        { "id": "ev_702", "date": "2026-03-03", "type": "past", "label": "Prequal opens", "stage": "Prequalification" },
+        { "id": "ev_703", "date": "2026-03-15", "type": "past", "label": "Auction provisional dates", "stage": "Prequalification" },
+        { "id": "ev_704", "date": "2026-05-30", "type": "upcoming", "label": "Prequalification closes", "stage": "Prequalification" },
+        { "id": "ev_705", "date": "2026-10-15", "type": "upcoming", "label": "Results of Prequal", "stage": "Prequalification" },
+        { "id": "ev_706", "date": "2027-02-02", "type": "upcoming", "label": "T-4 Auction", "stage": "Decision" }
+      ],
+      "documents": [
+        { "id": "doc_701", "stage": "Prequalification", "title": "T-4 Auction Guidelines", "date": "2026-03-03", "author": "NESO", "pages": 84 },
+        { "id": "doc_702", "stage": "Prequalification", "title": "De-rating Factors 2026", "date": "2025-11-22", "author": "NESO", "pages": 42 },
+        { "id": "doc_703", "stage": "Prequalification", "title": "Prequal Timetable", "date": "2026-03-03", "author": "NESO", "pages": 8 },
+        { "id": "doc_704", "stage": "Prequalification", "title": "Auction Provisional Dates", "date": "2026-03-15", "author": "NESO", "pages": 4 }
+      ],
+      "exposure": {
+        "distance_km": null,
+        "dno_area_overlap": "GB",
+        "grid_queue_impact": "CM award provides capacity revenue floor",
+        "timeline_impact_days": 0,
+        "delta_irr_bps": 50,
+        "delta_npv_kgbp": 2200
+      }
+    }
+  ],
+  "consultees": [
+    {
+      "id": "cns_ne",
+      "name": "Natural England",
+      "category": "Statutory",
+      "statutory_hook": "Section 42 PA2008 / Reg 8",
+      "status": "Responded",
+      "contact_email": "consultations@naturalengland.org.uk",
+      "applicable_when": "EIA-development with protected sites"
+    },
+    {
+      "id": "cns_ea",
+      "name": "Environment Agency",
+      "category": "Environmental",
+      "statutory_hook": "Section 42 PA2008",
+      "status": "Responded",
+      "contact_email": "enquiries@environment-agency.gov.uk",
+      "applicable_when": "Flood Zone 2/3 or water abstraction"
+    },
+    {
+      "id": "cns_he",
+      "name": "Historic England",
+      "category": "Heritage",
+      "statutory_hook": "Section 42 PA2008",
+      "status": "Objects",
+      "contact_email": "planning@historicengland.org.uk",
+      "applicable_when": "Listed buildings / conservation areas within 2 km"
+    },
+    {
+      "id": "cns_hse",
+      "name": "Health & Safety Executive",
+      "category": "Safety",
+      "statutory_hook": "Section 38 Planning Act 2008 / DSEAR",
+      "status": "Conditions",
+      "contact_email": "hselandandpropertyconsultancy@hse.gov.uk",
+      "applicable_when": "BESS / hazardous substances / hydrogen"
+    },
+    {
+      "id": "cns_ukpn",
+      "name": "UK Power Networks",
+      "category": "Network operators",
+      "statutory_hook": "Reg 8 PA2008",
+      "status": "Notified",
+      "contact_email": "planning.enquiries@ukpowernetworks.co.uk",
+      "applicable_when": "Connection in UKPN licence area"
+    },
+    {
+      "id": "cns_nget",
+      "name": "National Grid Electricity Transmission",
+      "category": "Network operators",
+      "statutory_hook": "Reg 8 PA2008",
+      "status": "Notified",
+      "contact_email": "plantprotection@nationalgrid.com",
+      "applicable_when": "400 kV or 275 kV proximity"
+    },
+    {
+      "id": "cns_neso",
+      "name": "NESO",
+      "category": "Network operators",
+      "statutory_hook": "Reg 8 PA2008",
+      "status": "Responded",
+      "contact_email": "connections@nationalgrideso.com",
+      "applicable_when": ">= 100 MW export/import"
+    },
+    {
+      "id": "cns_caa",
+      "name": "CAA",
+      "category": "Sector-specific",
+      "statutory_hook": "Section 42 PA2008",
+      "status": "Silent",
+      "contact_email": "airspace.regulation@caa.co.uk",
+      "applicable_when": "Airports within 30 km / tall structures"
+    },
+    {
+      "id": "cns_mod",
+      "name": "MoD Defence Infrastructure Organisation",
+      "category": "Sector-specific",
+      "statutory_hook": "Section 42 PA2008",
+      "status": "Conditions",
+      "contact_email": "dio-stratplan-windenergy@mod.gov.uk",
+      "applicable_when": "Within MoD safeguarding zones"
+    },
+    {
+      "id": "cns_mp_local",
+      "name": "Local MP",
+      "category": "Political",
+      "statutory_hook": "Section 47 PA2008",
+      "status": "Notified",
+      "contact_email": null,
+      "applicable_when": "All NSIPs"
+    },
+    {
+      "id": "cns_nrail",
+      "name": "Network Rail",
+      "category": "Network operators",
+      "statutory_hook": "Section 42 PA2008",
+      "status": "Notified",
+      "contact_email": "townplanningsupport@networkrail.co.uk",
+      "applicable_when": "Within 50 m of railway line"
+    },
+    {
+      "id": "cns_pc",
+      "name": "Parish Council",
+      "category": "Local authority",
+      "statutory_hook": "Section 42 PA2008",
+      "status": "Objects",
+      "contact_email": null,
+      "applicable_when": "Host parish"
+    },
+    {
+      "id": "cns_lpa",
+      "name": "Host LPA",
+      "category": "Local authority",
+      "statutory_hook": "Section 42 PA2008 / Reg 8",
+      "status": "Conditions",
+      "contact_email": null,
+      "applicable_when": "All applications"
+    },
+    {
+      "id": "cns_fire",
+      "name": "Fire & Rescue Service",
+      "category": "Safety",
+      "statutory_hook": "Section 42 PA2008",
+      "status": "Conditions",
+      "contact_email": null,
+      "applicable_when": "BESS / data centre / hydrogen"
+    },
+    {
+      "id": "cns_ofwat",
+      "name": "Ofwat / Water company",
+      "category": "Environmental",
+      "statutory_hook": "Section 42 PA2008",
+      "status": "Notified",
+      "contact_email": null,
+      "applicable_when": "Data centre or high-water-use development"
+    }
+  ]
+}
