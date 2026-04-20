@@ -1798,16 +1798,16 @@ export default function DataCentreTwin({ onClose }) {
         <div style={{ flex: 1, position: "relative" }}>
           {viewMode === "plan" ? (
             <DCDesignTwin
-              lat={pickedLocation?.lat ?? explain?.lat ?? 51.4974}
-              lon={pickedLocation?.lon ?? explain?.lon ?? -0.5683}
+              lat={pickedLocation?.lat ?? explain?.lat ?? 51.5260}
+              lon={pickedLocation?.lon ?? explain?.lon ?? -0.6155}
               itLoadMw={(itLoadKw || 0) / 1000}
               tier={tier}
               redundancy={redundancy}
             />
           ) : viewMode === "design" ? (
             <InsiderDCDesign
-              lat={pickedLocation?.lat ?? 51.4974}
-              lon={pickedLocation?.lon ?? -0.5683}
+              lat={pickedLocation?.lat ?? 51.5260}
+              lon={pickedLocation?.lon ?? -0.6155}
               itLoadMw={(itLoadKw || 0) / 1000}
               tier={tier}
               redundancy={redundancy}

@@ -15,12 +15,17 @@ const VERDICT_STYLE = {
   "NO-GO": { bg: "rgba(220,38,38,0.12)", fg: "var(--cds-support-error)" },
 };
 
+// Coordinates anchored to real UK industrial / brownfield plots; see app/db_setup.py
+// seed block for provenance. Verified via postcodes.io 2026-04-19.
 const DEFAULT_SITES = [
-  { candidate_id: "s1", name: "Rainham substation adjacent", lat: 51.518, lon: 0.19, capacity_mw: 50,
+  // Rainham Marshes / Ferry Lane, ~400m from UKPN Rainham 132/33kV GSP (RM13 9UG).
+  { candidate_id: "s1", name: "Rainham substation adjacent", lat: 51.5170, lon: 0.1950, capacity_mw: 50,
     scores: { resource: 82, grid: 88, planning: 71, land_use: 78, terrain: 65 }, lcoe: 42.5, verdict: "GO", is_preferred: true },
-  { candidate_id: "s2", name: "Dagenham industrial estate", lat: 51.54, lon: 0.15, capacity_mw: 50,
+  // Dagenham Dock / former Ford Stamping site, LBBD-allocated industrial (RM9 6FD).
+  { candidate_id: "s2", name: "Dagenham industrial estate", lat: 51.5335, lon: 0.1340, capacity_mw: 50,
     scores: { resource: 78, grid: 74, planning: 68, land_use: 62, terrain: 72 }, lcoe: 45.1, verdict: "GO", is_preferred: false },
-  { candidate_id: "s3", name: "Tilbury port brownfield", lat: 51.465, lon: 0.36, capacity_mw: 50,
+  // Tilbury Riverside / Port of Tilbury brownfield, former Tilbury A land (RM18 7BE).
+  { candidate_id: "s3", name: "Tilbury port brownfield", lat: 51.4630, lon: 0.3560, capacity_mw: 50,
     scores: { resource: 74, grid: 82, planning: 45, land_use: 58, terrain: 80 }, lcoe: 48.3, verdict: "CAUTION", is_preferred: false },
 ];
 

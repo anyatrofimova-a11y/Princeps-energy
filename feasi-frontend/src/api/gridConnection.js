@@ -34,8 +34,9 @@ export async function getGridConnection(projectId, opts = {}) {
   }
 
   const params = new URLSearchParams({
-    lat: lat ?? 51.5105,
-    lon: lon ?? -0.595,
+    // Slough Trading Estate (Bath Rd / Buckingham Ave) — default demo pin.
+    lat: lat ?? 51.5260,
+    lon: lon ?? -0.6155,
     capacity_mw: capacity_mw ?? 65,
     technology,
   });
@@ -60,8 +61,9 @@ export async function runTier2PowerFlow(projectId, opts = {}) {
   }
 
   const params = new URLSearchParams({
-    lat: lat ?? 51.5105,
-    lon: lon ?? -0.595,
+    // Slough Trading Estate (Bath Rd / Buckingham Ave) — default demo pin.
+    lat: lat ?? 51.5260,
+    lon: lon ?? -0.6155,
     capacity_mw: capacity_mw ?? 65,
     technology,
     contingency: "true",

@@ -484,19 +484,28 @@ async def setup_database(pool: asyncpg.Pool) -> None:
                 RETURNING portfolio_id
             """)
             # BESS project — Thames BESS Phase 1, 50MW/100MWh, London
+            # Headline pin: Stanford-le-Hope / Coryton — Shell Haven / London Gateway
+            # brownfield, Thames-estuary grid pinch adjacent to Tilbury B decomm site
+            # (SS17 0HQ, Thurrock). Verified postcodes.io 2026-04-19.
             _bess_id = await conn.fetchval("""
                 INSERT INTO projects (portfolio_id, name, description, technology, capacity_mw,
                                       stage, verdict, lat, lon, metadata)
                 VALUES ($1, 'Thames BESS Phase 1',
-                        '50 MW / 100 MWh grid-scale battery — Tilbury port brownfield, Thames Estuary.',
-                        'bess', 50.0, 'prospect', 'GO', 51.4650, 0.3600,
+                        '50 MW / 100 MWh grid-scale battery — Shell Haven / London Gateway brownfield, Thames Estuary grid pinch adjacent to Tilbury B decommissioning site.',
+                        'bess', 50.0, 'prospect', 'GO', 51.5180, 0.5180,
                         '{"energy_mwh": 100, "duration_h": 2, "chemistry": "LFP"}'::jsonb)
                 RETURNING project_id
             """, _pf_id)
             _bess_sites = [
-                ('Rainham substation adjacent', 51.5180, 0.1900, 50.0, 82, 88, 71, 78, 65, 42.5, 'GO', True),
-                ('Dagenham industrial estate', 51.5400, 0.1500, 50.0, 78, 74, 68, 62, 72, 45.1, 'GO', False),
-                ('Tilbury port brownfield',   51.4650, 0.3600, 50.0, 74, 82, 45, 58, 80, 48.3, 'CAUTION', False),
+                # 51.5170, 0.1950 — Rainham Marshes / Ferry Lane industrial, ~400m from
+                # UKPN Rainham 132/33kV grid substation (RM13 9UG, Havering).
+                ('Rainham substation adjacent', 51.5170, 0.1950, 50.0, 82, 88, 71, 78, 65, 42.5, 'GO', True),
+                # 51.5335, 0.1340 — Dagenham Dock / former Ford Stamping site,
+                # LBBD-allocated industrial (RM9 6FD, Goresbrook ward).
+                ('Dagenham industrial estate', 51.5335, 0.1340, 50.0, 78, 74, 68, 62, 72, 45.1, 'GO', False),
+                # 51.4630, 0.3560 — Tilbury Riverside / Port of Tilbury brownfield
+                # (RM18 7BE, Thurrock). Former Tilbury A coal station land.
+                ('Tilbury port brownfield',   51.4630, 0.3560, 50.0, 74, 82, 45, 58, 80, 48.3, 'CAUTION', False),
             ]
             for nm, lat, lon, cap, rs, gs, ps, ls, ts, lc, vd, pref in _bess_sites:
                 await conn.execute("""
@@ -507,20 +516,30 @@ async def setup_database(pool: asyncpg.Pool) -> None:
                      f'{{"resource":{rs},"grid":{gs},"planning":{ps},"land_use":{ls},"terrain":{ts}}}',
                      lc, vd, pref)
             # DC project — Slough Hyperscale DC, 40MW IT load
+            # Headline pin: 51.5260, -0.6155 — Bath Road / Buckingham Ave corner of
+            # Slough Trading Estate (SL2 1BT, Farnham ward). Equinix LD5 / Virtus LONDON2
+            # neighbourhood. Verified postcodes.io 2026-04-19.
             _dc_id = await conn.fetchval("""
                 INSERT INTO projects (portfolio_id, name, description, technology, capacity_mw,
                                       stage, verdict, lat, lon, blocker, metadata)
                 VALUES ($1, 'Slough Hyperscale DC',
-                        '40 MW IT-load data centre, Slough Trading Estate cluster (Equinix LD4/LD5 neighbourhood).',
-                        'dc', 40.0, 'screened', 'CAUTION', 51.4974, -0.5683,
-                        'Grid headroom marginal at summer peak — requires reinforcement',
+                        '40 MW IT-load data centre, Slough Trading Estate (Bath Rd / Buckingham Ave), Equinix LD5 / Virtus LONDON2 cluster.',
+                        'dc', 40.0, 'screened', 'CAUTION', 51.5260, -0.6155,
+                        'Iver 132kV firm headroom 72 MW covers 40 MW ask but ECR queue of 340 MW creates Gate 2 priority risk — request CCCM non-firm allocation',
                         '{"it_load_mw": 40, "pue_target": 1.2, "grid_headroom_mw": 15, "tier": "III"}'::jsonb)
                 RETURNING project_id
             """, _pf_id)
             _dc_sites = [
-                ('Slough West industrial', 51.5205, -0.6100, 40.0, 55, 42, 78, 82, 70, 68.2, 'CAUTION', True),
-                ('Reading east logistics', 51.4540, -0.9700, 40.0, 58, 68, 72, 75, 68, 62.5, 'GO', False),
-                ('Heathrow fringe plot',   51.4700, -0.4500, 40.0, 52, 38, 48, 55, 74, 75.1, 'NO-GO', False),
+                # 51.5150, -0.6350 — Cippenham Village industrial, west Slough
+                # (SL1 5DL, Cippenham Village ward). Light-industrial / logistics fringe.
+                ('Slough West industrial', 51.5150, -0.6350, 40.0, 55, 42, 78, 82, 70, 68.2, 'CAUTION', True),
+                # 51.4540, -0.9160 — Thames Valley Park, Reading east (RG5 3BF,
+                # Bulmershe & Coronation ward, Wokingham). Established business park
+                # with Microsoft/Oracle campus — proven DC-grade fibre + power.
+                ('Reading east logistics', 51.4540, -0.9160, 40.0, 58, 68, 72, 75, 68, 62.5, 'GO', False),
+                # 51.4880, -0.5320 — Colnbrook & Poyle trading estate (SL3 8QQ,
+                # Slough BC). Heathrow-fringe brownfield; Ark Data Centres neighbourhood.
+                ('Heathrow fringe plot',   51.4880, -0.5320, 40.0, 52, 38, 48, 55, 74, 75.1, 'NO-GO', False),
             ]
             for nm, lat, lon, cap, rs, gs, ps, ls, ts, lc, vd, pref in _dc_sites:
                 await conn.execute("""

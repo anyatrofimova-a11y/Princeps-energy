@@ -199,8 +199,11 @@ function fmtArea(m2) {
 }
 
 export default function DCDesignTwin({
-  lat: initialLat = 51.4974,
-  lon: initialLon = -0.5683,
+  // Default pin: Slough Trading Estate (Bath Rd / Buckingham Ave, SL2 1BT) —
+  // Equinix LD5 / Virtus LONDON2 neighbourhood. Was previously 51.4974,-0.5683
+  // which placed on Langley town centre (not developable).
+  lat: initialLat = 51.5260,
+  lon: initialLon = -0.6155,
   itLoadMw = 50,
   parcelHa = null,
   parcelId = null,           // optional HMLR INSPIRE id — plumbed for BOT-G
