@@ -305,20 +305,26 @@ export default function DCDesignTwin({
     if (!mapReady) return [];
     const layers = [];
 
-    // Building shell — extruded purple polygon
+    // Building shell — extruded purple polygon. Drag to move the site;
+    // click to open the inspector.
     layers.push(new PolygonLayer({
       id: "dc-shell",
       data: [{ polygon: geom.shell.polygon, ...geom.shell }],
       getPolygon: d => d.polygon,
       getElevation: () => geom.shell.heightM,
-      getFillColor: C.shell,
-      getLineColor: C.shellEdge,
-      lineWidthMinPixels: 2,
+      getFillColor: selected === "shell" ? [168, 85, 247, 240] : C.shell,
+      getLineColor: selected === "shell" ? [255, 215, 0, 255] : C.shellEdge,
+      lineWidthMinPixels: selected === "shell" ? 4 : 2,
       extruded: true,
       pickable: true,
-      onHover: ({ object, x, y }) => setHoverInfo(object ? {
+      updateTriggers: { getFillColor: [selected], getLineColor: [selected] },
+      onClick: ({ object }) => { if (object) setSelected("shell"); },
+      onDragStart: handleShellDragStart,
+      onDrag: handleShellDrag,
+      onDragEnd: handleShellDragEnd,
+      onHover: ({ object, x, y }) => setHoverInfo(object && !dragStateRef.current.active ? {
         x, y,
-        title: "Building shell",
+        title: "Building shell · drag to move",
         rows: [
           ["Footprint", fmtArea(geom.shell.areaM2)],
           ["Height", `${geom.shell.heightM.toFixed(1)} m`],
@@ -334,11 +340,13 @@ export default function DCDesignTwin({
       data: [{ polygon: geom.cooling.polygon }],
       getPolygon: d => d.polygon,
       getElevation: () => geom.cooling.heightM,
-      getFillColor: C.cooling,
-      getLineColor: C.coolingEdge,
-      lineWidthMinPixels: 1.5,
+      getFillColor: selected === "cooling" ? [34, 197, 110, 240] : C.cooling,
+      getLineColor: selected === "cooling" ? [255, 215, 0, 255] : C.coolingEdge,
+      lineWidthMinPixels: selected === "cooling" ? 4 : 1.5,
       extruded: true,
       pickable: true,
+      updateTriggers: { getFillColor: [selected], getLineColor: [selected] },
+      onClick: ({ object }) => { if (object) setSelected("cooling"); },
       onHover: ({ object, x, y }) => setHoverInfo(object ? {
         x, y,
         title: "Cooling yard",
@@ -356,11 +364,13 @@ export default function DCDesignTwin({
       data: [{ polygon: geom.substation.polygon }],
       getPolygon: d => d.polygon,
       getElevation: () => geom.substation.heightM,
-      getFillColor: C.substation,
-      getLineColor: C.subEdge,
-      lineWidthMinPixels: 1.5,
+      getFillColor: selected === "substation" ? [245, 158, 11, 240] : C.substation,
+      getLineColor: selected === "substation" ? [255, 215, 0, 255] : C.subEdge,
+      lineWidthMinPixels: selected === "substation" ? 4 : 1.5,
       extruded: true,
       pickable: true,
+      updateTriggers: { getFillColor: [selected], getLineColor: [selected] },
+      onClick: ({ object }) => { if (object) setSelected("substation"); },
       onHover: ({ object, x, y }) => setHoverInfo(object ? {
         x, y,
         title: "On-site substation",
@@ -406,6 +416,70 @@ export default function DCDesignTwin({
         extruded: false,
         stroked: true,
         filled: false,
+      }));
+    }
+
+    // Ambient context — nearby grid substations. Thin dashed line from each
+    // to the DC site for quick distance read.
+    if (showContext && nearbySubs.length > 0) {
+      layers.push(new ScatterplotLayer({
+        id: "nearby-subs",
+        data: nearbySubs,
+        getPosition: d => [d.lon, d.lat],
+        getFillColor: d => {
+          if (selected === `nearbySub:${d.id}`) return [255, 215, 0, 255];
+          if (d.voltage_kv >= 275) return [239, 68, 68, 230];
+          if (d.voltage_kv >= 132) return [30, 136, 229, 220];
+          if (d.voltage_kv >= 33)  return [156, 39, 176, 220];
+          return [158, 158, 158, 200];
+        },
+        getRadius: d => {
+          const base = d.voltage_kv >= 132 ? 60 : 40;
+          return selected === `nearbySub:${d.id}` ? base * 1.4 : base;
+        },
+        getLineColor: [255, 255, 255, 220],
+        lineWidthMinPixels: 1.5,
+        stroked: true,
+        radiusUnits: "meters",
+        radiusMinPixels: 6,
+        pickable: true,
+        updateTriggers: { getFillColor: [selected], getRadius: [selected] },
+        onClick: ({ object }) => { if (object) setSelected(`nearbySub:${object.id}`); },
+        onHover: ({ object, x, y }) => setHoverInfo(object ? {
+          x, y,
+          title: object.name,
+          rows: [
+            ["Voltage", object.voltage_kv ? `${object.voltage_kv} kV` : "—"],
+            ["Headroom", object.headroom_mw != null ? `${object.headroom_mw} MW` : "—"],
+            ["Operator", object.operator || "—"],
+            ["Distance", `${(Math.hypot(
+              (object.lat - lat) * M_PER_DEG_LAT,
+              (object.lon - lon) * mPerDegLon(lat),
+            ) / 1000).toFixed(2)} km`],
+          ],
+        } : null),
+      }));
+
+      // Faint connecting line from each substation to the site for visual
+      // triangulation. Thicker for the nearest 5.
+      const sorted = [...nearbySubs].map(s => ({
+        ...s,
+        dist_m: Math.hypot(
+          (s.lat - lat) * M_PER_DEG_LAT,
+          (s.lon - lon) * mPerDegLon(lat),
+        ),
+      })).sort((a, b) => a.dist_m - b.dist_m);
+      const top5Ids = new Set(sorted.slice(0, 5).map(s => s.id));
+      layers.push(new PathLayer({
+        id: "nearby-subs-spokes",
+        data: nearbySubs.map(s => ({
+          path: [[s.lon, s.lat], [lon, lat]],
+          prominent: top5Ids.has(s.id),
+        })),
+        getPath: d => d.path,
+        getColor: d => d.prominent ? [255, 215, 0, 120] : [200, 200, 200, 50],
+        getWidth: d => d.prominent ? 2 : 1,
+        widthMinPixels: 1,
       }));
     }
 
@@ -466,7 +540,43 @@ export default function DCDesignTwin({
       }}>
         <button onClick={() => setShowFence(s => !s)} style={chipBtn(showFence)}>Fence</button>
         <button onClick={() => setShowLabels(s => !s)} style={chipBtn(showLabels)}>Labels</button>
+        <button onClick={() => setShowContext(s => !s)} style={chipBtn(showContext)}>Grid ({nearbySubs.length})</button>
       </div>
+
+      {/* Drag hint — only on first paint until the user has moved the shell */}
+      {!dragStateRef.current.active && (
+        <div style={{
+          position: "absolute", top: 12, right: 12,
+          background: "rgba(15,23,42,0.85)", color: "#e2e8f0",
+          padding: "6px 10px", borderRadius: 6,
+          fontFamily: '"DM Sans", sans-serif', fontSize: 10, letterSpacing: 0.4,
+          textTransform: "uppercase", fontWeight: 700, backdropFilter: "blur(6px)",
+        }}>
+          Drag shell to reposition · Click any element to inspect
+        </div>
+      )}
+
+      {/* Inspector pane — shows click-selected element detail */}
+      {selected && (
+        <InspectorPane
+          selected={selected}
+          geom={geom}
+          itLoadMw={itLoadMw}
+          tier={tier}
+          redundancy={redundancy}
+          nearbySubs={nearbySubs}
+          lat={lat}
+          lon={lon}
+          onClose={() => setSelected(null)}
+          onSnapToSub={(sub) => {
+            // Snap the site centroid to ~120 m north of the chosen substation so
+            // the cable corridor lands directly on its pad.
+            setLat(sub.lat + 120 / M_PER_DEG_LAT);
+            setLon(sub.lon);
+            setSelected("shell");
+          }}
+        />
+      )}
 
       {/* Legend */}
       <div style={{
@@ -528,4 +638,112 @@ function chipBtn(active) {
     fontWeight: 700, fontSize: 10, cursor: "pointer",
     fontFamily: '"DM Sans", sans-serif',
   };
+}
+
+/** Right-rail inspector for the click-selected element. Content shape
+ *  differs per element type (shell / cooling / substation / nearbySub) but
+ *  the layout is shared: title · rows · actions. */
+function InspectorPane({ selected, geom, itLoadMw, tier, redundancy, nearbySubs, lat, lon, onClose, onSnapToSub }) {
+  let title = "";
+  let rows = [];
+  let actions = [];
+
+  if (selected === "shell") {
+    title = "Building shell";
+    rows = [
+      ["Footprint", fmtArea(geom.shell.areaM2)],
+      ["Width × depth", `${geom.shell.widthM.toFixed(0)} × ${geom.shell.depthM.toFixed(0)} m`],
+      ["Height", `${geom.shell.heightM.toFixed(1)} m (2-storey)`],
+      ["GFA", fmtArea(geom.shell.areaM2 * 2)],
+      ["IT load", `${itLoadMw} MW`],
+      ["PD intensity", `${(itLoadMw * 1000 / geom.shell.areaM2).toFixed(1)} W/m²`],
+      ["Tier", `${tier} · ${redundancy}`],
+      ["Rule of thumb", "600 m²/MW (2-storey hyperscale)"],
+    ];
+  } else if (selected === "cooling") {
+    title = "Cooling yard";
+    rows = [
+      ["Area", fmtArea(geom.cooling.areaM2)],
+      ["Height", `${geom.cooling.heightM} m`],
+      ["Location", "South of shell · 8 m corridor"],
+      ["Sizing", "35% of shell footprint"],
+      ["Topology", redundancy === "2N" || redundancy === "2N+1" ? "Dual-side, concurrent-maintainable" : "Single-side, N+1"],
+      ["Water", "Closed-loop (adjust in D2 Cooling)"],
+    ];
+  } else if (selected === "substation") {
+    title = "On-site substation pad";
+    rows = [
+      ["Side", `${geom.substation.sideM} × ${geom.substation.sideM} m`],
+      ["Height", `${geom.substation.heightM} m`],
+      ["Plant", "GIS switchgear · 33/132 kV"],
+      ["Tier path", tier >= 3 ? "Dual feed" : "Single feed"],
+      ["Orientation", "East of shell · 25 m gap"],
+      ["Cable distance", "~shell half-width + 25 m"],
+    ];
+  } else if (selected?.startsWith("nearbySub:")) {
+    const id = selected.slice("nearbySub:".length);
+    const sub = nearbySubs.find(s => s.id === id);
+    if (sub) {
+      title = sub.name;
+      const distKm = Math.hypot(
+        (sub.lat - lat) * M_PER_DEG_LAT,
+        (sub.lon - lon) * mPerDegLon(lat),
+      ) / 1000;
+      rows = [
+        ["Voltage", sub.voltage_kv ? `${sub.voltage_kv} kV` : "—"],
+        ["Headroom", sub.headroom_mw != null ? `${sub.headroom_mw} MW` : "unknown (OSM)"],
+        ["Operator", sub.operator || "—"],
+        ["Distance from site", `${distKm.toFixed(2)} km`],
+        ["Approx cable cost",
+          sub.voltage_kv >= 132 ? `£${Math.round(distKm * 500)}k (132 kV)`
+          : sub.voltage_kv >= 33 ? `£${Math.round(distKm * 150)}k (33 kV)`
+          : `£${Math.round(distKm * 80)}k (11 kV)`],
+        ["Coords", `${sub.lat.toFixed(4)}°, ${sub.lon.toFixed(4)}°`],
+      ];
+      actions = [
+        { label: "Snap DC to this substation", onClick: () => onSnapToSub(sub) },
+      ];
+    }
+  }
+
+  return (
+    <aside style={{
+      position: "absolute", top: 12, right: 12, width: 320,
+      maxHeight: "calc(100% - 24px)", overflowY: "auto",
+      background: "rgba(15,23,42,0.94)", color: "#f1f5f9",
+      borderRadius: 10, padding: "14px 16px",
+      fontFamily: '"DM Sans", sans-serif', fontSize: 12,
+      boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+      backdropFilter: "blur(8px)",
+      zIndex: 6,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: -0.2 }}>{title || "Inspector"}</div>
+        <button onClick={onClose} style={{
+          background: "none", border: "none", color: "#94a3b8",
+          fontSize: 18, cursor: "pointer", padding: 0, lineHeight: 1,
+        }}>×</button>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {rows.map((r, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "4px 0", borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.07)" }}>
+            <span style={{ color: "#94a3b8", fontSize: 11 }}>{r[0]}</span>
+            <span style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11, textAlign: "right" }}>{r[1]}</span>
+          </div>
+        ))}
+      </div>
+      {actions.length > 0 && (
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+          {actions.map((a, i) => (
+            <button key={i} onClick={a.onClick} style={{
+              padding: "8px 12px", borderRadius: 6, border: "none",
+              background: "#f5b731", color: "#0f172a",
+              fontWeight: 700, fontSize: 11, cursor: "pointer",
+              fontFamily: '"DM Sans", sans-serif',
+            }}>{a.label}</button>
+          ))}
+        </div>
+      )}
+    </aside>
+  );
 }

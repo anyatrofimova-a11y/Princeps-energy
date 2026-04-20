@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParcelDossier } from "../../hooks/useParcelDossier.js";
+import useParcelDossier from "../../hooks/useParcelDossier.js";
 
 const GOLD = "#F5B731";
 const IVORY = "#FBF8F2";

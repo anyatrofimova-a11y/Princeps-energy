@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import ProjectTree from "./ProjectTree";
 // ChatRail moved to global mount in App.jsx (2026-04-19 chat consolidation)
 import ProjectPage from "../workspace/ProjectPage";
@@ -275,52 +276,76 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
 
   return (
     <div className="rd-root">
-      <ProjectTree
-        portfolios={tree}
-        selectedPortfolioId={selectedPortfolioId}
-        selectedProjectId={selectedProjectId}
-        selectedSiteId={selectedCandidateId}
-        onSelectPortfolio={setSelectedPortfolioId}
-        onSelectProject={onSelectProject}
-        onSelectSite={onSelectSite}
-        onNewProject={onNewProject}
-        onNewPortfolio={() => { /* TODO: portfolio create modal */ }}
-      />
-
-      <div className="rd-center">
-        {loading && !project ? (
-          <div className="rd-loading">Loading portfolios…</div>
-        ) : loadError ? (
-          <div className="rd-error">
-            <div className="rd-error-title">Could not load</div>
-            <div className="rd-error-sub">{loadError}</div>
-            <button className="rd-retry" onClick={reloadTree}>Retry</button>
-          </div>
-        ) : (
-          <ProjectPage
-            portfolio={currentPortfolio}
-            project={project}
-            sites={sites}
-            activeTab={activeTab}
-            activeSubTab={activeSubTab}
-            onTabChange={(t) => { setActiveTab(t); setActiveSubTab(null); }}
-            onPopOutTwin={actions?.gridTwin || onPopOutTwin}
-            onAddCandidate={() => onNewProject(selectedPortfolioId)}
-            onSelectSite={(s) => setSelectedCandidateId(s.candidate_id)}
-            actions={actions}
-            mapSlot={activeTab === "overview" ? mapSlot : null}
-            onViewMap={onViewMap || (() => {})}
-            onNavigate={(href) => {
-              if (!href) return;
-              const match = href.match(/\/p\/([^/]+)(?:\/project\/([^/]+))?/);
-              if (match) {
-                setSelectedPortfolioId(match[1]);
-                setSelectedProjectId(match[2] || null);
-              }
-            }}
+      {/* Resizable + collapsible split between project tree and main canvas.
+          Sizes persist to localStorage via autoSaveId. Drag the gold rule to
+          resize; double-click to snap-collapse the project tree. */}
+      <PanelGroup
+        direction="horizontal"
+        autoSaveId="princeps-rd-layout"
+        style={{ height: "100%", width: "100%" }}
+      >
+        <Panel
+          id="rd-tree"
+          order={1}
+          defaultSize={20}
+          minSize={12}
+          maxSize={40}
+          collapsible
+          collapsedSize={0}
+          className="rd-pane rd-pane-tree"
+        >
+          <ProjectTree
+            portfolios={tree}
+            selectedPortfolioId={selectedPortfolioId}
+            selectedProjectId={selectedProjectId}
+            selectedSiteId={selectedCandidateId}
+            onSelectPortfolio={setSelectedPortfolioId}
+            onSelectProject={onSelectProject}
+            onSelectSite={onSelectSite}
+            onNewProject={onNewProject}
+            onNewPortfolio={() => { /* TODO: portfolio create modal */ }}
           />
-        )}
-      </div>
+        </Panel>
+
+        <PanelResizeHandle className="rd-resize-handle" />
+
+        <Panel id="rd-center" order={2} defaultSize={80} minSize={50}>
+          <div className="rd-center">
+            {loading && !project ? (
+              <div className="rd-loading">Loading portfolios…</div>
+            ) : loadError ? (
+              <div className="rd-error">
+                <div className="rd-error-title">Could not load</div>
+                <div className="rd-error-sub">{loadError}</div>
+                <button className="rd-retry" onClick={reloadTree}>Retry</button>
+              </div>
+            ) : (
+              <ProjectPage
+                portfolio={currentPortfolio}
+                project={project}
+                sites={sites}
+                activeTab={activeTab}
+                activeSubTab={activeSubTab}
+                onTabChange={(t) => { setActiveTab(t); setActiveSubTab(null); }}
+                onPopOutTwin={actions?.gridTwin || onPopOutTwin}
+                onAddCandidate={() => onNewProject(selectedPortfolioId)}
+                onSelectSite={(s) => setSelectedCandidateId(s.candidate_id)}
+                actions={actions}
+                mapSlot={activeTab === "overview" ? mapSlot : null}
+                onViewMap={onViewMap || (() => {})}
+                onNavigate={(href) => {
+                  if (!href) return;
+                  const match = href.match(/\/p\/([^/]+)(?:\/project\/([^/]+))?/);
+                  if (match) {
+                    setSelectedPortfolioId(match[1]);
+                    setSelectedProjectId(match[2] || null);
+                  }
+                }}
+              />
+            )}
+          </div>
+        </Panel>
+      </PanelGroup>
 
       {/* ChatRail mounted globally in App.jsx (2026-04-19 chat consolidation).
           Project context flows via window event 'princeps-chat-context'. */}
@@ -340,9 +365,52 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
           overflow: hidden;
           flex: 1; min-height: 0;
         }
+        .rd-pane {
+          height: 100%;
+          overflow: hidden;
+          min-width: 0;
+        }
+        /* Override ProjectTree's hard-coded 280px root width so it fills the
+           resizable Panel instead of clipping at the panel boundary. */
+        .rd-pane-tree { background: var(--surface, #fff); }
+        .rd-pane-tree .pt-root,
+        .rd-pane-tree .pt-scroll,
+        .rd-pane-tree .pt-row { min-width: 0; }
+        .rd-pane-tree .pt-root { width: 100%; }
+        .rd-pane-tree .pt-pf-name,
+        .rd-pane-tree .pt-name {
+          min-width: 0;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        /* Drag handle — thin gold rule. Hover/active widens it slightly so
+           it's hit-friendly but quiet at rest. */
+        .rd-resize-handle {
+          width: 4px;
+          flex-shrink: 0;
+          background: transparent;
+          border-left: 1px solid var(--cds-border-subtle, #e8e5df);
+          cursor: col-resize;
+          transition: background 120ms ease, border-color 120ms ease;
+          position: relative;
+        }
+        .rd-resize-handle:hover {
+          background: rgba(201, 166, 75, 0.12);
+          border-left-color: #C9A64B;
+        }
+        .rd-resize-handle[data-resize-handle-active] {
+          background: rgba(201, 166, 75, 0.22);
+          border-left-color: #A88732;
+        }
+        /* Collapsed-tree affordance: when the tree panel is collapsed the
+           resize handle is the only thing the user sees on the left edge,
+           so make it a touch wider on hover so it's discoverable. */
+        .rd-resize-handle:hover { width: 5px; }
         .rd-center {
           flex: 1; min-width: 0; min-height: 0;
           display: flex; flex-direction: column;
+          height: 100%;
         }
         .rd-loading, .rd-error {
           flex: 1;
