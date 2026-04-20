@@ -234,6 +234,31 @@ export default function GridConnectionPanel({ onClose, onHighlightSubstation }) 
               </div>
             )}
 
+            {/* Data sources — provenance honesty line */}
+            {result.data_provenance && (
+              <div
+                style={{
+                  padding: "4px 16px 0",
+                  fontSize: 11,
+                  color: result.data_provenance === "synthetic_fallback"
+                    ? "#b28600" : "var(--cds-text-secondary, #6b7280)",
+                }}
+                title={result.reason || ""}
+              >
+                Data sources: <strong>{result.data_provenance}</strong>
+                {result.last_refreshed_utc
+                  ? ` — refreshed ${result.last_refreshed_utc.slice(0, 10)}`
+                  : ""}
+                {typeof result.stale_days === "number"
+                  ? ` (${result.stale_days}d old)` : ""}
+                {result.reason ? (
+                  <span style={{ display: "block", fontStyle: "italic", opacity: 0.85 }}>
+                    {result.reason}
+                  </span>
+                ) : null}
+              </div>
+            )}
+
             {/* Cost Range P10/P50/P90 */}
             {cost && (
               <div className="gc-section">

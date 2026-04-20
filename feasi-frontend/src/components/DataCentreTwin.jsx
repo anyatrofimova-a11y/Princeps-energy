@@ -3,6 +3,8 @@ import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, OrthographicCamera, Grid, Html } from "@react-three/drei";
 import * as THREE from "three";
 import { useSite } from "../SiteContext";
+import InsiderDCDesign from "./InsiderDCDesign";
+import DCDesignTwin from "./DCDesignTwin";
 // import PostprocessingEffects from "./PostprocessingEffects";
 
 /* ── Design Tokens ───────────────────────────────────────────────────────── */
@@ -1421,6 +1423,16 @@ export default function DataCentreTwin({ onClose }) {
     finally { setLoading(false); }
   }, [itLoadKw, redundancy, coolingType, rackDensity, tier, explain, pickedLocation]);
 
+  // Auto-refetch plan when sizing inputs change. Without this the LAYOUT card
+  // (rack count, white space, total area) keeps showing the initial plan even
+  // after the user moves the IT Load / Rack Density sliders — which produced
+  // the visible bug "50 MW shows 13 racks / 32 m²" (those numbers were for the
+  // 100 kW initial plan, not the 50 MW slider value). Debounced 400 ms.
+  useEffect(() => {
+    const t = setTimeout(() => { fetchPlan(); }, 400);
+    return () => clearTimeout(t);
+  }, [itLoadKw, rackDensity, redundancy, coolingType, tier, fetchPlan]);
+
   // Fetch feasibility score
   const fetchFeasibility = useCallback(async () => {
     try {
@@ -1761,8 +1773,43 @@ export default function DataCentreTwin({ onClose }) {
           )}
         </div>
 
-        {/* 3D Canvas */}
+        {/* Centre pane — insider-grade pre-FID for Design mode; 3D canvas
+            preserved for Monitor / Simulate (live telemetry workflows) */}
         <div style={{ flex: 1, position: "relative" }}>
+          {viewMode === "plan" ? (
+            <DCDesignTwin
+              lat={pickedLocation?.lat ?? explain?.lat ?? 51.4974}
+              lon={pickedLocation?.lon ?? explain?.lon ?? -0.5683}
+              itLoadMw={(itLoadKw || 0) / 1000}
+              tier={tier}
+              redundancy={redundancy}
+            />
+          ) : viewMode === "design" ? (
+            <InsiderDCDesign
+              lat={pickedLocation?.lat ?? 51.4974}
+              lon={pickedLocation?.lon ?? -0.5683}
+              itLoadMw={(itLoadKw || 0) / 1000}
+              tier={tier}
+              redundancy={redundancy}
+              pvMw={0}
+              bessMwh={0}
+              projectId={null}
+              onClampIt={(mw) => setItLoadKw(Math.round(mw * 1000))}
+              onSelectCooling={(key) => {
+                // Map the new D2 topology vocabulary (a2_dry / a3_evap / l2c /
+                // immersion_1p / immersion_2p) onto the legacy COOLING_OPTIONS
+                // enum used by Monitor/Simulate modes + the /api/dc/plan body.
+                const LEGACY_MAP = {
+                  a2_dry:        "free_cooling",
+                  a3_evap:       "evaporative",
+                  l2c:           "hybrid",
+                  immersion_1p:  "mechanical",
+                  immersion_2p:  "mechanical",
+                };
+                setCoolingType(LEGACY_MAP[key] || "hybrid");
+              }}
+            />
+          ) : (
           <React.Suspense fallback={<div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", color: "#666", fontSize: 12 }}>Loading 3D view...</div>}>
             <Canvas
               shadows
@@ -1784,6 +1831,7 @@ export default function DataCentreTwin({ onClose }) {
               />
             </Canvas>
           </React.Suspense>
+          )}
 
           {/* Metrics strip at bottom of canvas */}
           {viewMode === "monitor" && metrics && (

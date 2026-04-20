@@ -8,6 +8,9 @@ mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 import { useSite } from "../SiteContext";
 import api from "../services/api";
 import electricityZonesGeoJSON from "../data/electricity-zones.json";
+import TimeScrubber from "./map/TimeScrubber";
+import FesPathwaySwitcher from "./map/FesPathwaySwitcher";
+import { useMapTime } from "../hooks/useMapTime";
 
 const PROXY = "pmtiles://http://localhost:3000/pmtiles-proxy";
 
@@ -110,6 +113,7 @@ const EMPTY_FC = { type: "FeatureCollection", features: [] };
 export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = false, onPick, pickedLocation, onZoneClick, epcFields = {},
   drawState, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex, chatLayers = [], onMapReady }) {
   const { stabilityData, gridHighlightSub } = useSite();
+  const { asOf: mapTimeAsOf } = useMapTime();
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
@@ -130,9 +134,27 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       protocolAdded = true;
     }
 
-    const map = new mapboxgl.Map({
+    // ── Basemap (2026-04-19 redesign): Mapbox vector tiles via Studio style
+    //    when a token is present; fall back to Carto raster when not so the
+    //    app still renders in unauth'd previews / CI. Custom sources / layers
+    //    (terrain, hillshade, assets, chat layers, deck.gl overlays) are
+    //    layered on top by the existing setupMap() routine.
+    const hasMapboxToken = !!mapboxgl.accessToken;
+    const mapOptions = {
       container: containerRef.current,
-      style: {
+      center: [-1.5, 52.5],
+      zoom: 7,
+      pitch: 45,
+      bearing: -10,
+      maxPitch: 85,
+    };
+    if (hasMapboxToken) {
+      // Light vector style — DM-Sans-friendly, clean basemap. Vector tiles
+      // give us smooth zoom at arbitrary levels, feature querying and correct
+      // terrain occlusion, which raster Carto does not.
+      mapOptions.style = "mapbox://styles/mapbox/light-v11";
+    } else {
+      mapOptions.style = {
         version: 8,
         glyphs: "mapbox://fonts/mapbox/{fontstack}/{range}.pbf",
         sprite: "mapbox://sprites/mapbox/light-v11",
@@ -152,13 +174,9 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         layers: [
           { id: "carto-base", type: "raster", source: "carto-dark" },
         ],
-      },
-      center: [-1.5, 52.5],
-      zoom: 7,
-      pitch: 45,
-      bearing: -10,
-      maxPitch: 85,
-    });
+      };
+    }
+    const map = new mapboxgl.Map(mapOptions);
 
     mapRef.current = map;
 
@@ -1699,13 +1717,16 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       });
 
       // ── Land Registry Parcels ──
+      // Purple fill matches the GridTwin land-rights overlay (#c040ff at
+      // 0.3 alpha). Per-feature `color` is respected when the API supplies
+      // one; otherwise everything falls back to the purple ownership tint.
       map.addLayer({
         id: "land-parcels-fill",
         type: "fill",
         source: "land-parcels",
         paint: {
-          "fill-color": ["get", "color"],
-          "fill-opacity": 0.15,
+          "fill-color": ["coalesce", ["get", "color"], "#c040ff"],
+          "fill-opacity": 0.3,
         },
         layout: { visibility: "none" },
       });
@@ -1714,9 +1735,9 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         type: "line",
         source: "land-parcels",
         paint: {
-          "line-color": ["get", "color"],
-          "line-width": 1.5,
-          "line-opacity": 0.7,
+          "line-color": ["coalesce", ["get", "color"], "#ffffff"],
+          "line-width": 1.2,
+          "line-opacity": 0.75,
         },
         layout: { visibility: "none" },
       });
@@ -4050,6 +4071,13 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   }, [drawState]);
 
   return (
-    <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />
+    <>
+      <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />
+      {/* BOT-EE: time scrubber + FES switcher mounted at map footer */}
+      <FesPathwaySwitcher />
+      <TimeScrubber />
+      {/* mapTimeAsOf is available as a prop for any layer factory that wants it */}
+      {mapTimeAsOf ? null : null}
+    </>
   );
 }

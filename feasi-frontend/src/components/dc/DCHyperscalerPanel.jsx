@@ -148,6 +148,213 @@ function formatGbp(v) {
 }
 
 
+/** Coloured pill used inside the dockets. */
+function Pill({ label, tone = "neutral" }) {
+  const tones = {
+    go:       { bg: "#dcfce7", fg: "#166534" },
+    caution:  { bg: "#fef3c7", fg: "#92400e" },
+    blocker:  { bg: "#fee2e2", fg: "#991b1b" },
+    info:     { bg: "#dbeafe", fg: "#1e40af" },
+    neutral:  { bg: "#f1f5f9", fg: "#334155" },
+  };
+  const t = tones[tone] || tones.neutral;
+  return (
+    <span style={{
+      padding: "2px 8px", borderRadius: 10, background: t.bg, color: t.fg,
+      fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5,
+    }}>{label}</span>
+  );
+}
+
+/** Three-card strip: Planning approval prediction · Comparable nearby
+ *  consents · Regulatory + Gate 2 readiness. Renders skeletons while
+ *  loading and graceful empty states when an endpoint returns nothing. */
+function DocketStrip({ dockets, tech, mw, targetEnergisation }) {
+  const { planning, comparables, regulatory, gateReadiness, loading } = dockets;
+
+  // Planning: hand-pick the 1-2 numbers we trust. Backend predict_approval
+  // returns probability + key drivers in shifting shapes across versions, so
+  // be defensive.
+  const planProb = planning?.approval_probability ?? planning?.probability
+                ?? planning?.predicted_probability ?? null;
+  const planConf = planning?.confidence ?? null;
+  const planDrivers = planning?.key_drivers || planning?.drivers || [];
+  const planTone = planProb == null ? "neutral"
+                  : planProb >= 0.7 ? "go"
+                  : planProb >= 0.45 ? "caution" : "blocker";
+
+  const compRows = (comparables?.projects || comparables?.results || comparables || []).slice(0, 4);
+
+  // Regulatory: collapse whatever the endpoint returns into a flat list of
+  // (title, status, date) triples so the UI doesn't break on schema drift.
+  const regItems = (() => {
+    const r = regulatory || {};
+    if (Array.isArray(r.items)) return r.items.slice(0, 5);
+    if (Array.isArray(r.regulatory_items)) return r.regulatory_items.slice(0, 5);
+    if (Array.isArray(r.consultations)) return r.consultations.slice(0, 5);
+    // Synthesise a minimal docket from named scalar fields when present
+    const synth = [];
+    if (r.eu_eed_compliant != null) synth.push({ title: "EU EED Article 12 reporting", status: r.eu_eed_compliant ? "compliant" : "action_required" });
+    if (r.tnuos_zone) synth.push({ title: `TNUoS zone ${r.tnuos_zone}`, status: "info" });
+    if (r.bng_required != null) synth.push({ title: "BNG 10% net gain", status: r.bng_required ? "required" : "n/a" });
+    if (r.epn5_thermal_limit_mw != null) synth.push({ title: `EPN-5 thermal limit ${r.epn5_thermal_limit_mw} MW`, status: "info" });
+    return synth;
+  })();
+
+  // Gate 2 readiness: backend returns a checklist with go/caution/blocker.
+  const gateItems = (() => {
+    const g = gateReadiness || {};
+    if (Array.isArray(g.checklist)) return g.checklist;
+    if (Array.isArray(g.items)) return g.items;
+    if (g.criteria && typeof g.criteria === "object") {
+      return Object.entries(g.criteria).map(([k, v]) => ({
+        title: k.replace(/_/g, " "),
+        status: v?.status || (v === true ? "go" : v === false ? "blocker" : "caution"),
+        note: v?.note,
+      }));
+    }
+    return [];
+  })();
+  const gateScore = gateReadiness?.readiness_score ?? gateReadiness?.score ?? null;
+
+  const gridStyle = {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: 14, marginBottom: 18,
+  };
+  const card = {
+    background: "#ffffff",
+    border: `1px solid #e5e7eb`,
+    borderRadius: 12,
+    padding: 16,
+    minHeight: 180,
+  };
+  const title = {
+    fontSize: 11, fontWeight: 700, color: "#64748b",
+    textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10,
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+  };
+  const headline = { fontSize: 22, fontWeight: 800, color: "#0f172a", lineHeight: 1, fontFamily: "'JetBrains Mono', monospace" };
+  const sub = { fontSize: 11, color: "#64748b", marginTop: 4 };
+  const row = { display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 11, borderTop: "1px solid #f1f5f9" };
+  const empty = { fontSize: 11, color: "#94a3b8", fontStyle: "italic" };
+
+  return (
+    <div style={gridStyle}>
+      {/* Planning approval prediction */}
+      <div style={card}>
+        <div style={title}>
+          <span>Planning · {tech.replace(/_/g, " ")}</span>
+          <Pill label={planTone === "neutral" ? "—" : planTone} tone={planTone} />
+        </div>
+        <div style={headline}>
+          {planProb == null ? "—" : `${Math.round(planProb * 100)}%`}
+        </div>
+        <div style={sub}>
+          {loading ? "Loading REPD ML prediction…"
+            : planProb == null ? "No prediction available for this site"
+            : `Approval probability${planConf != null ? ` · confidence ${Math.round(planConf * 100)}%` : ""}`}
+        </div>
+        {planDrivers.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ ...sub, marginBottom: 4, fontWeight: 700 }}>Drivers</div>
+            {planDrivers.slice(0, 3).map((d, i) => (
+              <div key={i} style={row}>
+                <span>{typeof d === "string" ? d : d.name || d.feature}</span>
+                <span style={{ color: "#475569" }}>
+                  {typeof d === "object" ? (d.impact || d.value || "") : ""}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ marginTop: 10 }}>
+          <div style={{ ...sub, marginBottom: 4, fontWeight: 700 }}>Comparable nearby</div>
+          {compRows.length === 0 ? (
+            <div style={empty}>{loading ? "…" : "No comparables within 20 km"}</div>
+          ) : compRows.map((c, i) => (
+            <div key={i} style={row}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
+                {c.name || c.site_name || c.project || "—"}
+              </span>
+              <span style={{ color: c.decision === "Approved" ? "#166534" : c.decision === "Refused" ? "#991b1b" : "#475569" }}>
+                {c.decision || c.status || c.outcome || "—"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Regulatory dockets */}
+      <div style={card}>
+        <div style={title}>
+          <span>Regulatory · live dockets</span>
+          <Pill label="2026" tone="info" />
+        </div>
+        {regItems.length === 0 ? (
+          <div style={empty}>
+            {loading ? "Loading regulatory snapshot…" :
+              "No active dockets returned for this site/capacity"}
+          </div>
+        ) : regItems.map((r, i) => {
+          const status = (r.status || r.state || "").toLowerCase();
+          const tone = /comply|compliant|met|approved|complete/.test(status) ? "go"
+                     : /pending|review|consult|action/.test(status) ? "caution"
+                     : /block|fail|breach|reject/.test(status) ? "blocker"
+                     : "info";
+          return (
+            <div key={i} style={{ ...row, alignItems: "center" }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>
+                {r.title || r.name || r.docket || "—"}
+              </span>
+              <Pill label={r.status || r.state || "info"} tone={tone} />
+            </div>
+          );
+        })}
+        <div style={{ ...sub, marginTop: 10, fontStyle: "italic" }}>
+          Sources: Ofgem RIIO-T3, NESO TMO4+, EU EED Art.12, DEFRA BNG, Town &amp; Country Planning (EIA) Regs.
+        </div>
+      </div>
+
+      {/* Gate 2 readiness */}
+      <div style={card}>
+        <div style={title}>
+          <span>Gate 2 readiness · {targetEnergisation}</span>
+          <Pill
+            label={gateScore == null ? "—" : `${Math.round((gateScore <= 1 ? gateScore * 100 : gateScore))}%`}
+            tone={gateScore == null ? "neutral"
+                  : (gateScore <= 1 ? gateScore : gateScore / 100) >= 0.7 ? "go"
+                  : (gateScore <= 1 ? gateScore : gateScore / 100) >= 0.4 ? "caution" : "blocker"}
+          />
+        </div>
+        {gateItems.length === 0 ? (
+          <div style={empty}>
+            {loading ? "Loading Gate 2 checklist…" :
+              `Capacity ${mw} MVA — checklist not returned for this configuration`}
+          </div>
+        ) : gateItems.slice(0, 7).map((g, i) => {
+          const s = (g.status || "").toLowerCase();
+          const tone = /go|met|complete|ready|compliant/.test(s) ? "go"
+                     : /caution|partial|pending|action/.test(s) ? "caution"
+                     : /block|missing|fail|gap/.test(s) ? "blocker"
+                     : "neutral";
+          return (
+            <div key={i} style={{ ...row, alignItems: "center" }}>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200, textTransform: "capitalize" }}>
+                {g.title || g.criterion || "—"}
+              </span>
+              <Pill label={g.status || "—"} tone={tone} />
+            </div>
+          );
+        })}
+        <div style={{ ...sub, marginTop: 10, fontStyle: "italic" }}>
+          NESO TMO4+ Gate 2 criteria: land rights, planning, MW, route to FID, PPA, licences.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DCHyperscalerPanel() {
   const [params, setParams] = useState({
     lat: 51.55,
@@ -160,6 +367,16 @@ export default function DCHyperscalerPanel() {
     strategic_demand: false,
     customer_role: "demand",
     risk_allowance_pct: 7.5,
+    // Pre-FID context (added 2026-04-19): drives planning/regulatory/Gate 2 dockets
+    target_energisation: "2030-Q1",
+    parcel_area_ha: 8,
+    is_greenfield: false,
+    fibre_pop_km: 1.5,
+    water_source: "closed_loop",   // closed_loop | evaporative | air_only
+    embedded_gen_mw: 0,
+    demand_profile: "24x7",        // 24x7 | interruptible | flexible
+    anm_acceptable: false,
+    planning_zone_flags: [],       // greenbelt | aonb | sssi | flood_z3 | conservation
   });
   const [result, setResult] = useState(null);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
@@ -169,6 +386,14 @@ export default function DCHyperscalerPanel() {
     msip: null,
     sqss: null,
     bom: null,
+  });
+  // Planning + regulatory + Gate 2 dockets (added 2026-04-19)
+  const [dockets, setDockets] = useState({
+    planning: null,
+    comparables: null,
+    regulatory: null,
+    gateReadiness: null,
+    loading: false,
   });
 
   const update = (key) => (e) => {
@@ -208,7 +433,7 @@ export default function DCHyperscalerPanel() {
         const [mvs, msip, sqss, bom] = await Promise.allSettled([
           api.dcHyperscaler.mvsGap({
             capacity_mva: Number(params.capacity_mva),
-            has_dual_feed: opt.dual_feed,
+            has_dual_feed: (opt.has_dual_feed ?? opt.dual_feed ?? false),
             uses_gis_switchgear: opt.switchgear?.recommended === "GIS",
             voltage_kv: opt.voltage_kv,
             urban: params.urban,
@@ -222,12 +447,12 @@ export default function DCHyperscalerPanel() {
           api.dcHyperscaler.sqssCheck({
             capacity_mva: Number(params.capacity_mva),
             voltage_kv: opt.voltage_kv,
-            has_dual_feed: opt.dual_feed,
+            has_dual_feed: (opt.has_dual_feed ?? opt.dual_feed ?? false),
           }),
           api.dcHyperscaler.connectionBom({
             capacity_mva: Number(params.capacity_mva),
             voltage_kv: opt.voltage_kv,
-            has_dual_feed: opt.dual_feed,
+            has_dual_feed: (opt.has_dual_feed ?? opt.dual_feed ?? false),
             uses_gis: opt.switchgear?.recommended === "GIS",
           }),
         ]);
@@ -245,6 +470,36 @@ export default function DCHyperscalerPanel() {
 
     return () => { cancelled = true; };
   }, [result, selectedOptionId, params]);
+
+  // Planning + regulatory + Gate 2 dockets — refresh on coords/capacity change
+  // and once after every optioneering run so the dockets reflect the case the
+  // user is actually optioning.
+  useEffect(() => {
+    let cancelled = false;
+    setDockets(d => ({ ...d, loading: true }));
+    const lat = Number(params.lat);
+    const lon = Number(params.lon);
+    const mw = Number(params.capacity_mva);  // MVA ≈ MW at PF≈1 for first-pass
+    (async () => {
+      const safe = async (p) => { try { return await p; } catch { return null; } };
+      const [planning, comparables, regulatory, gate] = await Promise.all([
+        safe(api.planning.predictApproval(lat, lon, mw, "data_centre")),
+        safe(api.planning.comparableProjects(lat, lon, mw, "data_centre", 5)),
+        safe(api.dc.regulatory(lat, lon, mw)),
+        safe(api.grid.gateReadiness(lat, lon, mw, "data_centre", {
+          target_energisation: params.target_energisation,
+          land_rights: false,
+          planning_status: params.is_greenfield ? "pre-app" : "consented_use",
+          ppa_status: "term_sheet",
+          parcel_area_ha: Number(params.parcel_area_ha) || null,
+        })),
+      ]);
+      if (cancelled) return;
+      setDockets({ planning, comparables, regulatory, gateReadiness: gate, loading: false });
+    })();
+    return () => { cancelled = true; };
+  }, [params.lat, params.lon, params.capacity_mva, params.target_energisation,
+      params.parcel_area_ha, params.is_greenfield, result]);
 
   const selectedOption = result?.options.find(o => o.option_id === selectedOptionId);
 
@@ -296,6 +551,41 @@ export default function DCHyperscalerPanel() {
             <input style={ST.input} value={params.risk_allowance_pct} onChange={update("risk_allowance_pct")} type="number" step="0.5" />
           </div>
           <div>
+            <div style={ST.label}>Target energisation</div>
+            <select style={ST.input} value={params.target_energisation} onChange={update("target_energisation")}>
+              <option value="2027-Q4">2027 Q4</option>
+              <option value="2028-Q4">2028 Q4</option>
+              <option value="2029-Q2">2029 Q2</option>
+              <option value="2030-Q1">2030 Q1</option>
+              <option value="2031-Q1">2031 Q1</option>
+              <option value="2032-Q1">2032+ </option>
+            </select>
+          </div>
+          <div>
+            <div style={ST.label}>Parcel area (ha)</div>
+            <input style={ST.input} value={params.parcel_area_ha} onChange={update("parcel_area_ha")} type="number" step="0.5" />
+          </div>
+          <div>
+            <div style={ST.label}>Fibre POP (km)</div>
+            <input style={ST.input} value={params.fibre_pop_km} onChange={update("fibre_pop_km")} type="number" step="0.1" />
+          </div>
+          <div>
+            <div style={ST.label}>Cooling water</div>
+            <select style={ST.input} value={params.water_source} onChange={update("water_source")}>
+              <option value="closed_loop">Closed-loop (low water)</option>
+              <option value="evaporative">Evaporative tower</option>
+              <option value="air_only">Air-only / dry</option>
+            </select>
+          </div>
+          <div>
+            <div style={ST.label}>Demand profile</div>
+            <select style={ST.input} value={params.demand_profile} onChange={update("demand_profile")}>
+              <option value="24x7">24×7 firm</option>
+              <option value="flexible">Flexible (DSR)</option>
+              <option value="interruptible">Interruptible</option>
+            </select>
+          </div>
+          <div>
             <label style={ST.checkbox}>
               <input type="checkbox" checked={params.urban} onChange={update("urban")} />
               Urban
@@ -312,11 +602,30 @@ export default function DCHyperscalerPanel() {
               <input type="checkbox" checked={params.strategic_demand} onChange={update("strategic_demand")} />
               Strategic demand (AI GZ)
             </label>
+            <label style={ST.checkbox}>
+              <input type="checkbox" checked={params.is_greenfield} onChange={update("is_greenfield")} />
+              Greenfield
+            </label>
+            <label style={ST.checkbox}>
+              <input type="checkbox" checked={params.anm_acceptable} onChange={update("anm_acceptable")} />
+              ANM / Flex connection OK
+            </label>
           </div>
           <button style={ST.runButton} onClick={run} disabled={loading}>
             {loading ? "Running…" : "Run optioneering"}
           </button>
         </div>
+
+        {/* Planning + Regulatory + Gate 2 dockets — ambient context that
+            updates as the user changes coords, capacity or energisation date.
+            Sits ABOVE results so it informs option selection, not the other
+            way round. */}
+        <DocketStrip
+          dockets={dockets}
+          tech="data_centre"
+          mw={params.capacity_mva}
+          targetEnergisation={params.target_energisation}
+        />
 
         {/* Results */}
         {result && (

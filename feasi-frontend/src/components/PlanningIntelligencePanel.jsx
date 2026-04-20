@@ -16,13 +16,20 @@ const REGULATIONS = [
   { id: "transport", label: "Transport Assessment",       category: "logistics",   description: "Construction traffic management and abnormal loads routing" },
 ];
 
+/* Backend REPD ML accepts: solar | wind | bess | battery | biomass | hydrogen.
+   "dc" (data centre) has no REPD class — map to "battery" (best proxy for large
+   load/MV connection applications) until the DC precedent table is ingested. */
 const TECH_OPTIONS = [
-  { value: "solar", label: "Solar PV" },
-  { value: "wind", label: "Wind" },
-  { value: "bess", label: "BESS" },
-  { value: "data_centre", label: "Data Centre" },
-  { value: "hybrid", label: "Hybrid" },
+  { value: "solar", label: "Solar PV", apiTech: "solar" },
+  { value: "wind", label: "Wind", apiTech: "wind" },
+  { value: "bess", label: "BESS", apiTech: "bess" },
+  { value: "data_centre", label: "Data Centre", apiTech: "battery" },
+  { value: "hybrid", label: "Hybrid", apiTech: "solar" },
 ];
+
+function resolveApiTech(uiValue) {
+  return TECH_OPTIONS.find(t => t.value === uiValue)?.apiTech || "solar";
+}
 
 /* ── Helpers ────────────────────────────────────────────────────────────── */
 function pct(v) { return v != null ? `${(v * 100).toFixed(0)}%` : "--"; }
@@ -109,6 +116,7 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
   // Compliance tab
   const [complianceData, setComplianceData] = useState(null);
   const [compLoading, setCompLoading] = useState(false);
+  const [compError, setCompError] = useState(null);
   const [regStatuses, setRegStatuses] = useState(() =>
     REGULATIONS.reduce((acc, r) => ({ ...acc, [r.id]: "pending" }), {})
   );
@@ -116,6 +124,7 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
   // Monitor tab
   const [monitorData, setMonitorData] = useState(null);
   const [monLoading, setMonLoading] = useState(false);
+  const [monError, setMonError] = useState(null);
 
   // Sync coords from site context
   useEffect(() => {
@@ -129,15 +138,16 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
   const runPrediction = useCallback(async () => {
     setPredLoading(true);
     setPredError(null);
+    const apiTech = resolveApiTech(technology);
     try {
       const [pred, comp] = await Promise.all([
-        api.planning.predictApproval(lat, lon, capacityMw, technology),
-        api.planning.comparableProjects(lat, lon, capacityMw, technology, 5),
+        api.planning.predictApproval(lat, lon, capacityMw, apiTech),
+        api.planning.comparableProjects(lat, lon, capacityMw, apiTech, 5),
       ]);
       setPrediction(pred);
       setComparables(comp);
     } catch (e) {
-      setPredError(e.message || "Prediction failed");
+      setPredError(e?.message || "Prediction failed. Check backend logs.");
     }
     setPredLoading(false);
   }, [lat, lon, capacityMw, technology]);
@@ -145,39 +155,43 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
   /* ── Compliance ── */
   const loadCompliance = useCallback(async () => {
     setCompLoading(true);
+    setCompError(null);
+    const apiTech = resolveApiTech(technology);
+    // Heuristic land area: solar ~2 ha/MW, other tech ~0.5 ha/MW
+    const landAreaHa = apiTech === "solar" ? capacityMw * 2 : capacityMw * 0.5;
     try {
-      const data = await api.planning.compliance(lat, lon, capacityMw, technology);
+      const data = await api.planning.compliance(lat, lon, capacityMw, apiTech, landAreaHa);
       setComplianceData(data);
-      // Map returned requirements to statuses
-      if (data?.requirements) {
+      // Map returned checks/requirements to statuses
+      const items = data?.requirements || data?.checks || [];
+      if (Array.isArray(items) && items.length) {
         const newStatuses = { ...regStatuses };
-        data.requirements.forEach(req => {
+        items.forEach(req => {
           if (req.id && req.status) newStatuses[req.id] = req.status;
         });
         setRegStatuses(newStatuses);
       }
-    } catch (e) { /* silent */ }
+    } catch (e) {
+      setCompError(e?.message || "Compliance check failed.");
+    }
     setCompLoading(false);
   }, [lat, lon, capacityMw, technology]);
 
   /* ── Monitor ── */
   const loadMonitor = useCallback(async () => {
     setMonLoading(true);
+    setMonError(null);
     try {
       const [nsipData, constraintsData] = await Promise.all([
         api.planning.nsipConflicts(lat, lon, 20),
         api.planning.constraints(lat, lon, 5000),
       ]);
       setMonitorData({ nsip: nsipData, constraints: constraintsData });
-    } catch (e) { /* silent */ }
+    } catch (e) {
+      setMonError(e?.message || "Planning monitor failed.");
+    }
     setMonLoading(false);
   }, [lat, lon]);
-
-  // Auto-load on tab switch
-  useEffect(() => {
-    if (activeTab === "compliance" && !complianceData && !compLoading) loadCompliance();
-    if (activeTab === "monitor" && !monitorData && !monLoading) loadMonitor();
-  }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleRegStatus = (id) => {
     setRegStatuses(prev => {
@@ -257,14 +271,19 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
               <button
                 onClick={runPrediction}
                 disabled={predLoading}
-                className={`gc-assess-btn${predLoading ? " gc-assess-btn--loading" : ""}`}
-                style={{ width: "100%" }}
+                className="pi-primary-btn"
               >
-                {predLoading ? "Analysing..." : "Predict Approval"}
+                {predLoading ? (<><span className="pi-spinner" />Running...</>) : (prediction ? "Re-run analysis" : "Analyse")}
               </button>
             </div>
 
-            {predError && <div className="gc-error" style={{ padding: "8px 16px", color: "#DC2626", fontSize: 11 }}>{predError}</div>}
+            {predError && (
+              <div className="pi-error-card">
+                <div className="pi-error-title">Prediction failed</div>
+                <div className="pi-error-msg">{predError}</div>
+                <button className="pi-retry-btn" onClick={runPrediction}>Retry</button>
+              </div>
+            )}
 
             {prediction && (
               <>
@@ -335,11 +354,14 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
             )}
 
             {/* Comparable decisions */}
-            {comparables?.projects?.length > 0 && (
+            {(() => {
+              const list = Array.isArray(comparables) ? comparables : (comparables?.projects || []);
+              if (!list.length) return null;
+              return (
               <div className="pi-section">
                 <div className="pi-section-title">
-                  Comparable Decisions
-                  <span className="gc-section-badge">{comparables.projects.length}</span>
+                  Comparable REPD Precedents
+                  <span className="gc-section-badge">{list.length}</span>
                 </div>
                 <div className="pi-comparables-table">
                   <div className="pi-comp-header">
@@ -348,7 +370,7 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
                     <span>Distance</span>
                     <span>Outcome</span>
                   </div>
-                  {comparables.projects.slice(0, 5).map((p, i) => (
+                  {list.slice(0, 5).map((p, i) => (
                     <div key={i} className="pi-comp-row">
                       <span className="pi-comp-name" title={p.name || p.site_name}>
                         {(p.name || p.site_name || "Project").slice(0, 28)}
@@ -362,17 +384,18 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
                   ))}
                 </div>
               </div>
-            )}
+              );
+            })()}
 
-            {!prediction && !predLoading && (
+            {!prediction && !predLoading && !predError && (
               <div className="gc-empty">
                 <div className="gc-empty-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--cds-interactive)" strokeWidth="1.5">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="1.5">
                     <path d="M3 21h18M9 8h1M9 12h1M9 16h1M14 8h1M14 12h1M14 16h1M5 21V5a2 2 0 012-2h10a2 2 0 012 2v16" />
                   </svg>
                 </div>
                 <div className="gc-empty-text">
-                  Configure site parameters and click<br /><strong>Predict Approval</strong> to run ML analysis
+                  Configure site parameters and click <strong>Analyse</strong> to run REPD ML prediction on 13,995 UK planning outcomes.
                 </div>
               </div>
             )}
@@ -382,6 +405,24 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
         {/* ═══════════════════ TAB: Compliance ═══════════════════ */}
         {activeTab === "compliance" && (
           <>
+            <div className="pi-action-row">
+              <button
+                onClick={loadCompliance}
+                disabled={compLoading}
+                className="pi-primary-btn"
+              >
+                {compLoading ? (<><span className="pi-spinner" />Running...</>) : (complianceData ? "Re-run compliance" : "Analyse compliance")}
+              </button>
+            </div>
+
+            {compError && (
+              <div className="pi-error-card">
+                <div className="pi-error-title">Compliance check failed</div>
+                <div className="pi-error-msg">{compError}</div>
+                <button className="pi-retry-btn" onClick={loadCompliance}>Retry</button>
+              </div>
+            )}
+
             {compLoading ? (
               <div className="gc-loading" style={{ padding: 24, textAlign: "center", fontSize: 11, color: "var(--cds-text-helper)" }}>Loading compliance data...</div>
             ) : (
@@ -404,6 +445,33 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
                     </div>
                   </div>
                 </div>
+
+                {/* Backend compliance matrix (NPPF/EN-1/EN-3/EIA/BNG/CDM) */}
+                {Array.isArray(complianceData?.checks) && complianceData.checks.length > 0 && (
+                  <div className="pi-section">
+                    <div className="pi-section-title">Policy Matrix
+                      <span className="gc-section-badge">{complianceData.checks.length}</span>
+                    </div>
+                    {complianceData.checks.map((c, i) => {
+                      const isNon = /non[-_ ]compliant|refuse|fail|nsip_required/i.test(c.status || "");
+                      return (
+                        <div key={i} className="pi-check-row" style={{
+                          display: "grid", gridTemplateColumns: "1.3fr 0.7fr 1.5fr", gap: 8,
+                          padding: "6px 0", borderBottom: "1px solid rgba(0,0,0,0.04)",
+                          fontSize: 10, alignItems: "start",
+                        }}>
+                          <span style={{ fontWeight: 600, color: "var(--cds-text-primary)" }}>{c.regulation}</span>
+                          <span className="pi-badge" style={{
+                            justifySelf: "start",
+                            background: isNon ? "rgba(220,38,38,0.1)" : "rgba(22,163,74,0.1)",
+                            color: isNon ? "#DC2626" : "#16A34A",
+                          }}>{(c.status || "--").replace(/_/g, " ")}</span>
+                          <span style={{ color: "var(--cds-text-secondary)", lineHeight: 1.4 }}>{c.detail || c.action || ""}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
 
                 {/* Regulation checklist */}
                 <div className="pi-reg-list">
@@ -439,6 +507,24 @@ export default function PlanningIntelligencePanel({ onClose, embedded }) {
         {/* ═══════════════════ TAB: Monitor ═══════════════════ */}
         {activeTab === "monitor" && (
           <>
+            <div className="pi-action-row">
+              <button
+                onClick={loadMonitor}
+                disabled={monLoading}
+                className="pi-primary-btn"
+              >
+                {monLoading ? (<><span className="pi-spinner" />Running...</>) : (monitorData ? "Refresh monitor" : "Analyse monitor")}
+              </button>
+            </div>
+
+            {monError && (
+              <div className="pi-error-card">
+                <div className="pi-error-title">Planning monitor failed</div>
+                <div className="pi-error-msg">{monError}</div>
+                <button className="pi-retry-btn" onClick={loadMonitor}>Retry</button>
+              </div>
+            )}
+
             {monLoading ? (
               <div className="gc-loading" style={{ padding: 24, textAlign: "center", fontSize: 11, color: "var(--cds-text-helper)" }}>Loading planning data...</div>
             ) : (

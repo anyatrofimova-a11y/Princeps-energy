@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useSite } from "../SiteContext";
 import api from "../services/api";
+import LenderCovenantTable from "./LenderCovenantTable";
 
 /* ── UK Benchmark Defaults by Technology ────────────────────────────────── */
 const TECH_BENCHMARKS = {
@@ -912,6 +913,30 @@ export default function FinancialModelPanel({ onClose }) {
               <div className="fm-chart-wrap">
                 <DscrChart years={model.years} dscrReq={dscrReq} />
               </div>
+            </div>
+
+            {/* Lender Covenant Table — DSCR / LLCR / PLCR / ICR / Gearing */}
+            <div className="gc-section">
+              <LenderCovenantTable
+                capex={model.totalCapex}
+                revenueSchedule={model.years.map(y => y.grossRev)}
+                opexSchedule={model.years.map(y => y.opex)}
+                debtPrincipal={model.debtQuantum}
+                debtRate={interestRate / 100}
+                debtTermYears={debtTenor}
+                wacc={0.08}
+                costOfEquity={Math.max(equityIrrTarget / 100, 0.10)}
+                taxRate={0.25}
+                terminalGrowth={0.02}
+                thresholds={{
+                  dscr_min: dscrReq,
+                  llcr_min: 1.30,
+                  plcr_min: 1.40,
+                  icr_min: 2.00,
+                  gearing_max: 0.75,
+                }}
+                title="Lender Covenants"
+              />
             </div>
           </>
         )}

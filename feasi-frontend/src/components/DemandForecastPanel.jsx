@@ -188,12 +188,32 @@ function UtilBar({ value, label }) {
 /* ═══════════════════════════════════════════════════════════════════════════
    DemandForecastPanel — right slide-in panel
    ═══════════════════════════════════════════════════════════════════════════ */
+/* Haversine km between two (lat, lon) — used to pick nearest GSP. */
+function _haversineKm(a, b) {
+  if (!a || !b || a.lat == null || b.lat == null) return Infinity;
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLon = (b.lon - a.lon) * Math.PI / 180;
+  const lat1 = a.lat * Math.PI / 180;
+  const lat2 = b.lat * Math.PI / 180;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
 export default function DemandForecastPanel({ onClose }) {
-  const { selectedParcel, explain } = useSite();
+  const { selectedParcel, explain, pickedLocation } = useSite();
+
+  // Site coords — prefer explicit explain.lat/lon, fall back to picked marker.
+  const siteCoord = (() => {
+    const lat = explain?.lat ?? pickedLocation?.lat ?? selectedParcel?.lat;
+    const lon = explain?.lon ?? pickedLocation?.lon ?? selectedParcel?.lon;
+    return lat != null && lon != null ? { lat, lon } : null;
+  })();
 
   /* ── State ── */
   const [gsps, setGsps] = useState([]);
   const [selectedGsp, setSelectedGsp] = useState(null);
+  const [autoPickedFor, setAutoPickedFor] = useState(null); // track which coord we auto-picked for
   const [forecast, setForecast] = useState(null);
   const [scenarios, setScenarios] = useState(null);
   const [historical, setHistorical] = useState(null);
@@ -210,12 +230,36 @@ export default function DemandForecastPanel({ onClose }) {
   /* ── Load GSP list on mount ── */
   useEffect(() => {
     api.demand.gsps().then(data => {
-      if (data?.gsps) {
-        setGsps(data.gsps);
-        if (!selectedGsp && data.gsps.length) setSelectedGsp(data.gsps[0]);
-      }
+      if (data?.gsps) setGsps(data.gsps);
     });
   }, []);
+
+  /* ── Auto-pick nearest GSP to the active site ──
+     If we have a site coord and the user hasn't already manually chosen a
+     different GSP for this coord, pick the closest one. Recomputes when the
+     site moves. */
+  useEffect(() => {
+    if (!gsps.length) return;
+    if (!siteCoord) {
+      // No site context — default to Beddington (London) as a sane national demo pick
+      // rather than the alphabetical first entry.
+      if (!selectedGsp) {
+        const demo = gsps.find(g => g.gsp_id === "BEDD") || gsps[0];
+        setSelectedGsp(demo);
+      }
+      return;
+    }
+    const key = `${siteCoord.lat.toFixed(3)},${siteCoord.lon.toFixed(3)}`;
+    if (autoPickedFor === key) return;
+    const ranked = [...gsps]
+      .map(g => ({ ...g, _km: _haversineKm(siteCoord, g) }))
+      .sort((a, b) => a._km - b._km);
+    const nearest = ranked[0];
+    if (nearest) {
+      setSelectedGsp(nearest);
+      setAutoPickedFor(key);
+    }
+  }, [gsps, siteCoord?.lat, siteCoord?.lon, autoPickedFor]);
 
   /* ── Load forecast when GSP selected ── */
   const loadForecast = useCallback(async (gsp) => {
@@ -272,22 +316,43 @@ export default function DemandForecastPanel({ onClose }) {
         <button className="gc-close" onClick={onClose} title="Close">&times;</button>
       </div>
 
-      {/* ── GSP Selector ── */}
+      {/* ── GSP Selector — ordered by distance when site is known ── */}
       <div className="df-gsp-selector">
         <select
           value={selectedGsp?.gsp_id || ""}
           onChange={e => {
             const gsp = gsps.find(g => g.gsp_id === e.target.value);
             setSelectedGsp(gsp);
+            if (siteCoord) {
+              // Manual override — freeze auto-pick for this coord.
+              setAutoPickedFor(`${siteCoord.lat.toFixed(3)},${siteCoord.lon.toFixed(3)}`);
+            }
           }}
           className="df-select"
         >
-          {gsps.map(g => (
-            <option key={g.gsp_id} value={g.gsp_id}>
-              {g.gsp_name} ({g.dno.toUpperCase()}) — {g.peak_demand_mw} MW peak
-            </option>
-          ))}
+          {(siteCoord
+            ? [...gsps].sort((a, b) => _haversineKm(siteCoord, a) - _haversineKm(siteCoord, b))
+            : gsps
+          ).map((g, idx) => {
+            const km = siteCoord ? _haversineKm(siteCoord, g) : null;
+            const prefix = siteCoord && idx < 5 ? `★ ` : "";
+            const suffix = km != null && isFinite(km) ? ` · ${km.toFixed(0)} km` : "";
+            return (
+              <option key={g.gsp_id} value={g.gsp_id}>
+                {prefix}{g.gsp_name} ({g.dno.toUpperCase()}) — {g.peak_demand_mw} MW peak{suffix}
+              </option>
+            );
+          })}
         </select>
+        {siteCoord && selectedGsp && (
+          <div className="df-gsp-hint">
+            Auto-selected nearest GSP
+            <b> · {_haversineKm(siteCoord, selectedGsp).toFixed(1)} km</b> from site
+            {selectedGsp.peak_demand_mw && selectedGsp.capacity_mw && (
+              <> · utilisation <b>{((selectedGsp.peak_demand_mw / selectedGsp.capacity_mw) * 100).toFixed(0)}%</b></>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ── Tab bar ── */}
