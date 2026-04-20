@@ -1,17 +1,19 @@
 """
-Biodiversity Net Gain (BNG) calculator — pragmatic port of Defra's
-Biodiversity Metric 4.0 using UKHab v2.0 habitat classifications.
+Biodiversity Net Gain (BNG) calculator — pragmatic port of Natural
+England's Statutory Biodiversity Metric using UKHab v2.0 habitat
+classifications.
 
 Background
 ----------
 The Environment Act 2021 (s.98) made Biodiversity Net Gain a mandatory
 condition of most Town & Country Planning Act permissions in England from
 12 February 2024. Developments must demonstrate a minimum 10% net gain
-in biodiversity units, calculated using Natural England's statutory
-Biodiversity Metric. Metric 4.0 (Jan 2023) is the applicable tool, and
-Metric 3.1 retains transitional validity. The broad habitat taxonomy
-used here is UK Habitat Classification (UKHab) v2.0 — the hierarchical
-classification referenced by the Metric.
+in biodiversity units, calculated using Natural England's Statutory
+Biodiversity Metric (v1.0, 29 November 2023; minor tooling update
+July 2025). The Metric 4.0 lookup tables were preserved structurally
+inside the statutory tool. The broad habitat taxonomy used here is UK
+Habitat Classification (UKHab) v2.0 — the hierarchical classification
+referenced by the Metric.
 
 Calculation (baseline, per habitat parcel)
 ------------------------------------------
@@ -25,7 +27,8 @@ Post-intervention (created / enhanced habitats) additionally apply:
     × difficulty_multiplier
     × spatial_risk_multiplier
 
-The figures embedded below follow Metric 4.0 Technical Annex 1 tables.
+The figures embedded below follow Statutory Biodiversity Metric (v1.0)
+Technical Annex 1 tables (structurally unchanged from Metric 4.0).
 They are a pragmatic port — not a substitute for the official spreadsheet
 which an accredited ecologist must run for a submission. The site-pack
 output makes that disclaimer explicit and cites the Metric version used.
@@ -37,9 +40,9 @@ from typing import Iterable
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# UKHab v2.0 — broad habitat groups with Metric 4.0 distinctiveness bands
+# UKHab v2.0 — broad habitat groups with Statutory Biodiversity Metric v1.0 distinctiveness bands
 # ─────────────────────────────────────────────────────────────────────────────
-# Distinctiveness: V.High=8, High=6, Medium=4, Low=2, V.Low=0 (Metric 4.0)
+# Distinctiveness: V.High=8, High=6, Medium=4, Low=2, V.Low=0 (Statutory Metric v1.0)
 UKHAB_DISTINCTIVENESS: dict[str, dict] = {
     # UKHab code → default distinctiveness band + score + example habitat
     "cropland": {
@@ -116,7 +119,7 @@ UKHAB_DISTINCTIVENESS: dict[str, dict] = {
     },
 }
 
-# Condition multiplier (Metric 4.0 Table 2)
+# Condition multiplier (Statutory Metric v1.0 Table 2)
 CONDITION_SCORES: dict[str, float] = {
     "good": 3.0,
     "moderate": 2.0,
@@ -127,14 +130,14 @@ CONDITION_SCORES: dict[str, float] = {
     "n/a": 1.0,
 }
 
-# Strategic significance (Metric 4.0 Table 3)
+# Strategic significance (Statutory Metric v1.0 Table 3)
 STRATEGIC_SIGNIFICANCE: dict[str, float] = {
     "high": 1.15,   # formally identified in Local Nature Recovery Strategy
     "medium": 1.10, # local strategy / biodiversity priority
     "low": 1.00,    # area not identified
 }
 
-# Difficulty of creation / enhancement (Metric 4.0 Table 4, indicative)
+# Difficulty of creation / enhancement (Statutory Metric v1.0 Table 4, indicative)
 DIFFICULTY_MULTIPLIER: dict[str, float] = {
     "very_high": 0.1,
     "high": 0.33,
@@ -142,7 +145,7 @@ DIFFICULTY_MULTIPLIER: dict[str, float] = {
     "low": 1.00,
 }
 
-# Temporal multiplier lookup — years to target condition (Metric 4.0 Table 5)
+# Temporal multiplier lookup — years to target condition (Statutory Metric v1.0 Table 5)
 # Figures here are representative; the tool gives habitat-specific values.
 TEMPORAL_MULTIPLIER: dict[int, float] = {
     0: 1.000,
@@ -157,7 +160,7 @@ TEMPORAL_MULTIPLIER: dict[int, float] = {
 # Default Defra 10% net-gain threshold (Environment Act 2021 s.98, Sch. 7A)
 NET_GAIN_THRESHOLD_PCT: float = 10.0
 
-METRIC_VERSION: str = "Defra Biodiversity Metric 4.0 (Jan 2023)"
+METRIC_VERSION: str = "Statutory Biodiversity Metric v1.0 (29 Nov 2023; minor tooling update Jul 2025)"
 UKHAB_VERSION: str = "UK Habitat Classification v2.0"
 
 
@@ -213,7 +216,7 @@ def _lookup(habitat: str) -> dict:
 
 
 def _baseline_units(parcel: HabitatParcel) -> float:
-    """Baseline biodiversity units (Metric 4.0 baseline formula)."""
+    """Baseline biodiversity units (Statutory Biodiversity Metric v1.0 baseline formula)."""
     h = _lookup(parcel.habitat)
     dist = float(h["score"])
     cond = float(CONDITION_SCORES.get(parcel.condition, 2.0))
@@ -384,7 +387,7 @@ def bng_from_land_use(land_use: dict, capacity_mw: float,
     if not baseline:
         baseline = [HabitatParcel(habitat="cropland", area_ha=total_ha, condition="moderate")]
 
-    # ── Post-intervention plan (Metric 4.0 created / enhanced habitats) ──
+    # ── Post-intervention plan (Statutory Metric v1.0 created / enhanced habitats) ──
     panel_ha = total_ha * float(footprint_frac)
     hedgerow_ha = total_ha * 0.05
     meadow_ha = max(total_ha - panel_ha - hedgerow_ha, 0.0)

@@ -452,7 +452,7 @@ def _multi_tech_comparison(lat: float, lon: float, capacity_mw: float,
 
 
 def _bng_estimate(land_use: dict, capacity_mw: float, technology: str = "solar") -> dict:
-    """Defra Biodiversity Metric 4.0 / UKHab v2.0 baseline + post-development
+    """Statutory Biodiversity Metric v1.0 / UKHab v2.0 baseline + post-development
     BNG calculation via utils.bng_calculator.
 
     Returns a pack-ready dict with baseline_units, post_units, net_change_pct,
@@ -902,7 +902,7 @@ def _build_sections(site_data: dict, sam_result: dict, grid_result: dict,
         """,
     })
 
-    # Section 10: BNG Assessment (Defra Biodiversity Metric 4.0 / UKHab v2.0)
+    # Section 10: BNG Assessment (Statutory Biodiversity Metric v1.0 / UKHab v2.0)
     baseline_rows = ""
     for h in bng_estimate.get("baseline_rows", []) or bng_estimate.get("habitat_breakdown", []):
         baseline_rows += f"""<tr>
@@ -936,9 +936,9 @@ def _build_sections(site_data: dict, sam_result: dict, grid_result: dict,
 
     sections.append({
         "number": 10,
-        "title": "Biodiversity Net Gain — Metric 4.0 / UKHab v2.0",
+        "title": "Biodiversity Net Gain — Statutory Biodiversity Metric v1.0 / UKHab v2.0",
         "content": f"""
-        <p>Under the <strong>Environment Act 2021 s.98</strong> (mandatory from 12 February 2024 via Schedule 7A of the Town & Country Planning Act 1990), development must deliver a minimum <strong>{threshold:.0f}% biodiversity net gain</strong> measured with Natural England's statutory <em>{bng_estimate.get('metric_version', 'Biodiversity Metric 4.0')}</em>. Habitat classifications below follow <em>{bng_estimate.get('ukhab_version', 'UKHab v2.0')}</em>.</p>
+        <p>Under the <strong>Environment Act 2021 s.98</strong> (mandatory from 12 February 2024 via Schedule 7A of the Town & Country Planning Act 1990), development must deliver a minimum <strong>{threshold:.0f}% biodiversity net gain</strong> measured with Natural England's statutory <em>{bng_estimate.get('metric_version', 'Statutory Biodiversity Metric v1.0')}</em>. Habitat classifications below follow <em>{bng_estimate.get('ukhab_version', 'UKHab v2.0')}</em>.</p>
         <div class=\"rpt-cols\">
           <div class=\"rpt-col\">
             <div class=\"rpt-kv\"><span class=\"rpt-kv-label\">Baseline Units</span><span class=\"rpt-kv-value\">{bng_estimate.get('baseline_units', '—')}</span></div>
@@ -962,7 +962,7 @@ def _build_sections(site_data: dict, sam_result: dict, grid_result: dict,
           <tr><th>Habitat (UKHab)</th><th>Code</th><th>Area (ha)</th><th>Action</th><th>Years to target</th><th>Units</th></tr>
           {post_rows}
         </table>
-        <div class=\"text-xs text-muted mt-8\">Pragmatic port of {bng_estimate.get('metric_version', 'Biodiversity Metric 4.0')} — formal submission requires the official Natural England spreadsheet executed by an accredited ecologist. Cost assumptions: residual deficit &times; &pound;{bng_estimate.get('cost_per_unit_gbp', 25000):,} per unit (market average for off-site credits, 2024).</div>
+        <div class=\"text-xs text-muted mt-8\">Pragmatic port of {bng_estimate.get('metric_version', 'Statutory Biodiversity Metric v1.0')} — formal submission requires the official Natural England spreadsheet executed by an accredited ecologist. Cost assumptions: residual deficit &times; &pound;{bng_estimate.get('cost_per_unit_gbp', 25000):,} per unit (market average for off-site credits, 2024).</div>
         """,
     })
 

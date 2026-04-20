@@ -244,7 +244,7 @@ def generate_xlsx(data: dict) -> bytes:
 
     r += 1
     r = _add_section(ws5, r, "REGULATORY FRAMEWORKS")
-    frameworks = ["G99/G100", "CDM 2015", "BNG (10% uplift)", "EIA Screening", "NPPF", "ALC", "Flood Test", "NSIP (>50MW)"]
+    frameworks = ["G99/G100", "CDM 2015", "BNG (10% uplift)", "EIA Screening", "NPPF", "ALC", "Flood Test", "NSIP (solar >100MW; onshore wind >100MW)"]
     for fw in frameworks:
         r = _add_kv(ws5, r, fw, "Check required")
 

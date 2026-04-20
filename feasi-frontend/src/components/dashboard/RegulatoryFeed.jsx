@@ -60,9 +60,9 @@ const STATIC_ALERTS = [
     source: "Natural England",
     date: "2026-03-05",
     relevance: "Medium",
-    impact: "BNG unit costs increase ~15% under Metric 4.0. Budget impact: +80-120k per typical 50MW solar site.",
+    impact: "BNG unit costs increase ~15% under the Statutory Biodiversity Metric (v1.0, July 2025 tooling update). Budget impact: +80-120k per typical 50MW solar site.",
     description:
-      "Natural England has released Biodiversity Metric 4.0 with updated habitat condition assessments. The new metric increases baseline habitat values for improved grassland, raising the number of BNG units required for solar developments.",
+      "Natural England has updated the Statutory Biodiversity Metric (v1.0) tooling (July 2025) with watercourse refinements and habitat condition clarifications. Baseline unit outputs unchanged; habitat values for improved grassland remain a key driver of BNG unit requirements for solar developments.",
   },
 ];
 

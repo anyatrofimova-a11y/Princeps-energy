@@ -1084,7 +1084,7 @@ async def generate_report(conn: asyncpg.Connection, lat: float, lon: float,
         fetch_static_map(lat, lon))
     log.info("Charts generated: %s", ", ".join(charts.keys()))
 
-    # Enrich site_data with BNG baseline/post-dev (Defra Metric 4.0 / UKHab v2.0)
+    # Enrich site_data with BNG baseline/post-dev (Statutory Biodiversity Metric v1.0 / UKHab v2.0)
     try:
         from utils.bng_calculator import bng_from_land_use, bng_to_pack_dict
         site_data["bng"] = bng_to_pack_dict(

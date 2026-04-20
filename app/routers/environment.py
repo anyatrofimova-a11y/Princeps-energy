@@ -435,7 +435,7 @@ async def environmental_assessment(
                 "Pond and wetland creation for amphibians",
                 "Bat and bird boxes on site infrastructure",
             ],
-            "bng_metric": "DEFRA Biodiversity Metric 4.2",
+            "bng_metric": "Statutory Biodiversity Metric v1.0",
         },
     }
 

@@ -294,7 +294,7 @@ def liquid_cooling_comparison(
 #  3. BIODIVERSITY NET GAIN (BNG) COST ESTIMATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# DEFRA Biodiversity Metric 4.0 — simplified habitat unit values
+# Statutory Biodiversity Metric v1.0 — simplified habitat unit values (unchanged from Metric 4.0)
 HABITAT_UNITS_PER_HA = {
     "cropland": 2.0,
     "improved_grassland": 4.0,

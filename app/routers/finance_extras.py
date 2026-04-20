@@ -404,7 +404,7 @@ async def policy_scenarios():
                 ],
             },
             {
-                "key": "planning_rules", "label": "Planning policy (NPPF 2026)",
+                "key": "planning_rules", "label": "Planning policy (NPPF Dec 2024, forthcoming 2026 revision)",
                 "options": [
                     {"k": "baseline", "label": "NPPF as-is",  "impact_irr_pp": 0.0},
                     {"k": "solar_fast_track", "label": "Solar fast-track", "impact_irr_pp": +0.4},

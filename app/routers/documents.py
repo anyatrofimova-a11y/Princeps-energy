@@ -145,7 +145,7 @@ async def api_document_types():
             {
                 "id": "bng_baseline",
                 "name": "BNG Baseline Assessment",
-                "description": "Simplified Biodiversity Metric 4.0 using DynamicWorld satellite classification",
+                "description": "Simplified Statutory Biodiversity Metric (v1.0) using DynamicWorld satellite classification",
                 "required_fields": ["site", "geeflow_data"],
             },
             {

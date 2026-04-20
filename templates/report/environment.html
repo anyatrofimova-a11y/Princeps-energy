@@ -193,9 +193,9 @@
         </div>
       </div>
 
-      <!-- BNG — Defra Biodiversity Metric 4.0 / UKHab v2.0 -->
+      <!-- BNG — Statutory Biodiversity Metric v1.0 / UKHab v2.0 -->
       <div class="card {% if site.bng and site.bng.compliant %}card-accent-green{% elif site.bng %}card-accent-red{% endif %}">
-        <div class="card-header">Biodiversity Net Gain &mdash; Metric 4.0 / UKHab v2.0</div>
+        <div class="card-header">Biodiversity Net Gain &mdash; Statutory Biodiversity Metric v1.0 / UKHab v2.0</div>
         <div class="text-xs text-muted mb-4">
           Environment Act 2021 s.98 &mdash; mandatory from 12 Feb 2024 for TCPA applications.
           Statutory threshold: <strong>&ge;10% net gain</strong>.
@@ -268,7 +268,7 @@
         </ul>
         {% endif %}
         <div class="text-xs text-muted mt-8">
-          Pragmatic port of {{ site.bng.metric_version if site.bng and site.bng.metric_version else 'Defra Biodiversity Metric 4.0' }}.
+          Pragmatic port of {{ site.bng.metric_version if site.bng and site.bng.metric_version else 'Statutory Biodiversity Metric v1.0' }}.
           Formal submission requires the Natural England statutory spreadsheet executed by an accredited ecologist.
         </div>
       </div>
@@ -277,6 +277,6 @@
 
   <div class="page-footer">
     Princeps Site Assessment &mdash; Environmental &mdash; {{ now }}
-    &mdash; BNG per {{ site.bng.metric_version if site.bng and site.bng.metric_version else 'Defra Biodiversity Metric 4.0 (Jan 2023)' }} / {{ site.bng.ukhab_version if site.bng and site.bng.ukhab_version else 'UKHab v2.0' }}
+    &mdash; BNG per {{ site.bng.metric_version if site.bng and site.bng.metric_version else 'Statutory Biodiversity Metric v1.0 (29 Nov 2023; minor tooling update Jul 2025)' }} / {{ site.bng.ukhab_version if site.bng and site.bng.ukhab_version else 'UKHab v2.0' }}
   </div>
 </div>
