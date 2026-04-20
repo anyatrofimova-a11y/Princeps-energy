@@ -1840,7 +1840,7 @@ def generate_bng_baseline(
 ) -> dict:
     """Generate a simplified BNG baseline assessment using DynamicWorld land cover.
 
-    Uses the Defra Biodiversity Metric 4.0 simplified methodology:
+    Uses the Defra Statutory Biodiversity Metric simplified methodology:
     Biodiversity Units = Area (ha) x Distinctiveness x Condition x Strategic Significance
 
     Args:
@@ -1924,13 +1924,13 @@ def generate_bng_baseline(
         "meta": {
             "document_type": "BNG Baseline Assessment (Simplified)",
             "legislation": "Environment Act 2021 — Biodiversity Net Gain",
-            "metric": "Defra Biodiversity Metric 4.0 (simplified)",
+            "metric": f"{_cite_reg('statutory_biodiversity_metric')} (simplified)",
             "net_gain_requirement": "Minimum 10% measurable biodiversity net gain",
             "generated_by": "Princeps AI Platform",
             "generated_at": _now_iso(),
             "disclaimer": (
                 "Simplified BNG baseline from satellite land cover classification. "
-                "A full Biodiversity Metric 4.0 assessment by a qualified ecologist "
+                f"A full {_cite_reg('statutory_biodiversity_metric')} assessment by a qualified ecologist "
                 "is required for planning submission."
             ),
         },
@@ -2304,7 +2304,7 @@ DOCUMENT_REQUIREMENTS = [
         "name": "BNG Baseline Assessment",
         "category": "Environmental",
         "required_if": lambda cap_kw, tech, constraints: True,
-        "description": "Biodiversity Metric 4.0 — baseline + gain plan for 10% net gain",
+        "description": f"{_cite_reg('statutory_biodiversity_metric')} — baseline + gain plan for 10% net gain",
         "typical_lead_time_weeks": 4,
     },
     {

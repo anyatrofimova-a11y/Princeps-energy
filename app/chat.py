@@ -1077,6 +1077,26 @@ TOOLS: list[dict] = [
             "required": ["project_id"],
         },
     },
+    {
+        "name": "get_pinned_dockets",
+        "description": (
+            "Return a compact JSON digest of all regulatory dockets pinned to a Princeps project "
+            "(NSIP DCO examinations, Ofgem code mods, LPA planning applications, CfD rounds, s36 "
+            "consents, DNO connection cases, etc.). Use this when you need to factor live "
+            "regulatory context into a GO/CAUTION/NO-GO verdict, identify deadlines, or surface "
+            "key stakeholder positions. Returns an empty list if no dockets are pinned to this "
+            "project. Each docket includes case_type, stage, applicant_name, statutory_deadline, "
+            "exec_summary_text (≤400 chars), next_deadline, stakeholder_position_breakdown, "
+            "timeline_next_3_events, and key_stakeholder_positions (top 5 by submission count)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "Princeps project UUID"},
+            },
+            "required": ["project_id"],
+        },
+    },
 ]
 
 
@@ -1097,6 +1117,12 @@ async def execute_tool(
 ) -> Any:
     """Execute a tool call and return the result dict."""
     try:
+        if name == "get_pinned_dockets":
+            from uuid import UUID as _UUID
+            from app.dockets.agent_tool import get_pinned_dockets
+            async with pool.acquire() as conn:
+                return await get_pinned_dockets(conn, _UUID(args["project_id"]))
+
         if name == "run_solar_yield":
             return await run_sam_subprocess(
                 args["lat"], args["lon"],

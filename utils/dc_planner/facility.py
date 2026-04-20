@@ -17,6 +17,15 @@ import random
 import logging
 from typing import Any
 
+from utils.dc_engineering_sizing import (
+    size_transformers,
+    size_generators,
+    size_ups,
+    size_switchgear,
+    check_pue_consistency,
+    redundancy_capacity_factor,
+)
+
 log = logging.getLogger("princeps.dc_planner")
 
 # ============================================================================
@@ -43,8 +52,13 @@ COST_BENCHMARKS = {
     "civil_per_m2": {"unit_cost": 1800, "description": "Shell & core civil works per m²"},
 }
 
-# UK electricity price for DC (typically on PPA or direct)
-UK_ELEC_PENCE_KWH = 18.0  # Large industrial / PPA rate
+# UK electricity price for DC — 2026 baseline for modelling.
+#
+# The previous value (18 p/kWh = £180/MWh) was ~40% above 2026 UK merchant
+# baseline. Ofgem / NESO modelled 2025-26 large-industrial range is £90–130
+# /MWh (baseload PPA) with £160–210 /MWh on unhedged merchant peaks. We use
+# the middle of the PPA range as the default; callers can override.
+UK_ELEC_PENCE_KWH = 11.0  # 110 £/MWh — 2026 PPA mid
 
 # ============================================================================
 # Rack Layout Sizing
@@ -79,20 +93,36 @@ def plan_facility(
     total_m2 = whitespace_m2 + support_m2
 
     # ── Power Chain ──
-    redundancy_factor = _redundancy_factor(redundancy)
-
-    ups_kw = it_load_kw * redundancy_factor
-    generator_kw = it_load_kw * redundancy_factor * 1.1  # 10% headroom
-    pdu_count = rack_count * (2 if redundancy in ("2N", "2N+1") else 1)
-
-    # Transformer sizing: IT + cooling + losses
+    # Delegate per-component sizing to utils/dc_engineering_sizing.py — it
+    # scales unit ratings with facility size (fixes the legacy "32× 78.7 MVA"
+    # bug where a facility aggregate MVA was divided by a 2.5 MVA unit rating
+    # regardless of site scale).
+    redundancy_factor = redundancy_capacity_factor(redundancy)
     total_facility_kw = it_load_kw * target_pue
-    transformer_mva = total_facility_kw / 1000 * redundancy_factor / 0.95  # 95% PF
-    transformer_count = math.ceil(transformer_mva / 2.5)  # 2.5 MVA units typical
 
-    # Switchgear
-    voltage_kv = 11 if it_load_mw < 20 else 33
-    switchgear_panels = math.ceil(transformer_count * 1.5)
+    tx = size_transformers(
+        facility_kw=total_facility_kw,
+        redundancy=redundancy,
+        power_factor=0.95,
+    )
+    gen = size_generators(
+        facility_kw=total_facility_kw,
+        redundancy=redundancy,
+        tier=tier,
+        headroom_pct=10.0,
+    )
+    ups = size_ups(
+        it_load_kw=it_load_kw,
+        redundancy=redundancy,
+        autonomy_minutes=5,
+        cover_cooling=False,
+    )
+    sg = size_switchgear(
+        transformer_count=tx["count"],
+        redundancy=redundancy,
+    )
+
+    pdu_count = rack_count * (2 if redundancy in ("2N", "2N+1") else 1)
 
     power_chain = {
         "it_load_kw": it_load_kw,
@@ -101,15 +131,31 @@ def plan_facility(
         "total_facility_mw": round(total_facility_kw / 1000, 1),
         "redundancy": redundancy,
         "redundancy_factor": redundancy_factor,
-        "ups_capacity_kw": round(ups_kw, 0),
-        "ups_modules": math.ceil(ups_kw / 250),  # 250kW modules
-        "generator_capacity_kw": round(generator_kw, 0),
-        "generator_sets": math.ceil(generator_kw / 2000),  # 2MW gensets
+        # UPS — from size_ups (IEC 62040-3, EN 50600-2-2 §6.4.2)
+        "ups_capacity_kw": round(ups.get("installed_kw") or ups.get("capacity_kw") or 0),
+        "ups_modules": ups.get("module_count") or ups.get("count"),
+        "ups_module_kw": ups.get("module_kw") or ups.get("unit_kw"),
+        "ups_autonomy_minutes": ups.get("autonomy_minutes", 5),
+        # Generators — from size_generators (BS EN ISO 8528, Uptime Tier)
+        "generator_capacity_kw": gen["installed_kw"],
+        "generator_sets": gen["count"],
+        "generator_unit_kw": gen["unit_kw"],
+        "generator_fuel_hours": gen["tier_fuel_hours"],
+        "generator_fuel_litres": gen["fuel_litres_onsite"],
+        # Transformers — from size_transformers (IEEE 241, BS 7671, EN 50600-2-2)
+        "transformer_mva": tx["installed_mva"],
+        "transformer_count": tx["count"],
+        "transformer_unit_mva": tx["unit_mva"],
+        "transformer_utilisation_pct": tx["utilisation_pct"],
+        "voltage_primary_kv": tx["voltage_primary_kv"],
+        "voltage_secondary_kv": tx["voltage_secondary_kv"],
+        "voltage_kv": tx["voltage_primary_kv"],  # legacy field
+        # Switchgear — from size_switchgear
+        "switchgear_panels": sg.get("panel_count") or sg.get("count") or math.ceil(tx["count"] * 1.5),
+        # Distribution
         "pdu_count": pdu_count,
-        "transformer_mva": round(transformer_mva, 1),
-        "transformer_count": transformer_count,
-        "voltage_kv": voltage_kv,
-        "switchgear_panels": switchgear_panels,
+        # Provenance
+        "sizing_standards": tx.get("standards", []) + gen.get("standards", []),
     }
 
     # ── Cooling System ──
