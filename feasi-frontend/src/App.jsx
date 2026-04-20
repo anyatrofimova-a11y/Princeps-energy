@@ -667,6 +667,14 @@ export default function App() {
   const _redesignActive = typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("redesign") === "1";
 
+  // Intelligence routes (/intelligence/alerts|dockets|datasets) own their
+  // own chat surface inside DocRail's right-hand panel. Suppress the global
+  // floating ChatRail there so we don't end up with two stacked chats.
+  // (main.jsx already mounts IntelligenceShell at /intelligence/*, so this
+  // gate is mostly defensive — it kicks in if the catch-all ever wins.)
+  const _isIntelligenceRoute = typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/intelligence");
+
   const _redesignActions = {
     gridTwin:        () => setGridTwinOpen(true),
     dcTwin:          () => setDcTwinOpen(true),
@@ -730,10 +738,17 @@ export default function App() {
       {/* Chat consolidation 2026-04-19: AIOrb + CopilotWidget retired in favour
           of a single global ChatRail. The ChatRail listens for cmd-K and the
           legacy "princeps-chat" custom event so existing AssetBrowser
-          suggestion-pills still expand the chat. */}
-      <ErrorBoundary name="ChatRail" fallback={null}>
-        <ChatRail parcelId={parcelId || null} projectId={null} />
-      </ErrorBoundary>
+          suggestion-pills still expand the chat.
+
+          Intelligence routes (/intelligence/alerts, /dockets, /datasets) host
+          the chat inside the right-hand DocRail panel instead — having the
+          floating bubble too would put two chat surfaces on screen at once.
+          See DocRail.jsx, which mounts <ChatRail inline /> in its Chat tab. */}
+      {!_isIntelligenceRoute && (
+        <ErrorBoundary name="ChatRail" fallback={null}>
+          <ChatRail parcelId={parcelId || null} projectId={null} />
+        </ErrorBoundary>
+      )}
 
       {/* Command Palette */}
       <Suspense fallback={null}>

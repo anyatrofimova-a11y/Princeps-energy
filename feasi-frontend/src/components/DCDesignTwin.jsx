@@ -132,8 +132,8 @@ function fmtArea(m2) {
 }
 
 export default function DCDesignTwin({
-  lat = 51.4974,
-  lon = -0.5683,
+  lat: initialLat = 51.4974,
+  lon: initialLon = -0.5683,
   itLoadMw = 50,
   parcelHa = null,
   tier = 3,
@@ -142,10 +142,21 @@ export default function DCDesignTwin({
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
+  const dragStateRef = useRef({ active: false, startLonLat: null, startMouse: null });
   const [mapReady, setMapReady] = useState(false);
   const [hoverInfo, setHoverInfo] = useState(null);
   const [showFence, setShowFence] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
+  const [showContext, setShowContext] = useState(true);
+  // Drag-moveable site centroid — initialised from props, then user-controlled
+  const [lat, setLat] = useState(initialLat);
+  const [lon, setLon] = useState(initialLon);
+  // Click-to-inspect selection (null | "shell" | "cooling" | "substation" | "nearbySub:<id>")
+  const [selected, setSelected] = useState(null);
+  // Ambient grid overlay — nearby substations fetched from backend
+  const [nearbySubs, setNearbySubs] = useState([]);
+
+  useEffect(() => { setLat(initialLat); setLon(initialLon); }, [initialLat, initialLon]);
 
   const geom = useMemo(
     () => deriveSiteGeometry({ lat, lon, itLoadMw, parcelHa }),
@@ -213,12 +224,81 @@ export default function DCDesignTwin({
     return () => { map.remove(); mapRef.current = null; overlayRef.current = null; };
   }, []); // eslint-disable-line
 
-  /* ── Recentre when lat/lon change without remounting ── */
+  /* ── Recentre when the CONTROLLING coords change (prop-driven only). */
   useEffect(() => {
     if (mapRef.current && mapReady) {
-      mapRef.current.flyTo({ center: [lon, lat], zoom: 16.5, pitch: 60, duration: 1200 });
+      mapRef.current.flyTo({ center: [initialLon, initialLat], zoom: 16.5, pitch: 60, duration: 1200 });
     }
-  }, [lat, lon, mapReady]);
+  }, [initialLat, initialLon, mapReady]);
+
+  /* ── Fetch nearby substations in a ~10 km bbox around the site. Re-runs
+        whenever the centroid moves > 500 m so the ambient context stays
+        accurate as the user drags the building. ── */
+  useEffect(() => {
+    let cancelled = false;
+    const halfDegLat = 10_000 / 111_320;       // ~10 km in deg lat
+    const halfDegLon = 10_000 / (111_320 * Math.cos((lat * Math.PI) / 180));
+    const bbox = [lon - halfDegLon, lat - halfDegLat, lon + halfDegLon, lat + halfDegLat];
+    const url = `/grid/osm/substations?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`;
+    (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const json = await res.json();
+        const feats = json?.features || json?.substations || json || [];
+        if (cancelled) return;
+        const norm = (Array.isArray(feats) ? feats : []).slice(0, 40).map((f, i) => {
+          const geo = f.geometry?.coordinates || f.centroid || [f.lon, f.lat];
+          const props = f.properties || f;
+          const kv = Number(props.voltage_kv ?? props.voltage ?? 0);
+          return {
+            id: props.osm_id || props.id || `sub-${i}`,
+            lon: geo[0], lat: geo[1],
+            name: props.name || props.ref || `Substation ${i + 1}`,
+            voltage_kv: kv,
+            headroom_mw: props.headroom_mw ?? props.capacity_headroom_mw ?? null,
+            operator: props.operator || null,
+          };
+        }).filter(s => s.lon != null && s.lat != null);
+        setNearbySubs(norm);
+      } catch { /* silent */ }
+    })();
+    return () => { cancelled = true; };
+  }, [
+    // Debounce by snapping to 0.005° grid (~500 m) so small drag adjustments
+    // don't thrash the API every render.
+    Math.round(lat * 200) / 200,
+    Math.round(lon * 200) / 200,
+  ]);
+
+  /* ── Drag handler: middle-click or alt+left-drag on the shell moves the
+        centroid. Plain left-drag still pans Mapbox. We consume pointer
+        events at the deck.gl layer level via onDragStart/onDrag/onDragEnd. ── */
+  const handleShellDragStart = useCallback((info, event) => {
+    if (!info?.coordinate) return;
+    event?.stopPropagation?.();
+    dragStateRef.current = {
+      active: true,
+      startLonLat: [lon, lat],
+      startPointerLonLat: info.coordinate,
+    };
+    if (mapRef.current) mapRef.current.dragPan.disable();
+  }, [lat, lon]);
+
+  const handleShellDrag = useCallback((info, event) => {
+    const st = dragStateRef.current;
+    if (!st.active || !info?.coordinate) return;
+    event?.stopPropagation?.();
+    const dLon = info.coordinate[0] - st.startPointerLonLat[0];
+    const dLat = info.coordinate[1] - st.startPointerLonLat[1];
+    setLon(st.startLonLat[0] + dLon);
+    setLat(st.startLonLat[1] + dLat);
+  }, []);
+
+  const handleShellDragEnd = useCallback(() => {
+    dragStateRef.current = { active: false, startLonLat: null, startPointerLonLat: null };
+    if (mapRef.current) mapRef.current.dragPan.enable();
+  }, []);
 
   /* ── Build deck.gl layers from derived geometry ── */
   const deckLayers = useMemo(() => {

@@ -249,7 +249,11 @@ function DocView({ docId }) {
 }
 
 export default function DocRail({ docId, alertId, onPickQuestion }) {
-  const [mode, setMode] = useState("docs");
+  // Chat is the default tab on Intelligence routes — the popup that used to
+  // float on top has been retired and the conversation now happens inside
+  // this rail. Docs view is opened on demand when the user clicks a document
+  // in the digest feed (see effect below).
+  const [mode, setMode] = useState("chat");
 
   // Auto-switch to docs when the selected document changes.
   useEffect(() => {
@@ -286,7 +290,7 @@ export default function DocRail({ docId, alertId, onPickQuestion }) {
       {mode === "docs" ? (
         <DocView docId={docId} />
       ) : (
-        <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+        <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex" }}>
           <Suspense fallback={<div style={{ padding: 20, fontSize: 12, color: C.tertiary }}>Loading chat…</div>}>
             <ChatRail
               inline={true}
