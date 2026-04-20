@@ -98,25 +98,36 @@ async def api_financial_xlsx(req: XlsxExportRequest):
 
 @router.post("/api/reports/grid-connection")
 async def grid_connection_report(
-    lat: float = Query(..., description="Latitude (WGS84)"),
-    lon: float = Query(..., description="Longitude (WGS84)"),
-    site_name: str = Query("Site", description="Site name for report title"),
+    project_id: str | None = Query(None, description="Project UUID (preferred entry point)"),
+    lat: float | None = Query(None, description="Latitude (WGS84) — required if project_id not given"),
+    lon: float | None = Query(None, description="Longitude (WGS84) — required if project_id not given"),
+    site_name: str | None = Query(None, description="Site name override"),
     capacity_mw: float = Query(50.0, description="Proposed generation capacity in MW"),
     technology: str = Query("solar", description="Technology type: solar, wind, bess"),
-    run_power_flow: bool = Query(False, description="Run Tier 2 pandapower analysis"),
+    run_power_flow: bool = Query(True, description="Run Tier 2 pandapower N/N-1 analysis"),
     pool: asyncpg.Pool = Depends(get_pool),
 ):
-    """Generate a branded PDF grid connection assessment report.
+    """Generate a branded PDF grid connection report (COUNCIL-1 rework #7).
 
-    Performs a full Tier 1 data-driven grid connection assessment including:
-    - Nearest substation identification with headroom analysis
-    - P10/P50/P90 connection cost estimates for multiple voltage options
-    - Queue depth and wait time analysis
-    - Actionable recommendations (connection voltage, flexible connection, BESS)
-    - Optional Tier 2 pandapower power flow validation
+    Institutional-grade PDF with:
+    - CCCM v19 cost breakdown (Sole / Shared / Reinforcement / Security)
+    - N-1 contingency table (pandapower subprocess)
+    - Embedded SLD (utils/sld_generator)
+    - LTDS citation per DNO (UKPN / NGED / SPEN / SSEN / NPG / ENWL)
+    - OSGB36 grid reference (pyproj)
+    - Headroom analysis (firm / non-firm / accepted queue / in-progress / forecast growth)
+    - G99 Issue 2 protection settings + commissioning plan
 
-    Returns a downloadable PDF with professional Princeps branding.
+    Either ``project_id`` or ``lat``+``lon`` must be given. When ``project_id``
+    is supplied, capacity / technology / location / name are loaded from the
+    projects table and CLI overrides are ignored for those fields.
     """
+    if not project_id and (lat is None or lon is None):
+        raise HTTPException(
+            status_code=400,
+            detail="Provide project_id or both lat and lon.",
+        )
+
     try:
         async with pool.acquire() as conn:
             pdf_bytes = await generate_grid_connection_report(
@@ -127,7 +138,11 @@ async def grid_connection_report(
                 site_name=site_name,
                 technology=technology,
                 run_power_flow=run_power_flow,
+                project_id=project_id,
+                pool=pool,
             )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
@@ -137,7 +152,8 @@ async def grid_connection_report(
             detail=f"Grid connection report generation failed: {e}",
         )
 
-    filename = f"princeps-grid-connection-{_safe_filename(site_name)}.pdf"
+    label = site_name or (project_id or "site")
+    filename = f"princeps-grid-connection-{_safe_filename(label)}.pdf"
 
     return StreamingResponse(
         iter([pdf_bytes]),

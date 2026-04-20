@@ -1,0 +1,190 @@
+{# =========================================================================
+   _brand.html — Princeps canonical brand partial (BOT-R1, cross-cutting)
+
+   ONE gold palette + typography. Replaces the 4 drifted palettes flagged by
+   COUNCIL-1 (purple #7c5cfc, gold #F5B731, teal #007A8C accent drift, and the
+   institutional_base variant).
+
+   Pack-rewrite bots: include ONCE in <head>. Do not redefine these CSS
+   variables inside individual pack templates.
+
+       <head>
+         ...
+         {% include "report/_partials/_brand.html" %}
+       </head>
+
+   Cover page + header/footer macros are exposed here too:
+
+       {% import "report/_partials/_brand.html" as brand %}
+       {{ brand.cover_page(project, pack_type, revision) }}
+       {{ brand.running_header(project, revision) }}
+       {{ brand.running_footer(confidentiality="Commercial in confidence") }}
+
+   Variables the macros accept fall back to "TO POPULATE" when `_empty` is set.
+   ========================================================================= #}
+
+<style>
+  /* -- Princeps canonical palette -------------------------------------- */
+  :root {
+    --gold:        #C9A64B;
+    --gold-dark:   #A88732;
+    --gold-light:  #F5E9C8;
+    --ink:         #1a1a1a;
+    --ink-muted:   #4a4a4a;
+    --rule:        #E6D9B8;
+
+    /* RAG (kept from institutional base for consistency with existing ML) */
+    --rag-green:   #228B22;
+    --rag-amber:   #D4A017;
+    --rag-red:     #C0392B;
+
+    /* Page + typography constants */
+    --body-font: 'Inter', 'Segoe UI', Calibri, -apple-system, sans-serif;
+    --mono-font: 'JetBrains Mono', 'Consolas', 'Courier New', monospace;
+    --page-margin-top: 18mm;
+    --page-margin-x:   15mm;
+  }
+
+  /* Explicit classes (pack bots may reference via .princeps-* to avoid
+     clashing with any pack-local styles). */
+  .princeps-root {
+    font-family: var(--body-font);
+    color: var(--ink);
+    font-size: 10.5pt;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .princeps-title    { font-size: 24pt; font-weight: 700; color: var(--ink); letter-spacing: 0.5px; }
+  .princeps-h2       { font-size: 14pt; font-weight: 700; color: var(--ink); border-bottom: 2px solid var(--gold); padding-bottom: 4px; margin: 20px 0 10px; }
+  .princeps-h3       { font-size: 11pt; font-weight: 600; color: var(--ink); margin: 14px 0 6px; }
+  .princeps-h4       { font-size: 10pt; font-weight: 600; color: var(--ink-muted); margin: 10px 0 4px; }
+
+  .princeps-hr-gold  { border: none; border-top: 2px solid var(--gold); margin: 12px 0; }
+  .princeps-rule     { border: none; border-top: 1px solid var(--rule); margin: 10px 0; }
+
+  /* Masthead strip (top of each section) */
+  .princeps-masthead {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0 8px;
+    border-bottom: 3px solid var(--gold);
+    margin-bottom: 16px;
+  }
+  .princeps-masthead-logo {
+    font-size: 16px; font-weight: 800; color: var(--ink);
+    letter-spacing: 3px; text-transform: uppercase;
+  }
+  .princeps-masthead-logo::before {
+    content: "\25C6"; /* ◆ */
+    color: var(--gold);
+    margin-right: 6px;
+  }
+  .princeps-masthead-meta {
+    font-size: 8pt; color: var(--ink-muted); text-align: right;
+  }
+
+  /* Footer strip */
+  .princeps-footer-strip {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0; margin-top: 20px;
+    border-top: 1px solid var(--rule);
+    font-size: 7.5pt; color: var(--ink-muted);
+  }
+  .princeps-footer-strip .conf { font-weight: 600; letter-spacing: 1px; }
+
+  /* Cover page */
+  .princeps-cover {
+    page-break-after: always; break-after: page;
+    min-height: 250mm; display: flex; flex-direction: column; justify-content: space-between;
+    padding: 20mm 10mm;
+  }
+  .princeps-cover-band {
+    background: var(--gold);
+    color: #fff;
+    padding: 8px 14px; font-weight: 700; letter-spacing: 2px;
+    display: inline-block; font-size: 10pt;
+  }
+  .princeps-cover-title { font-size: 32pt; font-weight: 800; color: var(--ink); margin: 16px 0 6px; }
+  .princeps-cover-subtitle { font-size: 14pt; color: var(--ink-muted); font-weight: 500; }
+  .princeps-cover-ref { font-family: var(--mono-font); font-size: 9pt; color: var(--ink-muted); }
+
+  /* TO-POPULATE marker */
+  .princeps-todo {
+    background: var(--gold-light);
+    color: var(--gold-dark);
+    border: 1px dashed var(--gold-dark);
+    padding: 2px 6px; border-radius: 3px; font-family: var(--mono-font); font-size: 9pt;
+  }
+
+  /* Generic table (pack-local tables should use .princeps-table for brand) */
+  table.princeps-table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; font-size: 9.5pt; }
+  table.princeps-table th {
+    background: var(--gold); color: #fff;
+    padding: 5px 8px; text-align: left; font-weight: 600; font-size: 9pt;
+    border-bottom: 1px solid var(--gold-dark);
+  }
+  table.princeps-table td {
+    padding: 5px 8px; border-bottom: 1px solid var(--rule); vertical-align: top;
+  }
+  table.princeps-table tr:nth-child(even) td { background: #FAF7EE; }
+
+  /* Page geometry (A4 portrait default) */
+  @page {
+    size: A4;
+    margin: 18mm 15mm 18mm 15mm;
+  }
+  .page-break { page-break-after: always; break-after: page; }
+</style>
+
+{# ---------------- Macros ---------------- #}
+
+{% macro cover_page(project=None, pack_type=None, revision=None, revision_date=None, client=None, prepared_by="Princeps", doc_ref=None) %}
+  {% set _empty = project is none %}
+  <section class="princeps-cover">
+    <div>
+      <div class="princeps-cover-band">PRINCEPS</div>
+      <h1 class="princeps-cover-title">
+        {% if _empty %}<span class="princeps-todo">TO POPULATE — project name</span>
+        {% else %}{{ project.name if project.name is defined else project }}{% endif %}
+      </h1>
+      <div class="princeps-cover-subtitle">
+        {% if pack_type %}{{ pack_type }}{% else %}<span class="princeps-todo">TO POPULATE — pack type</span>{% endif %}
+      </div>
+      <hr class="princeps-hr-gold" />
+      <div class="princeps-cover-ref">
+        Document reference: {{ doc_ref or "TO POPULATE" }}<br />
+        Revision: {{ revision or "P01" }} &mdash; {{ revision_date or "TO POPULATE" }}<br />
+        Client: {{ client or "TO POPULATE" }}<br />
+        Prepared by: {{ prepared_by }}
+      </div>
+    </div>
+    <div class="princeps-cover-ref">
+      Commercial in confidence. Prepared for named addressee(s) only. See Reliance Statement.
+    </div>
+  </section>
+{% endmacro %}
+
+{% macro running_header(project=None, revision=None, pack_type=None) %}
+  <header class="princeps-masthead">
+    <div class="princeps-masthead-logo">PRINCEPS</div>
+    <div class="princeps-masthead-meta">
+      {% if project %}{{ project.name if project.name is defined else project }}{% else %}<span class="princeps-todo">project</span>{% endif %}
+      {% if pack_type %} &nbsp;&middot;&nbsp; {{ pack_type }}{% endif %}
+      {% if revision %} &nbsp;&middot;&nbsp; Rev {{ revision }}{% endif %}
+    </div>
+  </header>
+{% endmacro %}
+
+{% macro running_footer(page_n=None, page_total=None, confidentiality="Commercial in confidence") %}
+  <footer class="princeps-footer-strip">
+    <span class="conf">{{ confidentiality }}</span>
+    <span>
+      {% if page_n and page_total %}
+        Page {{ page_n }} of {{ page_total }}
+      {% else %}
+        Page <span class="pageNumber"></span> of <span class="totalPages"></span>
+      {% endif %}
+    </span>
+  </footer>
+{% endmacro %}

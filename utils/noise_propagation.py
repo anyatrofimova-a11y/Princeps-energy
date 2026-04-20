@@ -506,3 +506,93 @@ def calculate_noise_contours(
             "humidity_pct": 70,
         },
     }
+
+
+# ─── Top-level propagate_noise (used by engineering router) ─────────────────
+
+from dataclasses import dataclass as _dataclass, asdict as _asdict, field as _field
+
+
+@_dataclass
+class _NoisePropResult:
+    inputs_echo: dict
+    outputs: dict
+    assumptions: list[str]
+    provenance: str
+    warnings: list[str] = _field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return _asdict(self)
+
+
+def propagate_noise(
+    source_lwa_dba: float,
+    distance_m: float,
+    source_height_m: float = 2.0,
+    receiver_height_m: float = 1.5,
+    ground: str = "soft",
+    barrier_attenuation_db: float = 0.0,
+    atmospheric_coeff_db_per_km: float = ALPHA_500HZ,
+    compliance_limit_dba: float = 35.0,
+    tonal: bool = False,
+):
+    """Compute SPL at receiver via ISO 9613-2.
+
+    Wraps the internal `_iso9613_attenuation` so router callers get a
+    consistent inputs_echo/outputs/assumptions/provenance/warnings shape.
+    """
+    if distance_m <= 0:
+        raise ValueError("distance_m > 0")
+
+    ground_factor = {"soft": GROUND_FACTOR_SOFT, "mixed": 0.5, "hard": 0.0}.get(ground, GROUND_FACTOR_SOFT)
+    a_div = 20.0 * math.log10(max(1.0, distance_m)) + 11.0
+    a_atm = atmospheric_coeff_db_per_km * distance_m / 1000.0
+    a_total = _iso9613_attenuation(
+        distance_m, source_height_m, receiver_height_m, ground_factor,
+        atmospheric_coeff_db_per_km,
+    )
+    a_ground_barrier = a_total - a_div - a_atm
+    spl = source_lwa_dba - a_total - barrier_attenuation_db
+    if tonal:
+        spl += 5.0
+
+    warnings = []
+    exceeds = spl > compliance_limit_dba
+    if exceeds:
+        warnings.append(f"SPL {spl:.1f} dBA exceeds limit {compliance_limit_dba} dBA")
+    if barrier_attenuation_db > 25.0:
+        warnings.append("barrier attenuation > 25 dB — ISO 9613-2 caps at ~25 dB")
+
+    return _NoisePropResult(
+        inputs_echo={
+            "source_lwa_dba": source_lwa_dba,
+            "distance_m": distance_m,
+            "source_height_m": source_height_m,
+            "receiver_height_m": receiver_height_m,
+            "ground": ground,
+            "barrier_attenuation_db": barrier_attenuation_db,
+            "atmospheric_coeff_db_per_km": atmospheric_coeff_db_per_km,
+            "compliance_limit_dba": compliance_limit_dba,
+            "tonal": tonal,
+        },
+        outputs={
+            "spl_at_receiver_dba": round(spl, 2),
+            "a_div_db": round(a_div, 2),
+            "a_atm_db": round(a_atm, 2),
+            "a_ground_db": round(max(0.0, a_ground_barrier), 2),
+            "a_barrier_db": round(barrier_attenuation_db, 2),
+            "total_attenuation_db": round(a_total + barrier_attenuation_db, 2),
+            "compliance_limit_dba": compliance_limit_dba,
+            "exceeds_limit": bool(exceeds),
+            "tonal_penalty_applied_db": 5.0 if tonal else 0.0,
+        },
+        assumptions=[
+            "ISO 9613-2:1996 downwind propagation",
+            f"Atmospheric absorption {atmospheric_coeff_db_per_km} dB/km (500 Hz, 15 °C, 70% RH)",
+            f"Ground type '{ground}' → G={ground_factor}",
+            "Barrier attenuation supplied externally (no diffraction calc)",
+            "Tonal penalty: +5 dB per IoA GPG",
+        ],
+        provenance="ISO 9613-2:1996; IoA 'A Good Practice Guide to the Application of ETSU-R-97'",
+        warnings=warnings,
+    )

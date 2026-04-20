@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Planning Application Bundle — {{ project_name }}</title>
+  <style>
+    body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+      color: #0F1318; max-width: 820px; margin: 32px auto; line-height: 1.45; font-size: 12px; }
+    .eyebrow { font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+      color: #C9A64B; font-weight: 600; }
+    h1 { font-size: 30px; font-weight: 600; margin: 6px 0 4px 0; letter-spacing: -0.5px; }
+    .meta { font-size: 11px; color: #6B7280; margin-bottom: 28px; }
+    h2 { font-size: 13px; letter-spacing: 1.5px; text-transform: uppercase;
+      color: #C9A64B; border-bottom: 1px solid #E5E7EB; padding-bottom: 6px;
+      margin-top: 28px; margin-bottom: 12px; }
+    h3 { font-size: 12px; font-weight: 600; margin: 16px 0 6px 0; color: #0F1318; }
+    .route-badge { display: inline-block; padding: 4px 10px; border-radius: 4px;
+      font-weight: 600; font-size: 11px; letter-spacing: 1px; }
+    .route-tcpa { background: #DBEAFE; color: #1D4ED8; }
+    .route-dco { background: #FEF3C7; color: #92660A; }
+    .nsip-flag { background: #FEE2E2; color: #B23B3B; padding: 10px 14px;
+      border-radius: 4px; margin: 14px 0; font-size: 11px; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0 14px 0; font-size: 11px; }
+    th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #C9A64B;
+      font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; font-size: 9px;
+      color: #A88732; }
+    td { padding: 6px 8px; border-bottom: 1px solid #E5E7EB; vertical-align: top; }
+    td.lbl { font-weight: 600; width: 32%; }
+    td.qcol { font-weight: 700; width: 8%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #A88732; }
+    .status-filled { color: #1E7B3A; font-weight: 600; font-size: 10px; }
+    .status-pending { color: #92660A; font-weight: 600; font-size: 10px; }
+    .status-na { color: #6B7280; font-weight: 600; font-size: 10px; }
+    .verdict { display: inline-block; padding: 2px 8px; border-radius: 3px;
+      font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .verdict-compliant { background: #DEF7E5; color: #1E7B3A; }
+    .verdict-partial { background: #FFF4D6; color: #92660A; }
+    .verdict-non-compliant { background: #FCE5E5; color: #B23B3B; }
+    .verdict-na { background: #F3F4F6; color: #6B7280; }
+    .autofill-bar { background: #F3F4F6; height: 8px; border-radius: 4px;
+      margin: 4px 0 10px 0; overflow: hidden; }
+    .autofill-fill { background: #C9A64B; height: 100%; }
+    .disclaimer { background: #FFFBEB; border-left: 3px solid #C9A64B;
+      padding: 10px 14px; font-size: 10px; color: #6B7280; margin: 18px 0; }
+    .section-pill { font-size: 9px; color: #6B7280; letter-spacing: 1px;
+      text-transform: uppercase; margin-bottom: 4px; }
+    .cert-callout { background: #F9F6EE; border: 1px solid #C9A64B;
+      border-radius: 4px; padding: 12px 16px; margin: 12px 0; }
+    .cil-callout { background: #F3F9F5; border: 1px solid #1E7B3A;
+      border-radius: 4px; padding: 12px 16px; margin: 12px 0; }
+    .cil-not-liable { background: #F9F9F9; border-color: #9CA3AF; }
+    .declaration-box { font-style: italic; font-size: 10.5px; color: #374151;
+      background: #FFFFFF; border-left: 3px solid #C9A64B; padding: 8px 12px;
+      margin: 8px 0; }
+    .footer { margin-top: 36px; padding-top: 14px; border-top: 1px solid #E5E7EB;
+      font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: #6B7280; text-align: center; }
+    .legacy-ref { color: #9CA3AF; font-size: 9px; }
+  </style>
+</head>
+<body>
+
+<div class="eyebrow">Planning Application Bundle · 1APP v6</div>
+<h1>{{ project_name }}</h1>
+<div class="meta">
+  {{ generated_at }} · Project ID {{ project_id }} ·
+  <span class="route-badge {% if meta.nsip %}route-dco{% else %}route-tcpa{% endif %}">{{ meta.route }}</span>
+</div>
+
+{% if meta.nsip %}
+<div class="nsip-flag">
+  <strong>NSIP / DCO-track:</strong> {{ meta.nsip_rationale }}.
+  1APP v6 headings below are shown for reference; DCO application documents
+  (Reg 5, Infrastructure Planning (Applications: Prescribed Forms and Procedure)
+  Regulations 2009) apply instead. See DCO equivalents in the meta block.
+</div>
+{% endif %}
+
+<h2>Pre-fill summary</h2>
+<table>
+  <tr><td class="lbl">Form version</td><td>{{ meta.form_version }}</td></tr>
+  <tr><td class="lbl">Canonical field count</td><td>{{ meta.field_count_canonical }} fields (Q1–Q40)</td></tr>
+  <tr><td class="lbl">Route</td><td>{{ meta.route }}</td></tr>
+  <tr><td class="lbl">Technology</td><td>{{ meta.technology }}</td></tr>
+  <tr><td class="lbl">Capacity</td><td>{{ meta.capacity_mw }} MW</td></tr>
+  <tr><td class="lbl">Site area</td><td>{{ meta.area_ha }} ha</td></tr>
+  <tr><td class="lbl">Auto-fill rate</td>
+      <td>
+        <strong>{{ meta.auto_fill_pct }}%</strong>
+        ({{ meta.fields_filled }} / {{ meta.fields_total }} fields)
+        <div class="autofill-bar"><div class="autofill-fill" style="width:{{ meta.auto_fill_pct }}%"></div></div>
+      </td></tr>
+  <tr><td class="lbl">Pending fields</td><td>{{ meta.fields_pending }} — require human review</td></tr>
+</table>
+
+<h2>1APP v6 fields — Q1 through Q40</h2>
+{% for section_key, section_fields in fields.items() %}
+  {% if section_fields %}
+  <h3>{{ section_key.replace("_", " ").title() }}</h3>
+  <table>
+    <tr>
+      <th style="width:8%">Q</th>
+      <th style="width:28%">Field</th>
+      <th style="width:50%">Value</th>
+      <th style="width:14%">Status</th>
+    </tr>
+    {% for qkey, field in section_fields.items() %}
+      <tr>
+        <td class="qcol">{{ qkey }}</td>
+        <td class="lbl">{{ field.label }}</td>
+        <td>
+          {% if field.value is mapping %}
+            <table style="margin:0;font-size:10.5px;">
+              {% for k, v in field.value.items() %}
+                <tr>
+                  <td style="border:none;padding:2px 6px;color:#6B7280;width:40%">{{ k }}</td>
+                  <td style="border:none;padding:2px 6px;">{% if v is none or v == '' %}<em>—</em>{% else %}{{ v }}{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </table>
+          {% elif field.value is none or field.value == "" %}
+            <em>—</em>
+          {% else %}
+            {{ field.value }}
+          {% endif %}
+          {% if field.notes %}<div style="font-size:10px;color:#6B7280;margin-top:4px;">{{ field.notes }}</div>{% endif %}
+        </td>
+        <td>
+          {% if field.status == "filled" %}<span class="status-filled">filled</span>
+          {% elif field.status == "pending" %}<span class="status-pending">pending</span>
+          {% else %}<span class="status-na">n/a</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+{% endfor %}
+
+{# =====================================================================
+   Ownership Certificate sub-form (A / B / C / D) — Art.14 DMPO 2015
+   ===================================================================== #}
+{% if sub_forms and sub_forms.ownership_certificate %}
+  {% set cert = sub_forms.ownership_certificate %}
+<h2>Ownership Certificate — {{ cert.certificate_code }}</h2>
+<div class="cert-callout">
+  <div class="section-pill">{{ cert.regulation_ref }} · 21-day notice window</div>
+  <h3>{{ cert.certificate_label }}</h3>
+  <div style="font-size:11px;color:#374151;margin-bottom:8px;">
+    {{ cert.rationale }}
+  </div>
+  <div class="declaration-box">
+    {{ cert.declaration }}
+  </div>
+
+  {% if cert.notices_to_owners %}
+    <h3>Notices served under Article 14(1)(b)</h3>
+    <table>
+      <tr>
+        <th>Owner</th>
+        <th>Address</th>
+        <th>HMLR title</th>
+        <th>Notice served</th>
+      </tr>
+      {% for n in cert.notices_to_owners %}
+        <tr>
+          <td>{{ n.owner_name }}</td>
+          <td>{{ n.owner_address }}</td>
+          <td>{{ n.title_number }}</td>
+          <td>{{ n.notice_served_on }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  {% endif %}
+
+  {% if cert.press_advertisement %}
+    <h3>Press advertisement — Article 14(2)</h3>
+    <table>
+      <tr><td class="lbl">Newspaper</td><td>{{ cert.press_advertisement.newspaper }}</td></tr>
+      <tr><td class="lbl">Publication date</td><td>{{ cert.press_advertisement.publication_date }}</td></tr>
+      <tr><td class="lbl">Copy attached</td><td>{{ "yes" if cert.press_advertisement.copy_attached else "no — tear-sheet to be attached at submission" }}</td></tr>
+    </table>
+  {% endif %}
+
+  <h3>Signature</h3>
+  <table>
+    <tr><td class="lbl">Signatory</td><td>{{ cert.signatory }}</td></tr>
+    <tr><td class="lbl">Role</td><td>{{ cert.signatory_role }}</td></tr>
+    <tr><td class="lbl">Date</td><td>{{ cert.signed_on }}</td></tr>
+    <tr><td class="lbl">Declaration made</td><td>{{ "yes" if cert.declaration_made else "pending" }}</td></tr>
+  </table>
+</div>
+{% endif %}
+
+{# =====================================================================
+   CIL Form 1 — Assumption of Liability (CIL Regs 2010 reg 31)
+   ===================================================================== #}
+{% if sub_forms and sub_forms.cil_form_1 %}
+  {% set cil = sub_forms.cil_form_1 %}
+<h2>Community Infrastructure Levy — Form 1 (Assumption of Liability)</h2>
+<div class="cil-callout {% if not cil.liable %}cil-not-liable{% endif %}">
+  <div class="section-pill">{{ cil.regulation_ref }} · {{ cil.trigger_ref }}</div>
+  <h3>CIL liability test</h3>
+  <table>
+    <tr><td class="lbl">Liable?</td>
+        <td>
+          {% if cil.liable %}
+            <span class="verdict verdict-partial">LIABLE — Form 1 required</span>
+          {% else %}
+            <span class="verdict verdict-compliant">NOT LIABLE — declaration only</span>
+          {% endif %}
+        </td></tr>
+    <tr><td class="lbl">Estimated GIA</td><td>{{ cil.floorspace_m2 }} m² ({{ cil.floorspace_source }})</td></tr>
+    <tr><td class="lbl">Threshold</td><td>{{ cil.floorspace_threshold_m2 }} m² (CIL Regs 2010 reg 6(1)(c))</td></tr>
+    <tr><td class="lbl">Chargeable use</td><td>{{ cil.chargeable_use_description }}</td></tr>
+    <tr><td class="lbl">Rationale</td><td>{{ cil.rationale }}</td></tr>
+  </table>
+
+  {% if cil.form_rendered %}
+    {% for part_key, part in cil.fields.items() %}
+      <h3>{{ part_key.replace("_", " ").title() }}</h3>
+      <table>
+        {% for k, v in part.items() %}
+          <tr>
+            <td class="lbl">{{ k }}</td>
+            <td>{% if v is none or v == "" %}<em>—</em>{% else %}{{ v }}{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    {% endfor %}
+  {% endif %}
+
+  <div class="declaration-box">
+    {{ cil.declaration }}
+  </div>
+</div>
+{% endif %}
+
+<h2>Policy compliance matrix</h2>
+<div class="section-pill">
+  {{ policy.catalogue_version.nppf }} · {{ policy.catalogue_version.nps }}
+</div>
+<table>
+  <tr>
+    <th style="width:22%">Policy ref</th>
+    <th style="width:26%">Title</th>
+    <th style="width:12%">Verdict</th>
+    <th style="width:22%">Alignment</th>
+    <th style="width:18%">Evidence pointer</th>
+  </tr>
+  {% for p in policy.policies %}
+    <tr>
+      <td>
+        <strong>{{ p.policy_ref }}</strong>
+        <div style="font-size:9px;color:#6B7280">{{ p.source }}</div>
+      </td>
+      <td>{{ p.title }}<div style="font-size:10px;color:#6B7280;margin-top:2px;">{{ p.summary }}</div></td>
+      <td>
+        <span class="verdict verdict-{{ p.verdict.replace('/', '-') }}">{{ p.verdict }}</span>
+      </td>
+      <td>
+        {{ p.proposal_alignment_text }}
+      </td>
+      <td>
+        {% if p.evidence_pointer %}
+          <code style="font-size:10px;color:#374151;">{{ p.evidence_pointer }}</code>
+        {% endif %}
+        {% if p.evidence_pointers %}
+          <div style="font-size:9px;color:#6B7280;margin-top:4px;">
+            {{ p.evidence_pointers | join(", ") }}
+          </div>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+</table>
+
+<h3>Compliance headline</h3>
+<table>
+  <tr><td class="lbl">Overall</td>
+      <td><span class="verdict verdict-{{ policy.summary.headline_verdict.replace('/', '-') }}">{{ policy.summary.headline_verdict }}</span></td></tr>
+  <tr><td class="lbl">Compliant</td><td>{{ policy.summary.counts.compliant }} / {{ policy.summary.total }}</td></tr>
+  <tr><td class="lbl">Partial</td><td>{{ policy.summary.counts.partial }} / {{ policy.summary.total }}</td></tr>
+  <tr><td class="lbl">Non-compliant</td><td>{{ policy.summary.counts["non-compliant"] }} / {{ policy.summary.total }}</td></tr>
+  <tr><td class="lbl">N/A</td><td>{{ policy.summary.counts["n/a"] }} / {{ policy.summary.total }}</td></tr>
+</table>
+
+{% if meta.dco_equivalents %}
+<h2>DCO equivalents (NSIP-track only)</h2>
+<table>
+  <tr><th style="width:34%">1APP section</th><th>DCO document equivalent</th></tr>
+  {% for k, v in meta.dco_equivalents.items() %}
+    <tr><td class="lbl">{{ k }}</td><td>{{ v }}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<div class="disclaimer">
+  <strong>Disclaimer.</strong> {{ meta.disclaimer }}
+  {{ policy.disclaimer }}
+  {% if sub_forms and sub_forms.ownership_certificate %}
+    {{ sub_forms.ownership_certificate.disclaimer }}
+  {% endif %}
+  {% if sub_forms and sub_forms.cil_form_1 %}
+    {{ sub_forms.cil_form_1.disclaimer }}
+  {% endif %}
+</div>
+
+<div class="footer">Princeps · Planning Application Bundle (1APP v6) · Generated {{ generated_at }}</div>
+
+</body>
+</html>

@@ -451,37 +451,39 @@ def _multi_tech_comparison(lat: float, lon: float, capacity_mw: float,
     return results
 
 
-def _bng_estimate(land_use: dict, capacity_mw: float) -> dict:
-    """Estimate BNG (Biodiversity Net Gain) baseline and required uplift."""
-    classes = land_use.get("class_percentages", {})
-    total_ha = capacity_mw * 2.0  # approximate site area
-    baseline_units = 0
-    habitat_breakdown = []
-    for cls, pct in classes.items():
-        ha = total_ha * pct / 100
-        rate = BNG_HABITAT_UNITS.get(cls, 2.0)
-        units = ha * rate
-        baseline_units += units
-        habitat_breakdown.append({
-            "habitat": cls.replace("_", " ").title(),
-            "area_ha": round(ha, 2),
-            "unit_rate": rate,
-            "units": round(units, 1),
-        })
+def _bng_estimate(land_use: dict, capacity_mw: float, technology: str = "solar") -> dict:
+    """Defra Biodiversity Metric 4.0 / UKHab v2.0 baseline + post-development
+    BNG calculation via utils.bng_calculator.
 
-    required_uplift = baseline_units * 0.10  # 10% mandatory net gain
-    cost_per_unit = 25_000  # UK average BNG credit cost
-    offset_cost = required_uplift * cost_per_unit
+    Returns a pack-ready dict with baseline_units, post_units, net_change_pct,
+    compliance flag, habitat_breakdown (baseline + post) and unit-offset cost
+    for any residual deficit. Keeps back-compat keys (`baseline_units`,
+    `habitat_breakdown`, `offset_cost_gbp`) used by older templates.
+    """
+    from utils.bng_calculator import bng_from_land_use, bng_to_pack_dict, NET_GAIN_THRESHOLD_PCT
 
-    return {
-        "baseline_units": round(baseline_units, 1),
-        "required_uplift_pct": 10,
-        "required_uplift_units": round(required_uplift, 1),
-        "offset_cost_gbp": round(offset_cost),
-        "cost_per_unit_gbp": cost_per_unit,
-        "habitat_breakdown": habitat_breakdown,
-        "strategy": "On-site habitat creation preferred; off-site credits as fallback",
-    }
+    result = bng_from_land_use(land_use or {}, capacity_mw, tech=technology)
+    pack = bng_to_pack_dict(result)
+
+    # Offset cost only applies to the deficit below the 10% threshold
+    required_units = pack["baseline_units"] * (NET_GAIN_THRESHOLD_PCT / 100.0)
+    achieved_over_baseline = max(pack["net_change_units"], 0.0)
+    deficit_units = max(required_units - achieved_over_baseline, 0.0)
+    cost_per_unit = 25_000  # UK average BNG credit cost (DEFRA statutory tariff c.£42k band2 — market avg ~£25k)
+    offset_cost = deficit_units * cost_per_unit
+
+    # Legacy keys retained for back-compat with older template paths
+    pack["required_uplift_pct"] = NET_GAIN_THRESHOLD_PCT
+    pack["required_uplift_units"] = round(required_units, 2)
+    pack["deficit_units"] = round(deficit_units, 2)
+    pack["offset_cost_gbp"] = round(offset_cost)
+    pack["cost_per_unit_gbp"] = cost_per_unit
+    pack["habitat_breakdown"] = pack["baseline_rows"]
+    pack["strategy"] = (
+        "On-site habitat creation preferred (meadow under panels, native hedgerow). "
+        "Off-site BNG credits as fallback for residual deficit."
+    )
+    return pack
 
 
 def _probability_table(annual_mwh: float, cf_pct: float) -> list[dict]:
@@ -658,6 +660,24 @@ def _monthly_yield_chart(sam_result: dict) -> str:
     return _fig_to_b64(fig)
 
 
+def _render_redline_b64(lat: float, lon: float, site_name: str) -> str:
+    """Render the red-line boundary map from a drop-pin and return a
+    base64 PNG string suitable for inlining in the report HTML.
+    Falls back to an empty string if rendering raises."""
+    try:
+        import base64 as _b64
+        from utils.red_line_map import render_redline_from_point
+        png = render_redline_from_point(
+            lat, lon,
+            site_name=site_name or "Site",
+            width_in=7.5, height_in=5.0, dpi=160,
+        )
+        return _b64.b64encode(png).decode("ascii")
+    except Exception as e:
+        log.warning("Red-line map b64 render failed: %s", e)
+        return ""
+
+
 def _demand_forecast_mini_chart(site_data: dict) -> str:
     """Mini demand forecast chart for the report."""
     from utils.report_renderer import generate_charts
@@ -701,6 +721,7 @@ def _build_sections(site_data: dict, sam_result: dict, grid_result: dict,
             <div class="rpt-kv"><span class="rpt-kv-label">Technology</span><span class="rpt-kv-value">{site_data.get('technology', 'Solar PV')}</span></div>
           </div>
         </div>
+        {'<div class="chart-container"><img src="data:image/png;base64,' + charts.get('redline_map', '') + '" alt="Red-line boundary map"><div class="chart-caption">Figure 2a: Red-line site boundary with statutory overlays (AONB/SSSI/flood) and access roads</div></div>' if charts.get('redline_map') else ''}
         {'<div class="chart-container"><img src="data:image/png;base64,' + charts.get('terrain_profile', '') + '" alt="Terrain"><div class="chart-caption">Terrain elevation and slope profile</div></div>' if charts.get('terrain_profile') else ''}
         {'<div class="chart-container"><img src="data:image/png;base64,' + charts.get('land_use_pie', '') + '" alt="Land use"><div class="chart-caption">DynamicWorld land use classification</div></div>' if charts.get('land_use_pie') else ''}
         """,
@@ -881,35 +902,67 @@ def _build_sections(site_data: dict, sam_result: dict, grid_result: dict,
         """,
     })
 
-    # Section 10: BNG Assessment
-    bng_rows = ""
-    for h in bng_estimate.get("habitat_breakdown", []):
-        bng_rows += f"""<tr>
+    # Section 10: BNG Assessment (Defra Biodiversity Metric 4.0 / UKHab v2.0)
+    baseline_rows = ""
+    for h in bng_estimate.get("baseline_rows", []) or bng_estimate.get("habitat_breakdown", []):
+        baseline_rows += f"""<tr>
             <td>{h['habitat']}</td>
-            <td class="num">{h['area_ha']} ha</td>
-            <td class="num">{h['unit_rate']}</td>
-            <td class="num">{h['units']}</td>
+            <td class=\"num\">{h.get('ukhab_code', '—')}</td>
+            <td class=\"num\">{h['area_ha']}</td>
+            <td class=\"num\">{h.get('distinctiveness', '—')}</td>
+            <td class=\"num\">{h.get('condition', '—')}</td>
+            <td class=\"num\">{h['units']}</td>
         </tr>"""
+
+    post_rows = ""
+    for h in bng_estimate.get("post_rows", []):
+        post_rows += f"""<tr>
+            <td>{h['habitat']}</td>
+            <td class=\"num\">{h.get('ukhab_code', '—')}</td>
+            <td class=\"num\">{h['area_ha']}</td>
+            <td class=\"num\">{h.get('action', '—')}</td>
+            <td class=\"num\">{h.get('years_to_target', '—')}</td>
+            <td class=\"num\">{h['units']}</td>
+        </tr>"""
+
+    compliant = bng_estimate.get("compliant", False)
+    net_pct = bng_estimate.get("net_change_pct", 0.0)
+    threshold = bng_estimate.get("threshold_pct", 10)
+    pill = (
+        f'<span style="background:#d4f4dd;color:#0a5;padding:2px 8px;border-radius:10px;font-weight:700;">MEETS ≥{threshold:.0f}%</span>'
+        if compliant else
+        f'<span style="background:#fde2e4;color:#b00020;padding:2px 8px;border-radius:10px;font-weight:700;">BELOW ≥{threshold:.0f}%</span>'
+    )
 
     sections.append({
         "number": 10,
-        "title": "Biodiversity Net Gain (BNG) Assessment",
+        "title": "Biodiversity Net Gain — Metric 4.0 / UKHab v2.0",
         "content": f"""
-        <p>Under the Environment Act 2021, all planning permissions in England must deliver a minimum 10% biodiversity net gain (BNG).</p>
-        <div class="rpt-cols">
-          <div class="rpt-col">
-            <div class="rpt-kv"><span class="rpt-kv-label">Baseline Units</span><span class="rpt-kv-value">{bng_estimate.get('baseline_units', '—')}</span></div>
-            <div class="rpt-kv"><span class="rpt-kv-label">Required Uplift</span><span class="rpt-kv-value">{bng_estimate.get('required_uplift_units', '—')} units ({bng_estimate.get('required_uplift_pct', 10)}%)</span></div>
-            <div class="rpt-kv"><span class="rpt-kv-label">Offset Cost (if credits)</span><span class="rpt-kv-value">&pound;{bng_estimate.get('offset_cost_gbp', 0):,.0f}</span></div>
+        <p>Under the <strong>Environment Act 2021 s.98</strong> (mandatory from 12 February 2024 via Schedule 7A of the Town & Country Planning Act 1990), development must deliver a minimum <strong>{threshold:.0f}% biodiversity net gain</strong> measured with Natural England's statutory <em>{bng_estimate.get('metric_version', 'Biodiversity Metric 4.0')}</em>. Habitat classifications below follow <em>{bng_estimate.get('ukhab_version', 'UKHab v2.0')}</em>.</p>
+        <div class=\"rpt-cols\">
+          <div class=\"rpt-col\">
+            <div class=\"rpt-kv\"><span class=\"rpt-kv-label\">Baseline Units</span><span class=\"rpt-kv-value\">{bng_estimate.get('baseline_units', '—')}</span></div>
+            <div class=\"rpt-kv\"><span class=\"rpt-kv-label\">Post-Development Units</span><span class=\"rpt-kv-value\">{bng_estimate.get('post_units', '—')}</span></div>
+            <div class=\"rpt-kv\"><span class=\"rpt-kv-label\">Net Change</span><span class=\"rpt-kv-value\">{bng_estimate.get('net_change_units', 0):+.2f} units ({net_pct:+.1f}%)</span></div>
+            <div class=\"rpt-kv\"><span class=\"rpt-kv-label\">Statutory Threshold</span><span class=\"rpt-kv-value\">{pill}</span></div>
           </div>
-          <div class="rpt-col">
-            <div class="rpt-kv"><span class="rpt-kv-label">Strategy</span><span class="rpt-kv-value">{bng_estimate.get('strategy', '—')}</span></div>
+          <div class=\"rpt-col\">
+            <div class=\"rpt-kv\"><span class=\"rpt-kv-label\">Residual Deficit</span><span class=\"rpt-kv-value\">{bng_estimate.get('deficit_units', 0):.2f} units</span></div>
+            <div class=\"rpt-kv\"><span class=\"rpt-kv-label\">Offset Cost (if credits)</span><span class=\"rpt-kv-value\">&pound;{bng_estimate.get('offset_cost_gbp', 0):,.0f}</span></div>
+            <div class=\"rpt-kv\"><span class=\"rpt-kv-label\">Strategy</span><span class=\"rpt-kv-value\">{bng_estimate.get('strategy', '—')}</span></div>
           </div>
         </div>
-        <table class="rpt-table">
-          <tr><th>Habitat Type</th><th>Area</th><th>Unit Rate</th><th>Units</th></tr>
-          {bng_rows}
+        <h3 class=\"rpt-sub\">Baseline habitats (pre-development)</h3>
+        <table class=\"rpt-table\">
+          <tr><th>Habitat (UKHab)</th><th>Code</th><th>Area (ha)</th><th>Distinctiveness</th><th>Condition</th><th>Units</th></tr>
+          {baseline_rows}
         </table>
+        <h3 class=\"rpt-sub\">Post-development habitats (≥10% net-gain plan)</h3>
+        <table class=\"rpt-table\">
+          <tr><th>Habitat (UKHab)</th><th>Code</th><th>Area (ha)</th><th>Action</th><th>Years to target</th><th>Units</th></tr>
+          {post_rows}
+        </table>
+        <div class=\"text-xs text-muted mt-8\">Pragmatic port of {bng_estimate.get('metric_version', 'Biodiversity Metric 4.0')} — formal submission requires the official Natural England spreadsheet executed by an accredited ecologist. Cost assumptions: residual deficit &times; &pound;{bng_estimate.get('cost_per_unit_gbp', 25000):,} per unit (market average for off-site credits, 2024).</div>
         """,
     })
 
@@ -1158,7 +1211,7 @@ async def generate_one_click_report(
         capacity_mw, sam_result, grid_result, loss_budget, technology))
     multi_tech = await loop.run_in_executor(None, lambda: _multi_tech_comparison(
         lat, lon, capacity_mw, sam_result, grid_result))
-    bng_estimate = _bng_estimate(site_data.get("land_use", {}), capacity_mw)
+    bng_estimate = _bng_estimate(site_data.get("land_use", {}), capacity_mw, technology=technology)
     prob_table = _probability_table(financials.get("annual_yield_mwh", 0),
                                      financials.get("capacity_factor_pct", 11))
 
@@ -1179,6 +1232,13 @@ async def generate_one_click_report(
     if sam_result.get("monthly_generation"):
         extra_charts["monthly_yield"] = await loop.run_in_executor(
             None, _monthly_yield_chart, sam_result)
+
+    # Red-line boundary map — embedded in the Site Assessment pack
+    try:
+        extra_charts["redline_map"] = await loop.run_in_executor(
+            None, _render_redline_b64, lat, lon, name)
+    except Exception as e:
+        log.warning("Red-line map render failed: %s", e)
 
     charts = {**base_charts, **extra_charts}
 

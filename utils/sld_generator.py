@@ -593,3 +593,277 @@ def generate_sld(assets: list[dict], capacity_kw: float,
         "components": components,
         "cable_schedule": cable_schedule,
     }
+
+
+# ===========================================================================
+# Matplotlib-based pragmatic SLD (SVG + PNG) — used by the Grid Connection
+# Report. Renders a grid-source to site topology with breaker symbols, suitable
+# for inclusion in a G99 pack or a DNO submission.
+# ===========================================================================
+
+def _draw_breaker(ax, x: float, y: float, size: float = 0.35) -> None:
+    """Draw a circuit-breaker symbol — square with internal X."""
+    import matplotlib.patches as mpatches
+    s = size
+    ax.add_patch(mpatches.Rectangle((x - s / 2, y - s / 2), s, s,
+                                     fill=False, lw=1.6, edgecolor="#111"))
+    ax.plot([x - s / 2, x + s / 2], [y - s / 2, y + s / 2],
+             color="#111", lw=1.0)
+    ax.plot([x + s / 2, x - s / 2], [y - s / 2, y + s / 2],
+             color="#111", lw=1.0)
+
+
+def _draw_transformer(ax, x: float, y: float, v_primary: str, v_secondary: str,
+                       rating: str | None = None) -> None:
+    """Draw a two-coil transformer symbol."""
+    import matplotlib.patches as mpatches
+    r = 0.25
+    ax.add_patch(mpatches.Circle((x - 0.12, y), r, fill=False, lw=1.6,
+                                   edgecolor="#111"))
+    ax.add_patch(mpatches.Circle((x + 0.12, y), r, fill=False, lw=1.6,
+                                   edgecolor="#111"))
+    ax.text(x, y + r + 0.18, v_primary, ha="center", va="bottom", fontsize=8)
+    ax.text(x, y - r - 0.10, v_secondary, ha="center", va="top", fontsize=8)
+    if rating:
+        ax.text(x, y - r - 0.28, rating, ha="center", va="top",
+                 fontsize=7, color="#555", style="italic")
+
+
+def _draw_busbar(ax, x_start: float, x_end: float, y: float,
+                  label: str | None = None) -> None:
+    """Draw a horizontal busbar (thick line)."""
+    ax.plot([x_start, x_end], [y, y], color="#111", lw=3.2, solid_capstyle="butt")
+    if label:
+        ax.text((x_start + x_end) / 2, y + 0.15, label,
+                 ha="center", va="bottom", fontsize=8, fontweight="bold")
+
+
+def _draw_grid_source(ax, x: float, y: float, voltage_kv: float,
+                       fault_level_ka: float | None) -> None:
+    """Draw the DNO grid source symbol — circle with lightning bolt."""
+    import matplotlib.patches as mpatches
+    ax.add_patch(mpatches.Circle((x, y), 0.38, fill=False, lw=2, edgecolor="#111"))
+    ax.text(x, y, "\u26A1", ha="center", va="center", fontsize=18)
+    label = f"DNO Grid  {voltage_kv:.0f} kV"
+    ax.text(x, y + 0.6, label, ha="center", va="bottom",
+             fontsize=9, fontweight="bold")
+    if fault_level_ka:
+        ax.text(x, y - 0.55, f"Fault level: {fault_level_ka:.1f} kA",
+                 ha="center", va="top", fontsize=7, color="#555")
+
+
+def _draw_feeder(ax, x: float, y_top: float, y_bot: float, kind: str,
+                  rating_kw: float, label: str) -> None:
+    """Draw a vertical feeder with breaker + termination symbol."""
+    import matplotlib.patches as mpatches
+    # Wire from busbar
+    ax.plot([x, x], [y_top, y_top - 0.35], color="#111", lw=1.3)
+    # Breaker
+    _draw_breaker(ax, x, y_top - 0.55, size=0.28)
+    # Wire down to symbol
+    ax.plot([x, x], [y_top - 0.69, y_bot + 0.35], color="#111", lw=1.3)
+    # Terminal symbol
+    if kind == "pv":
+        ax.add_patch(mpatches.Rectangle((x - 0.24, y_bot - 0.10), 0.48, 0.32,
+                                         fill=False, lw=1.4, edgecolor="#111"))
+        ax.plot([x - 0.18, x + 0.18], [y_bot + 0.06, y_bot + 0.16],
+                 color="#111", lw=1.0)
+        ax.annotate("", xy=(x - 0.28, y_bot - 0.20), xytext=(x - 0.42, y_bot - 0.36),
+                     arrowprops=dict(arrowstyle="->", color="#d4a018", lw=1.2))
+        ax.text(x, y_bot - 0.35, f"PV\n{rating_kw:.0f} kW",
+                 ha="center", va="top", fontsize=7, fontweight="bold")
+    elif kind == "bess":
+        ax.plot([x - 0.22, x + 0.22], [y_bot + 0.10, y_bot + 0.10],
+                 color="#111", lw=3.0)
+        ax.plot([x - 0.14, x + 0.14], [y_bot + 0.00, y_bot + 0.00],
+                 color="#111", lw=1.5)
+        ax.text(x, y_bot - 0.20, f"BESS\n{rating_kw:.0f} kW",
+                 ha="center", va="top", fontsize=7, fontweight="bold")
+    elif kind == "dc_load":
+        ax.add_patch(mpatches.FancyBboxPatch(
+            (x - 0.30, y_bot - 0.08), 0.60, 0.28,
+            boxstyle="round,pad=0.02", fill=True,
+            facecolor="#1a1a2e", edgecolor="#111", lw=1.2))
+        ax.text(x, y_bot + 0.06, "DC LOAD", ha="center", va="center",
+                 fontsize=7, color="#d4a018", fontweight="bold")
+        ax.text(x, y_bot - 0.22, f"{rating_kw:.0f} kW",
+                 ha="center", va="top", fontsize=7, fontweight="bold")
+    else:
+        ax.add_patch(mpatches.Circle((x, y_bot + 0.05), 0.16,
+                                       fill=False, lw=1.4, edgecolor="#111"))
+        ax.text(x, y_bot - 0.22, label, ha="center", va="top", fontsize=7)
+
+
+def _render_grid_sld_matplotlib(
+    *,
+    site_voltage_kv: float,
+    poc_voltage_kv: float,
+    poc_name: str,
+    fault_level_ka: float | None,
+    feeders: list[dict],
+    site_name: str | None = None,
+) -> tuple[str, bytes]:
+    """Pragmatic grid-connection SLD rendered with matplotlib.
+
+    Topology (left → right):
+        DNO grid source → POC CB → step-down/up xfmr → LV busbar →
+        [PV | BESS | DC LOAD] feeders each with their own breaker.
+
+    Returns:
+        (svg_string, png_bytes)
+    """
+    import io
+
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    # Canvas sizing — one column per feeder plus header
+    n_feed = max(1, len(feeders))
+    fig_w = 2.4 + n_feed * 1.1
+    fig_w = max(8.5, min(fig_w, 14.0))
+    fig, ax = plt.subplots(figsize=(fig_w, 5.6), dpi=150)
+    ax.set_xlim(0, fig_w)
+    ax.set_ylim(0, 6)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    fig.patch.set_facecolor("white")
+
+    # Title
+    title = site_name or "Grid Connection Single Line Diagram"
+    ax.text(fig_w / 2, 5.65,
+             f"{title}  |  {poc_voltage_kv:.0f} kV POC at {poc_name}",
+             ha="center", va="center", fontsize=11, fontweight="bold")
+
+    # Grid source (top-left)
+    x_grid = 1.1
+    y_grid = 4.6
+    _draw_grid_source(ax, x_grid, y_grid, poc_voltage_kv, fault_level_ka)
+
+    # POC breaker
+    x_poc = x_grid + 1.1
+    _draw_breaker(ax, x_poc, y_grid, size=0.3)
+    ax.text(x_poc, y_grid + 0.35, "POC\nCB", ha="center", va="bottom", fontsize=7)
+    ax.plot([x_grid + 0.38, x_poc - 0.15], [y_grid, y_grid],
+             color="#111", lw=1.4)
+    ax.plot([x_poc + 0.15, x_poc + 0.80], [y_grid, y_grid],
+             color="#111", lw=1.4)
+
+    # DNO substation bar
+    x_sub_l = x_poc + 0.80
+    x_sub_r = x_sub_l + 1.1
+    _draw_busbar(ax, x_sub_l, x_sub_r, y_grid,
+                  label=f"DNO {poc_voltage_kv:.0f} kV Bus")
+
+    # Step-down transformer (to LV busbar)
+    x_xfmr = (x_sub_l + x_sub_r) / 2
+    ax.plot([x_xfmr, x_xfmr], [y_grid, y_grid - 0.7],
+             color="#111", lw=1.4)
+    _draw_transformer(ax, x_xfmr, y_grid - 1.05,
+                      v_primary=f"{poc_voltage_kv:.0f} kV",
+                      v_secondary=f"{site_voltage_kv:.2f} kV",
+                      rating="Step-down")
+    ax.plot([x_xfmr, x_xfmr], [y_grid - 1.55, y_grid - 2.1],
+             color="#111", lw=1.4)
+
+    # Site LV/MV busbar
+    y_bus = y_grid - 2.2
+    x_bus_l = 1.4
+    x_bus_r = fig_w - 0.6
+    _draw_busbar(ax, x_bus_l, x_bus_r, y_bus,
+                  label=f"Site {site_voltage_kv:.2f} kV Busbar")
+
+    # Feeders
+    if feeders:
+        span = x_bus_r - x_bus_l - 0.8
+        step = span / max(1, n_feed - 1) if n_feed > 1 else 0
+        x0 = x_bus_l + 0.4
+        y_bot = y_bus - 1.3
+        for i, fd in enumerate(feeders):
+            xf = x0 + i * step if n_feed > 1 else (x_bus_l + x_bus_r) / 2
+            _draw_feeder(ax, xf, y_bus, y_bot,
+                          kind=fd.get("kind", "pv"),
+                          rating_kw=float(fd.get("rating_kw", 0.0)),
+                          label=fd.get("label", ""))
+
+    # Footer annotations
+    ax.text(0.2, 0.4,
+             "Princeps auto-SLD  |  per ENA EREC G99 Issue 1 Amdt 11",
+             fontsize=7, color="#555")
+    ax.text(fig_w - 0.2, 0.4,
+             "Symbols: IEC 60617 / BS 3939",
+             ha="right", fontsize=7, color="#555")
+
+    # Emit SVG + PNG
+    svg_buf = io.StringIO()
+    fig.savefig(svg_buf, format="svg", bbox_inches="tight",
+                 facecolor="white", edgecolor="none")
+    png_buf = io.BytesIO()
+    fig.savefig(png_buf, format="png", dpi=150, bbox_inches="tight",
+                 facecolor="white", edgecolor="none")
+    plt.close(fig)
+
+    return svg_buf.getvalue(), png_buf.getvalue()
+
+
+def generate_grid_connection_sld(
+    *,
+    site_voltage_kv: float = 0.4,
+    poc_voltage_kv: float = 33.0,
+    poc_name: str = "DNO Primary",
+    fault_level_ka: float | None = None,
+    feeders: list[dict] | None = None,
+    capacity_kw: float = 5000.0,
+    site_name: str | None = None,
+) -> dict:
+    """Generate a pragmatic grid-connection SLD (SVG + PNG + base64 PNG).
+
+    Topology: DNO grid source → POC breaker → DNO substation bar →
+    step-down transformer → site busbar → [PV | BESS | DC load] feeders.
+
+    Args:
+        site_voltage_kv:   Site-side (secondary) voltage (e.g. 0.4 kV).
+        poc_voltage_kv:    Point of connection voltage (e.g. 33 kV).
+        poc_name:          Substation / POC name for labelling.
+        fault_level_ka:    Optional DNO fault level at POC.
+        feeders:           List of {kind: 'pv'|'bess'|'dc_load', rating_kw, label}.
+                           If None, a single PV feeder of `capacity_kw` is shown.
+        capacity_kw:       Default total capacity if feeders is None.
+        site_name:         Optional project / site name for the title.
+
+    Returns:
+        {
+            'svg':        str,    # full SVG markup
+            'png_bytes':  bytes,  # raw PNG
+            'png_base64': str,    # base64 PNG for HTML embedding
+            'feeders':    list,   # echoed feeder list
+            'meta':       dict,   # topology summary
+        }
+    """
+    import base64
+
+    if feeders is None:
+        feeders = [{"kind": "pv", "rating_kw": capacity_kw, "label": "PV Site"}]
+
+    svg, png_bytes = _render_grid_sld_matplotlib(
+        site_voltage_kv=site_voltage_kv,
+        poc_voltage_kv=poc_voltage_kv,
+        poc_name=poc_name,
+        fault_level_ka=fault_level_ka,
+        feeders=feeders,
+        site_name=site_name,
+    )
+
+    return {
+        "svg": svg,
+        "png_bytes": png_bytes,
+        "png_base64": base64.b64encode(png_bytes).decode("ascii"),
+        "feeders": feeders,
+        "meta": {
+            "site_voltage_kv": site_voltage_kv,
+            "poc_voltage_kv": poc_voltage_kv,
+            "poc_name": poc_name,
+            "fault_level_ka": fault_level_ka,
+            "renderer": "matplotlib",
+        },
+    }

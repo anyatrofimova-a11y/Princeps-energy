@@ -193,21 +193,83 @@
         </div>
       </div>
 
-      <!-- BNG -->
-      <div class="card">
-        <div class="card-header">Biodiversity Net Gain (BNG)</div>
+      <!-- BNG — Defra Biodiversity Metric 4.0 / UKHab v2.0 -->
+      <div class="card {% if site.bng and site.bng.compliant %}card-accent-green{% elif site.bng %}card-accent-red{% endif %}">
+        <div class="card-header">Biodiversity Net Gain &mdash; Metric 4.0 / UKHab v2.0</div>
+        <div class="text-xs text-muted mb-4">
+          Environment Act 2021 s.98 &mdash; mandatory from 12 Feb 2024 for TCPA applications.
+          Statutory threshold: <strong>&ge;10% net gain</strong>.
+        </div>
+        {% if site.bng %}
+        <div class="stat-row">
+          <span class="stat-label">Baseline Units</span>
+          <span class="stat-value">{{ "%.2f"|format(site.bng.baseline_units) }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Post-Development Units</span>
+          <span class="stat-value">{{ "%.2f"|format(site.bng.post_units) }}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Net Change</span>
+          <span class="stat-value">
+            {{ "%+.2f"|format(site.bng.net_change_units) }} units
+            ({{ "%+.1f"|format(site.bng.net_change_pct) }}%)
+            {% if site.bng.compliant %}
+            <span class="score-pill score-go" style="margin-left:4px;">MEETS &ge;10%</span>
+            {% else %}
+            <span class="score-pill score-nogo" style="margin-left:4px;">BELOW &ge;10%</span>
+            {% endif %}
+          </span>
+        </div>
+        {% if site.bng.deficit_units and site.bng.deficit_units > 0 %}
+        <div class="stat-row">
+          <span class="stat-label">Residual Deficit</span>
+          <span class="stat-value">{{ "%.2f"|format(site.bng.deficit_units) }} units &mdash; est. &pound;{{ "{:,.0f}".format(site.bng.offset_cost_gbp) }} credits</span>
+        </div>
+        {% endif %}
+        <table style="margin-top:8px; font-size:10px;">
+          <tr>
+            <th>UKHab Habitat</th><th>Code</th><th>Area (ha)</th><th>Distinctiveness</th><th>Units</th>
+          </tr>
+          {% for row in site.bng.baseline_rows %}
+          <tr>
+            <td>{{ row.habitat }}</td>
+            <td>{{ row.ukhab_code }}</td>
+            <td>{{ "%.2f"|format(row.area_ha) }}</td>
+            <td>{{ row.distinctiveness }}</td>
+            <td>{{ "%.2f"|format(row.units) }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% if site.bng.post_rows %}
+        <div class="text-xs text-muted mt-4"><strong>Post-development plan (&ge;10% net-gain)</strong></div>
+        <table style="margin-top:4px; font-size:10px;">
+          <tr><th>UKHab Habitat</th><th>Action</th><th>Area (ha)</th><th>Yrs to target</th><th>Units</th></tr>
+          {% for row in site.bng.post_rows %}
+          <tr>
+            <td>{{ row.habitat }}</td>
+            <td>{{ row.action }}</td>
+            <td>{{ "%.2f"|format(row.area_ha) }}</td>
+            <td>{{ row.years_to_target }}</td>
+            <td>{{ "%.2f"|format(row.units) }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% endif %}
+        {% else %}
         <div class="text-sm">
-          Under the Environment Act 2021, developments must deliver a minimum
-          <strong>10% biodiversity net gain</strong>. Solar farms can achieve this through:
+          Solar / BESS sites typically achieve &ge;10% net gain through:
         </div>
         <ul style="font-size: 11px; margin: 8px 0 0 16px; line-height: 1.8;">
-          <li>Wildflower meadow creation between panel rows</li>
-          <li>Native hedgerow planting along site boundaries</li>
+          <li>Species-rich meadow seeding between panel rows</li>
+          <li>Native hedgerow planting along boundaries</li>
           <li>Habitat corridors connecting existing ecological features</li>
           <li>Pond and wetland creation for amphibians</li>
         </ul>
+        {% endif %}
         <div class="text-xs text-muted mt-8">
-          BNG assessment required using DEFRA Biodiversity Metric 4.0 by an accredited ecologist.
+          Pragmatic port of {{ site.bng.metric_version if site.bng and site.bng.metric_version else 'Defra Biodiversity Metric 4.0' }}.
+          Formal submission requires the Natural England statutory spreadsheet executed by an accredited ecologist.
         </div>
       </div>
     </div>
@@ -215,5 +277,6 @@
 
   <div class="page-footer">
     Princeps Site Assessment &mdash; Environmental &mdash; {{ now }}
+    &mdash; BNG per {{ site.bng.metric_version if site.bng and site.bng.metric_version else 'Defra Biodiversity Metric 4.0 (Jan 2023)' }} / {{ site.bng.ukhab_version if site.bng and site.bng.ukhab_version else 'UKHab v2.0' }}
   </div>
 </div>

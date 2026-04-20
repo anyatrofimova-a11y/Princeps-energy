@@ -21,22 +21,92 @@ import re
 from datetime import datetime, date
 from typing import Any
 
+from app.regulatory.versions import (
+    cite as _cite_reg,
+    cite_nps as _cite_nps,
+    nppf_para as _nppf_para,
+)
+
 
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
 
 def _latlon_to_osgb(lat: float, lon: float) -> str:
-    """Approximate WGS84 to OS Grid Reference (6-figure)."""
-    if not (49 < lat < 61 and -8 < lon < 2):
-        return f"{lat:.4f}N, {abs(lon):.4f}{'W' if lon < 0 else 'E'}"
-    e = int((lon + 2) * 100000 + 400000)
-    n = int((lat - 49) * 110000 + 100000)
-    return f"TL {e % 100000:05d} {n % 100000:05d}"
+    """WGS84 (decimal degrees) to a real 6-figure OS Grid Reference.
+
+    Delegates to :func:`utils.osgb.to_grid_ref`, which uses pyproj
+    (EPSG:4326 -> EPSG:27700) or a pure-Python Airy-1830 fallback.
+    Fixed 2026-04-19 to replace a fabricated approximation that produced
+    invalid grid references on generated packs (COUNCIL-1 audit).
+    """
+    from utils.osgb import to_grid_ref
+
+    try:
+        lat_f = float(lat)
+        lon_f = float(lon)
+    except (TypeError, ValueError):
+        return "—"
+    if not (math.isfinite(lat_f) and math.isfinite(lon_f)):
+        return "—"
+    return to_grid_ref(lat_f, lon_f, precision=6)
 
 
 def _slug(s: str) -> str:
     return re.sub(r"[^\w-]", "-", s or "site").strip("-")[:40]
+
+
+# Placeholder strings we consider "empty" and overwritable from enrichment.
+_PLACEHOLDER_VALUES = frozenset({
+    "[Postcode required]",
+    "[Parish — confirm from LPA boundary data]",
+    "[Ward — confirm from LPA boundary data]",
+    "[UPRN — look up at Ordnance Survey AddressBase]",
+    "[Title number — HMLR official search required]",
+    "[Local Planning Authority — confirm from LPA boundary service]",
+    "[Local Planning Authority]",
+    "[Postcode]",
+})
+
+
+def _merge_enrichment_into_site(site: dict, enrichment: dict) -> None:
+    """Populate ``site`` with enrichment values (from
+    :func:`utils.site_enrichment.enrich_site`), skipping any caller-supplied
+    value that is non-placeholder.
+    """
+    def _pick(field: str) -> Any:
+        rec = enrichment.get(field)
+        if isinstance(rec, dict):
+            return rec.get("value")
+        return rec
+
+    def _set_if_empty(key: str, value: Any) -> None:
+        if value in (None, "", []):
+            return
+        existing = site.get(key)
+        if existing in (None, "", *_PLACEHOLDER_VALUES):
+            site[key] = value
+
+    _set_if_empty("postcode", _pick("postcode"))
+    _set_if_empty("local_authority", _pick("local_planning_authority"))
+    _set_if_empty("lpa", _pick("local_planning_authority"))
+    _set_if_empty("parish", _pick("parish"))
+    _set_if_empty("ward", _pick("ward"))
+    _set_if_empty("parliamentary_constituency", _pick("parliamentary_constituency"))
+    uprn_val = _pick("uprn")
+    if uprn_val:
+        _set_if_empty("uprn", uprn_val)
+    title_val = _pick("land_registry_title")
+    if isinstance(title_val, dict):
+        tn = title_val.get("title_number") or title_val.get("inspire_id")
+        if tn:
+            _set_if_empty("title_number", tn)
+    elif title_val:
+        _set_if_empty("title_number", title_val)
+    osgb = _pick("osgb_grid_ref")
+    if osgb:
+        _set_if_empty("osgb_reference", osgb)
+        _set_if_empty("osgb_grid_ref", osgb)
 
 
 def _now_iso() -> str:
@@ -335,157 +405,294 @@ def generate_planning_summary(
     site: dict,
     assessment: dict,
     constraints: dict,
+    enrichment: dict | None = None,
 ) -> dict:
-    """Generate a pre-filled planning application summary (1APP key sections).
+    """Generate a UK 2026 industry-standard planning application summary.
+
+    Parameters
+    ----------
+    enrichment : dict | None
+        Optional output of ``utils.site_enrichment.enrich_site(...).to_dict()``.
+        When provided, its values (postcode, LPA, parish, ward, OSGB grid ref,
+        UPRN, title number) are used to overwrite any ``site`` fields that are
+        empty or still carry the ``[X required]`` / ``[X — confirm...]``
+        placeholder strings. Fields that enrichment could not resolve remain
+        as structured TODO markers rather than bare placeholders.
+
+    Aligned with: NPPF Dec 2024 (paras 86(c)/87/161/173), NPS EN-1 (2025),
+    Town & Country Planning (EIA) Regs 2017, Environment Act 2021 (mandatory
+    BNG from 12 Feb 2024 TCPA, NSIPs from May 2026), Planning & Infrastructure
+    Act 2025, Infrastructure Planning (Business or Commercial Projects)
+    (Amendment) Regs 2026 (DC NSIP opt-in via s.35 Planning Act 2008).
 
     Args:
         site: {name, address, postcode, lat, lon, area_ha, land_use,
-               local_authority, ward}
-        assessment: {capacity_mw, technology, panel_count, access_road,
-                     construction_months, description}
+               local_authority, ward, parish, last_known_use, existing_buildings}
+        assessment: {capacity_mw, technology ("solar"|"wind"|"bess"|"dc"|"hybrid"),
+                     it_load_mw, panel_count, access_road, construction_months,
+                     description, pue_target, wue_target_l_per_kwh,
+                     annual_water_m3, backup_genset_count, backup_genset_mva,
+                     heat_reuse_mwth, heat_reuse_partner, dc_floorspace_sqm,
+                     gross_external_area_sqm, building_height_m, use_class,
+                     employees_ops, construction_peak_hgv_per_day}
         constraints: {flood_zone, agricultural_grade, green_belt, aonb,
-                      conservation_area, listed_buildings, sssi, tpo,
-                      public_rights_of_way}
+                      conservation_area, listed_buildings, sssi, sac, spa,
+                      ramsar, tpo, public_rights_of_way, watercourse, archaeology,
+                      proximity_residential_m, heat_network_zone}
 
     Returns:
         {form_data, html, document_type, auto_fill_pct}
     """
+    # Merge enrichment into ``site`` so downstream placeholder fallbacks
+    # (e.g. ``site.get("postcode", "[Postcode required]")``) pick up real
+    # values. Never overwrites a caller-supplied non-placeholder value.
+    if enrichment:
+        _merge_enrichment_into_site(site, enrichment)
+
     lat = site.get("lat", 0)
     lon = site.get("lon", 0)
-    capacity_mw = assessment.get("capacity_mw", 5.0)
-    area_ha = site.get("area_ha", capacity_mw * 2)  # ~2 ha/MW for solar
-    tech = assessment.get("technology", "solar")
+    tech = (assessment.get("technology") or "solar").lower()
+    is_dc = tech in ("dc", "data_centre", "datacentre", "hyperscale")
+    capacity_mw = float(assessment.get("capacity_mw") or assessment.get("it_load_mw") or 5.0)
+    area_ha = float(site.get("area_ha") or (capacity_mw * 2 if not is_dc else max(5.0, capacity_mw / 20)))
 
-    # Determine planning route
-    if capacity_mw > 50:
-        planning_route = "NSIP — Development Consent Order (Planning Act 2008)"
-        authority = "Planning Inspectorate"
-    else:
-        planning_route = "Town and Country Planning Act 1990 — Full Application"
-        authority = site.get("local_authority", "[Local Planning Authority]")
+    # Planning route (2026 reality)
+    planning_route = _determine_planning_route(tech, capacity_mw, site)
+    authority = planning_route["determining_authority"]
 
-    # Land use from GeeFlow classification
+    # EIA screening — Schedule 1 / Schedule 2 Regulations 2017
+    eia = _screen_eia(tech, capacity_mw, area_ha, constraints)
+
+    # Use class (2025 case-law: B8 for DC)
+    use_class = assessment.get("use_class") or _default_use_class(tech)
+
     land_use = site.get("land_use", {})
     existing_use_desc = _describe_land_use(land_use)
 
-    # Flood zone determination
     fz = constraints.get("flood_zone", 1)
     flood_declaration = {
-        1: "Zone 1 — Low probability of flooding. No Sequential/Exception Test required.",
-        2: "Zone 2 — Medium probability. Sequential Test required.",
-        3: "Zone 3 — High probability. Sequential and Exception Tests required.",
-    }.get(fz, f"Flood Zone {fz} — check Environment Agency maps")
+        1: "Zone 1 — low probability of flooding (<1 in 1000 annual). Sequential / Exception Tests not required; FRA still needed for sites ≥1 ha (NPPF para 173).",
+        2: "Zone 2 — medium probability of flooding (1 in 100–1000). Sequential Test required; FRA mandatory.",
+        3: "Zone 3 — high probability of flooding (>1 in 100). Sequential AND Exception Tests required; FRA mandatory; development highly constrained.",
+    }.get(fz, f"Flood Zone {fz} — verify against Environment Agency flood map for planning.")
 
-    # Agricultural land classification
     ag_grade = constraints.get("agricultural_grade", 3)
+    is_bmv = ag_grade <= 2
     ag_declaration = (
-        f"Grade {ag_grade} {'(Best and Most Versatile — material consideration)' if ag_grade <= 2 else '(not BMV)'}"
+        f"Grade {ag_grade} — Best and Most Versatile (BMV) agricultural land. Material consideration under {_nppf_para('BMV')}. Requires justification and, where possible, use of lower-grade land."
+        if is_bmv else f"Grade {ag_grade} — not BMV. Agricultural Land Classification survey recommended at pre-app."
     )
 
-    form = {
+    form: dict[str, Any] = {
         "meta": {
-            "document_type": "Planning Application Summary (1APP)",
-            "planning_route": planning_route,
+            "document_type": "Planning Application Summary — UK Industry Standard (1APP + NPPF 2024)",
+            "planning_route": planning_route["route"],
             "determining_authority": authority,
+            "route_legal_basis": planning_route["legal_basis"],
+            "nsip_opt_in_available": planning_route["nsip_opt_in"],
+            "cni_designation": planning_route["cni"],
+            "use_class_order_1987_as_amended": use_class,
             "generated_by": "Princeps AI Platform",
             "generated_at": _now_iso(),
             "disclaimer": (
-                "Pre-filled summary for planning application preparation. "
-                "This does not constitute a formal planning submission."
+                "AUTO-GENERATED — NOT A SUBMISSION. This summary assists pre-application "
+                "preparation. Every figure must be verified by the applicant's planning, "
+                "legal, engineering and environmental consultants before any formal "
+                "submission. Reliance on this document does not transfer liability to "
+                "Princeps or its operators."
             ),
         },
 
         "section_1_site_details": {
             "site_address": site.get("address", site.get("name", "")),
-            "postcode": site.get("postcode", ""),
-            "os_grid_reference": _latlon_to_osgb(lat, lon),
-            "latitude": round(lat, 6),
-            "longitude": round(lon, 6),
+            "postcode": site.get("postcode") or "[Postcode required]",
+            "os_grid_reference": site.get("osgb_reference") or _latlon_to_osgb(lat, lon),
+            "latitude_wgs84": round(lat, 6),
+            "longitude_wgs84": round(lon, 6),
             "site_area_ha": round(area_ha, 2),
-            "local_authority": authority,
-            "ward": site.get("ward", "[Ward name]"),
-            "parish": site.get("parish", "[Parish]"),
+            "local_planning_authority": authority,
+            "parish": site.get("parish") or "[Parish — confirm from LPA boundary data]",
+            "ward": site.get("ward") or "[Ward — confirm from LPA boundary data]",
+            "site_identifier_uprn": site.get("uprn") or "[UPRN — order OS Open UPRN / AddressBase Plus]",
+            "land_registry_title": site.get("title_number") or "[Title number — HMLR Official Copy (£3) required]",
         },
 
-        "section_2_description": {
+        "section_2_proposed_development": {
             "proposal_description": (
                 assessment.get("description")
-                or _default_proposal_description(tech, capacity_mw, area_ha)
+                or _default_proposal_description(tech, capacity_mw, area_ha, assessment)
             ),
-            "technology_type": tech.title(),
+            "technology_type": "Data Centre (Hyperscale)" if is_dc else tech.title(),
+            "use_class_order_1987": use_class,
+            "gross_external_area_sqm": assessment.get("gross_external_area_sqm") or assessment.get("dc_floorspace_sqm") or ("[GEA — architect to confirm]" if is_dc else None),
             "installed_capacity_mw": round(capacity_mw, 2),
-            "number_of_panels": assessment.get(
-                "panel_count", math.ceil(capacity_mw * 1000 / 0.58) if tech == "solar" else None
+            "it_load_mw": assessment.get("it_load_mw") if is_dc else None,
+            "number_of_panels": (
+                assessment.get("panel_count")
+                or (math.ceil(capacity_mw * 1000 / 0.58) if tech == "solar" else None)
             ),
-            "max_height_m": _tech_max_height(tech),
-            "construction_period_months": assessment.get("construction_months", _est_construction(capacity_mw)),
-            "operational_life_years": 40 if tech == "solar" else 25,
-            "decommissioning_plan": "Condition to be agreed — full site restoration",
+            "number_of_turbines": assessment.get("turbine_count") if tech == "wind" else None,
+            "max_building_height_m_aod": assessment.get("building_height_m") or _tech_max_height(tech),
+            "construction_period_months": assessment.get("construction_months", _est_construction(capacity_mw, is_dc)),
+            "operational_life_years": 25 if is_dc else (40 if tech == "solar" else 25),
+            "decommissioning_plan": (
+                "Decommissioning & Site Restoration Plan to be secured by planning condition; "
+                "bond or equivalent financial instrument recommended where operational life is defined."
+            ),
         },
 
         "section_3_existing_use": {
-            "existing_use": existing_use_desc,
-            "is_land_vacant": "No" if land_use else "[Check required]",
+            "existing_primary_land_use": existing_use_desc,
+            "is_land_vacant": "No" if land_use else "[Verify on site visit and aerial photography]",
             "last_known_use": site.get("last_known_use", existing_use_desc),
-            "existing_buildings_on_site": site.get("existing_buildings", "[Check required]"),
+            "existing_buildings_on_site": site.get("existing_buildings", "[Survey required]"),
+            "previously_developed_land_pdl": "Yes" if (land_use.get("built") or 0) > 0.5 else "No (greenfield / agricultural)",
+            "contamination_risk": site.get("contamination_risk", "[Preliminary Risk Assessment (Phase 1 desk study) required]"),
         },
 
-        "section_4_access": {
-            "existing_access": assessment.get("access_road", "[To be confirmed]"),
-            "new_access_required": "[To be confirmed — transport statement may be needed]",
-            "public_highway_frontage": "[Check required]",
-            "visibility_splay_adequate": "[Check required]",
-            "construction_traffic_route": "[To be agreed with highways authority]",
-            "abnormal_loads_required": "Yes" if capacity_mw > 10 else "Unlikely",
+        "section_4_access_and_transport": {
+            "existing_access": assessment.get("access_road", "[To be confirmed on site plan]"),
+            "new_access_required": "[Transport Assessment needed if >5,000 sqm B8 — DfT Guidance on Transport Assessment]" if is_dc else "[Confirm against LPA thresholds]",
+            "public_highway_frontage": "[Confirm from OS MasterMap highway layer]",
+            "visibility_splay_adequate": "[Visibility splays to be demonstrated per Manual for Streets / DMRB CD 123]",
+            "construction_traffic_route": (
+                "Construction Traffic Management Plan (CTMP) to be submitted — route to avoid residential areas, "
+                "agreed with Highways Authority. Peak HGV movement: "
+                f"{assessment.get('construction_peak_hgv_per_day') or (120 if is_dc else 40)} per day."
+            ),
+            "travel_plan_required": "Yes — operational travel plan mandatory for DC >1,000 sqm" if is_dc else ("Yes" if capacity_mw > 20 else "Not normally required"),
+            "abnormal_loads_required": "Yes — transformer deliveries + pre-cast concrete" if (capacity_mw > 10 or is_dc) else "Unlikely",
+            "cycle_parking_ev_charging": (
+                "Cycle parking and EV charging to Part S / Local Plan standards; minimum 20% EV-ready provision for staff parking."
+                if is_dc else "As per Local Plan parking standards."
+            ),
         },
 
-        "section_5_flood_risk": {
-            "flood_zone": fz,
+        "section_5_flood_risk_and_drainage": {
+            "flood_zone_ea": fz,
             "flood_zone_declaration": flood_declaration,
-            "flood_risk_assessment_required": "Yes" if fz >= 2 else "No",
-            "surface_water_drainage": "SuDS scheme to be submitted" if area_ha > 1 else "Permeable ground maintained",
-            "watercourse_within_site": constraints.get("watercourse", "[Check required]"),
+            "flood_risk_assessment_required": "Yes" if (fz >= 2 or area_ha >= 1) else "No",
+            "sequential_test_required": "Yes" if fz >= 2 else "No",
+            "exception_test_required": "Yes" if fz >= 3 else "No",
+            "suds_strategy": (
+                "SuDS Management Train (source / site / regional controls) required. "
+                "Greenfield runoff rates (Qbar) to be achieved. Hierarchy per PPG Flood Risk ID 7."
+            ),
+            "watercourse_within_site": constraints.get("watercourse", "[Check Environment Agency Main Rivers / OS watercourse layers]"),
+            "surface_water_sewer_capacity": "[Thames Water / local wastewater undertaker capacity check required]",
+            "pollution_prevention": "Construction phase: oil interceptors, silt fences, refuelling bunds. Operational: none normally needed (no fuel storage beyond genset day tanks).",
         },
 
         "section_6_agricultural_land": {
-            "agricultural_grade": ag_grade,
-            "agricultural_declaration": ag_declaration,
-            "bmv_land_affected_ha": (
-                round(area_ha, 2) if ag_grade <= 2 else 0
+            "agricultural_land_classification_grade": ag_grade,
+            "alc_declaration": ag_declaration,
+            "bmv_land_affected_ha": round(area_ha, 2) if is_bmv else 0,
+            "alc_post_1988_survey_required": "Yes — provisional 1:250,000 maps are insufficient for determination" if is_bmv else "Recommended",
+            "soil_management_plan": "Soil Management Plan (Defra Code of Practice 2009) required — pre-commencement condition.",
+            "reversibility_statement": (
+                "Full reversibility within 12 months of decommissioning; shallow pile foundations; topsoil stripping limited to access tracks and substation platforms."
+                if tech == "solar"
+                else ("Not reversible — permanent buildings and deep foundations." if is_dc else "Partial reversibility — containers on pad foundations.")
             ),
-            "soil_management_plan": "To be conditioned" if ag_grade <= 3 else "Not required",
-            "reversibility": "Fully reversible — solar panels on ground-mounted frames",
         },
 
-        "section_7_designations": {
-            "green_belt": "Yes" if constraints.get("green_belt") else "No",
-            "aonb_national_landscape": "Yes" if constraints.get("aonb") else "No",
-            "conservation_area": "Yes" if constraints.get("conservation_area") else "No",
-            "listed_buildings_nearby": "Yes" if constraints.get("listed_buildings") else "No",
-            "sssi": "Yes" if constraints.get("sssi") else "No",
-            "tree_preservation_orders": "Yes" if constraints.get("tpo") else "No",
-            "public_rights_of_way": "Yes" if constraints.get("public_rights_of_way") else "No",
-            "archaeological_interest": constraints.get("archaeology", "[Check required]"),
+        "section_7_designations_and_constraints": {
+            "green_belt": f"Yes — Very Special Circumstances required ({_nppf_para('GREEN_BELT_VSC')} / {_nppf_para('GREEN_BELT_SECTION')})" if constraints.get("green_belt") else "No",
+            "aonb_national_landscape": "Yes — great weight given to landscape conservation (NPPF para 189)" if constraints.get("aonb") else "No",
+            "conservation_area": "Yes — s.72 Planning (LBCA) Act 1990 applies" if constraints.get("conservation_area") else "No",
+            "listed_buildings_within_500m": "Yes — Heritage Impact Assessment required (s.66 P(LBCA)A 1990)" if constraints.get("listed_buildings") else "No",
+            "scheduled_ancient_monument": constraints.get("sam", "No / [Check Historic England National Heritage List]"),
+            "sssi": "Yes — Natural England notification required under Wildlife & Countryside Act 1981" if constraints.get("sssi") else "No",
+            "sac_spa_ramsar_natura_2000": "Yes — Habitats Regulations Assessment (HRA) required" if (constraints.get("sac") or constraints.get("spa") or constraints.get("ramsar")) else "No",
+            "ancient_woodland": constraints.get("ancient_woodland", "[Check Natural England Ancient Woodland Inventory]"),
+            "tree_preservation_orders": "Yes — TPO consent required for works to protected trees" if constraints.get("tpo") else "No",
+            "public_rights_of_way": "Yes — PROW diversion / temporary closure may be needed" if constraints.get("public_rights_of_way") else "No",
+            "archaeological_interest": constraints.get("archaeology", "Desk-Based Assessment required; evaluation trenching if DBA identifies potential."),
         },
 
-        "section_8_supporting_documents": {
-            "design_and_access_statement": "Required" if area_ha > 0.5 else "Recommended",
-            "planning_statement": "Required",
-            "landscape_visual_impact_assessment": "Required" if capacity_mw > 5 else "Recommended",
-            "ecological_impact_assessment": "Required",
-            "flood_risk_assessment": "Required" if fz >= 2 else "Not required",
-            "transport_statement": "Required" if capacity_mw > 10 else "Recommended",
-            "noise_assessment": "Required" if tech == "wind" else "Recommended for BESS",
-            "glint_and_glare_study": "Required" if tech == "solar" else "Not applicable",
-            "heritage_impact_assessment": (
-                "Required"
-                if constraints.get("listed_buildings") or constraints.get("conservation_area")
-                else "Not required"
-            ),
-            "agricultural_land_classification": "Required" if ag_grade <= 3 else "Not required",
-            "community_benefit_statement": "Recommended",
+        "section_8_eia_screening": {
+            "eia_regulations": "Town and Country Planning (Environmental Impact Assessment) Regulations 2017 (as amended)",
+            "schedule_1_trigger": eia["schedule_1"],
+            "schedule_2_trigger": eia["schedule_2"],
+            "eia_opinion_required": eia["opinion"],
+            "likely_outcome": eia["likely_outcome"],
+            "sensitivity_factors": eia["sensitivity_factors"],
+            "recommended_scope": eia["recommended_scope"],
         },
+
+        "section_9_biodiversity_net_gain": {
+            "regime": "Environment Act 2021 — mandatory BNG for TCPA applications from 12 Feb 2024 (major), 2 Apr 2024 (minor); NSIPs from May 2026.",
+            "minimum_gain_pct": "10% (statutory minimum — LPAs may set higher in Local Plan)",
+            "management_period_years": 30,
+            "delivery_hierarchy": "1) on-site; 2) off-site with legal agreement (S106 / conservation covenant); 3) statutory biodiversity credits (last resort).",
+            "baseline_metric": f"{_cite_reg('statutory_biodiversity_metric')} — baseline habitat condition survey required by competent ecologist (CIEEM).",
+            "habitat_management_and_monitoring_plan": "HMMP required — to be secured by S106 or conservation covenant; 30-year monitoring reports to LPA / responsible body.",
+            "biodiversity_gain_plan_stage": "To be submitted post-permission, pre-commencement.",
+        },
+
+        "section_10_climate_and_sustainability": {
+            "nppf_climate_paragraphs": "NPPF 2024 paras 161 (climate), 164–166 (renewable energy), 86(c)/87 (data centre needs).",
+            "energy_sustainability_statement": "Required — demonstrate efficiency hierarchy: Be Lean → Be Clean → Be Green → Be Seen.",
+            "embodied_carbon_assessment": "RICS Whole Life Carbon Assessment 2nd Ed. (2023) — recommended; required in London Plan / Welsh PPW / increasingly in county Local Plans.",
+            "heat_network_zoning": constraints.get("heat_network_zone", "[Check emerging Heat Network Zone designation under Energy Act 2023]"),
+            "heat_reuse_feasibility": (
+                f"Assessment required (NPPF para 161). Available heat offtake: {assessment.get('heat_reuse_mwth', 'TBD')} MW thermal. "
+                f"Partner: {assessment.get('heat_reuse_partner', '[Engagement with local heat network operator required — e.g., Thames Valley Energy]')}."
+                if is_dc else "N/A"
+            ),
+            "circular_economy_statement": "Required — demolition / construction / operational waste hierarchy.",
+        },
+
+        "section_11_dc_technical_schedule": _dc_technical_schedule(is_dc, capacity_mw, assessment) if is_dc else None,
+
+        "section_12_noise_air_lighting": {
+            "noise_assessment_standard": "BS 4142:2014+A1:2019 (industrial / commercial noise); BS 8233:2014 (internal receptors).",
+            "expected_noise_sources": (
+                "Dry coolers, chillers, CRAH fans, backup generator testing (≤50 hr/yr), transformer hum."
+                if is_dc else (
+                    "Panel tracker motors (minor), inverter cooling fans, HV transformer hum." if tech == "solar"
+                    else "Turbine blade aerodynamic + mechanical noise, gearbox." if tech == "wind"
+                    else "Inverter fans, HVAC; higher during C-rate charging."
+                )
+            ),
+            "air_quality_assessment": (
+                "Required — standby diesel generators (Stage V / HVO). Dispersion modelling to EA BAT for emergency backup diesel engines (50 hr/yr test cap, vertical uncapped stack)."
+                if is_dc else "Screening assessment — construction dust mitigation (IAQM 2014)."
+            ),
+            "lighting_assessment": "Institution of Lighting Professionals GN01:21 — obtrusive light; environmental zone determined by LPA (E1 dark / E2 rural / E3 suburban / E4 urban).",
+            "electromagnetic_compatibility": (
+                "BS EN 55011 Class A (industrial) / Class B (residential proximity). Set-back from sensitive receptors demonstrated."
+                if is_dc else "BS EN 50470 for DNO metering; general EMC compliance via CE/UKCA marking."
+            ),
+        },
+
+        "section_13_supporting_documents": _build_validation_checklist(
+            tech, capacity_mw, area_ha, is_dc, fz, constraints, assessment
+        ),
+
+        "section_14_consultation_and_obligations": {
+            "pre_application_engagement": (
+                "LPA pre-app service — strongly recommended; written opinion requested. "
+                "Statutory consultees: Environment Agency, Natural England, Historic England, Highways, DNO, Thames Water (or local wastewater)."
+            ),
+            "statement_of_community_involvement": "Required — proportionate to scale; reference LPA adopted SCI.",
+            "planning_and_infrastructure_act_2025_changes": (
+                "Statutory s.42/s.47/s.48 pre-app consultation duty for NSIPs REPEALED (P&I Act 2025, in force from 2026 commencement). "
+                "Replaced with SoS guidance-led early engagement — still expect multi-round public exhibitions and s.56 notification in practice."
+            ),
+            "s106_heads_of_terms": _s106_heads_of_terms(tech, capacity_mw, is_dc, area_ha, authority),
+            "cil_liability": _cil_note(authority, is_dc, area_ha),
+            "community_benefit": (
+                "Community Benefit Fund (onshoreWIND / largeSOLAR): ~£5k/MW/yr industry benchmark. "
+                "Heat offtake, fibre drops, STEM outreach, local employment clauses negotiated via S106."
+            ),
+        },
+
+        "section_15_policy_references": _policy_references(tech, capacity_mw, is_dc, authority),
     }
+
+    # Remove any None sections for cleanliness
+    form = {k: v for k, v in form.items() if v is not None}
 
     filled, total = _count_filled(form)
     auto_fill_pct = _pct(filled, total)
@@ -497,6 +704,375 @@ def generate_planning_summary(
         "html": html,
         "document_type": "planning_summary",
         "auto_fill_pct": auto_fill_pct,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Planning-route determination (2026 reality)
+# ---------------------------------------------------------------------------
+
+def _determine_planning_route(tech: str, capacity_mw: float, site: dict) -> dict:
+    """Route applicable as of April 2026.
+
+    Key 2026 refs:
+    - Planning Act 2008 s.14 thresholds
+    - Infrastructure Planning (Business or Commercial Projects) (Amendment)
+      Regs 2026 (made 8 Jan 2026) — brings DCs into NSIP via s.35 opt-in
+    - DSIT CNI designation for DCs (12 Sep 2024) — security/resilience only,
+      does not itself change planning route.
+    - Planning & Infrastructure Act 2025 (Royal Assent 18 Dec 2025) — repeals
+      s.42/s.47/s.48 statutory pre-app duty.
+    """
+    is_dc = tech in ("dc", "data_centre", "datacentre", "hyperscale")
+    authority = site.get("local_authority", "[Local Planning Authority — confirm from LPA boundary service]")
+
+    if is_dc:
+        # DC NSIP route is OPT-IN via s.35 direction — not automatic at any threshold.
+        # De facto: hyperscale schemes in 2026 are still mostly TCPA 1990 Full.
+        return {
+            "route": ("TCPA 1990 s.70 — Full Application (most likely) OR NSIP via s.35 Planning Act 2008 direction (opt-in, Jan 2026 regs)."),
+            "determining_authority": authority,
+            "legal_basis": "Town and Country Planning Act 1990 s.70 / Infrastructure Planning (Business or Commercial Projects) (Amendment) Regs 2026.",
+            "nsip_opt_in": "Available — applicant may request s.35 Secretary of State direction if nationally significant.",
+            "cni": "Data Centre sector designated CNI by DSIT on 12 Sep 2024 (HCWS89). Security / resilience designation only — does not alter planning route.",
+        }
+    if tech == "solar" and capacity_mw > 100:
+        return {
+            "route": "NSIP — Development Consent Order (Planning Act 2008 s.15, as amended 2025).",
+            "determining_authority": "Planning Inspectorate (PINS) — Secretary of State (DESNZ) decides.",
+            "legal_basis": "Planning Act 2008. NPS EN-1 (revised 2025) + EN-3 apply.",
+            "nsip_opt_in": "N/A — mandatory route above 100 MW threshold (post-Apr 2024 reform).",
+            "cni": "N/A",
+        }
+    if tech == "wind" and capacity_mw > 100:  # Onshore wind NSIP threshold reset post-2024
+        return {
+            "route": "NSIP — Development Consent Order (Planning Act 2008 s.15).",
+            "determining_authority": "Planning Inspectorate (PINS) — Secretary of State (DESNZ) decides.",
+            "legal_basis": "Planning Act 2008. NPS EN-1 + EN-3 apply (2025 revision; EN-3 in force 6 Jan 2026).",
+            "nsip_opt_in": "N/A — mandatory.",
+            "cni": "N/A",
+        }
+    return {
+        "route": "Town and Country Planning Act 1990 s.70 — Full Application.",
+        "determining_authority": authority,
+        "legal_basis": "Town and Country Planning Act 1990; Town and Country Planning (Development Management Procedure) (England) Order 2015.",
+        "nsip_opt_in": "Not available at this scale.",
+        "cni": "N/A",
+    }
+
+
+def _default_use_class(tech: str) -> str:
+    """Use Class Order 1987 (as amended).
+
+    For DC: B8 (storage & distribution) — confirmed by 2025 appeal decisions
+    APP/P1940/W/24/3346061 (Abbotts Langley, 12 May 2025) and
+    APP/N0410/W/24/3347353 (Bucks, 9 Jul 2025). Some LPAs still prefer sui
+    generis — decide case-by-case and reflect in condition.
+    """
+    if tech in ("dc", "data_centre", "datacentre", "hyperscale"):
+        return "B8 (storage and distribution) — per 2025 appeal decisions; alternatively sui generis subject to LPA view."
+    if tech in ("solar", "wind", "bess"):
+        return "Sui generis (renewable electricity generating station) — GPDO Part 14 PD rights where applicable."
+    return "To be confirmed — no established class for this development type."
+
+
+def _screen_eia(tech: str, capacity_mw: float, area_ha: float, constraints: dict) -> dict:
+    """EIA screening under T&CP (EIA) Regs 2017, Schedules 1 and 2.
+
+    Schedule 1 triggers MANDATORY EIA:
+      - Para 21: thermal power stations ≥300 MW (rarely a DC unless CHP).
+      - Para 3(a): nuclear; 9(a): major roads — not relevant here.
+
+    Schedule 2 triggers SCREENING (EIA required if significant effects):
+      - Para 3(a): industrial installations for carrying electricity — all
+        overground lines >15 km (solar/wind typically trigger).
+      - Para 3(i): wind farms — all screening (previously >0.5 ha / >5 turbines).
+      - Para 10(a): Industrial estate development — THRESHOLD 5 ha
+        (post-2015 threshold; DC sites ≥5 ha typically trigger).
+      - Para 10(b): Urban development projects — non-dwelling >1 ha or area
+        >150 dwellings. DC on greenfield >1 ha triggers screening.
+    """
+    is_dc = tech in ("dc", "data_centre", "datacentre", "hyperscale")
+    sensitivity = []
+    if constraints.get("aonb"): sensitivity.append("AONB / National Landscape")
+    if constraints.get("sssi"): sensitivity.append("SSSI")
+    if constraints.get("sac") or constraints.get("spa") or constraints.get("ramsar"):
+        sensitivity.append("Natura 2000 / Ramsar site")
+    if constraints.get("conservation_area"): sensitivity.append("Conservation Area")
+    if constraints.get("flood_zone", 1) >= 2: sensitivity.append(f"Flood Zone {constraints.get('flood_zone')}")
+    if (constraints.get("agricultural_grade") or 3) <= 2: sensitivity.append("BMV agricultural land")
+    if (constraints.get("proximity_residential_m") or 9999) < 500:
+        sensitivity.append(f"Residential receptors within {constraints.get('proximity_residential_m')} m")
+
+    # Schedule 1
+    schedule_1 = "Not triggered"
+    if tech == "thermal" and capacity_mw >= 300:
+        schedule_1 = "Para 21 — thermal power station ≥300 MW. MANDATORY EIA."
+
+    # Schedule 2
+    schedule_2_triggers = []
+    if is_dc and area_ha >= 5:
+        schedule_2_triggers.append("Para 10(a) industrial estate — site area ≥5 ha.")
+    if is_dc and area_ha > 1:
+        schedule_2_triggers.append("Para 10(b) urban development — non-dwelling development >1 ha on non-previously-developed land.")
+    if tech == "solar" and area_ha > 0.5:
+        schedule_2_triggers.append("Para 3(a) industrial installation for electricity production.")
+    if tech == "wind":
+        schedule_2_triggers.append("Para 3(i) wind farm — all installations screen-in under 2017 Regs.")
+    if tech == "bess" and capacity_mw > 50:
+        schedule_2_triggers.append("Para 3(a) industrial installation — large BESS typically screens-in.")
+
+    schedule_2 = "; ".join(schedule_2_triggers) if schedule_2_triggers else "Not triggered"
+
+    # Opinion & outcome
+    if schedule_1 != "Not triggered":
+        opinion = "Mandatory EIA. Scoping Opinion should be requested before ES preparation."
+        outcome = "EIA Development — full Environmental Statement required."
+    elif schedule_2 != "Not triggered":
+        opinion = "Screening Opinion must be requested from LPA / PINS before application, per Reg. 6."
+        if sensitivity or (is_dc and area_ha >= 10):
+            outcome = "Likely EIA Development — sensitivity factors present. Proceed to Scoping."
+        else:
+            outcome = "May be screened out (negative screening) subject to LPA view on significance."
+    else:
+        opinion = "No screening opinion strictly required, but recommended as a safeguard."
+        outcome = "Likely not EIA Development."
+
+    # Recommended scope (headline chapters)
+    scope = [
+        "Landscape & Visual Impact (GLVIA3, photomontages, ZTV)",
+        "Ecology (BNG baseline, protected species, HRA if Natura 2000 near)",
+        "Heritage & Archaeology (DBA, setting assessment)",
+        "Traffic & Transport (construction + operational)",
+        "Noise & Vibration (BS 4142 / BS 8233)",
+        "Air Quality (IAQM / EA BAT for gensets)",
+        "Hydrology & Flood Risk (FRA + SuDS)",
+        "Ground Conditions & Contamination (Phase 1 + Phase 2 if needed)",
+        "Climate Change (IEMA Assessing Greenhouse Gas Emissions, 2022)",
+        "Cumulative Effects Assessment",
+    ]
+    if is_dc:
+        scope.extend([
+            "Water Resources (demand, wastewater, thermal discharge)",
+            "Socio-economic (employment, skills, business rates)",
+            "Electromagnetic Fields (BS EN 55011)",
+        ])
+
+    return {
+        "schedule_1": schedule_1,
+        "schedule_2": schedule_2,
+        "opinion": opinion,
+        "likely_outcome": outcome,
+        "sensitivity_factors": sensitivity or ["None identified from current constraints data."],
+        "recommended_scope": scope,
+    }
+
+
+def _dc_technical_schedule(is_dc: bool, capacity_mw: float, a: dict) -> dict | None:
+    if not is_dc:
+        return None
+    it_load = float(a.get("it_load_mw") or capacity_mw)
+    pue = a.get("pue_target") or 1.25
+    wue = a.get("wue_target_l_per_kwh") or 0.3
+    gensets_n = a.get("backup_genset_count") or max(4, math.ceil(it_load / 3.0))
+    genset_mva = a.get("backup_genset_mva") or 3.0
+    annual_mwh = it_load * pue * 8760
+    annual_m3 = a.get("annual_water_m3") or round(annual_mwh * wue / 1000)
+    return {
+        "ict_load_mw": round(it_load, 2),
+        "total_facility_load_mw": round(it_load * pue, 2),
+        "power_usage_effectiveness_target": f"PUE ≤ {pue:.2f} (EU EED target 1.2 new-build / 1.3 retrofit by 2027)",
+        "cooling_architecture": a.get("cooling", "[Air / evaporative / adiabatic / liquid — architect to confirm]"),
+        "water_usage_effectiveness_target": f"WUE ≤ {wue:.2f} L/kWh (techUK 2025 baseline ≤ 0.4 L/kWh for dry/adiabatic)",
+        "annual_water_consumption_m3": annual_m3,
+        "thames_water_pre_app": "Mandatory engagement — bulk water offer + wastewater discharge consent.",
+        "grid_connection_capacity_mw": round(it_load * pue * 1.1, 2),
+        "grid_connection_route": "G99 Relevant Embedded Large Power Station (if ≤50 MW import at HV DNO) / direct transmission connection via NESO (if ≥100 MW) — confirm offer ref + energisation date.",
+        "standby_generators": f"{gensets_n} × {genset_mva:.1f} MVA standby diesel generators (Stage V / Tier 4 Final; HVO-compatible). Vertical uncapped stacks; 50 hr/yr test cap per EA BAT.",
+        "emission_standard": "Stage V compliant; NOx / PM / CO dispersion modelled to IAQM + Defra AQTAG06.",
+        "fuel_storage": "Day tanks + bulk storage per BS 5410 / CIRIA C736 (pollution prevention).",
+        "heat_reuse_mwth": a.get("heat_reuse_mwth", "[Feasibility assessment required per NPPF 2024 para 161]"),
+        "heat_reuse_partner": a.get("heat_reuse_partner", "[LPA / heat network operator engagement required]"),
+        "security_bs5357_ls_iso27001": "Physical security to BS 5979 / CPNI guidance; OT security to IEC 62443; ISMS to ISO 27001.",
+        "fire_safety": "NFCC BESS guidance (if on-site BESS); BS 9999 for occupied areas; gaseous suppression in data halls (NOVEC / FM200 / Inergen).",
+    }
+
+
+def _build_validation_checklist(
+    tech: str, capacity_mw: float, area_ha: float, is_dc: bool,
+    fz: int, constraints: dict, a: dict,
+) -> dict:
+    """LPA validation checklist — national 1APP + typical LPA local list.
+
+    Basis: Town and Country Planning (DMPO) (England) Order 2015; typical
+    Slough / Thames Valley local validation list; NPPF 2024; mandatory BNG.
+    """
+    is_major = area_ha >= 1 or capacity_mw >= 5 or is_dc
+    has_heritage = constraints.get("listed_buildings") or constraints.get("conservation_area") or constraints.get("sam")
+    has_ecology_risk = constraints.get("sssi") or constraints.get("sac") or constraints.get("spa") or constraints.get("ramsar")
+
+    checklist = {
+        "1_1app_application_forms": "Required — signed; correct fee tier; ownership certificate (A/B/C/D); agricultural holdings certificate.",
+        "2_location_plan": "Required — 1:1250 or 1:2500; red line; north arrow; scale bar.",
+        "3_site_block_plan": "Required — 1:200 or 1:500; existing + proposed; access, parking, landscape, levels.",
+        "4_elevations_and_floor_plans": "Required — 1:100; all new and altered elevations and floors.",
+        "5_design_and_access_statement": "Required — Article 9 DMPO 2015.",
+        "6_planning_statement": "Required — cite NPPF 2024 paras 86(c), 87; Local Plan compliance matrix.",
+        "7_energy_and_sustainability_statement": "Required — Be Lean / Be Clean / Be Green / Be Seen hierarchy; whole-life carbon (RICS WLCA 2nd Ed).",
+        "8_transport_assessment": (
+            "Required — DfT Guidance on Transport Assessment triggers at >5,000 sqm B8." if is_dc
+            else ("Required — operational + construction phases." if capacity_mw > 10 else "Transport Statement sufficient.")
+        ),
+        "9_travel_plan": "Required for major; link to LPA monitoring sum.",
+        "10_flood_risk_assessment": (
+            "Required — EA FRA Standing Advice + PPG Flood Risk ID 7."
+            if (fz >= 2 or area_ha >= 1) else "Not required (Zone 1 < 1 ha)."
+        ),
+        "11_drainage_strategy_suds": "Required — hierarchy: infiltration → watercourse → surface water sewer → foul (last resort); Qbar greenfield target.",
+        "12_water_consumption_statement": "Required — cooling architecture, annual m³, Thames Water / local undertaker engagement letter." if is_dc else "Not normally required.",
+        "13_noise_impact_assessment": (
+            "Required — BS 4142:2014+A1:2019 for plant; BS 8233 for internal receptors; MID for BS 4142 (gov.uk)."
+            if is_dc or tech == "wind" else "Screening sufficient for solar / BESS subject to LPA view."
+        ),
+        "14_air_quality_assessment": (
+            "Required — standby diesel genset stack dispersion modelling; EA BAT for emergency backup diesel engines."
+            if is_dc else "Construction dust assessment (IAQM 2014)."
+        ),
+        "15_biodiversity_net_gain_plan": (
+            f"MANDATORY (Environment Act 2021) — 10% statutory minimum, 30-year management. {_cite_reg('statutory_biodiversity_metric')} baseline + gain plan."
+        ),
+        "16_preliminary_ecological_appraisal": "Required — PEA + species surveys as indicated; CIEEM competent ecologist.",
+        "17_habitats_regulations_assessment": "Required — competent authority screening under Conservation of Habitats and Species Regs 2017." if has_ecology_risk else "Not required.",
+        "18_landscape_and_visual_impact_assessment": (
+            "Required — Guidelines for Landscape & Visual Impact Assessment 3rd Ed. (GLVIA3); photomontages from agreed viewpoints."
+            if (is_major or constraints.get("aonb")) else "Recommended."
+        ),
+        "19_heritage_impact_assessment": "Required — Historic England GPA 3; setting assessment." if has_heritage else "Screening only.",
+        "20_archaeological_desk_based_assessment": "Required — CIfA Standard and Guidance for Historic Environment DBA; evaluation trenching if DBA identifies potential.",
+        "21_arboricultural_survey": "Required — BS 5837:2012; tree constraints plan; AIA/AMS for works within RPAs.",
+        "22_glint_and_glare_study": "Required — FAA SGHAT / Pager Power methodology; receptors include residential, highway, rail, aviation." if tech == "solar" else "Not applicable.",
+        "23_agricultural_land_classification": "Required — post-1988 ALC survey if 1:250k maps suggest BMV (Grade 1–3a).",
+        "24_external_lighting_assessment": "Required — Institution of Lighting Professionals GN01:21; environmental zone classification.",
+        "25_waste_and_circular_economy_statement": "Required — demolition / construction / operational waste hierarchy; reuse + recycling targets.",
+        "26_cemp_outline": "Outline CEMP with application; full CEMP secured by pre-commencement condition.",
+        "27_ctmp": "Construction Traffic Management Plan — pre-commencement condition.",
+        "28_lighting_at_construction": "Task lighting only; curfew if adjacent to residential.",
+        "29_fire_safety_strategy": (
+            "Required — NFCC BESS guidance v3 (if BESS); BS 9999; gaseous suppression design for data halls."
+            if is_dc or tech == "bess" else "Building Regs Part B sufficient for ancillary buildings."
+        ),
+        "30_utilities_statement": "Required — confirm grid connection offer (G99/G100 or NESO), water, wastewater, telecoms, gas (if applicable).",
+        "31_heat_reuse_feasibility": "Required — NPPF 2024 para 161; check Heat Network Zoning under Energy Act 2023." if is_dc else "Not applicable.",
+        "32_statement_of_community_involvement": "Required — reference LPA adopted SCI; record pre-app exhibitions, consultation responses.",
+        "33_cil_additional_info_form": "Required where LPA has adopted CIL (check LPA charging schedule — Slough has not adopted CIL as of 2024).",
+        "34_section_106_draft_heads_of_terms": "Strongly recommended at submission to speed determination.",
+        "35_bng_statement_of_intent": "Required at submission; full Biodiversity Gain Plan post-permission, pre-commencement.",
+    }
+    return checklist
+
+
+def _s106_heads_of_terms(tech: str, capacity_mw: float, is_dc: bool, area_ha: float, authority: str) -> list[str]:
+    heads = [
+        "Biodiversity Net Gain — 10% minimum, 30-year HMMP, financial contribution for monitoring / default.",
+        "Highways works — junction improvements, bond for repair of construction damage.",
+        "Travel Plan monitoring contribution (typically £5k–£15k).",
+    ]
+    if is_dc:
+        heads.extend([
+            "Employment & Skills Plan — construction phase apprenticeship targets (typically 1 per £3–5m of build cost); local labour clause; annual KPI reporting.",
+            "Heat offtake safeguard — pipework to site boundary by defined operational trigger; first right of refusal for local heat network operator.",
+            "Fibre / digital connectivity contribution — leverage DC fibre routing for community benefit.",
+            "STEM outreach — school partnerships, work experience, curriculum support.",
+        ])
+    if tech in ("solar", "wind", "bess"):
+        heads.extend([
+            "Community Benefit Fund — ~£5k/MW/yr industry benchmark (indicative; not a tax on planning).",
+            "Decommissioning bond or equivalent financial instrument — full site restoration.",
+            "Landscape & ecology management — long-term stewardship.",
+        ])
+    if area_ha > 5:
+        heads.append("Public access / Public Rights of Way improvements — permissive paths, interpretation boards.")
+    return heads
+
+
+def _cil_note(authority: str, is_dc: bool, area_ha: float) -> str:
+    # Slough does not have an adopted CIL charging schedule (as of Jan 2024);
+    # many Thames Valley authorities do. Generic note below.
+    if "slough" in (authority or "").lower():
+        return (
+            "Slough Borough Council has not adopted a CIL Charging Schedule (Jan 2024 position). "
+            "Contributions via S106 only. Confirm current status at submission."
+        )
+    return (
+        "Check LPA CIL Charging Schedule. CIL is a non-negotiable per-m² tariff; Regulation 123 list of infrastructure replaced by Infrastructure Funding Statements (IFS) since 2019. "
+        "CIL additional information form accompanies application."
+    )
+
+
+def _policy_references(tech: str, capacity_mw: float, is_dc: bool, authority: str) -> dict:
+    nppf = [
+        "NPPF Dec 2024 — para 11 (presumption in favour of sustainable development).",
+        "NPPF Dec 2024 — paras 86(c), 87 (data centre needs, clustering, grid proximity).",
+        "NPPF Dec 2024 — paras 161, 164–166 (climate change, renewables, low-carbon tech).",
+        "NPPF Dec 2024 — para 173 (flood risk sequential / exception).",
+        f"{_nppf_para('BMV')} (Best and Most Versatile agricultural land).",
+        "NPPF Dec 2024 — paras 189–193 (heritage assets; great weight).",
+    ]
+    ppg = [
+        "PPG Flood Risk and Coastal Change",
+        "PPG Noise",
+        "PPG Air Quality",
+        "PPG Climate Change",
+        "PPG Biodiversity Net Gain",
+        "PPG Use of Planning Conditions",
+    ]
+    nps = []
+    if tech == "solar" and capacity_mw > 100:
+        nps.extend([
+            "NPS EN-1 (revised 2025) — overarching energy.",
+            "NPS EN-3 (revised 2025) — renewables (solar).",
+            "NPS EN-5 — electricity networks.",
+        ])
+    if tech == "wind" and capacity_mw > 100:
+        nps.extend([
+            "NPS EN-1 (revised 2025) — overarching energy.",
+            "NPS EN-3 (revised 2025) — renewables (wind).",
+            "NPS EN-5 — electricity networks.",
+        ])
+    if is_dc:
+        nps.append("No designated NPS for data centres as of Apr 2026 (DSIT consultation opened Feb 2026). NPS EN-1 relevant where NSIP route via s.35 taken.")
+
+    local = ["[Adopted Local Plan — confirm for LPA, include site allocation policies]"]
+    if "slough" in (authority or "").lower():
+        local = [
+            "Slough Local Plan Core Strategy (adopted 2008) — CP1 (spatial strategy), CP4 (Slough Trading Estate), CP8 (sustainability), CP9 (natural + built environment).",
+            "Slough Emerging Local Plan — Reg 19 consultation late 2025; SSA2 Slough Trading Estate lists data centres as permitted use.",
+            "Slough Site Allocations DPD — relevant allocations.",
+            "Slough Local Validation List — https://www.slough.gov.uk/planning-application-validation-requirements",
+        ]
+
+    case_law = []
+    if is_dc:
+        case_law = [
+            "Appeal APP/P1940/W/24/3346061 (Abbotts Langley, 12 May 2025) — confirmed B8 use class for 84,000 sqm DC.",
+            "Appeal APP/N0410/W/24/3347353 (Bucks, 9 Jul 2025) — confirmed B8 use class for 72,000 sqm DC.",
+        ]
+
+    return {
+        "nppf_paragraphs": nppf,
+        "planning_practice_guidance": ppg,
+        "national_policy_statements": nps or ["Not applicable (TCPA route)."],
+        "local_plan_policies": local,
+        "use_class_case_law": case_law or ["N/A"],
+        "statutes": [
+            "Town and Country Planning Act 1990 s.70 (TCPA route).",
+            "Planning Act 2008 s.14/s.15/s.35 (NSIP route).",
+            "Planning and Infrastructure Act 2025 (Royal Assent 18 Dec 2025).",
+            "Environment Act 2021 (mandatory BNG).",
+            "Conservation of Habitats and Species Regulations 2017 (HRA).",
+            "Town and Country Planning (Environmental Impact Assessment) Regulations 2017.",
+            "Infrastructure Planning (Business or Commercial Projects) (Amendment) Regulations 2026 (DC NSIP opt-in).",
+        ],
     }
 
 
@@ -522,20 +1098,66 @@ def _describe_land_use(land_use: dict) -> str:
     return "[Existing land use to be confirmed]"
 
 
-def _default_proposal_description(tech: str, cap_mw: float, area_ha: float) -> str:
+def _default_proposal_description(tech: str, cap_mw: float, area_ha: float, assessment: dict | None = None) -> str:
+    a = assessment or {}
+    tech = (tech or "solar").lower()
+    if tech in ("dc", "data_centre", "datacentre", "hyperscale"):
+        gea = a.get("gross_external_area_sqm") or a.get("dc_floorspace_sqm") or int(area_ha * 5500)
+        it_load = a.get("it_load_mw") or cap_mw
+        pue = a.get("pue_target") or 1.25
+        total_mw = it_load * pue
+        gensets = a.get("backup_genset_count") or max(4, math.ceil(it_load / 3.0))
+        genset_mva = a.get("backup_genset_mva") or 3.0
+        return (
+            f"Construction and operation of a hyperscale data centre campus comprising data hall buildings with a "
+            f"total gross external area (GEA) of approximately {gea:,} sqm on a site of {area_ha:.1f} hectares, with "
+            f"a design IT load of {it_load:.1f} MW (total facility load approximately {total_mw:.1f} MW at PUE "
+            f"{pue:.2f}). The proposal includes electrical infrastructure (primary substation, transformers, switchgear, "
+            f"HV/LV distribution), mechanical cooling plant (chillers, dry/adiabatic coolers, CRAH units), "
+            f"{gensets} no. {genset_mva:.1f} MVA standby diesel (HVO-compatible, Stage V) generators with associated "
+            f"fuel storage, water treatment plant, security and fire-safety systems, perimeter fencing with CCTV, "
+            f"access roads, car and cycle parking (Part S compliant), lorry bays, landscape and biodiversity "
+            f"enhancements delivering a minimum 10% Biodiversity Net Gain, and all associated engineering and "
+            f"ancillary operations. The development is proposed under Use Class B8 (storage and distribution)."
+        )
     tech_desc = {
-        "solar": f"Installation of a ground-mounted solar photovoltaic generating station with an installed capacity of {cap_mw:.1f} MW on approximately {area_ha:.1f} hectares of land, together with associated infrastructure including inverters, transformers, substation, battery energy storage, security fencing, CCTV, access tracks, and landscaping.",
-        "wind": f"Erection of wind turbine generators with a combined capacity of {cap_mw:.1f} MW, together with associated infrastructure including access tracks, crane hardstandings, substation, underground cabling, and temporary construction compound.",
-        "bess": f"Installation of a battery energy storage system (BESS) with a capacity of {cap_mw:.1f} MW / {cap_mw * 2:.1f} MWh, together with associated infrastructure including inverters, transformers, substation, fire suppression systems, security fencing, and access tracks.",
+        "solar": (
+            f"Installation of a ground-mounted solar photovoltaic generating station with an installed capacity of "
+            f"{cap_mw:.1f} MW on approximately {area_ha:.1f} hectares of land, together with associated infrastructure "
+            f"including inverters, transformers, on-site substation, co-located battery energy storage (where applicable), "
+            f"security fencing (deer-type, 2.0 m), CCTV, unsurfaced access tracks, landscape and biodiversity "
+            f"enhancements delivering a minimum 10% Biodiversity Net Gain, and sheep-grazing management for the "
+            f"operational life of the scheme."
+        ),
+        "wind": (
+            f"Erection of wind turbine generators with a combined installed capacity of {cap_mw:.1f} MW, together with "
+            f"associated infrastructure including permanent access tracks, crane hardstandings, on-site substation and "
+            f"control building, underground cabling, anemometry mast, temporary construction compound and site office, "
+            f"and landscape / biodiversity enhancements delivering a minimum 10% Biodiversity Net Gain."
+        ),
+        "bess": (
+            f"Installation of a battery energy storage system (BESS) with a power rating of {cap_mw:.1f} MW and storage "
+            f"capacity of approximately {cap_mw * 2:.1f} MWh, together with associated infrastructure including "
+            f"inverters, transformers, on-site substation, fire-safety systems (NFCC BESS guidance v3 compliant), "
+            f"security fencing, CCTV, access tracks, and landscape / biodiversity enhancements delivering a minimum "
+            f"10% Biodiversity Net Gain."
+        ),
     }
-    return tech_desc.get(tech, f"Installation of a {tech} energy generating station of {cap_mw:.1f} MW capacity.")
+    return tech_desc.get(tech, f"Installation of a {tech} energy development of {cap_mw:.1f} MW capacity.")
 
 
 def _tech_max_height(tech: str) -> str:
     return {"solar": "3.0m (panel top)", "wind": "[Hub height + blade length]", "bess": "3.5m (container height)"}.get(tech, "[To be confirmed]")
 
 
-def _est_construction(cap_mw: float) -> int:
+def _est_construction(cap_mw: float, is_dc: bool = False) -> int:
+    if is_dc:
+        # Hyperscale DC shells typically 18-30 months per phase; large campuses phased.
+        if cap_mw <= 25:
+            return 18
+        if cap_mw <= 100:
+            return 30
+        return 42
     if cap_mw <= 5:
         return 4
     elif cap_mw <= 20:
@@ -547,41 +1169,96 @@ def _est_construction(cap_mw: float) -> int:
 
 def _render_planning_html(form: dict) -> str:
     meta = form["meta"]
+    site = form["section_1_site_details"]
+
+    def _section(num: int, title: str, key: str, intro: str | None = None) -> str:
+        data = form.get(key)
+        if data is None:
+            return ""
+        body = _render_value(data)
+        intro_html = f'<div class="info-box">{intro}</div>' if intro else ""
+        return f'<h2>{num}. {title}</h2>{intro_html}{body}'
+
+    sections = []
+    sections.append(_section(1, "Site Details", "section_1_site_details"))
+    sections.append(_section(2, "Proposed Development", "section_2_proposed_development"))
+    sections.append(_section(3, "Existing Use", "section_3_existing_use"))
+    sections.append(_section(4, "Access & Transport", "section_4_access_and_transport"))
+    sections.append(_section(5, "Flood Risk & Drainage", "section_5_flood_risk_and_drainage",
+        "Flood risk under NPPF 2024 para 173 + PPG Flood Risk ID 7. FRA mandatory for sites ≥1 ha or in Flood Zones 2/3."))
+    sections.append(_section(6, "Agricultural Land", "section_6_agricultural_land",
+        f"Best and Most Versatile (BMV) land = Grades 1, 2, 3a. Material consideration under {_nppf_para('BMV')}."))
+    sections.append(_section(7, "Designations & Constraints", "section_7_designations_and_constraints"))
+    sections.append(_section(8, "EIA Screening", "section_8_eia_screening",
+        "Screening under Town and Country Planning (Environmental Impact Assessment) Regulations 2017. Screening Opinion must be requested from LPA / PINS per Reg. 6 before application."))
+    sections.append(_section(9, "Biodiversity Net Gain", "section_9_biodiversity_net_gain",
+        f"BNG is MANDATORY under the Environment Act 2021. Minimum 10% net gain, secured for 30 years via S106 or Conservation Covenant. {_cite_reg('statutory_biodiversity_metric')} baseline."))
+    sections.append(_section(10, "Climate & Sustainability", "section_10_climate_and_sustainability"))
+    if form.get("section_11_dc_technical_schedule"):
+        sections.append(_section(11, "Data Centre Technical Schedule", "section_11_dc_technical_schedule",
+            "DC-specific technical schedule — power, cooling, water, heat reuse, standby generation, security. Required to demonstrate NPPF 2024 paras 86(c), 87, 161."))
+    sections.append(_section(12, "Noise, Air Quality & Lighting", "section_12_noise_air_lighting"))
+    sections.append(_section(13, "Supporting Documents — Validation Checklist", "section_13_supporting_documents",
+        "National 1APP + typical LPA local validation list. Items marked 'Required' are mandatory for the application to be validated; 'Recommended' items are typically requested by the LPA and speed determination."))
+    sections.append(_section(14, "Consultation & Planning Obligations (S106/CIL)", "section_14_consultation_and_obligations"))
+    sections.append(_section(15, "Policy References", "section_15_policy_references",
+        "Cite these in the Planning Statement. Local Plan policies are LPA-specific — populate from adopted Local Plan."))
+
+    body_html = "\n\n".join(s for s in sections if s)
+
+    banner = ""
+    if meta.get("cni_designation") and meta["cni_designation"] != "N/A":
+        banner += f'<div class="info-box"><strong>CNI status:</strong> {meta["cni_designation"]}</div>'
+    if meta.get("nsip_opt_in_available") and "available" in str(meta["nsip_opt_in_available"]).lower():
+        banner += f'<div class="info-box"><strong>NSIP route:</strong> {meta["nsip_opt_in_available"]}</div>'
+
     return f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Planning Summary — {form['section_1_site_details'].get('site_address', 'Site')}</title>
+<html><head><meta charset="utf-8"><title>Planning Summary — {site.get('site_address', 'Site')}</title>
 <style>{_princeps_style()}</style></head><body>
 <h1>Planning Application Summary</h1>
-<div class="subtitle">{meta['planning_route']}</div>
-<div class="subtitle">Determining Authority: {meta['determining_authority']}</div>
+<div class="subtitle"><strong>Route:</strong> {meta['planning_route']}</div>
+<div class="subtitle"><strong>Determining Authority:</strong> {meta['determining_authority']}</div>
+<div class="subtitle"><strong>Legal basis:</strong> {meta.get('route_legal_basis', '')}</div>
+<div class="subtitle"><strong>Use Class Order 1987:</strong> {meta.get('use_class_order_1987_as_amended', '')}</div>
 <div class="subtitle">Generated by {meta['generated_by']} on {meta['generated_at'][:10]}</div>
+{banner}
 <div class="disclaimer">{meta['disclaimer']}</div>
 
-<h2>1. Site Details</h2>
-<table>{_table_rows(form['section_1_site_details'])}</table>
+{body_html}
 
-<h2>2. Proposed Development</h2>
-<table>{_table_rows(form['section_2_description'])}</table>
-
-<h2>3. Existing Use</h2>
-<table>{_table_rows(form['section_3_existing_use'])}</table>
-
-<h2>4. Access Arrangements</h2>
-<table>{_table_rows(form['section_4_access'])}</table>
-
-<h2>5. Flood Risk Declaration</h2>
-<table>{_table_rows(form['section_5_flood_risk'])}</table>
-
-<h2>6. Agricultural Land Declaration</h2>
-<table>{_table_rows(form['section_6_agricultural_land'])}</table>
-
-<h2>7. Designations and Constraints</h2>
-<table>{_table_rows(form['section_7_designations'])}</table>
-
-<h2>8. Supporting Documents Checklist</h2>
-<table>{_table_rows(form['section_8_supporting_documents'])}</table>
-
-{_footer('Planning Application Summary')}
+{_footer('Planning Application Summary — UK Industry Standard (NPPF 2024 / EIA Regs 2017 / Environment Act 2021 / P&I Act 2025)')}
 </body></html>"""
+
+
+def _render_value(val: Any, depth: int = 0) -> str:
+    """Recursively render form values into HTML.
+
+    dict → two-column table (label | value)
+    list → bullet list
+    scalar → text (with placeholder class if it starts with '[')
+    """
+    if isinstance(val, dict):
+        rows = []
+        for k, v in val.items():
+            label = k.replace("_", " ").title()
+            rendered = _render_value(v, depth + 1)
+            rows.append(f'<tr><td class="lbl">{label}</td><td>{rendered}</td></tr>')
+        return f"<table>{''.join(rows)}</table>"
+    if isinstance(val, list):
+        if not val:
+            return '<span class="neutral">(none)</span>'
+        items = "".join(f"<li>{_render_value(x, depth + 1)}</li>" for x in val)
+        return f"<ul>{items}</ul>"
+    if val is None:
+        return '<span class="neutral">—</span>'
+    text = str(val)
+    if text.startswith("["):
+        return f'<span class="placeholder">{text}</span>'
+    if text.lower() in ("required", "mandatory"):
+        return f'<span class="cross" style="color:#b45309">{text}</span>'
+    if text.lower() in ("yes", "not required", "n/a"):
+        return f'<span class="neutral">{text}</span>'
+    return text
 
 
 # ===========================================================================

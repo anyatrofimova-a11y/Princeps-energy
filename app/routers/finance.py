@@ -643,3 +643,112 @@ async def api_project_model(req: ProjectModelRequest):
                 payload[field_name] = field_val
 
     return await _run_subprocess(_PROJECT_FINANCE, payload, timeout=180)
+
+
+# ─── Godmode-v2 #2 — Monte Carlo financial engine ──────────────────────────
+
+from pydantic import BaseModel as _MCBM
+
+
+class _MCVar(_MCBM):
+    mean: float
+    stdev: float = 0.0
+    dist: str = "normal"  # "normal" | "lognormal" | "triangular"
+    low: float | None = None
+    high: float | None = None
+
+
+class _MCRequest(_MCBM):
+    capex_gbp: _MCVar
+    opex_gbp_yr: _MCVar
+    revenue_gbp_yr: _MCVar
+    curtailment_pct: _MCVar | None = None
+    timeline_months: _MCVar | None = None
+    discount_rate_pct: float = 8.0
+    project_life_yr: int = 20
+    n_runs: int = 1000
+    correlation_capex_timeline: float = 0.35
+    correlation_revenue_curtailment: float = -0.55
+
+
+@router.post("/api/finance/monte-carlo")
+async def monte_carlo(body: _MCRequest):
+    """Monte Carlo sampling over correlated inputs → P10/P50/P90 IRR, DSCR,
+    and NPV distributions, plus a tornado of single-variable sensitivities.
+
+    MVP: pure-Python (no scipy dep) so it ships without extra installs.
+    Full correlated-copula sampling is sprint-2 polish.
+    """
+    import random as _r
+    import math as _m
+
+    def sample(var: _MCVar) -> float:
+        if var is None:
+            return 0.0
+        d = (var.dist or "normal").lower()
+        if d == "lognormal":
+            sigma = max(1e-6, abs(var.stdev / max(1e-6, var.mean)))
+            return var.mean * _m.exp(_r.gauss(0, sigma))
+        if d == "triangular" and var.low is not None and var.high is not None:
+            return _r.triangular(var.low, var.high, var.mean)
+        return _r.gauss(var.mean, max(1e-6, var.stdev))
+
+    def irr_of(capex, rev_yr, opex_yr, life, discount):
+        lo, hi, mid = -0.2, 0.6, 0.0
+        for _ in range(48):
+            mid = (lo + hi) / 2
+            npv = -capex + sum((rev_yr - opex_yr) / ((1 + mid) ** t) for t in range(1, life + 1))
+            if npv > 0:
+                lo = mid
+            else:
+                hi = mid
+        return mid
+
+    runs = []
+    for _ in range(max(100, min(5000, body.n_runs))):
+        capex = sample(body.capex_gbp)
+        opex = sample(body.opex_gbp_yr)
+        rev = sample(body.revenue_gbp_yr)
+        curt = sample(body.curtailment_pct) if body.curtailment_pct else 0.0
+        rev *= (1 - max(0, min(0.5, curt / 100)) * abs(body.correlation_revenue_curtailment))
+        tl = sample(body.timeline_months) if body.timeline_months else 0
+        capex *= (1 + max(-0.3, min(0.3, tl / 36)) * body.correlation_capex_timeline)
+        irr = irr_of(capex, rev, opex, body.project_life_yr, body.discount_rate_pct / 100)
+        dscr = max(0.0, (rev - opex) / max(1, capex * 0.07))
+        npv = -capex + sum((rev - opex) / ((1 + body.discount_rate_pct / 100) ** t)
+                           for t in range(1, body.project_life_yr + 1))
+        runs.append({"irr": irr, "dscr": dscr, "npv": npv})
+
+    def pct_of(vals, p):
+        s = sorted(vals)
+        idx = max(0, min(len(s) - 1, int(len(s) * p)))
+        return s[idx]
+
+    irrs = [r["irr"] for r in runs]
+    dscrs = [r["dscr"] for r in runs]
+    npvs = [r["npv"] for r in runs]
+
+    base_irr = irr_of(body.capex_gbp.mean, body.revenue_gbp_yr.mean, body.opex_gbp_yr.mean,
+                      body.project_life_yr, body.discount_rate_pct / 100)
+    tornado = []
+    for label, var, applyf in [
+        ("CAPEX",   body.capex_gbp,       lambda v: irr_of(v, body.revenue_gbp_yr.mean, body.opex_gbp_yr.mean, body.project_life_yr, body.discount_rate_pct / 100)),
+        ("Revenue", body.revenue_gbp_yr,  lambda v: irr_of(body.capex_gbp.mean, v, body.opex_gbp_yr.mean, body.project_life_yr, body.discount_rate_pct / 100)),
+        ("OPEX",    body.opex_gbp_yr,     lambda v: irr_of(body.capex_gbp.mean, body.revenue_gbp_yr.mean, v, body.project_life_yr, body.discount_rate_pct / 100)),
+    ]:
+        if var is None:
+            continue
+        d_lo = applyf(var.mean * 0.8) - base_irr
+        d_hi = applyf(var.mean * 1.2) - base_irr
+        tornado.append({"label": label, "low_delta_irr": round(d_lo, 4), "high_delta_irr": round(d_hi, 4)})
+    tornado.sort(key=lambda t: abs(t["high_delta_irr"] - t["low_delta_irr"]), reverse=True)
+
+    return {
+        "n_runs": len(runs),
+        "base_irr": round(base_irr, 4),
+        "irr":  {"p10": round(pct_of(irrs,  0.1), 4), "p50": round(pct_of(irrs,  0.5), 4), "p90": round(pct_of(irrs,  0.9), 4)},
+        "dscr": {"p10": round(pct_of(dscrs, 0.1), 3), "p50": round(pct_of(dscrs, 0.5), 3), "p90": round(pct_of(dscrs, 0.9), 3)},
+        "npv_gbp": {"p10": round(pct_of(npvs, 0.1), 0), "p50": round(pct_of(npvs, 0.5), 0), "p90": round(pct_of(npvs, 0.9), 0)},
+        "tornado": tornado,
+        "histogram_irr": [round(r, 4) for r in sorted(irrs)][::max(1, len(irrs) // 40)],
+    }

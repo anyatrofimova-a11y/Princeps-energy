@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ pack.pack_title }}</title>
+  {% include "report/_partials/_brand.html" %}
+  <style>
+    /* DCO-pack local overrides */
+    body { font-family: var(--body-font); color: var(--ink); }
+    .dco-section { page-break-before: always; break-before: page; }
+    .dco-section:first-of-type { page-break-before: auto; }
+    .reg-cite {
+      background: var(--gold-light);
+      border-left: 4px solid var(--gold);
+      padding: 8px 12px;
+      margin: 10px 0;
+      font-size: 9.5pt;
+      font-style: italic;
+      color: var(--ink-muted);
+    }
+    .todo-mark {
+      background: #FFF4D6; color: #92660A;
+      padding: 1px 5px; border-radius: 2px;
+      font-family: var(--mono-font); font-size: 9pt;
+    }
+    .skeleton-banner {
+      background: #FFE4B5; color: #7A3F00;
+      padding: 12px; margin: 10px 0; border: 2px dashed #B8860B;
+      font-weight: 700;
+    }
+    .art {
+      margin: 8px 0 14px; padding: 10px; background: #FAF7EE;
+      border-left: 3px solid var(--gold); font-size: 9.5pt;
+    }
+    .art-heading { font-weight: 700; color: var(--ink); font-size: 10pt; }
+    .art-body { margin-top: 4px; line-height: 1.55; }
+    .art-precedent { font-size: 8.5pt; color: var(--ink-muted); margin-top: 4px; font-style: italic; }
+    .kv-row {
+      display: flex; padding: 3px 0; border-bottom: 1px solid var(--rule);
+      font-size: 9.5pt;
+    }
+    .kv-label { width: 45%; font-weight: 600; color: #555; }
+    .kv-value { width: 55%; color: var(--ink); }
+    .kv-pending .kv-value { color: #92660A; font-family: var(--mono-font); font-size: 9pt; }
+    .index-table td, .index-table th { font-size: 9.5pt; }
+    .doc-body { font-size: 10pt; line-height: 1.6; margin-bottom: 12px; }
+    .doc-body p { margin: 6px 0 10px; }
+    .schedule-block {
+      margin: 8px 0; padding: 8px 12px;
+      background: #F9F6EA; border-left: 3px solid var(--gold-dark);
+      font-size: 9.5pt;
+    }
+    .verdict-card {
+      display: inline-block; padding: 6px 16px; border-radius: 4px;
+      font-weight: 700; font-size: 11pt;
+      background: var(--gold); color: #fff;
+    }
+    .verdict-card.no { background: #6B7280; }
+    .figure-wrap { margin: 12px 0; text-align: center; }
+    .figure-wrap img { max-width: 100%; border: 1px solid var(--rule); }
+    .caption { font-size: 8.5pt; color: var(--ink-muted); margin-top: 4px; }
+  </style>
+</head>
+<body class="princeps-root">
+
+{# ============ COVER ============ #}
+<section class="princeps-cover">
+  <div>
+    <div class="princeps-cover-band">PRINCEPS</div>
+    <h1 class="princeps-cover-title">{{ pack.pack_title }}</h1>
+    <div class="princeps-cover-subtitle">Development Consent Order Application — Reg 5 Document Set</div>
+    <hr class="princeps-hr-gold" />
+    <div class="princeps-cover-ref">
+      Document reference: {{ pack.pack_reference }}<br />
+      Revision: {{ pack.revision }} &mdash; {{ pack.generated_at }}<br />
+      Client: {{ pack.client or "TO POPULATE" }}<br />
+      Prepared by: {{ pack.prepared_by }}
+    </div>
+    <div style="margin-top: 24px;">
+      <div class="verdict-card {% if not pack.verdict.qualifies %}no{% endif %}">
+        NSIP Verdict: {{ pack.verdict.route }}
+      </div>
+      <p style="font-size: 10pt; margin-top: 10px;">{{ pack.verdict.reason }}</p>
+    </div>
+  </div>
+  <div class="princeps-cover-ref">
+    Commercial in confidence. Prepared for named addressee(s) only. See Reliance Statement.<br>
+    In fulfilment of the Infrastructure Planning (Applications: Prescribed Forms and Procedure)
+    Regulations 2009 (SI 2009/2264, as amended) and the Planning Act 2008.
+  </div>
+</section>
+
+{# ============ CONTENTS ============ #}
+<section class="dco-section">
+  <header class="princeps-masthead">
+    <div class="princeps-masthead-logo">PRINCEPS</div>
+    <div class="princeps-masthead-meta">{{ pack.pack_title }} &middot; Rev {{ pack.revision }}</div>
+  </header>
+  <h1 class="princeps-title">Contents — Reg 5 Document Index</h1>
+  <div class="reg-cite">{{ pack.application_regulations_citation }}</div>
+  <table class="princeps-table index-table">
+    <thead>
+      <tr>
+        <th style="width: 5%">#</th>
+        <th style="width: 15%">Regulation</th>
+        <th>Document</th>
+        <th style="width: 15%">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in pack.document_index %}
+      <tr>
+        <td>{{ r.n }}</td>
+        <td><code>{{ r.reg }}</code></td>
+        <td><strong>{{ r.doc }}</strong></td>
+        <td>{{ r.status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 class="princeps-h2">Regulatory framework</h2>
+  <ul style="font-size: 10pt; line-height: 1.7;">
+    <li><strong>Primary Act:</strong> Planning Act 2008 c.29 (as amended by Localism Act 2011 and Levelling-up and Regeneration Act 2023).</li>
+    <li><strong>Application Regulations:</strong> Infrastructure Planning (Applications: Prescribed Forms and Procedure) Regulations 2009 (SI 2009/2264, as amended).</li>
+    <li><strong>EIA Regulations:</strong> Infrastructure Planning (EIA) Regulations 2017 (SI 2017/572).</li>
+    <li><strong>NSIP threshold:</strong> {{ pack.nsip_threshold_citation }}</li>
+    <li><strong>Decision framework:</strong> Planning Act 2008 s.104 (decisions in accordance with the relevant National Policy Statements: EN-1, EN-3, EN-5, all Jan 2024).</li>
+    <li><strong>Guidance:</strong> DCLG / DLUHC / MHCLG / DESNZ Guidance on the NSIP process; PINS Advice Notes 1-18.</li>
+  </ul>
+
+  <h2 class="princeps-h2">Reliance statement</h2>
+  <p style="font-size: 10pt;">This Pack has been prepared by Princeps for the named Client (above) for the purpose of supporting the application under the Planning Act 2008 for the draft Development Consent Order. No third party may rely on this Pack without the prior written consent of Princeps. Princeps accepts no liability to any third party arising from any matter in the Pack.</p>
+</section>
+
+{# ============ (a) APPLICATION FORM ============ #}
+{% set doc = pack.reg5_documents.a_application_form %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">Form 1 &middot; Reg 5(2)(a)</div></header>
+  <h1 class="princeps-title">{{ doc.form_title }}</h1>
+  <div class="reg-cite">{{ doc.regulation_citation }}</div>
+  <p class="doc-body"><strong>Primary Act:</strong> {{ doc.primary_act }}</p>
+
+  {% for s in doc.sections %}
+  <h2 class="princeps-h2">{{ s.n }} — {{ s.heading }}</h2>
+  {% if s.fields %}
+    {% for f in s.fields %}
+    <div class="kv-row {% if f.status == 'pending' %}kv-pending{% endif %}">
+      <div class="kv-label">{{ f.label }}</div>
+      <div class="kv-value">{{ f.value }}</div>
+    </div>
+    {% endfor %}
+  {% endif %}
+  {% if s.document_index %}
+    <table class="princeps-table" style="margin-top: 8px;">
+      <thead><tr><th>Reg ref</th><th>Document</th><th>Required</th></tr></thead>
+      <tbody>
+        {% for d in s.document_index %}
+        <tr>
+          <td><code>{{ d.ref }}</code></td>
+          <td>{{ d.doc }}</td>
+          <td>{{ "Yes" if d.required else "If triggered" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+  {% endfor %}
+</section>
+
+{# ============ (b) LAND PLANS ============ #}
+{% set doc = pack.reg5_documents.b_land_plans %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">Land Plans &middot; Reg 5(2)(b)</div></header>
+  <h1 class="princeps-title">{{ doc.document_title }}</h1>
+  <p class="doc-body">{{ doc.sheet_title }}</p>
+  <div class="reg-cite">{{ doc.regulation_citation }}</div>
+
+  <h2 class="princeps-h2">Legend</h2>
+  <table class="princeps-table">
+    <thead><tr><th style="width:30%">Symbol</th><th>Meaning</th></tr></thead>
+    <tbody>
+      {% for l in doc.legend %}
+      <tr><td>{{ l.symbol }}</td><td>{{ l.meaning }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if doc.figure_png_data_uri %}
+  <div class="figure-wrap">
+    <img src="{{ doc.figure_png_data_uri }}" alt="Land Plan">
+    <div class="caption">Figure 1. Land Plan (indicative — skeleton render)</div>
+  </div>
+  {% else %}
+  <p class="todo-mark">TO POPULATE — Land Plan PNG could not be rendered (matplotlib unavailable)</p>
+  {% endif %}
+
+  <h2 class="princeps-h2">Sheet notes</h2>
+  <ul style="font-size: 9.5pt;">
+    {% for n in doc.sheet_notes %}<li>{{ n }}</li>{% endfor %}
+  </ul>
+
+  <h2 class="princeps-h2">Revision block</h2>
+  <table class="princeps-table">
+    <tbody>
+      {% for k, v in doc.revision_block.items() %}
+      <tr><td style="width:30%"><strong>{{ k | replace('_', ' ') | title }}</strong></td><td>{{ v }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{# ============ (b) WORKS PLANS ============ #}
+{% set doc = pack.reg5_documents.b_works_plans %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">Works Plans &middot; Reg 5(2)(b)</div></header>
+  <h1 class="princeps-title">{{ doc.document_title }}</h1>
+  <p class="doc-body">{{ doc.sheet_title }}</p>
+  <div class="reg-cite">{{ doc.regulation_citation }}</div>
+
+  <h2 class="princeps-h2">Works schedule (cross-reference to Schedule 1 of the Order)</h2>
+  <table class="princeps-table">
+    <thead><tr><th style="width:15%">Work No.</th><th>Short description</th></tr></thead>
+    <tbody>
+      {% for w in doc.works_schedule %}
+      <tr><td><strong>{{ w.work_no }}</strong></td><td>{{ w.short_description }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if doc.figure_png_data_uri %}
+  <div class="figure-wrap">
+    <img src="{{ doc.figure_png_data_uri }}" alt="Works Plan">
+    <div class="caption">Figure 2. Works Plan (schematic — skeleton render)</div>
+  </div>
+  {% else %}
+  <p class="todo-mark">TO POPULATE — Works Plan PNG could not be rendered</p>
+  {% endif %}
+
+  <h2 class="princeps-h2">Sheet notes</h2>
+  <ul style="font-size: 9.5pt;">
+    {% for n in doc.sheet_notes %}<li>{{ n }}</li>{% endfor %}
+  </ul>
+</section>
+
+{# ============ (c) DRAFT ORDER ============ #}
+{% set doc = pack.reg5_documents.c_draft_order %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">Draft DCO &middot; Reg 5(2)(c)</div></header>
+  <h1 class="princeps-title">{{ doc.document_title }}</h1>
+  <h3 class="princeps-h3" style="font-family: var(--mono-font);">{{ doc.order_title }}</h3>
+  <div class="reg-cite">{{ doc.regulation_citation }}</div>
+  <p class="doc-body"><strong>Primary Act powers:</strong> {{ doc.primary_act }}</p>
+
+  <h2 class="princeps-h2">Preamble</h2>
+  <div class="doc-body">
+    <div class="kv-row"><div class="kv-label">SI number</div><div class="kv-value">{{ doc.preamble.si_number }}</div></div>
+    <div class="kv-row"><div class="kv-label">Made date</div><div class="kv-value">{{ doc.preamble.made_date }}</div></div>
+    <div class="kv-row"><div class="kv-label">Coming into force</div><div class="kv-value">{{ doc.preamble.coming_into_force_date }}</div></div>
+    <h4 class="princeps-h4">Recitals</h4>
+    <ol>{% for r in doc.preamble.recitals %}<li style="margin: 6px 0; font-size: 9.5pt;">{{ r }}</li>{% endfor %}</ol>
+    <p style="font-style: italic; font-size: 9.5pt; margin-top: 10px;">{{ doc.preamble.making_power }}</p>
+  </div>
+
+  {% for part in doc.parts %}
+  <h2 class="princeps-h2">Part {{ part.n }} — {{ part.heading }}</h2>
+  {% for art in part.articles %}
+  <div class="art">
+    <div class="art-heading">Article {{ art.n }} — {{ art.heading }}</div>
+    <div class="art-body">{{ art.body }}</div>
+  </div>
+  {% endfor %}
+  {% endfor %}
+
+  <h2 class="princeps-h2">Schedules</h2>
+  {% for s in doc.schedules %}
+  <div class="schedule-block">
+    <div class="art-heading">Schedule {{ s.n }} — {{ s.heading }}</div>
+    <div class="doc-body" style="margin-top: 4px; white-space: pre-line;">{{ s.body }}</div>
+  </div>
+  {% endfor %}
+</section>
+
+{# ============ (d) EXPLANATORY MEMORANDUM ============ #}
+{% set doc = pack.reg5_documents.d_explanatory_memorandum %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">Explanatory Memorandum &middot; Reg 5(2)(d)</div></header>
+  <h1 class="princeps-title">{{ doc.document_title }}</h1>
+  <h3 class="princeps-h3">{{ doc.order_title }}</h3>
+  <div class="reg-cite">{{ doc.regulation_citation }}<br>{{ doc.advice_note_citation }}</div>
+
+  {% for s in doc.sections %}
+  <h2 class="princeps-h2">{{ s.n }} — {{ s.heading }}</h2>
+  <div class="doc-body">{{ s.body }}</div>
+
+  {% if s.articles %}
+  <table class="princeps-table">
+    <thead><tr><th>Pt</th><th>Art</th><th>Article heading</th><th>Explanation</th><th>Precedent</th></tr></thead>
+    <tbody>
+      {% for a in s.articles %}
+      <tr>
+        <td>{{ a.part_n }}</td>
+        <td><strong>{{ a.article_n }}</strong></td>
+        <td>{{ a.article_heading }}</td>
+        <td>{{ a.explanation }}</td>
+        <td style="font-size: 8.5pt; font-style: italic;">{{ a.precedent_cite }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% if s.schedules %}
+  <table class="princeps-table">
+    <thead><tr><th>Sch</th><th>Heading</th><th>Explanation</th></tr></thead>
+    <tbody>
+      {% for sc in s.schedules %}
+      <tr><td><strong>{{ sc.schedule_n }}</strong></td><td>{{ sc.heading }}</td><td>{{ sc.explanation }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% endfor %}
+</section>
+
+{# ============ (e) STATEMENT OF REASONS ============ #}
+{% set doc = pack.reg5_documents.e_statement_of_reasons %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">Statement of Reasons &middot; Reg 5(2)(e)</div></header>
+  <h1 class="princeps-title">{{ doc.document_title }}</h1>
+  <div class="reg-cite">{{ doc.regulation_citation }}</div>
+
+  <h2 class="princeps-h2">Primary legislation</h2>
+  <ul style="font-size: 9.5pt;">
+    {% for l in doc.primary_legislation %}<li>{{ l }}</li>{% endfor %}
+  </ul>
+
+  <h2 class="princeps-h2">Policy basis</h2>
+  <ul style="font-size: 9.5pt;">
+    {% for p in doc.policy_basis %}<li>{{ p }}</li>{% endfor %}
+  </ul>
+
+  {% for s in doc.sections %}
+  <h2 class="princeps-h2">{{ s.n }} — {{ s.heading }}</h2>
+  <div class="doc-body">{{ s.body }}</div>
+  {% endfor %}
+</section>
+
+{# ============ (f) FUNDING STATEMENT ============ #}
+{% set doc = pack.reg5_documents.f_funding_statement %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">Funding Statement &middot; Reg 5(2)(f)</div></header>
+  <h1 class="princeps-title">{{ doc.document_title }}</h1>
+  <div class="reg-cite">{{ doc.regulation_citation }}</div>
+
+  {% for s in doc.sections %}
+  <h2 class="princeps-h2">{{ s.n }} — {{ s.heading }}</h2>
+  <div class="doc-body">{{ s.body }}</div>
+  {% if s.tables %}
+    {% for t in s.tables %}
+    <h3 class="princeps-h3">{{ t.title }}</h3>
+    <table class="princeps-table">
+      <thead><tr>{% for c in t.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in t.rows %}
+        <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+  {% endif %}
+  {% endfor %}
+</section>
+
+{# ============ (g) ENVIRONMENTAL STATEMENT SKELETON ============ #}
+{% set doc = pack.reg5_documents.g_environmental_statement_skeleton %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">ES Skeleton &middot; Reg 5(2)(g)</div></header>
+  <h1 class="princeps-title">{{ doc.document_title }}</h1>
+  <div class="reg-cite">{{ doc.regulation_citation }}</div>
+  <div class="skeleton-banner">{{ doc.status_banner }}</div>
+
+  <h2 class="princeps-h2">Reference framework</h2>
+  <p class="doc-body"><strong>IEMA:</strong> {{ doc.iema_reference }}</p>
+  <ul style="font-size: 9.5pt;">
+    {% for an in doc.pins_advice_notes %}<li>{{ an }}</li>{% endfor %}
+  </ul>
+
+  <h2 class="princeps-h2">Scoping</h2>
+  <div class="kv-row"><div class="kv-label">Scoping Opinion requested</div><div class="kv-value">{{ doc.scoping.opinion_requested }}</div></div>
+  <div class="kv-row"><div class="kv-label">Scoping Opinion received</div><div class="kv-value">{{ doc.scoping.opinion_received }}</div></div>
+  <div class="kv-row"><div class="kv-label">PINS reference</div><div class="kv-value">{{ doc.scoping.request_reference }}</div></div>
+
+  <h2 class="princeps-h2">PEIR</h2>
+  <div class="kv-row"><div class="kv-label">PEIR published</div><div class="kv-value">{{ doc.peir.published_date }}</div></div>
+  <div class="kv-row"><div class="kv-label">PEIR consultation window</div><div class="kv-value">{{ doc.peir.consultation_window }}</div></div>
+
+  <h2 class="princeps-h2">Chapter list — Sched 4 SI 2017/572 cross-referenced</h2>
+  <table class="princeps-table">
+    <thead><tr><th>#</th><th>Chapter</th><th>Sched 4 ref</th><th>Scoped in</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for c in doc.chapter_list %}
+      <tr>
+        <td>{{ c.n }}</td>
+        <td><strong>{{ c.title }}</strong><br><span style="font-size: 8.5pt; color: #555;">{{ c.summary_line }}</span></td>
+        <td><code>{{ c.schedule_4_ref }}</code></td>
+        <td>{{ "Yes" if c.scoped_in else "No" }}</td>
+        <td><span class="todo-mark">{{ c.status }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 class="princeps-h2">Standard chapter sub-structure</h2>
+  <p class="doc-body" style="font-size: 9.5pt;">Each chapter above follows the IEMA 8th ed. 2024 structure:</p>
+  <ul style="font-size: 9.5pt; columns: 2;">
+    {% for step in doc.chapter_list[0].chapter_stub %}<li>{{ step }}</li>{% endfor %}
+  </ul>
+
+  <h2 class="princeps-h2">Appendices (technical studies)</h2>
+  <table class="princeps-table">
+    <thead><tr><th style="width:10%">ID</th><th>Title</th></tr></thead>
+    <tbody>
+      {% for a in doc.appendices %}
+      <tr><td><strong>{{ a.id }}</strong></td><td>{{ a.title }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2 class="princeps-h2">Figures register</h2>
+  <table class="princeps-table">
+    <thead><tr><th style="width:18%">Figure</th><th>Title</th></tr></thead>
+    <tbody>
+      {% for f in doc.figures_register %}
+      <tr><td><strong>{{ f.id }}</strong></td><td>{{ f.title }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{# ============ (h) CONSULTATION REPORT ============ #}
+{% set doc = pack.reg5_documents.h_consultation_report %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">Consultation Report &middot; Reg 5(2)(h)</div></header>
+  <h1 class="princeps-title">{{ doc.document_title }}</h1>
+  <div class="reg-cite">{{ doc.regulation_citation }}</div>
+
+  <h2 class="princeps-h2">PINS Advice Notes cited</h2>
+  <ul style="font-size: 9.5pt;">
+    {% for an in doc.advice_notes %}<li>{{ an }}</li>{% endfor %}
+  </ul>
+
+  {% for s in doc.sections %}
+  <h2 class="princeps-h2">{{ s.n }} — {{ s.heading }}</h2>
+  <div class="doc-body">{{ s.body }}</div>
+  {% if s.tables %}
+    {% for t in s.tables %}
+    <h3 class="princeps-h3">{{ t.title }}</h3>
+    <table class="princeps-table">
+      <thead><tr>{% for c in t.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in t.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+  {% endif %}
+  {% endfor %}
+
+  <h2 class="princeps-h2">Appendices</h2>
+  <table class="princeps-table">
+    <thead><tr><th style="width:10%">ID</th><th>Title</th></tr></thead>
+    <tbody>
+      {% for a in doc.appendices %}
+      <tr><td><strong>{{ a.id }}</strong></td><td>{{ a.title }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{# ============ (i) BOOK OF REFERENCE ============ #}
+{% set doc = pack.reg5_documents.i_book_of_reference %}
+<section class="dco-section">
+  <header class="princeps-masthead"><div class="princeps-masthead-logo">PRINCEPS</div><div class="princeps-masthead-meta">Book of Reference &middot; Reg 5(2)(i)</div></header>
+  <h1 class="princeps-title">{{ doc.document_title }}</h1>
+  <div class="reg-cite">{{ doc.regulation_citation }}</div>
+
+  <h2 class="princeps-h2">Methodology</h2>
+  <div class="doc-body">{{ doc.methodology_note }}</div>
+
+  <div class="doc-body" style="margin: 8px 0;">
+    <strong>Summary:</strong>
+    Cat 1 entries: {{ doc.summary.category_1_count }} &middot;
+    Cat 2 entries: {{ doc.summary.category_2_count }} &middot;
+    Cat 3 entries: {{ doc.summary.category_3_count }} &middot;
+    Total: {{ doc.summary.total_entries }}
+  </div>
+
+  {% for part in doc.parts %}
+  <h2 class="princeps-h2">Part {{ part.n }} — {{ part.heading }}</h2>
+  <div class="doc-body">{{ part.body }}</div>
+  {% if part.rows %}
+  <table class="princeps-table">
+    <thead><tr>{% for c in part.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in part.rows %}
+      <tr>
+        {% if part.n == "1" %}
+        <td><strong>{{ row.plot }}</strong></td>
+        <td>{{ row.area_m2 }}</td>
+        <td>{{ row.title_no }}</td>
+        <td>{{ row.freeholder }}</td>
+        <td>{{ row.leaseholders }}</td>
+        <td>{{ row.occupiers }}</td>
+        <td>{{ row.other_interests }}</td>
+        {% elif part.n == "2" %}
+        <td><strong>{{ row.ref }}</strong></td>
+        <td>{{ row.name }}</td>
+        <td>{{ row.address }}</td>
+        <td>{{ row.land_affected }}</td>
+        <td>{{ row.nature }}</td>
+        {% else %}
+        <td><strong>{{ row.ref }}</strong></td>
+        <td>{{ row.name }}</td>
+        <td>{{ row.address }}</td>
+        <td>{{ row.distance_m }}</td>
+        <td>{{ row.nature }}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% endfor %}
+
+  <h2 class="princeps-h2">Statutory undertakers</h2>
+  <div class="doc-body">{{ doc.statutory_undertakers_note }}</div>
+  <h2 class="princeps-h2">Crown land</h2>
+  <div class="doc-body">{{ doc.crown_land_note }}</div>
+</section>
+
+{# ============ FOOTER ============ #}
+<footer class="princeps-footer-strip" style="margin-top: 24px;">
+  <span class="conf">Commercial in confidence &middot; Prepared for named addressee only</span>
+  <span>Princeps &middot; {{ pack.generated_at }} &middot; {{ pack.pack_reference }}</span>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,130 @@
+{# =========================================================================
+   _reliance.html — Addressee list + limit-of-liability boilerplate (BOT-R1).
+
+   Variants by `reliance_type` kwarg:
+     - "lender"   : RICS-style with LMA reliance letter reference.
+     - "investor" : IC / fund investor variant.
+     - "planning" : Planning Authority variant (LPA / PINS).
+     - "dno"      : DNO variant (UKPN / NGED / SPEN / SSEN / NPg / ENWL).
+     - "client"   : Generic client / developer.
+
+   Pack bots:
+
+       {% import "report/_partials/_reliance.html" as rel %}
+       {{ rel.statement(reliance_type="lender",
+                        addressees=[{"name":"Lloyds Bank plc","role":"Agent"}],
+                        client="Princeps Solar Ltd",
+                        project_name="Oxfordshire 50 MW",
+                        purpose="technical due diligence") }}
+
+   All fields fall back to TO-POPULATE rather than crashing.
+   ========================================================================= #}
+
+{% macro _boilerplate_by_type(reliance_type) %}
+  {% if reliance_type == "lender" %}
+    This report has been prepared by Princeps on an agreed scope of work for the named
+    addressees in connection with financing of the Project. Reliance is extended to the
+    named addressees under a separate reliance letter. Princeps accepts no duty of care
+    and no liability to any third party who may come into possession of this report.
+    Save in respect of a signed reliance letter, our aggregate liability for any loss
+    suffered is limited to the fees paid to Princeps under the relevant engagement.
+    Nothing in this report constitutes investment, legal or tax advice.
+  {% elif reliance_type == "investor" %}
+    This report is prepared for the named investor(s) solely for the purpose of assessing
+    the investment described on the cover page. It does not constitute an offer or
+    solicitation. Princeps accepts no liability to any third party. Forward-looking
+    statements are estimates and actual outcomes may differ materially. This report must
+    be read in conjunction with the base-case financial model pack and the underlying
+    data-room index.
+  {% elif reliance_type == "planning" %}
+    This document is submitted to the planning authority named above in support of the
+    application described on the cover page. Statements of fact are believed to be
+    accurate as at the retrieval dates listed in Appendix A (Data Provenance).
+    Professional judgements stated herein are those of named signatories (see Revision
+    Control). Princeps accepts no liability to any third party other than the planning
+    authority and the applicant. Where a statutory requirement requires a competent
+    person's declaration (e.g. biodiversity metric, EIA competent expert), the relevant
+    declaration is included in the appendices.
+  {% elif reliance_type == "dno" %}
+    This document is submitted to the distribution network operator named above in
+    support of an application or enquiry under G99 Issue 2 (10 March 2025) and the
+    Common Connection Charging Methodology v19 (2024). Data prepared for the DNO is
+    drawn from the applicant's declarations and Princeps' technical analysis; the DNO
+    may rely on this document for connection assessment purposes only. The DNO retains
+    final determination of points of connection, connection charges and connection
+    offers under its Distribution Licence.
+  {% elif reliance_type == "client" %}
+    This report has been prepared by Princeps solely for the named client and solely
+    for the purpose stated on the cover page. No third party is entitled to rely on
+    this report without Princeps' prior written consent. Princeps accepts no duty of
+    care and no liability to any third party.
+  {% else %}
+    <span class="princeps-todo">TO POPULATE — unknown reliance_type "{{ reliance_type }}"; valid: lender / investor / planning / dno / client</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro statement(reliance_type="client",
+                   addressees=None,
+                   client=None,
+                   project_name=None,
+                   purpose=None,
+                   title="Reliance Statement") %}
+  {% set _empty_addr = (addressees is none) or (addressees | length == 0) %}
+  <section class="princeps-reliance">
+    <h2 class="princeps-h2">{{ title }}</h2>
+
+    <table class="princeps-table">
+      <tbody>
+        <tr>
+          <th style="width:22%">Reliance type</th>
+          <td><code style="font-family: var(--mono-font);">{{ reliance_type }}</code></td>
+        </tr>
+        <tr>
+          <th>Client (commissioning party)</th>
+          <td>{{ client or '<span class="princeps-todo">TO POPULATE</span>' | safe }}</td>
+        </tr>
+        <tr>
+          <th>Project</th>
+          <td>{{ project_name or '<span class="princeps-todo">TO POPULATE</span>' | safe }}</td>
+        </tr>
+        <tr>
+          <th>Purpose</th>
+          <td>{{ purpose or '<span class="princeps-todo">TO POPULATE</span>' | safe }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 class="princeps-h3">Addressees entitled to rely</h3>
+    <table class="princeps-table">
+      <thead>
+        <tr>
+          <th style="width:40%">Organisation</th>
+          <th style="width:30%">Role</th>
+          <th style="width:30%">Reliance basis</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if _empty_addr %}
+          <tr>
+            <td><span class="princeps-todo">TO POPULATE — addressees list missing</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+          </tr>
+        {% else %}
+          {% for a in addressees %}
+            <tr>
+              <td>{{ a.name or '<span class="princeps-todo">TO POPULATE</span>' | safe }}</td>
+              <td>{{ a.role or '&mdash;' | safe }}</td>
+              <td>{{ a.basis or "Named addressee" }}</td>
+            </tr>
+          {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+
+    <h3 class="princeps-h3">Limit of liability</h3>
+    <p style="font-size: 9.5pt; color: var(--ink); line-height: 1.55;">
+      {{ _boilerplate_by_type(reliance_type) }}
+    </p>
+  </section>
+{% endmacro %}

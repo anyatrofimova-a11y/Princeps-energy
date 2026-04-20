@@ -28,6 +28,13 @@ import matplotlib.patches as mpatches
 import numpy as np
 from jinja2 import Environment, FileSystemLoader
 
+# DCF engine (BOT-A) — used by GAP 2: real DCF waterfall, debt schedule, DSCR timeline
+from utils.dcf_evaluator import DCFEvaluator, DCFResult, build_amortising_debt
+from utils.financial_viability_charts import (
+    generate_dcf_charts,
+    build_amortising_schedule_rows,
+)
+
 log = logging.getLogger("princeps.report_financial")
 
 _TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "report"
@@ -589,6 +596,87 @@ def _build_full_debt_schedule(debt: dict) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# GAP 2 — Real DCF via utils.dcf_evaluator.DCFEvaluator
+# ---------------------------------------------------------------------------
+
+def _run_dcf_evaluator(
+    capacity_mw: float,
+    technology: str,
+    ppa_price: float,
+    gearing_pct: float = 0.70,
+    interest_rate: float = 0.06,
+    debt_term_years: int = 18,
+    wacc: float = 0.075,
+    tax_rate: float = 0.25,
+) -> tuple[DCFResult, dict]:
+    """Build revenue + opex + debt schedules from UK assumptions and run
+    DCFEvaluator.evaluate(). Returns the DCFResult plus an echoed param
+    dict for the template context.
+
+    This replaces the legacy finance-summary path (_build_full_cashflow +
+    _build_full_debt_schedule) with the single-source-of-truth BOT-A
+    evaluator so the IC pack, lender pack and FVP all agree.
+    """
+    from utils.investment_appraisal import (
+        CAPEX_PER_MW, OPEX_PER_MW, CAPACITY_FACTORS, REVENUE_PER_MW,
+        DEGRADATION_RATE, INFLATION, PROJECT_LIFE,
+    )
+
+    capex_mw = CAPEX_PER_MW.get(technology, CAPEX_PER_MW.get("solar", 550_000))
+    opex_mw = OPEX_PER_MW.get(technology, OPEX_PER_MW.get("solar", 12_000))
+    cf = CAPACITY_FACTORS.get(technology, 0.11)
+    is_bess = technology == "bess"
+    annual_gen_mwh = capacity_mw * cf * 8760 if not is_bess else 0
+    bess_revenue_base = REVENUE_PER_MW.get(technology, 0) * capacity_mw if is_bess else 0
+    annual_opex = opex_mw * capacity_mw
+    total_capex = capex_mw * capacity_mw
+
+    revenue_schedule: list[float] = []
+    opex_schedule: list[float] = []
+    for y in range(1, PROJECT_LIFE + 1):
+        if is_bess:
+            rev = bess_revenue_base * (1 + INFLATION) ** y * (1 - DEGRADATION_RATE * 2) ** y
+        else:
+            deg_gen = annual_gen_mwh * (1 - DEGRADATION_RATE) ** y
+            rev = deg_gen * ppa_price * (1 + INFLATION) ** y
+        opx = annual_opex * (1 + INFLATION) ** y
+        revenue_schedule.append(rev)
+        opex_schedule.append(opx)
+
+    debt_principal = total_capex * gearing_pct
+    debt_schedule = build_amortising_debt(
+        principal=debt_principal,
+        rate=interest_rate,
+        term_years=debt_term_years,
+        life_years=PROJECT_LIFE,
+    )
+
+    evaluator = DCFEvaluator(
+        capex=total_capex,
+        revenue_schedule=revenue_schedule,
+        opex_schedule=opex_schedule,
+        tax_rate=tax_rate,
+        wacc=wacc,
+        terminal_growth=0.0,
+        debt_schedule=debt_schedule,
+    )
+    result = evaluator.evaluate()
+    params = {
+        "capex": total_capex,
+        "annual_opex_yr1": annual_opex,
+        "gearing_pct": gearing_pct,
+        "debt_principal": debt_principal,
+        "equity": total_capex - debt_principal,
+        "interest_rate_pct": interest_rate * 100,
+        "debt_term_years": debt_term_years,
+        "wacc": wacc,
+        "tax_rate": tax_rate,
+        "project_life_years": PROJECT_LIFE,
+    }
+    return result, params
+
+
+# ---------------------------------------------------------------------------
 # Sensitivity analysis
 # ---------------------------------------------------------------------------
 
@@ -728,6 +816,8 @@ def _build_context(
     ppa_price: float,
     sensitivity: list[dict],
     charts: dict[str, str],
+    dcf_result: DCFResult | None = None,
+    dcf_params: dict | None = None,
 ) -> dict[str, Any]:
     """Build the Jinja2 template context dict."""
 
@@ -819,6 +909,15 @@ def _build_context(
     # NPV display
     npv_8 = finance.get("npv_8pct", 0) or 0
 
+    # GAP 2: Real DCF waterfall / amortising-debt table / DSCR timeline
+    dcf_summary: dict[str, Any] = {}
+    dcf_amortising_rows: list[dict[str, Any]] = []
+    dcf_covenants: list[dict[str, Any]] = []
+    if dcf_result is not None:
+        dcf_summary = dict(dcf_result.summary)
+        dcf_amortising_rows = build_amortising_schedule_rows(dcf_result)
+        dcf_covenants = list(dcf_result.covenants)
+
     return {
         "site_name": site_name,
         "capacity_mw": capacity_mw,
@@ -847,6 +946,14 @@ def _build_context(
         "land_ha": capacity_mw * land_per_mw.get(technology, 2.0),
         "risks": RISK_REGISTER,
         "charts": charts,
+        # GAP 2 — DCF evaluator output (from utils.dcf_evaluator.DCFEvaluator)
+        "dcf_summary": dcf_summary,
+        "dcf_amortising_rows": dcf_amortising_rows,
+        "dcf_covenants": dcf_covenants,
+        "dcf_params": dcf_params or {},
+        "dcf_npv_display": _format_gbp(dcf_summary.get("npv", 0) or 0),
+        "dcf_equity_npv_display": _format_gbp(dcf_summary.get("equity_npv", 0) or 0),
+        "dcf_terminal_display": _format_gbp(dcf_summary.get("terminal_value", 0) or 0),
     }
 
 
@@ -1035,7 +1142,25 @@ async def generate_financial_report(
         None, _generate_all_charts,
         finance, debt, capex_items, full_cashflow, sensitivity, debt_schedule,
     )
-    log.info("Charts generated: %s", ", ".join(charts.keys()))
+
+    # GAP 2: Run DCFEvaluator (BOT-A) to produce DCF waterfall + DSCR timeline +
+    # amortising debt schedule. This becomes the single source of truth for
+    # NPV / terminal / FCFF / DSCR across IC pack, FVP and lender pack.
+    wacc = float(finance.get("wacc") or 0.075)
+    dcf_result, dcf_params = await loop.run_in_executor(
+        None, _run_dcf_evaluator,
+        capacity_mw, technology, ppa_price, 0.70, 0.06, 18, wacc, 0.25,
+    )
+    dcf_charts = await loop.run_in_executor(None, generate_dcf_charts, dcf_result, wacc)
+    charts.update(dcf_charts)
+    log.info(
+        "DCF (BOT-A) NPV=%s  IRR=%s%%  min DSCR=%s  terminal=%s  charts=%s",
+        _format_gbp(dcf_result.summary.get("npv", 0)),
+        dcf_result.summary.get("irr_pct"),
+        dcf_result.summary.get("min_dscr"),
+        _format_gbp(dcf_result.summary.get("terminal_value", 0)),
+        ", ".join(charts.keys()),
+    )
 
     # 6. Build context and render HTML
     context = _build_context(
@@ -1050,6 +1175,8 @@ async def generate_financial_report(
         ppa_price=ppa_price,
         sensitivity=sensitivity,
         charts=charts,
+        dcf_result=dcf_result,
+        dcf_params=dcf_params,
     )
     html = _render_html(context)
 

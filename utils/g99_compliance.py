@@ -6,7 +6,9 @@ application generation, compliance checking, protection settings, and
 timeline estimation for UK distributed generation connections.
 
 References:
-  - ENA EREC G99 Issue 1 Amendment 9 (2023)
+  - ENA EREC G99 — current version resolved via
+    ``app.regulatory.versions.cite("g99")`` (Issue 2, 10 March 2025 at
+    time of writing; Annex C storage provisions in force 1 March 2026)
   - ENA EREC G100 Issue 1 Amendment 3 (2023)
   - ENA Engineering Recommendation P28/P29 (voltage limits)
 
@@ -22,6 +24,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
+
+from app.regulatory.versions import cite as _cite_reg
 
 # ---------------------------------------------------------------------------
 # Constants & Enums
@@ -627,7 +631,8 @@ def check_g99_compliance(
     Determine which G99/G100 generator category applies and return
     the full set of applicable requirements.
 
-    Category thresholds (EREC G99 Issue 1 Amendment 9):
+    Category thresholds (current EREC G99 per
+    ``app.regulatory.versions.cite("g99")``):
       - Type A: 0.8 kW – 1 MW (single-phase) or 0.8 kW – 50 kW (three-phase)
       - Type B: 1 MW – 10 MW (single-phase) or 50 kW – 1 MW (three-phase)
                 Note: also 1 MW – 10 MW three-phase
@@ -691,7 +696,7 @@ def check_g99_compliance(
         "voltage_kv": voltage_kv,
         "technology": tech_enum.value,
         "phase": "single" if is_single else "three",
-        "applicable_standard": "EREC G99 Issue 1 Amendment 9 (2023)",
+        "applicable_standard": _cite_reg("g99"),
         "voltage_protection": VOLTAGE_PROTECTION.get(category_str, {}),
         "frequency_protection": FREQUENCY_PROTECTION.get(category_str, {}),
         "rocof": ROCOF_SETTINGS.get(category_str, {}),
@@ -918,9 +923,17 @@ def generate_g99_application(
     phase: str = "three_phase",
     applicant: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """
-    Generate a structured G99 application data package with all seven
-    sections (A–G) auto-filled where possible.
+    """Generate a structured G99 application data package.
+
+    Thin passthrough to the canonical generator at
+    ``utils.g99_pack_generator.generate_g99_application_from_scalars``
+    (COUNCIL-1 consolidation, BOT-T 2026-04-19). The canonical generator
+    renders ENA EREC G99 **Issue 2** (10 March 2025) sections A–I plus
+    Annex C (storage, effective 1 March 2026). This wrapper preserves the
+    historical fields that callers of ``utils.g99_compliance`` relied on:
+    ``category``, ``timeline``, ``compliance_summary``, ``commissioning``,
+    ``checklist`` — sourced from the compliance helpers that still live in
+    this module.
 
     Parameters:
         lat, lon:       Site coordinates (WGS84)
@@ -932,192 +945,82 @@ def generate_g99_application(
         applicant:      Optional dict with applicant details to fill Section A
 
     Returns:
-        Dict with sections A-G, plus compliance info and timeline.
+        Dict with the canonical pack payload (``form_data``, ``html``,
+        ``filename``, ``document_type``, ``auto_fill_pct``, ``provenance``)
+        plus back-compat keys: ``category``, ``standard``, ``timeline``,
+        ``compliance_summary``, ``commissioning``, ``checklist``.
     """
+    from utils.g99_pack_generator import (
+        generate_g99_application_from_scalars,
+        G99_VERSION,
+    )
+
     tech_enum = _normalise_technology(technology)
     dno_name = _normalise_dno(dno)
     compliance = check_g99_compliance(capacity_mw, voltage_kv, technology, phase)
     cat = compliance.get("category", "Type B")
-    protection = g99_protection_settings(capacity_mw, voltage_kv, technology, phase)
-    timeline = estimate_g99_timeline(capacity_mw, dno, phase)
+    timeline = estimate_g99_timeline(capacity_mw, dno_name, phase)
 
-    capacity_kw = capacity_mw * 1000.0
-    rated_current_a = (capacity_mw * 1e6) / (voltage_kv * 1e3 * math.sqrt(3)) if voltage_kv > 0 else 0
+    # Render the canonical Issue 2 pack.
+    pack = generate_g99_application_from_scalars(
+        lat=lat, lon=lon, capacity_mw=capacity_mw, technology=technology,
+        voltage_kv=voltage_kv, dno=dno_name, phase=phase, applicant=applicant,
+    )
 
-    # Determine connection type
-    if voltage_kv <= 0.4:
-        connection_type = "Low Voltage (LV)"
-    elif voltage_kv <= 11:
-        connection_type = "High Voltage (HV) — 11 kV"
-    elif voltage_kv <= 33:
-        connection_type = "High Voltage (HV) — 33 kV"
-    elif voltage_kv <= 66:
-        connection_type = "Extra High Voltage (EHV) — 66 kV"
-    elif voltage_kv <= 132:
-        connection_type = "Extra High Voltage (EHV) — 132 kV"
-    else:
-        connection_type = "Transmission (>132 kV)"
-
-    # Determine if synchronous or inverter-based
+    # Determine if synchronous or inverter-based (retained for callers who
+    # inspect it).
     synchronous_types = {
         GeneratorType.CHP, GeneratorType.HYDRO, GeneratorType.BIOMASS,
         GeneratorType.GAS_RECIPROCATING, GeneratorType.SYNCHRONOUS,
     }
     is_synchronous = tech_enum in synchronous_types
-    interface_type = "Synchronous" if is_synchronous else "Inverter (power electronic)"
 
-    # Default applicant template
-    default_applicant = {
-        "name": "[Applicant Name]",
-        "company": "[Company Name]",
-        "address": "[Company Address]",
-        "postcode": "[Postcode]",
-        "telephone": "[Telephone]",
-        "email": "[Email]",
-        "contact_person": "[Contact Person]",
-        "company_number": "[Companies House Number]",
-        "role": "Generator owner/developer",
-    }
-    if applicant:
-        default_applicant.update(applicant)
-
-    # Build application
-    application = {
+    # Merge the legacy extras back on top of the canonical pack so callers
+    # that previously relied on `category`, `timeline`, `checklist`, etc.
+    # keep working. The canonical Issue 2 pack is the primary shape.
+    pack.update({
         "form_reference": f"G99-APP-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
-        "standard": "EREC G99 Issue 1 Amendment 9",
+        "standard": G99_VERSION["citation"],  # e.g. "ENA EREC G99 Issue 2 (10 March 2025)"
+        "g99_version": G99_VERSION["version"],
+        "g99_published": G99_VERSION["published"],
+        "annex_c_effective": G99_VERSION["annex_c_effective"],
         "category": cat,
         "generated_at": datetime.now().isoformat(),
-
-        # ---- SECTION A: Applicant Details ----
-        "section_a_applicant": {
-            "title": "Section A — Applicant Details",
-            **default_applicant,
-            "type_of_applicant": "Generator Developer",
-            "accredited_installer": "[Installer Name — must hold G99 accreditation]",
-            "installer_accreditation_number": "[MCS/RECC/NAPIT/NICEIC number]",
-        },
-
-        # ---- SECTION B: Site Details ----
-        "section_b_site": {
-            "title": "Section B — Site Details",
-            "site_name": "[Site Name]",
-            "site_address": "[Site Address]",
-            "latitude": lat,
-            "longitude": lon,
-            "grid_reference": _latlon_to_osgr_approx(lat, lon),
-            "dno": dno_name,
-            "dno_region": _dno_region(dno_name),
-            "connection_voltage_kv": voltage_kv,
-            "connection_type": connection_type,
-            "metering_arrangement": "Export and import metering at point of connection",
-            "mpan": "[MPAN — to be confirmed by DNO]",
-            "existing_supply": "[Existing supply details if applicable]",
-            "land_ownership": "[Freehold/Leasehold — confirm planning status]",
-            "planning_reference": "[Local planning authority reference]",
-            "access_arrangements": "[Site access details for commissioning]",
-        },
-
-        # ---- SECTION C: Generator Details ----
-        "section_c_generator": {
-            "title": "Section C — Generator Details",
-            "technology": tech_enum.value,
-            "interface_type": interface_type,
-            "number_of_units": "[Number of generating units]",
-            "individual_unit_capacity_kw": "[Per-unit capacity]",
-            "total_registered_capacity_kw": capacity_kw,
-            "total_registered_capacity_mw": capacity_mw,
-            "rated_voltage_kv": voltage_kv,
-            "rated_current_a": round(rated_current_a, 1),
-            "rated_power_factor": 0.95,
-            "rated_apparent_power_mva": round(capacity_mw / 0.95, 3),
-            "phase_configuration": "Single phase" if phase.startswith("single") else "Three phase",
-            "frequency_hz": 50,
-            "manufacturer": "[Manufacturer]",
-            "model": "[Model]",
-            "type_test_certificate": "[Reference to type test certificate per G99 Annex B]",
-            "inverter_manufacturer": "[Inverter manufacturer]" if not is_synchronous else "N/A",
-            "inverter_model": "[Inverter model]" if not is_synchronous else "N/A",
-            "inverter_g99_certificate": "[G99 type test cert reference]" if not is_synchronous else "N/A",
-            "reactive_power_capability": REACTIVE_POWER_REQUIREMENTS.get(cat, {}),
-            "frequency_response_capability": FREQUENCY_RESPONSE.get(cat, {}),
-        },
-
-        # ---- SECTION D: Protection Settings ----
-        "section_d_protection": {
-            "title": "Section D — Protection Settings (per EREC G99 Table A.1/A.2)",
-            **protection.get("voltage_protection", {}),
-            **protection.get("frequency_protection", {}),
-            "rocof": protection.get("rocof_protection", {}),
-            "loss_of_mains": protection.get("loss_of_mains", {}),
-            "vector_shift": protection.get("vector_shift", {}),
-            "fault_ride_through": protection.get("fault_ride_through", {}),
-            "protection_relay_manufacturer": "[Relay manufacturer]",
-            "protection_relay_model": "[Relay model — must be G99 type-tested]",
-            "intertrip_required": cat == G99Category.TYPE_D.value,
-            "note": "All settings must be sealed after commissioning. DNO may specify tighter settings.",
-        },
-
-        # ---- SECTION E: Power Quality ----
-        "section_e_power_quality": {
-            "title": "Section E — Power Quality (EREC G99 Annex A / Eng Rec P28)",
-            "harmonic_limits": {
-                "individual_harmonics_percent_of_fundamental": HARMONIC_LIMITS_PERCENT,
-                "total_harmonic_distortion_limit_percent": THD_LIMIT_PERCENT,
-                "note": "Even harmonics limited to 25% of adjacent odd harmonic. Interharmonics to be assessed.",
-            },
-            "flicker_limits": {
-                "pst_1min": FLICKER_LIMITS["pst_1min"],
-                "pst_10min": FLICKER_LIMITS["pst_10min"],
-                "plt_long_term": FLICKER_LIMITS["plt"],
-                "standard": "Engineering Recommendation P28",
-            },
-            "voltage_unbalance_limit_percent": VOLTAGE_UNBALANCE_LIMIT_PERCENT,
-            "rapid_voltage_change_percent": RAPID_VOLTAGE_CHANGE_LIMIT_PERCENT,
-            "dc_injection_limit_percent": DC_INJECTION_LIMIT_PERCENT,
-            "switching_operations": "[Detail planned switching frequency and expected voltage steps]",
-            "note": "Compliance to be demonstrated by type test certificate and/or site-specific study.",
-        },
-
-        # ---- SECTION F: Fault Level Contribution ----
-        "section_f_fault_level": {
-            "title": "Section F — Fault Level Contribution",
-            **protection.get("fault_level_contribution", {}),
-            "network_fault_level_at_poc_mva": "[To be provided by DNO]",
-            "note": (
-                "Generator fault contribution must not cause total network fault level "
-                "to exceed switchgear ratings at point of connection. DNO will assess."
-            ),
-        },
-
-        # ---- SECTION G: Islanding Protection ----
-        "section_g_islanding": {
-            "title": "Section G — Islanding Protection Settings",
-            "primary_islanding_protection": "Rate of Change of Frequency (RoCoF)",
-            "rocof_setting_hz_per_s": 1.0,
-            "rocof_measurement_window_ms": 500,
-            "rocof_time_delay_s": LOM_SETTINGS.get(cat, {}).get("rocof_delay_s", 0.5),
-            "backup_islanding_protection": "Under/Over Voltage + Under/Over Frequency",
-            "intertrip": {
-                "required": cat in (G99Category.TYPE_C.value, G99Category.TYPE_D.value),
-                "type": "Fibre optic / pilot wire" if cat in (G99Category.TYPE_C.value, G99Category.TYPE_D.value) else "N/A",
-                "note": "Intertrip may be required for Type C/D or where RoCoF alone is insufficient.",
-            },
-            "intended_island_operation": False,
-            "note": (
-                "Intentional islanding prohibited unless agreed with DNO under specific "
-                "Distribution Use of System Agreement. All generators must disconnect on "
-                "loss of mains within the specified protection operating time."
-            ),
-        },
-
-        # ---- SUPPLEMENTARY INFO ----
         "timeline": timeline,
         "compliance_summary": compliance,
         "commissioning": COMMISSIONING_REQUIREMENTS.get(cat, {}),
         "checklist": _application_checklist(cat, is_synchronous),
-    }
+        "interface_type": (
+            "Synchronous" if is_synchronous
+            else "Inverter (power electronic)"
+        ),
+    })
+    return pack
 
-    return application
+
+# Retained below only for callers of `_legacy_generate_g99_application_v1`
+# (internal); the public API is the passthrough above. The Issue-1 body was
+# removed as part of the COUNCIL-1 consolidation — the canonical Issue 2
+# generator is in `utils.g99_pack_generator`.
+def _legacy_generate_g99_application_v1(*_a, **_kw) -> dict[str, Any]:  # noqa: D401
+    """Removed. See :func:`generate_g99_application` (canonical passthrough)."""
+    raise RuntimeError(
+        "The Issue 1 Amendment 9 generate_g99_application body has been "
+        "removed by COUNCIL-1 consolidation. Call "
+        "utils.g99_pack_generator.generate_g99_pack instead."
+    )
+
+
+# ---------------------------------------------------------------------------
+# NOTE (BOT-T, 2026-04-19): The original Issue 1 Amendment 9 body of
+# ``generate_g99_application`` used to live between this line and the
+# ``_latlon_to_osgr_approx`` helper below. It has been fully removed in
+# favour of the canonical Issue 2 generator in
+# ``utils.g99_pack_generator``. Callers that relied on the old section-
+# dict shape (Section A-G plus timeline / checklist / commissioning) now
+# receive the canonical A–I + Annex C pack with the legacy extras merged
+# on top by the thin passthrough above.
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -1125,80 +1028,20 @@ def generate_g99_application(
 # ---------------------------------------------------------------------------
 
 def _latlon_to_osgr_approx(lat: float, lon: float) -> str:
+    """Return an OSGB36 National Grid reference via ``utils.osgb``.
+
+    Renamed for historical compatibility — the "approx" in the old name
+    reflected the previous linear approximation (flagged by COUNCIL-1 as
+    fabricated). This is now a proper OSGB36 transform via pyproj; the
+    name is kept only so any remaining internal callers continue to work.
     """
-    Approximate conversion of WGS84 lat/lon to UK Ordnance Survey
-    grid reference (6-figure). For display only — use a proper
-    transformation (OSGB36) for production.
-    """
-    # Very rough approximation for UK coordinates
-    if not (49.0 <= lat <= 61.0 and -8.0 <= lon <= 2.0):
-        return f"Outside UK — ({lat:.4f}, {lon:.4f})"
-
-    # Simplified Helmert transform (good to ~5m for display purposes)
-    lat_r = math.radians(lat)
-    lon_r = math.radians(lon)
-
-    a = 6377563.396  # Airy 1830 semi-major
-    b = 6356256.909  # Airy 1830 semi-minor
-    e2 = 1 - (b * b) / (a * a)
-    n = (a - b) / (a + b)
-
-    lat0 = math.radians(49)
-    lon0 = math.radians(-2)
-    F0 = 0.9996012717
-    N0 = -100000
-    E0 = 400000
-
-    sin_lat = math.sin(lat_r)
-    cos_lat = math.cos(lat_r)
-    tan_lat = math.tan(lat_r)
-    nu = a * F0 / math.sqrt(1 - e2 * sin_lat ** 2)
-    rho = a * F0 * (1 - e2) / ((1 - e2 * sin_lat ** 2) ** 1.5)
-    eta2 = nu / rho - 1
-
-    M = b * F0 * (
-        (1 + n + 5 / 4 * n ** 2 + 5 / 4 * n ** 3) * (lat_r - lat0)
-        - (3 * n + 3 * n ** 2 + 21 / 8 * n ** 3) * math.sin(lat_r - lat0) * math.cos(lat_r + lat0)
-        + (15 / 8 * n ** 2 + 15 / 8 * n ** 3) * math.sin(2 * (lat_r - lat0)) * math.cos(2 * (lat_r + lat0))
-        - 35 / 24 * n ** 3 * math.sin(3 * (lat_r - lat0)) * math.cos(3 * (lat_r + lat0))
-    )
-
-    dlon = lon_r - lon0
-
-    N_val = (
-        M + N0
-        + nu * sin_lat * cos_lat * dlon ** 2 / 2
-        + nu * sin_lat * cos_lat ** 3 * (5 - tan_lat ** 2 + 9 * eta2) * dlon ** 4 / 24
-    )
-    E_val = (
-        E0
-        + nu * cos_lat * dlon
-        + nu * cos_lat ** 3 * (nu / rho - tan_lat ** 2) * dlon ** 3 / 6
-    )
-
-    # Convert to grid letters
-    E_val = max(0, min(E_val, 700000))
-    N_val = max(0, min(N_val, 1300000))
-
-    e100k = int(E_val / 100000)
-    n100k = int(N_val / 100000)
-
-    letters1 = "VWXYZ"[n100k // 5] if n100k // 5 < 5 else "Z"
-    # Simplified — just return numeric for robustness
-    e_remainder = int(E_val) % 100000
-    n_remainder = int(N_val) % 100000
-
-    l1_idx = (19 - n100k) // 5
-    l2_idx = ((19 - n100k) % 5) * 5 + e100k
-    grid_letters_1 = "STNOHJ"
-    grid_letters_2 = "ABCDEFGHJKLMNOPQRSTUVWXYZ"
-
-    if l1_idx < len(grid_letters_1) and l2_idx < len(grid_letters_2):
-        prefix = grid_letters_1[l1_idx] + grid_letters_2[l2_idx]
-    else:
-        prefix = "??"
-
-    return f"{prefix} {e_remainder // 100:03d} {n_remainder // 100:03d}"
+    if lat is None or lon is None:
+        return "To be confirmed"
+    try:
+        from utils.osgb import to_grid_ref
+        return to_grid_ref(lat, lon, precision=8)
+    except Exception:
+        return f"[OSGB unavailable — WGS84 {lat:.5f}, {lon:.5f}]"
 
 
 def _dno_region(dno_name: str) -> str:

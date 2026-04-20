@@ -1,0 +1,315 @@
+{# =========================================================================
+   g99_pack.html — G99 Application Pack Jinja template (BOT-T, 2026-04-19).
+
+   Alternate renderer for the G99 pack. The canonical HTML is produced by
+   ``utils.g99_pack_generator._render_g99_html`` (inline string builder); this
+   template exposes the same pack through the BOT-R1 institutional partials
+   (``_brand.html`` + ``_provenance.html``) for bots that prefer Jinja.
+
+   Required context (all keys produced by ``utils.g99_pack_generator``):
+       form              -> the ``form_data`` dict returned by generate_g99_pack
+       provenance_entries -> list of provenance rows (optional)
+       project, pack_type, revision, revision_date, client, doc_ref (optional)
+
+   Pack-rewrite contract:
+     - Every pack must cite G99 Issue 2 (10 March 2025) in cover, header, footer
+       and version metadata.
+     - Annex C (storage, effective 1 March 2026) is rendered whenever
+       ``form.annex_c_storage`` is present.
+     - OSGB grid reference comes from ``form.section_b_site.grid_reference_os``
+       which is produced by ``utils.osgb.to_grid_ref`` — never hand-format.
+     - Citation strings pull from ``app.regulatory.versions.get('g99')`` via
+       ``utils.g99_pack_generator.G99_VERSION``; fallback table in
+       ``templates/report/_partials/helpers.py``.
+   ========================================================================= #}
+{% import "report/_partials/_brand.html" as brand %}
+{% import "report/_partials/_provenance.html" as prov %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>G99 Application Pack &mdash; {{ form.section_b_site.site_name }}</title>
+  {% include "report/_partials/_brand.html" %}
+  <style>
+    .g99-section h2 { background: var(--gold-light); border-left: 4px solid var(--gold); padding: 6px 10px; }
+    .g99-section table.form { width: 100%; border-collapse: collapse; font-size: 9.5pt; }
+    .g99-section table.form td { padding: 4px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+    .g99-section table.form td.lbl { font-weight: 600; width: 42%; color: var(--ink-muted); }
+    .g99-annex-c { border: 1px solid var(--gold); background: #fffbea; padding: 8px 12px; margin: 14px 0; border-radius: 4px; }
+    .g99-meta-chip { background: var(--gold-light); color: var(--gold-dark); padding: 2px 8px; border-radius: 8px; font-weight: 600; margin-right: 6px; font-size: 9pt; }
+    .g99-attestation { background: #fff8e1; padding: 6px 10px; border-left: 3px solid var(--gold); margin: 6px 0 10px; font-size: 9pt; }
+    .g99-placeholder { background: var(--gold-light); color: var(--gold-dark); padding: 1px 4px; border: 1px dashed var(--gold-dark); border-radius: 2px; font-family: var(--mono-font); font-size: 9pt; }
+  </style>
+</head>
+<body class="princeps-root">
+
+{# ---------------- Cover ---------------- #}
+{{ brand.cover_page(
+     project=project or {'name': form.section_b_site.site_name},
+     pack_type='G99 Application Pack',
+     revision=revision or 'P01',
+     revision_date=revision_date or form.meta.generated_at[:10],
+     client=client,
+     doc_ref=doc_ref or default_revision_code(project_code=(project.code if project and project.code is defined else None), pack_type='G99')
+   ) }}
+
+{# ---------------- Running header ---------------- #}
+{{ brand.running_header(
+     project=project or {'name': form.section_b_site.site_name},
+     pack_type='G99 Application Pack — ' ~ form.meta.application_type,
+     revision=revision or 'P01'
+   ) }}
+
+<section class="g99-section">
+  <h1 class="princeps-title">G99 Application Pack</h1>
+  <p class="princeps-cover-subtitle">
+    {{ form.meta.ena_reference }} &mdash;
+    {{ form.meta.application_type }} Route (Category {{ form.meta.ena_category }})
+  </p>
+
+  <div style="margin: 6px 0 12px;">
+    <span class="g99-meta-chip">{{ form.meta.application_type }}</span>
+    <span class="g99-meta-chip">Category {{ form.meta.ena_category }}</span>
+    <span class="g99-meta-chip">G99 {{ form.meta.g99_version }}</span>
+    <span class="g99-meta-chip">Published {{ form.meta.g99_published }}</span>
+    {% if form.meta.annex_c_applies %}
+      <span class="g99-meta-chip">Annex C live {{ form.meta.annex_c_effective }}</span>
+    {% else %}
+      <span class="g99-meta-chip">Annex C storage: N/A</span>
+    {% endif %}
+  </div>
+
+  <div class="g99-attestation">
+    <strong>Attestation</strong>
+    <ul style="margin: 4px 0 0 20px; padding: 0;">
+      {% for line in form.meta.attestation_lines %}
+        <li>{{ line }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <div class="disclaimer" style="background: var(--gold-light); padding: 7px 10px; border-left: 3px solid var(--gold-dark); font-size: 9pt; color: var(--gold-dark); margin: 10px 0;">
+    {{ form.meta.disclaimer }}<br>
+    <span style="font-size: 8.5pt; color: var(--ink-muted);">
+      Data provenance: <strong>{{ form.meta.provenance }}</strong>
+      &middot; Reference: <a href="{{ form.meta.url }}" style="color: var(--gold-dark);">{{ form.meta.url }}</a>
+    </span>
+  </div>
+</section>
+
+{# ---------------- Sections A–I ---------------- #}
+{% macro render_kv(d) %}
+  <table class="form">
+    {% for k, v in d.items() %}
+      {% if v is not mapping and v is not iterable or v is string %}
+        <tr>
+          <td class="lbl">{{ k.replace('_',' ').title() }}</td>
+          <td>
+            {% if v is none or v == '' %}&mdash;
+            {% elif v is sameas(true) %}Yes
+            {% elif v is sameas(false) %}No
+            {% elif v is string and v.startswith('[') %}<span class="g99-placeholder">{{ v }}</span>
+            {% else %}{{ v }}
+            {% endif %}
+          </td>
+        </tr>
+      {% endif %}
+    {% endfor %}
+  </table>
+{% endmacro %}
+
+<section class="g99-section">
+  <h2 class="princeps-h2">{{ form.section_a_applicant.title }}</h2>
+  <h3 class="princeps-h3">Applicant</h3>
+  {{ render_kv(form.section_a_applicant.applicant) }}
+  <h3 class="princeps-h3">Installer</h3>
+  {{ render_kv(form.section_a_applicant.installer) }}
+  <h3 class="princeps-h3">Consulting engineer</h3>
+  {{ render_kv(form.section_a_applicant.consultant_engineer) }}
+</section>
+
+<section class="g99-section">
+  <h2 class="princeps-h2">{{ form.section_b_site.title }}</h2>
+  {{ render_kv(form.section_b_site) }}
+</section>
+
+<section class="g99-section">
+  <h2 class="princeps-h2">{{ form.section_c_connection.title }}</h2>
+  {{ render_kv(form.section_c_connection) }}
+</section>
+
+<section class="g99-section">
+  <h2 class="princeps-h2">{{ form.section_d_generator.title }}</h2>
+  {{ render_kv(form.section_d_generator) }}
+  <h3 class="princeps-h3">Inverter</h3>
+  {{ render_kv(form.section_d_generator.inverter) }}
+  <h3 class="princeps-h3">Anti-islanding</h3>
+  {{ render_kv(form.section_d_generator.anti_islanding) }}
+  <h3 class="princeps-h3">Fault ride-through</h3>
+  {{ render_kv(form.section_d_generator.fault_ride_through) }}
+</section>
+
+<section class="g99-section">
+  <h2 class="princeps-h2">{{ form.section_e_export_limits.title }}</h2>
+  {{ render_kv(form.section_e_export_limits) }}
+  {% if form.section_e_export_limits.dno_interface_signals %}
+    <h3 class="princeps-h3">DNO interface signals</h3>
+    <ul>
+      {% for sig in form.section_e_export_limits.dno_interface_signals %}
+        <li>{{ sig }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+
+<section class="g99-section">
+  <h2 class="princeps-h2">{{ form.section_f_protection.title }}</h2>
+  <p style="font-size: 9pt; color: var(--ink-muted);">
+    Cross-reference: {{ form.section_f_protection.reference_table }}
+    &middot; voltage band {{ form.section_f_protection.voltage_band }}
+    &middot; anti-islanding: <strong>{{ form.section_f_protection.anti_islanding_scheme }}</strong>
+  </p>
+  <table class="princeps-table">
+    <thead>
+      <tr><th>Category</th><th>Function</th><th>Setting</th><th>Time (s)</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      {% for r in form.section_f_protection.table_101_rows %}
+        <tr>
+          <td>{{ r.category }}</td>
+          <td><strong>{{ r.function }}</strong></td>
+          <td>{{ r.threshold }}</td>
+          <td>{{ r.time_s }}</td>
+          <td>{{ r.action }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h3 class="princeps-h3">ENA P28/P29 voltage-step compliance (&plusmn;3% normal)</h3>
+  <ul>
+    {% for n in form.section_f_protection.voltage_step_notes %}
+      <li>{{ n }}</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="g99-section">
+  <h2 class="princeps-h2">{{ form.section_g_fault_level.title }}</h2>
+  {{ render_kv(form.section_g_fault_level) }}
+</section>
+
+<section class="g99-section">
+  <h2 class="princeps-h2">{{ form.section_h_commissioning.title }}</h2>
+  {{ render_kv({'witness_by_dno': form.section_h_commissioning.witness_by_dno,
+                 'expected_commissioning_date': form.section_h_commissioning.expected_commissioning_date}) }}
+  <table class="princeps-table">
+    <thead><tr><th></th><th>Commissioning step</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for it in form.section_h_commissioning['items'] %}
+        <tr>
+          <td>{% if it.done %}&#9745;{% else %}&#9744;{% endif %}</td>
+          <td>{{ it.step }}</td>
+          <td>{% if it.required %}Required{% else %}Optional{% endif %}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="g99-section">
+  <h2 class="princeps-h2">{{ form.section_i_signatures.title }}</h2>
+  <p style="font-size: 9pt; color: var(--ink-muted);">{{ form.section_i_signatures.declaration }}</p>
+  <div style="display: flex; gap: 12px; margin-top: 8px;">
+    {% for role in ['applicant', 'installer', 'consulting_engineer'] %}
+      {% set b = form.section_i_signatures[role] %}
+      <div style="flex: 1; border: 1px dashed var(--rule); border-radius: 4px; padding: 8px; min-height: 64px;">
+        <div style="font-weight: 700; font-size: 10pt;">{{ role.replace('_',' ').title() }}</div>
+        <div style="border-bottom: 1px solid var(--gold); margin: 18px 0 4px;"></div>
+        <div style="font-size: 9pt; color: var(--ink-muted);">Name: {{ b.printed_name }}</div>
+        <div style="font-size: 9pt; color: var(--ink-muted);">Date: {{ b.date }}</div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+{# ---------------- Annex C (storage) ---------------- #}
+{% if form.annex_c_storage %}
+  {% set ac = form.annex_c_storage %}
+  <section class="g99-section g99-annex-c">
+    <h2 class="princeps-h2" style="background: var(--gold); color: #fff;">{{ ac.title }}</h2>
+    <p style="font-size: 9pt; color: var(--ink-muted);">{{ ac.applicability }}</p>
+
+    <h3 class="princeps-h3">Nameplate</h3>
+    {{ render_kv(ac.nameplate) }}
+
+    <h3 class="princeps-h3">Frequency response modes</h3>
+    <table class="princeps-table">
+      <thead><tr><th>Mode</th><th>Capability (MW)</th><th>Response</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for key, val in ac.frequency_response_modes.items() if key != 'note' and val is mapping %}
+          <tr>
+            <td><strong>{{ key.replace('_',' ').title() }}</strong></td>
+            <td>{{ val.capability_mw }}</td>
+            <td>{{ val.response_time_ms | default('—') }} ms</td>
+            <td>{% if val.declared %}Declared{% else %}Not declared{% endif %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p style="font-size: 8.5pt; color: var(--ink-muted);">{{ ac.frequency_response_modes.note }}</p>
+
+    <h3 class="princeps-h3">State of charge management</h3>
+    {{ render_kv(ac.state_of_charge_management) }}
+
+    <h3 class="princeps-h3">Anti-islanding (storage-specific)</h3>
+    {{ render_kv(ac.anti_islanding_storage) }}
+
+    <h3 class="princeps-h3">BESS-specific protection</h3>
+    <table class="form">
+      {% for k, v in ac.bess_specific_protection.items() %}
+        <tr>
+          <td class="lbl">{{ k.replace('_',' ').title() }}</td>
+          <td>{{ v | join(', ') }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+
+    <h3 class="princeps-h3">Grid-forming declaration</h3>
+    {{ render_kv(ac.grid_forming_declaration) }}
+
+    <h3 class="princeps-h3">Commercial services</h3>
+    <ul>
+      {% for s in ac.commercial_services %}
+        <li>{{ s }}</li>
+      {% endfor %}
+    </ul>
+
+    <h3 class="princeps-h3">Additional commissioning tests</h3>
+    <ul>
+      {% for s in ac.commissioning_additions %}
+        <li>{{ s }}</li>
+      {% endfor %}
+    </ul>
+
+    <p style="font-size: 8.5pt; color: var(--ink-muted);">
+      Reference: {{ ac.ena_reference }}. {{ ac.category_impact_note }}
+    </p>
+  </section>
+{% endif %}
+
+{# ---------------- Provenance appendix ---------------- #}
+{{ prov.footnotes(provenance_entries or [], title='Appendix A — Data Provenance') }}
+
+{# ---------------- Footer ---------------- #}
+{{ brand.running_footer(confidentiality='Commercial in confidence') }}
+
+<div class="princeps-footer-strip" style="margin-top: 16px; border-top: 2px solid var(--gold); padding-top: 10px; font-size: 8.5pt; color: var(--ink-muted); text-align: center;">
+  Prepared by Princeps against {{ form.meta.ena_reference }}.
+  G99 Issue 2 published {{ form.meta.g99_published }};
+  Annex C (storage) effective {{ form.meta.annex_c_effective }}.
+  All values must be verified by a qualified electrical engineer before
+  submission to the Distribution Network Operator.
+</div>
+
+</body>
+</html>

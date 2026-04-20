@@ -84,6 +84,17 @@
       </div>
       {% endif %}
 
+      <!-- Red-line boundary map with constraint overlays -->
+      {% if charts.redline_map %}
+      <div class="card">
+        <div class="text-xs text-muted mb-4">RED-LINE SITE BOUNDARY &amp; CONSTRAINT OVERLAYS</div>
+        <img src="data:image/png;base64,{{ charts.redline_map }}" alt="Red-line boundary map" class="map-img" style="width:100%;">
+        <div class="text-xs text-muted" style="margin-top:4px;">
+          Overlays: AONB / National Landscape, SSSI, EA Flood Zone 2/3, OSM access roads, slope &gt; 10&deg;.
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Quick Stats -->
       <div class="card">
         <div class="card-header">Key Metrics</div>

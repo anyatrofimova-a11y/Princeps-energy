@@ -1,0 +1,116 @@
+{# =========================================================================
+   _citation_macros.html — Inline + block citation macros (BOT-R1).
+
+   Three macros:
+     - cite(n)                                   : inline [n] superscript
+     - cite_block(n, source, url, retrieved)     : one-line footnote body
+     - regcite(key)                              : regulatory citation lookup
+
+   `regcite` relies on a Jinja global `regcite` that is registered in Python
+   via `templates/report/_partials/helpers.register_jinja_helpers(env)`. This
+   Python-side lookup tries `app.regulatory.versions` first (BOT-R2
+   deliverable) and falls back to the hard-coded table in `helpers.py` so the
+   template never crashes.
+
+   Usage (pack bot):
+
+       {% import "report/_partials/_citation_macros.html" as c %}
+
+       UK solar capacity factor ~10.5%{{ c.cite(3) }} is used as the baseline.
+
+       {{ c.regcite_line("G99_v2") }}
+       {{ c.regcite_line("NPPF_2024") }}
+
+   ========================================================================= #}
+
+{% macro cite(n) -%}
+<sup class="princeps-cite" style="color: var(--gold-dark); font-weight: 700;">[{{ n }}]</sup>
+{%- endmacro %}
+
+{% macro cite_block(n, source=None, url=None, retrieved=None, method="unspecified") %}
+  <div class="princeps-cite-block" style="font-size: 8.5pt; color: var(--ink-muted); margin: 2px 0;">
+    <strong style="color: var(--gold-dark);">[{{ n }}]</strong>
+    {{ source or "TO POPULATE" }}
+    {% if url %} &mdash; <a href="{{ url }}" style="color: var(--gold-dark);">{{ url }}</a>{% endif %}
+    {% if retrieved %} &middot; retrieved {{ retrieved }}{% endif %}
+    &middot; <code>{{ method }}</code>
+  </div>
+{% endmacro %}
+
+{# ---------------- Regulatory citation helpers ----------------
+
+   The `regcite` Jinja global (registered by helpers.register_jinja_helpers)
+   returns a single formatted inline string. `regcite_dict` returns the full
+   dict if pack bots want to compose their own layout (e.g. in an Appendix D
+   Regulatory Register table).
+
+   If a pack bot did NOT call register_jinja_helpers, these macros guard
+   against the undefined global by checking for its presence.
+#}
+
+{% macro regcite_line(key) %}
+  {% if regcite is defined %}
+    <span class="princeps-regcite">{{ regcite(key) }}</span>
+  {% else %}
+    <span class="princeps-todo">TO POPULATE — register_jinja_helpers not called; cannot resolve "{{ key }}"</span>
+  {% endif %}
+{% endmacro %}
+
+{% macro regcite_row(key) %}
+  {# One <tr> for a regulatory register table (Appendix D). #}
+  {% if regcite_dict is defined %}
+    {% set c = regcite_dict(key) %}
+    <tr>
+      <td><code style="font-family: var(--mono-font);">{{ key }}</code></td>
+      <td>{{ c.title }}</td>
+      <td>{{ c.version }}</td>
+      <td>{{ c.publisher }}</td>
+      <td>
+        {% if c.url %}<a href="{{ c.url }}" style="color: var(--gold-dark); word-break: break-all;">link</a>{% else %}&mdash;{% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr>
+      <td><code>{{ key }}</code></td>
+      <td colspan="4"><span class="princeps-todo">TO POPULATE — register_jinja_helpers not called</span></td>
+    </tr>
+  {% endif %}
+{% endmacro %}
+
+{% macro regcite_register(keys=None, title="Regulatory & Standards Register") %}
+  {% set _empty = (keys is none) or (keys | length == 0) %}
+  <section class="princeps-regcite-register">
+    <h2 class="princeps-h2">{{ title }}</h2>
+    <p style="font-size: 9pt; color: var(--ink-muted);">
+      Every standard, regulation and code cited in this pack with its version/issue and date.
+      Pulled from the single source of truth in
+      <code>docs/audits/industry_standards_index.md</code>.
+    </p>
+    <table class="princeps-table">
+      <thead>
+        <tr>
+          <th style="width:14%">Key</th>
+          <th style="width:34%">Title</th>
+          <th style="width:18%">Version / Date</th>
+          <th style="width:22%">Publisher</th>
+          <th style="width:12%">Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if _empty %}
+          <tr>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td><span class="princeps-todo">TO POPULATE — keys list missing</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td>&mdash;</td>
+          </tr>
+        {% else %}
+          {% for k in keys %}
+            {{ regcite_row(k) }}
+          {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+  </section>
+{% endmacro %}

@@ -1,0 +1,88 @@
+{# =========================================================================
+   _provenance.html — Footnote / provenance table partial (BOT-R1).
+
+   Pack bots pass a list `provenance_entries` of dicts of shape:
+
+       {
+         "n":            1,
+         "claim":        "UK solar capacity factor ~10.5%",
+         "source":       "NREL PVWatts v8 via SAM",
+         "url":          "https://pvwatts.nrel.gov/",
+         "retrieved_utc":"2026-04-19T10:22Z",
+         "method":       "SRC_API_LIVE"   # or SRC_DB_SNAPSHOT / SRC_SYNTHETIC / SRC_USER_INPUT
+       }
+
+   Include as a footnote section on the last page of the pack body, or within
+   Appendix A (Data Provenance) per the style guide:
+
+       {% import "report/_partials/_provenance.html" as prov %}
+       {{ prov.footnotes(provenance_entries) }}
+
+   Falls back to a visible TO-POPULATE table if the list is missing/empty.
+   ========================================================================= #}
+
+{% macro inline_cite(n) %}<sup class="princeps-cite">[{{ n }}]</sup>{% endmacro %}
+
+{% macro footnotes(provenance_entries=None, title="Footnotes & Provenance") %}
+  {% set _empty = (provenance_entries is none) or (provenance_entries | length == 0) %}
+  <section class="princeps-prov">
+    <h2 class="princeps-h2">{{ title }}</h2>
+    <p style="font-size: 9pt; color: var(--ink-muted); margin-bottom: 8px;">
+      Every quantitative claim in this document is numbered. The table below records the
+      data source, retrieval timestamp and provenance class for each claim.
+    </p>
+    <table class="princeps-table">
+      <thead>
+        <tr>
+          <th style="width:6%">[n]</th>
+          <th style="width:34%">Claim</th>
+          <th style="width:24%">Source</th>
+          <th style="width:14%">Retrieved (UTC)</th>
+          <th style="width:12%">Class</th>
+          <th style="width:10%">Link</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if _empty %}
+          <tr>
+            <td>[1]</td>
+            <td><span class="princeps-todo">TO POPULATE — populate provenance_entries list in the pack context</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td>&mdash;</td>
+          </tr>
+        {% else %}
+          {% for e in provenance_entries %}
+            <tr>
+              <td><strong>[{{ e.n }}]</strong></td>
+              <td>{{ e.claim or '<span class="princeps-todo">TO POPULATE</span>' | safe }}</td>
+              <td>{{ e.source or '<span class="princeps-todo">TO POPULATE</span>' | safe }}</td>
+              <td style="font-family: var(--mono-font); font-size: 8.5pt;">{{ e.retrieved_utc or 'TO POPULATE' }}</td>
+              <td><code style="font-size: 8.5pt;">{{ e.method or 'unspecified' }}</code></td>
+              <td>
+                {% if e.url %}<a href="{{ e.url }}" style="color: var(--gold-dark); word-break: break-all;">link</a>{% else %}&mdash;{% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+    <p style="font-size: 8pt; color: var(--ink-muted); margin-top: 6px;">
+      Provenance classes: <code>SRC_DB_SNAPSHOT</code> (internal DB, point-in-time),
+      <code>SRC_API_LIVE</code> (external API, retrieved at generation),
+      <code>SRC_SYNTHETIC</code> (model-generated — reason field required),
+      <code>SRC_USER_INPUT</code> (supplied by addressee / operator).
+    </p>
+  </section>
+{% endmacro %}
+
+{# Small "block" form for a single footnote rendered in-body (rare). #}
+{% macro footnote_block(n, source, url=None, retrieved=None, method="unspecified") %}
+  <div class="princeps-footnote-block" style="font-size: 8.5pt; color: var(--ink-muted); margin: 4px 0;">
+    <strong>[{{ n }}]</strong> {{ source or "TO POPULATE" }}
+    {% if url %} &mdash; <a href="{{ url }}" style="color: var(--gold-dark);">{{ url }}</a>{% endif %}
+    {% if retrieved %} (retrieved {{ retrieved }}){% endif %}
+    &middot; <code>{{ method }}</code>
+  </div>
+{% endmacro %}

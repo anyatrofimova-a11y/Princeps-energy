@@ -1,0 +1,119 @@
+{# =========================================================================
+   _revision.html — Revision-control block partial (BOT-R1).
+
+   Renders the page-2 revision table + prepared/reviewed/approved signature
+   block + document reference code pattern.
+
+   Pack bots pass a `revisions` list and a `signatories` dict:
+
+       revisions = [
+           {"rev": "P01", "date": "2026-04-19", "description": "Internal draft",
+            "author": "A. Trofimova", "reviewer": "Princeps QA",
+            "approver": "Princeps Director"},
+           {"rev": "P02", "date": "2026-04-21", "description": "Client review draft", ...},
+       ]
+       signatories = {
+           "prepared_by": {"name": "A. Trofimova", "role": "Analyst",
+                           "date": "2026-04-19", "signature_image": None},
+           "reviewed_by": {"name": "TO POPULATE", "role": "QA Reviewer", ...},
+           "approved_by": {"name": "TO POPULATE", "role": "Director", ...},
+       }
+       doc_ref = "OXFO-GCR-P01"   # PROJ-PACK-REV-NN
+
+   Usage:
+       {% import "report/_partials/_revision.html" as rev %}
+       {{ rev.block(revisions, signatories, doc_ref) }}
+   ========================================================================= #}
+
+{% macro block(revisions=None, signatories=None, doc_ref=None, title="Revision Control") %}
+  {% set _empty_rev = (revisions is none) or (revisions | length == 0) %}
+  {% set _empty_sig = (signatories is none) %}
+
+  <section class="princeps-revision">
+    <h2 class="princeps-h2">{{ title }}</h2>
+
+    <p style="font-size: 9pt; color: var(--ink-muted); margin-bottom: 6px;">
+      Document reference:
+      <code style="font-family: var(--mono-font); color: var(--ink);">
+        {{ doc_ref or "PROJ-PACK-REV" }}
+      </code>
+      {% if not doc_ref %}<span class="princeps-todo">TO POPULATE — PROJ-PACK-REV-NN pattern</span>{% endif %}
+    </p>
+
+    <h3 class="princeps-h3">Revision history</h3>
+    <table class="princeps-table">
+      <thead>
+        <tr>
+          <th style="width:8%">Rev</th>
+          <th style="width:12%">Date</th>
+          <th style="width:30%">Description</th>
+          <th style="width:17%">Author</th>
+          <th style="width:17%">Reviewer</th>
+          <th style="width:16%">Approver</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if _empty_rev %}
+          <tr>
+            <td><strong>P01</strong></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td><span class="princeps-todo">TO POPULATE — revisions list missing</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+            <td><span class="princeps-todo">TO POPULATE</span></td>
+          </tr>
+        {% else %}
+          {% for r in revisions %}
+            <tr>
+              <td><strong>{{ r.rev or "TO POPULATE" }}</strong></td>
+              <td>{{ r.date or "TO POPULATE" }}</td>
+              <td>{{ r.description or "TO POPULATE" }}</td>
+              <td>{{ r.author or "TO POPULATE" }}</td>
+              <td>{{ r.reviewer or "TO POPULATE" }}</td>
+              <td>{{ r.approver or "TO POPULATE" }}</td>
+            </tr>
+          {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+
+    <p style="font-size: 8pt; color: var(--ink-muted); margin-top: 4px;">
+      Revision codes: <code>P01 / P02 ...</code> are pre-issue drafts;
+      <code>01 / 02 ...</code> are formally issued revisions.
+    </p>
+
+    <h3 class="princeps-h3" style="margin-top: 18px;">Signatories</h3>
+    <table class="princeps-table">
+      <thead>
+        <tr>
+          <th style="width:20%">Role</th>
+          <th style="width:25%">Name</th>
+          <th style="width:25%">Position</th>
+          <th style="width:15%">Date</th>
+          <th style="width:15%">Signature</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% set roles = [("prepared_by", "Prepared by"),
+                        ("reviewed_by", "Reviewed by"),
+                        ("approved_by", "Approved by")] %}
+        {% for key, label in roles %}
+          {% set sig = (signatories[key] if (not _empty_sig and key in signatories) else none) %}
+          <tr>
+            <td><strong>{{ label }}</strong></td>
+            <td>{{ (sig.name if sig else none) or ('<span class="princeps-todo">TO POPULATE</span>' | safe) }}</td>
+            <td>{{ (sig.role if sig else none) or ('<span class="princeps-todo">TO POPULATE</span>' | safe) }}</td>
+            <td>{{ (sig.date if sig else none) or ('<span class="princeps-todo">TO POPULATE</span>' | safe) }}</td>
+            <td>
+              {% if sig and sig.signature_image %}
+                <img src="{{ sig.signature_image }}" alt="signature" style="max-height: 28px;" />
+              {% else %}
+                <span style="border-bottom: 1px solid var(--ink-muted); display: inline-block; width: 100%; height: 18px;">&nbsp;</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endmacro %}

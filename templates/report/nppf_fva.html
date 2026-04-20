@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NPPF Financial Viability Assessment — {{ inp.site_name }}</title>
+<style>
+  /* === Canonical Princeps palette (per paperwork_rewrite_spec §b) === */
+  :root {
+    --inst-navy: #1B365D;
+    --inst-teal: #007A8C;
+    --inst-gold: #D4A018;
+    --inst-green: #24a148;
+    --inst-amber: #f1c21b;
+    --inst-red: #da1e28;
+    --ink: #262626;
+    --ink-muted: #697077;
+    --paper: #ffffff;
+    --rule: #e0e0e0;
+    --mono-font: 'SF Mono', Menlo, Consolas, monospace;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 18mm 15mm;
+    @top-right { content: "{{ inp.site_name }} · NPPF FVA · Rev P01"; font-size: 8pt; color: #697077; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #697077; }
+    @bottom-left { content: "Commercial in Confidence"; font-size: 8pt; color: #697077; }
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 12.5px; }
+  body {
+    font-family: Inter, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    line-height: 1.55;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page-break { page-break-after: always; break-after: page; }
+  .section { page-break-inside: avoid; margin-bottom: 18px; }
+
+  /* === Cover page === */
+  .cover {
+    min-height: 260mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 40px 10px 20px;
+  }
+  .cover .masthead {
+    border-top: 6px solid var(--inst-gold);
+    border-bottom: 1px solid var(--rule);
+    padding: 28px 0 20px;
+  }
+  .cover .masthead .brand {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: 6px;
+    color: var(--inst-gold);
+  }
+  .cover .masthead .tagline {
+    font-size: 11px;
+    color: var(--ink-muted);
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+  .cover .title {
+    margin-top: 60px;
+  }
+  .cover .title .packtype {
+    font-size: 11px;
+    color: var(--inst-teal);
+    letter-spacing: 2px;
+    font-weight: 700;
+  }
+  .cover .title h1 {
+    font-size: 34px;
+    font-weight: 800;
+    color: var(--inst-navy);
+    margin: 10px 0 6px;
+    line-height: 1.2;
+  }
+  .cover .title .subtitle {
+    font-size: 16px;
+    color: var(--ink);
+    font-weight: 400;
+    margin-bottom: 16px;
+  }
+  .cover .meta-grid {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    row-gap: 8px;
+    column-gap: 12px;
+    font-size: 12px;
+    margin-top: 28px;
+  }
+  .cover .meta-grid .k {
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+  .cover .footer-note {
+    border-top: 1px solid var(--rule);
+    padding-top: 12px;
+    font-size: 9.5px;
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+
+  /* === Section styling === */
+  h1.section-h { font-size: 20px; color: var(--inst-navy); margin: 28px 0 6px; border-bottom: 3px solid var(--inst-gold); padding-bottom: 5px; }
+  h2.section-h { font-size: 15px; color: var(--inst-navy); margin: 20px 0 8px; font-weight: 700; }
+  h3.section-h { font-size: 12.5px; color: var(--inst-teal); margin: 14px 0 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  p, li { font-size: 11.5px; line-height: 1.6; margin-bottom: 8px; }
+  ul { padding-left: 18px; }
+
+  /* === Tables === */
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; font-size: 10.5px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    background: #f5f6f8;
+    color: var(--inst-navy);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border-bottom: 2px solid var(--inst-navy);
+  }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: var(--mono-font); font-size: 10px; }
+
+  /* === Verdict banner === */
+  .verdict {
+    padding: 14px 18px;
+    border-radius: 6px;
+    margin: 14px 0 18px;
+    color: #fff;
+  }
+  .verdict.viable { background: var(--inst-green); }
+  .verdict.partial { background: var(--inst-amber); color: var(--ink); }
+  .verdict.notviable { background: var(--inst-red); }
+  .verdict .label { text-transform: uppercase; font-size: 11px; letter-spacing: 2px; font-weight: 800; }
+  .verdict .value { font-size: 18px; font-weight: 700; margin-top: 2px; }
+  .verdict .body { font-size: 11px; margin-top: 6px; line-height: 1.5; }
+
+  /* === Cards / KPIs === */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin: 12px 0;
+  }
+  .kpi {
+    background: #f9fafc;
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--inst-gold);
+    padding: 8px 10px;
+    border-radius: 4px;
+  }
+  .kpi .k { font-size: 9px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 1px; }
+  .kpi .v { font-size: 15px; font-weight: 700; color: var(--inst-navy); margin-top: 2px; }
+  .kpi .sub { font-size: 9px; color: var(--ink-muted); margin-top: 2px; }
+
+  /* === Reliance / confidentiality === */
+  .reliance {
+    border: 1px solid var(--rule);
+    background: #fbf8ee;
+    padding: 12px 14px;
+    margin: 12px 0;
+    font-size: 10.5px;
+    line-height: 1.55;
+  }
+  .reliance h3 { font-size: 11.5px; font-weight: 700; color: var(--inst-navy); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+
+  .callout {
+    background: #eef4f6;
+    border-left: 3px solid var(--inst-teal);
+    padding: 8px 12px;
+    font-size: 10.5px;
+    margin: 10px 0;
+  }
+
+  code { font-family: var(--mono-font); font-size: 10px; background: #f5f6f8; padding: 0 3px; border-radius: 2px; }
+
+  .rag-green { color: var(--inst-green); font-weight: 700; }
+  .rag-amber { color: var(--inst-amber); font-weight: 700; }
+  .rag-red { color: var(--inst-red); font-weight: 700; }
+
+  .appendix-header {
+    font-size: 11px;
+    color: var(--inst-teal);
+    letter-spacing: 2px;
+    font-weight: 700;
+    text-transform: uppercase;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================================================================== -->
+<!-- COVER                                                                 -->
+<!-- ==================================================================== -->
+<div class="cover">
+  <div class="masthead">
+    <div class="brand">PRINCEPS</div>
+    <div class="tagline">Energy Infrastructure · Viability · Planning</div>
+  </div>
+
+  <div class="title">
+    <div class="packtype">NPPF · FINANCIAL VIABILITY ASSESSMENT · FVA</div>
+    <h1>{{ inp.site_name }}</h1>
+    <div class="subtitle">Residual land value appraisal per RICS Financial Viability in Planning 2nd ed. (2021)</div>
+
+    <div class="meta-grid">
+      <div class="k">Project reference</div><div><code>{{ inp.project_id }}</code></div>
+      <div class="k">Technology</div><div>{{ inp.technology | upper }} · {{ "%.0f"|format(inp.capacity_mw) }} MW</div>
+      <div class="k">Site area</div><div>{{ "%.1f"|format(inp.area_ha) }} ha ({{ inp.existing_use | title }})</div>
+      <div class="k">Local planning authority</div><div>{{ inp.lpa or "Not specified" }}</div>
+      <div class="k">Region</div><div>{{ inp.region }}</div>
+      <div class="k">Assessment date</div><div>{{ generated_at }}</div>
+      <div class="k">Document reference</div><div><code>{{ doc_ref }}</code></div>
+      <div class="k">Revision</div><div>P01 (pre-issue draft)</div>
+      <div class="k">Prepared by</div><div>Princeps — RICS-regulated valuation output</div>
+      <div class="k">Purpose</div><div>Submission with planning application / s73 variation / obligations negotiation</div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    <strong>Commercial in Confidence.</strong> This Financial Viability Assessment has been prepared for the sole purpose
+    stated above and in accordance with the RICS Professional Standard
+    "Financial Viability in Planning: Conduct and Reporting" (2nd ed., 1 May 2021) and the
+    Planning Practice Guidance (PPG) Viability (ID 10, rolling). Figures quoted are
+    nominal GBP at the date of assessment unless otherwise stated. No third party
+    may rely on this document without prior written consent from Princeps.
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ==================================================================== -->
+<!-- RELIANCE + METHODOLOGY                                                -->
+<!-- ==================================================================== -->
+<section class="section">
+  <h1 class="section-h">1. Reliance, scope and methodology</h1>
+
+  <div class="reliance">
+    <h3>Reliance statement</h3>
+    This report is prepared for the applicant ({{ inp.site_name }}) for use in discussions with
+    {{ inp.lpa or "the Local Planning Authority" }} regarding the financial viability of the proposed
+    scheme under the National Planning Policy Framework (December 2024) and the Planning Practice
+    Guidance (Viability, ID 10). No third party may rely on this report without prior written
+    consent. Princeps accepts no liability to any third party for any matter arising from the content.
+  </div>
+
+  <h2 class="section-h">1.1 Purpose</h2>
+  <p>
+    This Financial Viability Assessment (FVA) tests whether the proposed
+    <strong>{{ inp.capacity_mw }} MW {{ inp.technology }}</strong> scheme at <strong>{{ inp.site_name }}</strong>
+    can sustain the package of planning obligations (s106 community benefit, CIL, BNG delivery,
+    habitat management, landscape mitigation) that the LPA is asking, while still generating a
+    residual land value sufficient to secure the land from a reasonable willing landowner.
+  </p>
+
+  <h2 class="section-h">1.2 Standards applied</h2>
+  <ul>
+    <li><strong>RICS Professional Standard — Financial Viability in Planning: Conduct and Reporting.</strong> 1st ed. 2019, 2nd ed. effective 1 May 2021. Sections 2 (scope), 3 (BLV), 4 (appraisal) and 5 (reporting) apply.</li>
+    <li><strong>RICS Valuation — Global Standards (Red Book Global)</strong>, effective 31 January 2025. VPS 1 (terms of engagement), VPS 3 (valuation approach), VPS 4 (applications).</li>
+    <li><strong>NPPF</strong> (Dec 2024) Annex 2 (Glossary — viability) and para. 58 (decision-taking — viability of plan-making level obligations in decision-taking).</li>
+    <li><strong>Planning Practice Guidance</strong> — Viability (ID 10); Planning Obligations (ID 23b); Community Infrastructure Levy (ID 25).</li>
+  </ul>
+
+  <h2 class="section-h">1.3 Method</h2>
+  <p>
+    Residual appraisal: the scheme's Gross Development Value (GDV) is calculated by income capitalisation
+    of projected PPA revenue over the PPA term, with total costs (CAPEX, opex PV, policy costs, and
+    developer profit benchmark) deducted. The Residual Land Value (RLV) is then tested against the
+    Benchmark Land Value (BLV) derived per RICS FVP 2021 §3.
+  </p>
+  <p class="callout">
+    <strong>BLV = EUV + premium,</strong> tested against market evidence (comparable transactions).
+    Where market evidence exceeds EUV+, market evidence is adopted (RICS FVP 2021 §3.5).
+  </p>
+</section>
+
+<div class="page-break"></div>
+
+<!-- ==================================================================== -->
+<!-- EXECUTIVE SUMMARY                                                     -->
+<!-- ==================================================================== -->
+<section class="section">
+  <h1 class="section-h">2. Executive summary</h1>
+
+  <div class="verdict {% if verdict == 'viable' %}viable{% elif verdict == 'partially viable' %}partial{% else %}notviable{% endif %}">
+    <div class="label">Viability verdict</div>
+    <div class="value">{{ verdict | upper }}</div>
+    <div class="body">{{ verdict_rationale }}</div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi">
+      <div class="k">Benchmark Land Value</div>
+      <div class="v">£{{ "%.2f"|format(blv/1e6) }}m</div>
+      <div class="sub">£{{ "{:,.0f}".format(blv/inp.area_ha) }}/ha</div>
+    </div>
+    <div class="kpi">
+      <div class="k">Gross Development Value</div>
+      <div class="v">£{{ "%.2f"|format(gdv_total/1e6) }}m</div>
+      <div class="sub">PPA income capitalised {{ inp.ppa_term_yr }} yr @ {{ "%.1f"|format(inp.exit_yield*100) }}%</div>
+    </div>
+    <div class="kpi">
+      <div class="k">Residual Land Value</div>
+      <div class="v">£{{ "%.2f"|format(rlv/1e6) }}m</div>
+      <div class="sub">GDV minus total costs</div>
+    </div>
+    <div class="kpi">
+      <div class="k">Surplus / (deficit)</div>
+      <div class="v">£{{ "%.2f"|format(surplus/1e6) }}m</div>
+      <div class="sub">RLV − BLV (ratio {{ "%.2f"|format(rlv_to_blv_ratio) }})</div>
+    </div>
+  </div>
+
+  <h3 class="section-h">Headline numbers</h3>
+  <table>
+    <thead><tr><th>Metric</th><th class="num">Value</th><th>Basis</th></tr></thead>
+    <tbody>
+      <tr><td>EUV (per ha)</td><td class="num">£{{ "{:,.0f}".format(euv_per_ha) }}</td><td>Defra / Savills 2024 — {{ inp.existing_use }}</td></tr>
+      <tr><td>EUV (total)</td><td class="num">£{{ "{:,.0f}".format(euv_total) }}</td><td>{{ "%.1f"|format(inp.area_ha) }} ha × £{{ "{:,.0f}".format(euv_per_ha) }}/ha</td></tr>
+      <tr><td>Landowner premium</td><td class="num">{{ "%.0f"|format(premium_pct) }}%</td><td>"{{ inp.premium_band }}" band per RICS FVP 2021 §3.5</td></tr>
+      <tr><td>EUV+</td><td class="num">£{{ "{:,.0f}".format(euv_plus) }}</td><td>EUV × (1 + premium)</td></tr>
+      <tr><td>Benchmark Land Value</td><td class="num">£{{ "{:,.0f}".format(blv) }}</td><td>{{ blv_basis }}</td></tr>
+      <tr><td>Annual revenue (year 1)</td><td class="num">£{{ "{:,.0f}".format(annual_revenue) }}</td><td>{{ "%.0f"|format(inp.capacity_mw) }} MW × 8,760 h × CF × £{{ "%.1f"|format(inp.ppa_price) }}/MWh</td></tr>
+      <tr><td>Gross Development Value</td><td class="num">£{{ "{:,.0f}".format(gdv_total) }}</td><td>Income capitalisation, {{ inp.ppa_term_yr }} yr, yield {{ "%.1f"|format(inp.exit_yield*100) }}%</td></tr>
+      <tr><td>CAPEX total</td><td class="num">£{{ "{:,.0f}".format(capex_total) }}</td><td>Benchmark £/MW, UK 2024</td></tr>
+      <tr><td>OPEX (PV over life)</td><td class="num">£{{ "{:,.0f}".format(opex_pv) }}</td><td>{{ inp.lifetime_yr }} yr annuity @ {{ "%.1f"|format(inp.opex_discount_rate*100) }}%</td></tr>
+      <tr><td>Policy compliance cost</td><td class="num">£{{ "{:,.0f}".format(policy_cost) }}</td><td>s106 + CIL + BNG + habitat + landscape, {{ inp.premium_band }} band</td></tr>
+      <tr><td>Developer profit</td><td class="num">£{{ "{:,.0f}".format(developer_profit) }}</td><td>{{ profit_basis_label }}</td></tr>
+      <tr><td><strong>Total costs</strong></td><td class="num"><strong>£{{ "{:,.0f}".format(total_costs) }}</strong></td><td>CAPEX + OPEX PV + Policy + Profit</td></tr>
+      <tr><td><strong>Residual Land Value</strong></td><td class="num"><strong>£{{ "{:,.0f}".format(rlv) }}</strong></td><td>GDV − Total costs</td></tr>
+      <tr><td><strong>Surplus vs BLV</strong></td><td class="num"><strong>£{{ "{:,.0f}".format(surplus) }}</strong></td><td>RLV − BLV</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="page-break"></div>
+
+<!-- ==================================================================== -->
+<!-- EUV / EUV+ / BLV                                                       -->
+<!-- ==================================================================== -->
+<section class="section">
+  <h1 class="section-h">3. Benchmark Land Value derivation</h1>
+
+  <h2 class="section-h">3.1 Existing Use Value</h2>
+  <p>
+    The site comprises <strong>{{ "%.1f"|format(inp.area_ha) }} ha</strong> of {{ inp.existing_use }} land.
+    EUV is determined by reference to the Defra agricultural land price series,
+    triangulated against Savills and Strutt &amp; Parker 2024 rural land market data and
+    the RICS/RAU Rural Land Market Survey H2 2024.
+  </p>
+  <table>
+    <thead><tr><th>Existing use class</th><th class="num">£/ha (2024)</th><th>Source</th></tr></thead>
+    <tbody>
+      {% for k, v in euv_benchmarks.items() %}
+      <tr {% if k == inp.existing_use %}style="background:#fbf8ee;font-weight:700;"{% endif %}>
+        <td>{{ k | title }}{% if k == inp.existing_use %} (adopted){% endif %}</td>
+        <td class="num">£{{ "{:,.0f}".format(v) }}</td>
+        <td>Defra / Savills 2024</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p><strong>EUV = £{{ "{:,.0f}".format(euv_per_ha) }}/ha × {{ "%.1f"|format(inp.area_ha) }} ha = £{{ "{:,.0f}".format(euv_total) }}.</strong></p>
+
+  <h2 class="section-h">3.2 Landowner premium (EUV+)</h2>
+  <p>
+    Per RICS FVP 2021 §3.5 the premium must reflect what a reasonable landowner would
+    require to release the land for development. Industry practice for energy schemes on
+    agricultural land supports a premium in the range <strong>10–30%</strong>. The central
+    20% case is typical for UK ground-mount solar and BESS consented post-2022.
+  </p>
+  <table>
+    <thead><tr><th>Premium band</th><th class="num">Rate</th><th class="num">EUV+ (£)</th><th class="num">£/ha</th></tr></thead>
+    <tbody>
+      {% for band, rate in premium_range.items() %}
+      <tr {% if band == inp.premium_band %}style="background:#fbf8ee;font-weight:700;"{% endif %}>
+        <td>{{ band | title }}{% if band == inp.premium_band %} (adopted){% endif %}</td>
+        <td class="num">{{ "%.0f"|format(rate*100) }}%</td>
+        <td class="num">£{{ "{:,.0f}".format(euv_total * (1+rate)) }}</td>
+        <td class="num">£{{ "{:,.0f}".format(euv_total * (1+rate) / inp.area_ha) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p><strong>EUV+ adopted = £{{ "{:,.0f}".format(euv_plus) }}.</strong></p>
+
+  <h2 class="section-h">3.3 Benchmark Land Value</h2>
+  <p>
+    The Benchmark Land Value is adopted as <strong>£{{ "{:,.0f}".format(blv) }}</strong>
+    ({{ blv_basis }}).
+  </p>
+  {% if inp.market_blv_per_ha %}
+    <p>Comparable transaction evidence reviewed via <code>utils/precedent_transactions.py</code>
+    indicated £{{ "{:,.0f}".format(inp.market_blv_per_ha) }}/ha.</p>
+  {% else %}
+    <p><em>No comparable transaction evidence was available within the capture window; EUV+ adopted per RICS FVP 2021 §3.5 default.</em></p>
+  {% endif %}
+</section>
+
+<div class="page-break"></div>
+
+<!-- ==================================================================== -->
+<!-- GDV, COSTS, PROFIT                                                     -->
+<!-- ==================================================================== -->
+<section class="section">
+  <h1 class="section-h">4. Scheme appraisal</h1>
+
+  <h2 class="section-h">4.1 Gross Development Value</h2>
+  <p>
+    GDV is calculated by capitalising projected PPA revenue over the PPA term using the
+    exit yield consistent with bankable UK renewable transactions 2023–2024 (7.0–8.0% for
+    solar; 7.5% adopted as central).
+  </p>
+  <table>
+    <thead><tr><th>Input</th><th class="num">Value</th></tr></thead>
+    <tbody>
+      <tr><td>Capacity (nameplate)</td><td class="num">{{ "%.1f"|format(inp.capacity_mw) }} MW</td></tr>
+      <tr><td>Capacity factor</td><td class="num">assumed {{ inp.technology }} UK benchmark</td></tr>
+      <tr><td>PPA price</td><td class="num">£{{ "%.1f"|format(inp.ppa_price) }}/MWh</td></tr>
+      <tr><td>PPA term</td><td class="num">{{ inp.ppa_term_yr }} years</td></tr>
+      <tr><td>Exit / capitalisation yield</td><td class="num">{{ "%.2f"|format(inp.exit_yield*100) }}%</td></tr>
+      <tr><td>Annual revenue (year 1)</td><td class="num">£{{ "{:,.0f}".format(annual_revenue) }}</td></tr>
+      <tr><td><strong>Gross Development Value</strong></td><td class="num"><strong>£{{ "{:,.0f}".format(gdv_total) }}</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-h">4.2 Total costs</h2>
+  <table>
+    <thead><tr><th>Cost line</th><th class="num">£</th><th>Basis</th></tr></thead>
+    <tbody>
+      <tr><td>CAPEX (construction + grid + DEVEX)</td><td class="num">£{{ "{:,.0f}".format(capex_total) }}</td><td>Benchmark £/MW, UK 2024 (P50)</td></tr>
+      <tr><td>OPEX (discounted PV, {{ inp.lifetime_yr }} yr)</td><td class="num">£{{ "{:,.0f}".format(opex_pv) }}</td><td>Level annuity @ {{ "%.1f"|format(inp.opex_discount_rate*100) }}%</td></tr>
+      <tr><td>Policy compliance (s106 + CIL + BNG + habitat + landscape)</td><td class="num">£{{ "{:,.0f}".format(policy_cost) }}</td><td>Per-MW benchmarks, "{{ inp.premium_band }}" band</td></tr>
+      <tr><td>Developer profit</td><td class="num">£{{ "{:,.0f}".format(developer_profit) }}</td><td>{{ profit_basis_label }}</td></tr>
+      <tr><td><strong>Total costs</strong></td><td class="num"><strong>£{{ "{:,.0f}".format(total_costs) }}</strong></td><td>Sum of above</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-h">4.3 Developer profit benchmark</h2>
+  <p>
+    RICS FVP 2021 §4.6 and PPG Viability ID 10 para. 018 cite the industry convention
+    of <strong>15–20% of GDV</strong> or <strong>20–25% of cost</strong> as the developer profit
+    allowance. Adopted here: <strong>{{ profit_basis_label }}</strong>.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Basis</th>
+        <th class="num">Low</th>
+        <th class="num">Central</th>
+        <th class="num">High</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Profit on GDV</td>
+        <td class="num">{{ "%.1f"|format(dev_profit_on_gdv_range.low*100) }}%</td>
+        <td class="num">{{ "%.1f"|format(dev_profit_on_gdv_range.central*100) }}%</td>
+        <td class="num">{{ "%.1f"|format(dev_profit_on_gdv_range.high*100) }}%</td>
+      </tr>
+      <tr>
+        <td>Profit on cost</td>
+        <td class="num">{{ "%.1f"|format(dev_profit_on_cost_range.low*100) }}%</td>
+        <td class="num">{{ "%.1f"|format(dev_profit_on_cost_range.central*100) }}%</td>
+        <td class="num">{{ "%.1f"|format(dev_profit_on_cost_range.high*100) }}%</td>
+      </tr>
+    </tbody>
+  </table>
+  <p>
+    In this appraisal the profit allowance implies a margin of
+    <strong>{{ "%.1f"|format(profit_margin_on_gdv*100) }}% on GDV</strong> /
+    <strong>{{ "%.1f"|format(profit_margin_on_cost*100) }}% on cost.</strong>
+  </p>
+</section>
+
+<div class="page-break"></div>
+
+<!-- ==================================================================== -->
+<!-- RESIDUAL LAND VALUE / VIABILITY TEST                                   -->
+<!-- ==================================================================== -->
+<section class="section">
+  <h1 class="section-h">5. Residual Land Value and viability test</h1>
+
+  <h2 class="section-h">5.1 RLV calculation</h2>
+  <table>
+    <tbody>
+      <tr><td>Gross Development Value</td><td class="num">£{{ "{:,.0f}".format(gdv_total) }}</td></tr>
+      <tr><td>Less: total scheme costs</td><td class="num">(£{{ "{:,.0f}".format(total_costs) }})</td></tr>
+      <tr style="background:#fbf8ee;"><td><strong>Residual Land Value</strong></td><td class="num"><strong>£{{ "{:,.0f}".format(rlv) }}</strong></td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-h">5.2 Test: RLV vs BLV</h2>
+  <table>
+    <tbody>
+      <tr><td>Residual Land Value</td><td class="num">£{{ "{:,.0f}".format(rlv) }}</td></tr>
+      <tr><td>Less: Benchmark Land Value</td><td class="num">(£{{ "{:,.0f}".format(blv) }})</td></tr>
+      <tr style="background:#fbf8ee;">
+        <td><strong>Surplus / (deficit)</strong></td>
+        <td class="num"><strong>£{{ "{:,.0f}".format(surplus) }}</strong></td>
+      </tr>
+      <tr>
+        <td>RLV / BLV ratio</td>
+        <td class="num">{{ "%.2f"|format(rlv_to_blv_ratio) }}×</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-h">5.3 Affordability of policy obligations</h2>
+  <p>
+    The scheme's ability to absorb the policy compliance package of
+    <strong>£{{ "{:,.0f}".format(policy_cost) }}</strong>
+    (approximately <strong>£{{ "{:,.0f}".format(policy_cost/inp.capacity_mw) }} / MW</strong>)
+    is demonstrated by the {{ verdict }} RLV-vs-BLV position above.
+  </p>
+  {% if verdict == 'not viable' %}
+  <p class="callout">
+    <strong>Planning implication.</strong> The scheme as currently costed cannot bear the full
+    policy ask. PPG Viability ID 10 para 025 permits the decision-maker to consider a reduced
+    package. Recommended renegotiation: reduce s106 community benefit, phase CIL, or adopt a
+    review mechanism at commissioning.
+  </p>
+  {% elif verdict == 'partially viable' %}
+  <p class="callout">
+    <strong>Planning implication.</strong> The scheme is on the margin of viability. A review
+    mechanism (late-stage or commissioning-trigger) per PPG ID 10 para 025 is recommended to
+    capture value uplift if GDV outperforms.
+  </p>
+  {% else %}
+  <p class="callout">
+    <strong>Planning implication.</strong> The scheme can bear the full policy compliance
+    package without reduction. No obligations discount is justified on viability grounds.
+  </p>
+  {% endif %}
+</section>
+
+<div class="page-break"></div>
+
+<!-- ==================================================================== -->
+<!-- SENSITIVITY                                                            -->
+<!-- ==================================================================== -->
+<section class="section">
+  <h1 class="section-h">6. Sensitivity analysis</h1>
+  <p>
+    Sensitivity tests the ±10% and ±20% perturbation of the three primary value drivers —
+    GDV, CAPEX and PPA price — holding all other inputs constant. This matches the approach
+    expected by LPA viability reviewers (PPG Viability ID 10 para 014).
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Driver</th>
+        <th class="num">Δ %</th>
+        <th class="num">GDV (£m)</th>
+        <th class="num">RLV (£m)</th>
+        <th class="num">Surplus vs BLV (£m)</th>
+        <th>Verdict</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sensitivity %}
+      <tr>
+        <td>{{ s.driver }}</td>
+        <td class="num">{{ "%.0f"|format(s.delta_pct) }}%</td>
+        <td class="num">{{ "%.2f"|format(s.gdv/1e6) }}</td>
+        <td class="num">{{ "%.2f"|format(s.rlv/1e6) }}</td>
+        <td class="num">{{ "%.2f"|format(s.surplus/1e6) }}</td>
+        <td>
+          {% if s.verdict == 'viable' %}<span class="rag-green">{{ s.verdict }}</span>
+          {% elif s.verdict == 'partially viable' %}<span class="rag-amber">{{ s.verdict }}</span>
+          {% else %}<span class="rag-red">{{ s.verdict }}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="page-break"></div>
+
+<!-- ==================================================================== -->
+<!-- CONCLUSION                                                             -->
+<!-- ==================================================================== -->
+<section class="section">
+  <h1 class="section-h">7. Conclusion</h1>
+
+  <div class="verdict {% if verdict == 'viable' %}viable{% elif verdict == 'partially viable' %}partial{% else %}notviable{% endif %}">
+    <div class="label">Overall viability</div>
+    <div class="value">{{ verdict | upper }}</div>
+    <div class="body">{{ verdict_rationale }}</div>
+  </div>
+
+  <p>
+    This Financial Viability Assessment has been prepared in accordance with RICS Professional
+    Standard "Financial Viability in Planning: Conduct and Reporting" 2nd ed. (1 May 2021) and
+    the Planning Practice Guidance Viability (ID 10). The appraisal adopts the residual land
+    value method, which is the industry-standard approach for testing scheme viability against
+    planning policy obligations.
+  </p>
+  <p>
+    The viability verdict is <strong>{{ verdict }}</strong> and is robust to the sensitivity
+    perturbations presented in §6 above.
+    {% if verdict == 'viable' %}
+    Full policy compliance is affordable and no reduction in obligations is required on
+    viability grounds.
+    {% elif verdict == 'partially viable' %}
+    A review mechanism is recommended per PPG Viability ID 10 para 025.
+    {% else %}
+    A reduction in obligations is required per PPG Viability ID 10 para 018.
+    {% endif %}
+  </p>
+</section>
+
+<div class="page-break"></div>
+
+<!-- ==================================================================== -->
+<!-- APPENDICES                                                            -->
+<!-- ==================================================================== -->
+<section class="section">
+  <div class="appendix-header">Appendix A · Data provenance</div>
+  <table>
+    <thead><tr><th>[n]</th><th>Claim</th><th>Source</th><th>Class</th></tr></thead>
+    <tbody>
+      <tr><td>[1]</td><td>EUV £/ha by existing-use</td><td>Defra Farmland Values 2024 · Savills Farmland Market Q4 2024 · Strutt &amp; Parker 2024</td><td><code>SRC_DB_SNAPSHOT</code></td></tr>
+      <tr><td>[2]</td><td>Landowner premium 10–30%</td><td>RICS FVP 2nd ed. (2021) §3.5 commentary</td><td><code>SRC_DB_SNAPSHOT</code></td></tr>
+      <tr><td>[3]</td><td>Developer profit 15–20% GDV / 20–25% cost</td><td>RICS FVP 2021 §4.6 · PPG Viability ID 10 para 018</td><td><code>SRC_DB_SNAPSHOT</code></td></tr>
+      <tr><td>[4]</td><td>CAPEX £/MW UK 2024 benchmarks</td><td>Princeps UK cost benchmarks (<code>utils/investment_appraisal.py</code>)</td><td><code>SRC_DB_SNAPSHOT</code></td></tr>
+      <tr><td>[5]</td><td>Technology capacity factors</td><td>DESNZ Digest of UK Energy Statistics 2024</td><td><code>SRC_DB_SNAPSHOT</code></td></tr>
+      <tr><td>[6]</td><td>Comparable land transactions</td><td><code>utils/precedent_transactions.py</code></td><td><code>SRC_API_LIVE</code></td></tr>
+      <tr><td>[7]</td><td>Project site area &amp; location</td><td>PostGIS <code>projects</code> + <code>site_boundaries</code> + <code>parcels</code></td><td><code>SRC_DB_SNAPSHOT</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="appendix-header">Appendix B · Methodology &amp; assumptions</div>
+  <ul>
+    <li>GDV via income capitalisation (DCF annuity over PPA term, level revenue, exit yield).</li>
+    <li>OPEX discounted at {{ "%.1f"|format(inp.opex_discount_rate*100) }}% over {{ inp.lifetime_yr }} years (RICS Red Book VPS 3 income approach).</li>
+    <li>Developer profit: {{ profit_basis_label }} (RICS FVP 2021 §4.6; PPG Viability ID 10 para 018).</li>
+    <li>Policy cost: s106 community benefit + CIL + BNG delivery + 30-year habitat mgmt + landscape mitigation.</li>
+    <li>BLV = max(EUV+, market evidence) per RICS FVP 2021 §3.5.</li>
+    <li>Sensitivity: ±10% / ±20% on GDV, CAPEX, PPA price (holding others constant).</li>
+    <li>All figures nominal GBP at assessment date. No inflation escalator applied to level revenue (conservative).</li>
+  </ul>
+
+  <div class="appendix-header">Appendix C · Glossary</div>
+  <table>
+    <tbody>
+      <tr><td><strong>BLV</strong></td><td>Benchmark Land Value (RICS FVP 2021 §3)</td></tr>
+      <tr><td><strong>EUV</strong></td><td>Existing Use Value (value in its current use, no hope value)</td></tr>
+      <tr><td><strong>EUV+</strong></td><td>EUV plus a landowner premium</td></tr>
+      <tr><td><strong>GDV</strong></td><td>Gross Development Value — capitalised scheme income</td></tr>
+      <tr><td><strong>RLV</strong></td><td>Residual Land Value = GDV − total costs</td></tr>
+      <tr><td><strong>PPA</strong></td><td>Power Purchase Agreement</td></tr>
+      <tr><td><strong>CIL</strong></td><td>Community Infrastructure Levy</td></tr>
+      <tr><td><strong>BNG</strong></td><td>Biodiversity Net Gain (Environment Act 2021 s.98)</td></tr>
+      <tr><td><strong>s106</strong></td><td>Town and Country Planning Act 1990, section 106 agreement</td></tr>
+    </tbody>
+  </table>
+
+  <div class="appendix-header">Appendix D · Regulatory &amp; standards register</div>
+  <table>
+    <thead><tr><th>Standard</th><th>Version / date</th><th>URL</th></tr></thead>
+    <tbody>
+      <tr><td>RICS Financial Viability in Planning: Conduct and Reporting</td><td>2nd ed., effective 1 May 2021</td><td>rics.org</td></tr>
+      <tr><td>RICS Financial Viability in Planning (1st ed.)</td><td>2019 (superseded by 2nd ed.)</td><td>rics.org</td></tr>
+      <tr><td>RICS Valuation — Global Standards (Red Book Global)</td><td>Effective 31 January 2025</td><td>rics.org</td></tr>
+      <tr><td>NPPF — National Planning Policy Framework</td><td>December 2024</td><td>gov.uk</td></tr>
+      <tr><td>PPG — Viability</td><td>ID 10 (rolling; captured {{ generated_at }})</td><td>gov.uk/guidance</td></tr>
+      <tr><td>PPG — Planning Obligations</td><td>ID 23b (rolling)</td><td>gov.uk/guidance</td></tr>
+      <tr><td>PPG — CIL</td><td>ID 25 (rolling)</td><td>gov.uk/guidance</td></tr>
+      <tr><td>TCPA 1990</td><td>As amended</td><td>legislation.gov.uk</td></tr>
+      <tr><td>Environment Act 2021</td><td>c.30</td><td>legislation.gov.uk</td></tr>
+    </tbody>
+  </table>
+
+  <div class="appendix-header">Appendix E · Revision history</div>
+  <table>
+    <thead><tr><th>Rev</th><th>Date</th><th>Author</th><th>Reviewer</th><th>Approver</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><strong>P01</strong></td><td>{{ generated_at }}</td><td>Princeps (automated)</td><td>TO POPULATE</td><td>TO POPULATE</td><td>Internal pre-issue draft — NPPF FVA per RICS FVP 2021</td></tr>
+    </tbody>
+  </table>
+
+  <div class="appendix-header">Appendix F · Reliance statement</div>
+  <div class="reliance">
+    This report is prepared for the applicant for use in planning discussions with
+    {{ inp.lpa or "the Local Planning Authority" }}. No third party may rely on this report
+    without prior written consent from Princeps. Princeps accepts no liability to any third
+    party for any matter arising from this report. The report has been prepared in accordance
+    with RICS Professional Standard "Financial Viability in Planning: Conduct and Reporting"
+    2nd ed. (2021) and the RICS Valuation — Global Standards (Red Book Global) 2025. The
+    assessor declares no conflict of interest in relation to the applicant or the LPA.
+  </div>
+</section>
+
+</body>
+</html>

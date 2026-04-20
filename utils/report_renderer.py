@@ -701,9 +701,14 @@ def _score_bar_chart(scores: dict[str, int]) -> str:
 # Chart: Monthly Solar GHI + Temperature
 # ---------------------------------------------------------------------------
 def _solar_monthly_chart(monthly: list[dict]) -> str:
-    data = sorted(monthly, key=lambda m: m.get("month", 0))
-    mlabels = [_MONTHS[m.get("month", 1) - 1] for m in data]
-    ghi = [m.get("ghi_kwh_m2_day", 0) for m in data]
+    def _month_int(m: dict) -> int:
+        try:
+            return int(m.get("month", 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+    data = sorted(monthly, key=_month_int)
+    mlabels = [_MONTHS[max(min(_month_int(m), 12), 1) - 1] for m in data]
+    ghi = [float(m.get("ghi_kwh_m2_day", 0) or 0) for m in data]
     temps = [m.get("temperature_c") for m in data]
     has_temp = any(t is not None for t in temps)
     x = np.arange(len(mlabels))
@@ -746,10 +751,15 @@ def _solar_monthly_chart(monthly: list[dict]) -> str:
 # Chart: Monthly NDVI
 # ---------------------------------------------------------------------------
 def _ndvi_monthly_chart(monthly_ndvi: list[dict]) -> str:
-    data = sorted(monthly_ndvi, key=lambda m: m.get("month", 0))
-    mlabels = [_MONTHS[m.get("month", 1) - 1] for m in data]
-    means = [m.get("ndvi_mean", 0) for m in data]
-    stds = [m.get("ndvi_std", 0) for m in data]
+    def _month_int(m: dict) -> int:
+        try:
+            return int(m.get("month", 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+    data = sorted(monthly_ndvi, key=_month_int)
+    mlabels = [_MONTHS[max(min(_month_int(m), 12), 1) - 1] for m in data]
+    means = [float(m.get("ndvi_mean", 0) or 0) for m in data]
+    stds = [float(m.get("ndvi_std", 0) or 0) for m in data]
     x = np.arange(len(mlabels))
 
     fig, ax = plt.subplots(figsize=(7, 3.2))
@@ -1073,6 +1083,30 @@ async def generate_report(conn: asyncpg.Connection, lat: float, lon: float,
         loop.run_in_executor(None, generate_charts, site_data),
         fetch_static_map(lat, lon))
     log.info("Charts generated: %s", ", ".join(charts.keys()))
+
+    # Enrich site_data with BNG baseline/post-dev (Defra Metric 4.0 / UKHab v2.0)
+    try:
+        from utils.bng_calculator import bng_from_land_use, bng_to_pack_dict
+        site_data["bng"] = bng_to_pack_dict(
+            bng_from_land_use(site_data.get("land_use", {}), capacity_mw, tech="solar")
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning("BNG calculator skipped: %s", e)
+
+    # Render red-line site-boundary map and expose as a chart
+    try:
+        import base64 as _b64
+        from utils.red_line_map import render_redline_from_point
+        png = await loop.run_in_executor(
+            None,
+            lambda: render_redline_from_point(
+                lat, lon, site_name=site_data.get("name") or "Site",
+                width_in=7.5, height_in=5.0, dpi=160,
+            ),
+        )
+        charts["redline_map"] = _b64.b64encode(png).decode("ascii")
+    except Exception as e:  # noqa: BLE001
+        log.warning("Red-line map skipped: %s", e)
 
     html = render_report_html(site_data, charts, map_image, template)
     pdf_bytes = await html_to_pdf(html)

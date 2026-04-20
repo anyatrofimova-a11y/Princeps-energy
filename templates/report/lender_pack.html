@@ -1,0 +1,830 @@
+{#
+  templates/report/lender_pack.html — Princeps Lender Information Pack.
+  15 sections per COUNCIL-1 rewrite spec, A4, institutional gold palette.
+
+  Context keys (see utils/lender_pack.py::_assemble_context):
+    project_id, project_name, sponsor, technology, capacity_mw, lat, lon,
+    osgb_grid_ref, region, generated_at_display, generated_at_iso,
+    model_version,
+    sections.{cover, transaction, sources_uses, base_case, downside,
+              breakeven, covenants, mel, tddr, cp, cs, precedents,
+              security, model_audit, signature},
+    charts.{dcf_waterfall, dscr_timeline, cashflow_stack},
+    regulatory_citations
+
+  TODO(BOT-R1): replace inline reliance / provenance / revision blocks
+  with _reliance.html, _provenance.html, _revision.html partials when
+  they ship (templates/report/_partials/*.html).
+#}
+{% macro gbp_m(v) -%}
+  {%- if v is none or v == '' -%}—
+  {%- elif v|abs >= 1e9 -%}£{{ '%.2f' % (v/1e9) }}bn
+  {%- elif v|abs >= 1e6 -%}£{{ '%.2f' % (v/1e6) }}m
+  {%- elif v|abs >= 1e3 -%}£{{ '%.0f' % (v/1e3) }}k
+  {%- else -%}£{{ '%.0f' % v }}
+  {%- endif -%}
+{%- endmacro %}
+{% macro pct(v, d=2) -%}
+  {%- if v is none or v == '' -%}—{% else %}{{ ('%%.%df' % d) % v }}%{% endif -%}
+{%- endmacro %}
+{% macro cross(v) -%}
+  {%- if v is none or v == '' -%}—{% else %}{{ '%.2f' % v }}x{% endif -%}
+{%- endmacro %}
+{% macro footnote(n) -%}<sup class="fn">[{{ n }}]</sup>{%- endmacro %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lender Pack — {{ project_name }} — {{ sections.cover.revision }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 15mm 22mm 15mm;
+    @bottom-left { content: "{{ project_name }} · Lender Pack · {{ sections.cover.revision }}"; font: 8px 'DM Sans', sans-serif; color: #6b7280; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8px 'DM Sans', sans-serif; color: #6b7280; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #1a1a2e; font-size: 10.5px; line-height: 1.55; margin: 0;
+  }
+  h1, h2, h3, h4 { margin: 0; color: #1a1a2e; font-weight: 700; }
+  h1 { font-size: 28px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 22px 0 6px; padding: 6px 0 4px;
+       border-bottom: 2px solid #D4A018; color: #1a1a2e; }
+  h3 { font-size: 12px; margin: 14px 0 4px; color: #1a1a2e;
+       text-transform: uppercase; letter-spacing: 0.04em; }
+  h4 { font-size: 11px; margin: 10px 0 3px; color: #16213e; }
+  p { margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5px;
+          margin: 6px 0 10px; }
+  th, td { padding: 5px 7px; border-bottom: 1px solid #e5e7eb;
+           vertical-align: top; text-align: left; }
+  th { background: #F7F8FA; font-weight: 700; font-size: 8.5px;
+       letter-spacing: 0.04em; text-transform: uppercase; color: #4B5563; }
+  tr.total td { font-weight: 700; border-top: 2px solid #1a1a2e;
+                border-bottom: 2px solid #1a1a2e; background: #FFF8E6; }
+  .section { page-break-inside: avoid; margin-top: 18px; }
+  .section.new-page { page-break-before: always; margin-top: 0; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 3px;
+         font-size: 8.5px; font-weight: 700; letter-spacing: 0.05em;
+         text-transform: uppercase; }
+  .tag-green { background: #DEF7E5; color: #1E7B3A; }
+  .tag-amber { background: #FFF4D6; color: #92660A; }
+  .tag-red { background: #FEE2E2; color: #B91C1C; }
+  .tag-low { background: #DEF7E5; color: #1E7B3A; }
+  .tag-medium { background: #FFF4D6; color: #92660A; }
+  .tag-high { background: #FEE2E2; color: #B91C1C; }
+  .hero-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+               margin: 12px 0 6px; }
+  .hero { padding: 10px 12px; background: #F7F8FA; border-radius: 6px;
+          border-left: 3px solid #D4A018; }
+  .hero-lbl { font-size: 7.5px; color: #6B7280; letter-spacing: 0.06em;
+              text-transform: uppercase; font-weight: 700; }
+  .hero-val { font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+              font-size: 18px; font-weight: 700; color: #1a1a2e; margin-top: 3px; }
+  .hero-sub { font-size: 8.5px; color: #6B7280; margin-top: 2px;
+              font-family: 'JetBrains Mono', monospace; }
+  .cover {
+    page-break-after: always;
+    padding: 40mm 0 0 0;
+  }
+  .cover .kicker {
+    font-size: 11px; color: #6B7280; letter-spacing: 0.08em;
+    text-transform: uppercase; font-weight: 700;
+  }
+  .cover h1 { color: #D4A018; margin: 8px 0 4px; font-size: 38px; }
+  .cover .sub { color: #1a1a2e; font-size: 14px;
+                border-top: 2px solid #D4A018; padding-top: 12px;
+                margin-top: 12px; }
+  .cover .reliance-block {
+    margin-top: 60px; padding: 16px 18px; background: #FFF8E6;
+    border-left: 4px solid #D4A018; font-size: 10px; line-height: 1.6;
+  }
+  .cover .addressees {
+    margin-top: 14px;
+  }
+  .cover .addressees li { margin-bottom: 2px; }
+  .cover .footer {
+    margin-top: 60px; border-top: 1px solid #e5e7eb;
+    padding-top: 10px; font-size: 9px; color: #6b7280;
+  }
+  .chart-box { margin: 10px 0; text-align: center; }
+  .chart-box img { max-width: 100%; height: auto; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .bullet-list { padding-left: 18px; margin: 6px 0; }
+  .bullet-list li { margin-bottom: 3px; }
+  .cite { font-size: 8.5px; color: #6B7280; font-style: italic;
+          margin-top: 6px; }
+  .fn { font-size: 7.5px; color: #D4A018; vertical-align: super;
+        font-weight: 700; margin-left: 1px; }
+  .footnote-list {
+    margin-top: 8px; padding: 10px 14px; background: #F7F8FA;
+    border-radius: 4px; font-size: 8.5px; color: #4B5563;
+  }
+  .footnote-list ol { margin: 0; padding-left: 16px; }
+  .kpi-pill {
+    display: inline-block; padding: 2px 8px; margin-right: 6px;
+    border-radius: 3px; background: #F7F8FA;
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    border: 1px solid #e5e7eb;
+  }
+  .rev-table td { font-size: 9px; }
+</style>
+</head>
+<body>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 1 — Cover + reliance addressee
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="cover">
+  <div class="kicker">{{ sections.cover.confidentiality }}</div>
+  <h1>{{ sections.cover.title }}</h1>
+  <div class="sub">{{ project_name }} — {{ capacity_mw }} MW {{ technology_label }}</div>
+  <div style="margin-top: 10px; font-size: 11px; color: #4B5563;">
+    Sponsor: <b>{{ sponsor }}</b> · Issued to: <b>{{ sections.cover.issued_to }}</b>
+    · Revision <b>{{ sections.cover.revision }}</b> dated <b>{{ sections.cover.revision_date }}</b>
+  </div>
+
+  <div class="reliance-block">
+    <h3 style="margin-top:0;color:#D4A018;">Reliance &amp; addressees{{ footnote(1) }}</h3>
+    <p style="margin-top:4px;">{{ sections.cover.reliance_statement }}</p>
+    <h4>Addressees</h4>
+    <ul class="addressees">
+      {% for a in sections.cover.reliance_addressees %}
+      <li>{{ a }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <h3 style="margin-top:36px;">Revision control</h3>
+  <table class="rev-table">
+    <tr><th>Rev</th><th>Date</th><th>Author</th><th>Reviewer</th><th>Approver</th><th>Description</th></tr>
+    {% for r in sections.cover.revision_history %}
+    <tr>
+      <td>{{ r.rev }}</td><td>{{ r.date }}</td>
+      <td>{{ r.author }}</td><td>{{ r.reviewer }}</td>
+      <td>{{ r.approver }}</td><td>{{ r.description }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div class="footer">
+    Princeps Analytics · Generated {{ generated_at_display }} · Model: {{ model_version }}<br>
+    {% if osgb_grid_ref %}Site OSGB grid ref: {{ osgb_grid_ref }} · {% endif %}
+    Cite: {{ sections.cover.citation }}
+  </div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 2 — Transaction summary
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>2 · Transaction summary</h2>
+  <p>
+    Headline deal metrics summarising the financing ask. Covenant targets
+    reflect a conservative project-finance case{{ footnote(2) }} on an LMA
+    Investment Grade Facility Agreement form{{ footnote(3) }}.
+  </p>
+
+  <div class="hero-grid">
+    <div class="hero">
+      <div class="hero-lbl">Capacity</div>
+      <div class="hero-val">{{ capacity_mw }}</div>
+      <div class="hero-sub">MW {{ technology_label }}</div>
+    </div>
+    <div class="hero">
+      <div class="hero-lbl">Total project cost</div>
+      <div class="hero-val">{{ gbp_m(sections.sources_uses.total_uses_gbp) }}</div>
+      <div class="hero-sub">sources &amp; uses balance</div>
+    </div>
+    <div class="hero">
+      <div class="hero-lbl">Debt ask</div>
+      <div class="hero-val">{{ gbp_m(sections.transaction.debt_amount_gbp) }}</div>
+      <div class="hero-sub">{{ (sections.transaction.debt_amount_gbp / sections.sources_uses.total_uses_gbp * 100) | round(0) }}% gearing</div>
+    </div>
+    <div class="hero">
+      <div class="hero-lbl">Base case IRR</div>
+      <div class="hero-val">{{ pct(sections.base_case.irr_pct, 1) }}</div>
+      <div class="hero-sub">WACC {{ pct(sections.base_case.wacc_pct, 1) }}</div>
+    </div>
+  </div>
+
+  <table>
+    {% for r in sections.transaction.rows %}
+    <tr><th style="width:32%;">{{ r.label }}</th><td>{{ r.value }}</td></tr>
+    {% endfor %}
+  </table>
+  <div class="cite">[2] Target DSCR 1.30x P50 (LMA IGFA §24.5). [3] {{ sections.transaction.citation }}.</div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 3 — Sources & Uses + capital stack
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>3 · Sources &amp; Uses · Capital stack</h2>
+  <p>
+    Sources balance to uses. Contingency (5% of EPC) and DSRA (6-month
+    reserve) sized per LMA IGFA §23.1{{ footnote(4) }}.
+  </p>
+
+  <div class="two-col">
+    <div>
+      <h3>Sources</h3>
+      <table>
+        <tr><th>Layer</th><th>Amount</th><th>%</th></tr>
+        {% for s in sections.sources_uses.sources_rows %}
+        <tr>
+          <td>{{ s.label }}</td>
+          <td>{{ gbp_m(s.amount_gbp) }}</td>
+          <td>{{ '%.1f' % s.pct }}%</td>
+        </tr>
+        {% endfor %}
+        <tr class="total">
+          <td>Total sources</td>
+          <td>{{ gbp_m(sections.sources_uses.total_sources_gbp) }}</td>
+          <td>100.0%</td>
+        </tr>
+      </table>
+    </div>
+    <div>
+      <h3>Uses</h3>
+      <table>
+        <tr><th>Line</th><th>Amount</th><th>%</th></tr>
+        {% for u in sections.sources_uses.uses_rows %}
+        <tr>
+          <td>{{ u.label }}</td>
+          <td>{{ gbp_m(u.amount_gbp) }}</td>
+          <td>{{ '%.1f' % u.pct }}%</td>
+        </tr>
+        {% endfor %}
+        <tr class="total">
+          <td>Total uses</td>
+          <td>{{ gbp_m(sections.sources_uses.total_uses_gbp) }}</td>
+          <td>100.0%</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <h3>Capital stack waterfall</h3>
+  <table>
+    <tr><th>Rank</th><th>Layer</th><th>Amount</th><th>Return target</th><th>Notes</th></tr>
+    {% for c in sections.sources_uses.capital_stack %}
+    <tr>
+      <td>{{ c.ranking }}</td>
+      <td>{{ c.layer }}</td>
+      <td>{{ gbp_m(c.amount_gbp) }}</td>
+      <td>{{ pct(c.return_target_pct, 1) }}</td>
+      <td>{{ c.notes }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="cite">[4] {{ sections.sources_uses.citation }}.</div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 4 — Base case model pack
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>4 · Base-case model pack</h2>
+  {% if sections.base_case.available %}
+  <p>
+    Base-case DCF run on {{ sections.base_case.cashflows|length }}-year life. IRR
+    {{ pct(sections.base_case.irr_pct, 1) }} ({{ pct(sections.base_case.equity_irr_pct, 1) }} equity);
+    NPV {{ gbp_m(sections.base_case.npv_gbp) }} at WACC {{ pct(sections.base_case.wacc_pct, 1) }}.
+    Terminal value {{ gbp_m(sections.base_case.terminal_value_gbp) }}. Minimum DSCR
+    {{ cross(sections.base_case.min_dscr) }}, minimum LLCR {{ cross(sections.base_case.min_llcr) }}{{ footnote(5) }}.
+  </p>
+
+  <div class="hero-grid">
+    <div class="hero"><div class="hero-lbl">NPV</div><div class="hero-val">{{ gbp_m(sections.base_case.npv_gbp) }}</div></div>
+    <div class="hero"><div class="hero-lbl">Equity NPV</div><div class="hero-val">{{ gbp_m(sections.base_case.equity_npv_gbp) }}</div></div>
+    <div class="hero"><div class="hero-lbl">Min DSCR</div><div class="hero-val">{{ cross(sections.base_case.min_dscr) }}</div></div>
+    <div class="hero"><div class="hero-lbl">Terminal</div><div class="hero-val">{{ gbp_m(sections.base_case.terminal_value_gbp) }}</div></div>
+  </div>
+
+  {% if charts.dcf_waterfall %}
+  <div class="chart-box">
+    <img src="data:image/png;base64,{{ charts.dcf_waterfall }}" alt="DCF Waterfall">
+  </div>
+  {% endif %}
+
+  <h3>FCFF / FCFE timeseries (selected years)</h3>
+  <table>
+    <tr><th>Year</th><th>Revenue</th><th>OPEX</th><th>EBITDA</th><th>Tax</th><th>CFADS</th><th>Debt service</th><th>FCFF</th><th>FCFE</th></tr>
+    {% for cf in sections.base_case.cashflows %}
+    {% if loop.first or loop.index % 3 == 0 or loop.last %}
+    <tr>
+      <td>{{ cf.year }}</td>
+      <td>{{ gbp_m(cf.revenue) }}</td>
+      <td>{{ gbp_m(cf.opex) }}</td>
+      <td>{{ gbp_m(cf.ebitda) }}</td>
+      <td>{{ gbp_m(cf.tax) }}</td>
+      <td>{{ gbp_m(cf.cfads) }}</td>
+      <td>{{ gbp_m(cf.debt_service) }}</td>
+      <td>{{ gbp_m(cf.fcff) }}</td>
+      <td>{{ gbp_m(cf.fcfe) }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </table>
+
+  {% if charts.cashflow_stack %}
+  <div class="chart-box">
+    <img src="data:image/png;base64,{{ charts.cashflow_stack }}" alt="Cashflow Stack">
+  </div>
+  {% endif %}
+
+  <h3>Amortising debt schedule (selected years)</h3>
+  <table>
+    <tr><th>Year</th><th>Opening</th><th>Interest</th><th>Principal</th><th>Debt service</th><th>Closing</th><th>DSCR</th></tr>
+    {% for a in sections.base_case.amortising_rows %}
+    {% if loop.first or loop.index % 3 == 0 or loop.last %}
+    <tr>
+      <td>{{ a.year }}</td>
+      <td>{{ gbp_m(a.opening_balance) }}</td>
+      <td>{{ gbp_m(a.interest) }}</td>
+      <td>{{ gbp_m(a.principal) }}</td>
+      <td>{{ gbp_m(a.debt_service) }}</td>
+      <td>{{ gbp_m(a.closing_balance) }}</td>
+      <td>{{ cross(a.dscr) }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </table>
+  <div class="cite">[5] {{ sections.base_case.citation }}.</div>
+  {% else %}
+  <p><i>{{ sections.base_case.note }}</i></p>
+  {% endif %}
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 5 — Downside case
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>5 · Downside case (combined stress)</h2>
+  {% if sections.downside.available %}
+  <p>
+    Concurrent shocks: utilisation {{ pct(sections.downside.assumptions.utilisation_shock_pct, 0) }},
+    price {{ pct(sections.downside.assumptions.price_shock_pct, 0) }},
+    CAPEX {{ pct(sections.downside.assumptions.capex_shock_pct, 0) }}.
+    Covenants re-run against shocked cashflows{{ footnote(6) }}.
+  </p>
+
+  <div class="hero-grid">
+    <div class="hero"><div class="hero-lbl">Min DSCR</div>
+      <div class="hero-val">{{ cross(sections.downside.min_dscr) }}</div></div>
+    <div class="hero"><div class="hero-lbl">Min LLCR</div>
+      <div class="hero-val">{{ cross(sections.downside.min_llcr) }}</div></div>
+    <div class="hero"><div class="hero-lbl">Min ICR</div>
+      <div class="hero-val">{{ cross(sections.downside.min_icr) }}</div></div>
+    <div class="hero"><div class="hero-lbl">NPV</div>
+      <div class="hero-val">{{ gbp_m(sections.downside.npv_gbp) }}</div></div>
+  </div>
+
+  <p>
+    Shocked capex {{ gbp_m(sections.downside.shocked_capex_gbp) }}.
+    Any covenant breach in downside:
+    {% if sections.downside.any_breach %}
+      <span class="tag tag-red">YES — years {{ sections.downside.breach_years|join(", ") }}</span>
+    {% else %}
+      <span class="tag tag-green">NO</span>
+    {% endif %}
+  </p>
+
+  <div class="cite">[6] {{ sections.downside.citation }}.</div>
+  {% else %}
+  <p><i>{{ sections.downside.note }}</i></p>
+  {% endif %}
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 6 — Breakeven case
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>6 · Breakeven case — DSCR {{ sections.breakeven.target_dscr_floor }}x floor</h2>
+  {% if sections.breakeven.available %}
+  <p>
+    For each input driver in isolation, the shock that brings minimum DSCR
+    down to the LMA covenant floor ({{ sections.breakeven.target_dscr_floor }}x).
+    Binding driver in this case: <b>{{ sections.breakeven.binding_driver }}</b>{{ footnote(7) }}.
+  </p>
+  <table>
+    <tr><th>Driver</th><th>Direction</th><th>Breakeven shock</th><th>Resulting min DSCR</th><th>Commentary</th></tr>
+    {% for r in sections.breakeven.rows %}
+    <tr>
+      <td>{{ r.driver }}</td>
+      <td>{{ r.direction }}</td>
+      <td>{{ pct(r.breakeven_shock_pct, 1) }}</td>
+      <td>{{ cross(r.resulting_min_dscr) }}</td>
+      <td>{{ r.commentary }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="cite">[7] {{ sections.breakeven.citation }}.</div>
+  {% else %}
+  <p><i>{{ sections.breakeven.note }}</i></p>
+  {% endif %}
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 7 — Covenant package
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>7 · Covenant package</h2>
+  <p>
+    LMA Investment Grade Facility Agreement (English law, 2024 update) covenant
+    package{{ footnote(8) }}. Base-case and downside columns populated from the
+    DCFEvaluator output; lock-up and default levels are LMA market standard
+    for UK operating-phase project finance.
+  </p>
+  <table>
+    <tr>
+      <th>Covenant</th><th>Formula</th><th>Covenant level</th>
+      <th>Base</th><th>Downside</th><th>Lock-up</th><th>Default</th><th>LMA ref</th>
+    </tr>
+    {% for r in sections.covenants.rows %}
+    <tr>
+      <td><b>{{ r.covenant }}</b></td>
+      <td>{{ r.formula }}</td>
+      <td>{{ r.covenant_level }}</td>
+      <td>{{ r.base_case }}</td>
+      <td>{{ r.downside }}</td>
+      <td>{{ r.lock_up }}</td>
+      <td>{{ r.default }}</td>
+      <td style="font-size:8px;color:#6b7280;">{{ r.lma_ref }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>Cure rights</h3>
+  <ul class="bullet-list">
+    {% for c in sections.covenants.cure_rights %}
+    <li>{{ c }}</li>
+    {% endfor %}
+  </ul>
+
+  <div class="two-col">
+    <div>
+      <h3>Operating covenants</h3>
+      <ul class="bullet-list">
+        {% for x in sections.covenants.operating_covenants %}<li>{{ x }}</li>{% endfor %}
+      </ul>
+    </div>
+    <div>
+      <h3>Information covenants</h3>
+      <ul class="bullet-list">
+        {% for x in sections.covenants.information_covenants %}<li>{{ x }}</li>{% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  {% if charts.dscr_timeline %}
+  <div class="chart-box">
+    <img src="data:image/png;base64,{{ charts.dscr_timeline }}" alt="DSCR Timeline">
+  </div>
+  {% endif %}
+
+  <div class="cite">[8] {{ sections.covenants.citation }}.</div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 8 — Material Event List (MEL)
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>8 · Material Event List (MEL)</h2>
+  <p>
+    Risk register framed against PRA SS31/15 ICAAP taxonomy{{ footnote(9) }}.
+    Each event carries likelihood × impact × mitigation strength →
+    residual rating. Lender should size reserving and covenant headroom
+    against rows rated MEDIUM residual or higher.
+  </p>
+  <table>
+    <tr>
+      <th>Event</th><th>Cat.</th><th>Likelihood</th><th>Impact</th>
+      <th>Mitigation (summary)</th><th>Residual</th><th>Ref</th>
+    </tr>
+    {% for r in sections.mel.rows %}
+    <tr>
+      <td><b>{{ r.event }}</b><br><span style="font-size:8.5px;color:#6b7280;">{{ r.description }}</span></td>
+      <td>{{ r.category }}</td>
+      <td><span class="tag tag-{{ r.likelihood }}">{{ r.likelihood }}</span></td>
+      <td><span class="tag tag-{{ r.impact }}">{{ r.impact }}</span></td>
+      <td>{{ r.mitigation }}</td>
+      <td><span class="tag tag-{{ r.residual_rating|lower }}">{{ r.residual_rating }}</span></td>
+      <td style="font-size:8px;color:#6b7280;">{{ r.evidence_ref }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="cite">[9] {{ sections.mel.citation }}. Framework: {{ sections.mel.framework }}.</div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 9 — Technical Due Diligence Review (TDDR)
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>9 · Technical Due Diligence Review (TDDR)</h2>
+  <p>
+    Multi-pillar TDDR structure per DNV-GL Project Certification scope /
+    Mott MacDonald Lenders' TDDR template{{ footnote(10) }}. Overall grade
+    <b>{{ sections.tddr.grade }}</b> ({{ sections.tddr.overall_score }}/100,
+    <span class="tag tag-{{ sections.tddr.overall_rag|lower }}">{{ sections.tddr.overall_rag }}</span>)
+    → verdict <b>{{ sections.tddr.verdict }}</b>.
+  </p>
+
+  {% for sec in sections.tddr.sections %}
+  <h3>{{ loop.index }}.{{ loop.index }}{% if false %}{% endif %} {{ sec.heading }}
+    <span class="tag tag-{{ sec.status|lower }}">{{ sec.status }}</span>
+  </h3>
+  <p>{{ sec.summary }}</p>
+  {% if sec['items'] %}
+  <table>
+    <tr><th>Item</th><th>Score / Status</th><th>Note</th></tr>
+    {% for it in sec['items'] %}
+    <tr>
+      <td>{{ it.item }}</td>
+      <td>
+        {% if it.score is defined and it.score is not none %}{{ it.score }}/100 {% if it.rag %}<span class="tag tag-{{ it.rag|lower }}">{{ it.rag }}</span>{% endif %}
+        {% elif it.status is defined %}<span class="tag tag-{{ 'green' if it.status in ('Completed','Pre-bound','Pre-bound (quote held)') else ('amber' if it.status in ('Scoped','In progress','Optional') else 'red') }}">{{ it.status }}</span>
+        {% else %}—{% endif %}
+      </td>
+      <td>{{ it.note }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+  {% endfor %}
+  <div class="cite">[10] {{ sections.tddr.citation }}. Source: {{ sections.tddr.tddr_source }}.</div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 10 — Conditions Precedent
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>10 · Conditions Precedent (CP) schedule</h2>
+  {% if sections.cp.available %}
+  <p>
+    {{ sections.cp.total }} CPs listed; {{ sections.cp.ready_pct }}% ready at
+    pack-generation time{{ footnote(11) }}.
+  </p>
+  <table>
+    <tr><th>ID</th><th>Cat.</th><th>Item</th><th>Responsible</th><th>Target</th><th>Status</th><th>LMA ref</th></tr>
+    {% for r in sections.cp.rows %}
+    <tr>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:8.5px;">{{ r.id }}</td>
+      <td>{{ r.category }}</td>
+      <td>{{ r.item }}</td>
+      <td>{{ r.responsible }}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:9px;">{{ r.target_date }}</td>
+      <td>
+        {% set st = r.status|lower %}
+        <span class="tag tag-{{ 'green' if st in ('met','waived','not_applicable') else ('amber' if st == 'in_progress' else 'red') }}">{{ st|replace('_',' ') }}</span>
+      </td>
+      <td style="font-size:8px;color:#6b7280;">{{ r.lma_ref }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="cite">[11] {{ sections.cp.citation }}.</div>
+  {% else %}
+  <p><i>{{ sections.cp.note }}</i></p>
+  {% endif %}
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 11 — Conditions Subsequent
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>11 · Conditions Subsequent (CS) schedule</h2>
+  {% if sections.cs.available %}
+  <p>
+    {{ sections.cs.total }} post-close items listed; {{ sections.cs.ready_pct }}% currently satisfied{{ footnote(12) }}.
+  </p>
+  <table>
+    <tr><th>ID</th><th>Cat.</th><th>Item</th><th>Responsible</th><th>Target</th><th>Status</th><th>LMA ref</th></tr>
+    {% for r in sections.cs.rows %}
+    <tr>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:8.5px;">{{ r.id }}</td>
+      <td>{{ r.category }}</td>
+      <td>{{ r.item }}</td>
+      <td>{{ r.responsible }}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:9px;">{{ r.target_date }}</td>
+      <td>
+        {% set st = r.status|lower %}
+        <span class="tag tag-{{ 'green' if st in ('met','waived','not_applicable') else ('amber' if st == 'in_progress' else 'red') }}">{{ st|replace('_',' ') }}</span>
+      </td>
+      <td style="font-size:8px;color:#6b7280;">{{ r.lma_ref }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="cite">[12] {{ sections.cs.citation }}.</div>
+  {% else %}
+  <p><i>{{ sections.cs.note }}</i></p>
+  {% endif %}
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 12 — Precedent transactions
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>12 · Precedent transactions</h2>
+  <p>{{ sections.precedents.note }}{{ footnote(13) }}</p>
+  {% if sections.precedents.available %}
+  <table>
+    <tr><th>Deal</th><th>Tech</th><th>MW</th><th>Region</th><th>Year</th><th>Stage</th><th>£/MW</th><th>Strike (£/MWh)</th><th>Sim</th></tr>
+    {% for d in sections.precedents.rows %}
+    <tr>
+      <td>{{ d.deal_name }}{% if d.buyer %} <span style="color:#6b7280;font-size:8.5px;">→ {{ d.buyer }}</span>{% endif %}</td>
+      <td>{{ d.technology }}</td>
+      <td>{{ d.capacity_mw }}</td>
+      <td>{{ d.region }}</td>
+      <td>{{ d.year }}</td>
+      <td>{{ d.stage }}</td>
+      <td>{% if d.gbp_per_mw %}£{{ '%.2f' % (d.gbp_per_mw/1e6) }}m{% else %}—{% endif %}</td>
+      <td>{% if d.strike_price_gbp_per_mwh %}£{{ '%.1f' % d.strike_price_gbp_per_mwh }}{% else %}—{% endif %}</td>
+      <td>{{ '%.2f' % d.similarity }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <p><i>Precedent lookup unavailable (DB pool not provided).</i></p>
+  {% endif %}
+  <div class="cite">[13] {{ sections.precedents.citation }}.</div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 13 — Security & account structure
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>13 · Security &amp; account structure</h2>
+  <p>
+    Standard UK project-finance security package per LMA Real Estate
+    Finance and LMA Security Agent Deed{{ footnote(14) }}.
+  </p>
+
+  <h3>Security package</h3>
+  <table>
+    <tr><th>Instrument</th><th>Granted by</th><th>Scope</th><th>Ranking</th><th>LMA ref</th></tr>
+    {% for s in sections.security.security_rows %}
+    <tr>
+      <td><b>{{ s.instrument }}</b></td>
+      <td>{{ s.granted_by }}</td>
+      <td>{{ s.scope }}</td>
+      <td>{{ s.ranking }}</td>
+      <td style="font-size:8px;color:#6b7280;">{{ s.lma_ref }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>Project accounts cascade</h3>
+  <table>
+    <tr><th>Account</th><th>Purpose</th><th>Control</th></tr>
+    {% for a in sections.security.accounts_cascade %}
+    <tr>
+      <td><b>{{ a.account }}</b></td>
+      <td>{{ a.purpose }}</td>
+      <td>{{ a.control }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>Payment waterfall</h3>
+  <ol class="bullet-list">
+    {% for w in sections.security.waterfall %}
+    <li>{{ w }}</li>
+    {% endfor %}
+  </ol>
+  <div class="cite">[14] {{ sections.security.citation }}.</div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 14 — Model audit trail
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>14 · Model audit trail appendix</h2>
+  <p>
+    Model version: <b>{{ sections.model_audit.model_version }}</b>. Generated
+    {{ sections.model_audit.generated_at }}. Audit status:
+    <i>{{ sections.model_audit.audit_status }}</i>{{ footnote(15) }}.
+  </p>
+
+  <h3>Input parameters</h3>
+  <table>
+    {% for k, v in sections.model_audit.dcf_params.items() %}
+    <tr>
+      <th style="width:30%;">{{ k|replace('_',' ')|capitalize }}</th>
+      <td>{{ v }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>Data provenance</h3>
+  <table>
+    <tr><th>Data item</th><th>Source</th><th>Version</th><th>Extracted</th><th>Class</th><th>Stale days</th><th>Notes</th></tr>
+    {% for r in sections.model_audit.provenance_rows %}
+    <tr>
+      <td>{{ r.data_item }}</td>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:8.5px;">{{ r.source }}</td>
+      <td>{{ r.version }}</td>
+      <td>{{ r.extraction_date }}</td>
+      <td><span class="tag tag-{{ 'green' if r.stale_days == 0 else ('amber' if r.stale_days < 30 else 'red') }}">{{ r.provenance_class }}</span></td>
+      <td>{{ r.stale_days }}</td>
+      <td style="font-size:8.5px;">{{ r.notes }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>Sensitivity tornado (narrative)</h3>
+  <table>
+    <tr><th>Input</th><th>Shock</th><th>IRR impact</th><th>Method</th></tr>
+    {% for r in sections.model_audit.sensitivity_tornado %}
+    <tr>
+      <td><b>{{ r.input }}</b></td>
+      <td>{{ r.shock_modelled }}</td>
+      <td>{{ r.impact_on_irr_pp }}</td>
+      <td>{{ r.method }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>Formula transparency</h3>
+  <ul class="bullet-list">
+    {% for f in sections.model_audit.formula_notes %}
+    <li style="font-family:'JetBrains Mono',monospace;font-size:9px;">{{ f }}</li>
+    {% endfor %}
+  </ul>
+
+  <h3>Regulatory &amp; standards register</h3>
+  <table>
+    <tr><th>Standard</th><th>Version</th><th>Role</th></tr>
+    {% for c in regulatory_citations %}
+    <tr>
+      <td><b>{{ c.standard }}</b></td>
+      <td>{{ c.version }}</td>
+      <td>{{ c.role }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <div class="cite">[15] {{ sections.model_audit.citation }}.</div>
+</section>
+
+{# ══════════════════════════════════════════════════════════════════════════
+   Section 15 — Reliance, qualifications, signature block
+   ══════════════════════════════════════════════════════════════════════════ #}
+<section class="section new-page">
+  <h2>15 · Reliance, qualifications &amp; signatures</h2>
+
+  <h3>Reliance</h3>
+  <p>{{ sections.signature.reliance }}</p>
+
+  <h3>Qualifications</h3>
+  <ul class="bullet-list">
+    {% for q in sections.signature.qualifications %}
+    <li>{{ q }}</li>
+    {% endfor %}
+  </ul>
+
+  <h3>Signatures</h3>
+  <table>
+    <tr><th>Role</th><th>Name</th><th>Signature</th><th>Date</th></tr>
+    {% for s in sections.signature.signatures %}
+    <tr>
+      <td>{{ s.role }}</td>
+      <td>{{ s.name }}</td>
+      <td style="height:26px;border-bottom:1px solid #1a1a2e;"></td>
+      <td>{{ s.date }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div class="footnote-list">
+    <b>Footnotes</b>
+    <ol>
+      <li>Reliance statement per RICS Red Book Global 2025 VPS 3. Addressees limited to parties named.</li>
+      <li>Target DSCR 1.30x P50 per LMA IGFA 2024 §24.5 standard market case.</li>
+      <li>{{ sections.transaction.citation }}</li>
+      <li>{{ sections.sources_uses.citation }}</li>
+      <li>DCFEvaluator engine — utils.dcf_evaluator.DCFEvaluator (BOT-A).</li>
+      <li>PRA SS31/15 combined-stress scenario convention.</li>
+      <li>LMA covenant floor 1.20x (§24.5); reverse stress per PRA SS31/15.</li>
+      <li>LMA Investment Grade Facility Agreement 2024 §§23–26.</li>
+      <li>PRA SS31/15 ICAAP risk taxonomy; LMA Bankability Checklist.</li>
+      <li>DNV-GL Project Certification scope; Mott MacDonald TDDR template.</li>
+      <li>LMA IGFA Schedule 2 (CPs).</li>
+      <li>LMA IGFA CS + CA 2006 s.859A / LRA 2002 s.27 perfection.</li>
+      <li>RICS FVP 2021 comparable evidence; AIFMD marketing guidance.</li>
+      <li>LMA Security Agent Deed + LMA REF debenture template + LMA Direct Agreement.</li>
+      <li>ICMA Model Auditor Best Practice; independent model audit at CS step cs_11_model_audit.</li>
+    </ol>
+  </div>
+
+  <div style="margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb;font-size:8.5px;color:#6b7280;">
+    Prepared by Princeps Analytics · Project {{ project_id }} · Generated
+    {{ generated_at_display }} · {{ model_version }}<br>
+    <b>{{ sections.cover.confidentiality }}</b> ·
+    Citations compiled from: {% for c in regulatory_citations %}{{ c.standard }}{% if not loop.last %} · {% endif %}{% endfor %}
+  </div>
+</section>
+
+</body>
+</html>
