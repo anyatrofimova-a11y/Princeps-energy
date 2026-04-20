@@ -107,6 +107,17 @@ async def setup_database(pool: asyncpg.Pool) -> None:
                     "0009_substrate_schema.sql failed — substrate layers may be degraded"
                 )
 
+        # ── 0012 EA Flood Map + 0013 LCCC + safeguarding ──────────────────
+        # Applied lazily on startup; idempotent with IF NOT EXISTS.
+        for _mig in ("0012_ea_data_layers.sql", "0013_lccc_safeguarding_schema.sql"):
+            _path = pathlib.Path(__file__).parent / "migrations" / _mig
+            if _path.exists():
+                try:
+                    await conn.execute(_path.read_text())
+                    log.info("Applied %s", _mig)
+                except Exception:
+                    log.exception("%s failed — related datasets may be degraded", _mig)
+
         # ── Planning applications + sample energy data ────────────────────
         await planning_setup(conn)
         await planning_seed(conn)

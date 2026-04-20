@@ -271,6 +271,8 @@ _ROUTER_MODULES = [
     "billing",
     "enterprise_admin",
     "substrate",
+    "ea_layers",
+    "lccc",
     "project_memo",
 ]
 
