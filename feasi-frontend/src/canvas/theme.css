@@ -1,0 +1,397 @@
+/* Princeps Unified Canvas — L1 tokens
+ * Scoped to the canvas route. Do NOT override app-wide styles.
+ */
+
+.princeps-canvas {
+  --gold: #C9A24D;
+  --gold-soft: #E6D7A8;
+  --ink: #0E1016;
+  --ink-soft: #2A2D35;
+  --paper: #FAF7F2;
+  --mist: #EEE9DF;
+  --mist-strong: #DDD6C4;
+  --line: rgba(14, 16, 22, 0.08);
+  --line-strong: rgba(14, 16, 22, 0.16);
+  --danger: #B0413E;
+  --ok: #4E7C4E;
+
+  font-family: "Inter", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.princeps-canvas * { box-sizing: border-box; }
+
+/* ---- Top bar ---- */
+.pc-topbar {
+  height: 48px;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  flex-shrink: 0;
+  z-index: 40;
+}
+
+.pc-topbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-right: 8px;
+}
+
+.pc-topbar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--mist);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--line);
+}
+.pc-topbar-pill.gold { background: var(--gold-soft); border-color: var(--gold); }
+
+.pc-topbar select.pc-class-select {
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  padding: 0 8px;
+  font-family: inherit;
+}
+
+.pc-topbar-spacer { flex: 1; }
+
+.pc-topbar button {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pc-topbar button:hover { background: var(--mist); }
+
+/* ---- Left rail ---- */
+.pc-left {
+  background: #fff;
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.pc-left-header {
+  padding: 16px 16px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.pc-project-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 16px;
+}
+
+.pc-project-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink);
+  transition: background 120ms ease;
+}
+.pc-project-item:hover { background: var(--mist); }
+.pc-project-item.active { background: var(--gold-soft); color: var(--ink); font-weight: 500; }
+.pc-project-item-sub {
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+/* ---- Centre ---- */
+.pc-centre {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: var(--mist);
+}
+
+.pc-map-container { position: absolute; inset: 0; }
+
+.pc-canvas-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(14, 16, 22, 0.06);
+}
+
+.pc-tool-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+}
+.pc-tool-btn:hover { background: var(--mist); color: var(--ink); }
+.pc-tool-btn.active { background: var(--gold); color: #fff; }
+
+/* ---- Right rail (CardStack) ---- */
+.pc-right {
+  background: var(--paper);
+  border-left: 1px solid var(--line);
+  overflow-y: auto;
+  height: 100%;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pc-card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(14, 16, 22, 0.04);
+}
+
+.pc-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 8px;
+}
+
+.pc-card-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: #fff;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+}
+
+/* ---- Chat rail (bottom) ---- */
+.pc-chat {
+  height: 100%;
+  background: #fff;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pc-chat-header {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pc-chat-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.pc-chat-msg { margin-bottom: 10px; }
+.pc-chat-msg-role {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  margin-bottom: 2px;
+}
+.pc-chat-msg-user { color: var(--ink); }
+.pc-chat-msg-assistant { color: var(--ink); }
+
+.pc-chat-tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--mist);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin: 2px 4px 2px 0;
+}
+
+.pc-chat-input-row {
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+  display: flex;
+  gap: 8px;
+}
+
+.pc-chat-input {
+  flex: 1;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--paper);
+  color: var(--ink);
+  outline: none;
+}
+.pc-chat-input:focus { border-color: var(--gold); background: #fff; }
+
+.pc-chat-send {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pc-chat-send:disabled { opacity: 0.4; cursor: default; }
+
+/* ---- react-resizable-panels handles ---- */
+.pc-resize-handle-vertical {
+  width: 3px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.pc-resize-handle-vertical:hover,
+.pc-resize-handle-vertical[data-resize-handle-active] { background: var(--gold); }
+
+.pc-resize-handle-horizontal {
+  height: 3px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+.pc-resize-handle-horizontal:hover,
+.pc-resize-handle-horizontal[data-resize-handle-active] { background: var(--gold); }
+
+/* ---- Command palette (cmdk) ---- */
+.pc-cmdk-root {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(14, 16, 22, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.pc-cmdk {
+  width: min(560px, 92vw);
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(14, 16, 22, 0.25);
+  border: 1px solid var(--line);
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.pc-cmdk [cmdk-input] {
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  color: var(--ink);
+  background: #fff;
+}
+
+.pc-cmdk [cmdk-list] {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.pc-cmdk [cmdk-group-heading] {
+  padding: 8px 10px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.pc-cmdk [cmdk-item] {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pc-cmdk [cmdk-item][data-selected="true"] {
+  background: var(--gold-soft);
+  color: var(--ink);
+}
+
+.pc-cmdk [cmdk-empty] {
+  padding: 24px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+/* ---- Asset class pill swatches ---- */
+.pc-swatch { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.pc-swatch.solar { background: var(--gold); }
+.pc-swatch.wind  { background: #8FA4B8; }
+.pc-swatch.bess  { background: #7A6CBF; }
+.pc-swatch.dc    { background: #4E7C4E; }
+.pc-swatch.hybrid { background: linear-gradient(135deg, var(--gold) 50%, #7A6CBF 50%); }
