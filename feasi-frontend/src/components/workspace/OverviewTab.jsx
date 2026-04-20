@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
+import ProjectKpiStrip from "../project/ProjectKpiStrip.jsx";
+import SiteMemoCard from "../project/SiteMemoCard.jsx";
 
 /**
  * SiteMapPin — tiny satellite map that drops a single gold pin on the
@@ -310,9 +312,17 @@ export default function OverviewTab({
         { label: "CAPEX", value: "—", trend: "" },
       ];
 
+  const projectId = project?.project_id || project?.id;
+
   return (
     <div className="ov-root">
       {/* StageRibbon (above this tab) is the canonical pipeline — duplicate card removed 2026-04-19 */}
+
+      {projectId && (
+        <div style={{ marginBottom: 16 }}>
+          <ProjectKpiStrip projectId={projectId} />
+        </div>
+      )}
 
       <div className="ov-row ov-row-top">
         <div className="ov-card ov-map-card">
@@ -387,6 +397,13 @@ export default function OverviewTab({
           </ul>
         </div>
       </div>
+
+      {/* AI Site Memo — investment-grade one-pager */}
+      {projectId && (
+        <div style={{ marginTop: 16 }}>
+          <SiteMemoCard projectId={projectId} />
+        </div>
+      )}
 
       {/* Filings preview — link through to File tab */}
       <div className="ov-card">

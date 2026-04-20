@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, Suspense, lazy } from "react";
 import { COLOURS, SANS } from "./tokens";
 import DocketHeader from "./DocketHeader";
+const ChatRail = lazy(() => import("../../../components/shell/ChatRail"));
 import AtAGlanceBand from "./AtAGlanceBand";
 import ExecutiveSummary from "./ExecutiveSummary";
 import QuestionCards from "./QuestionCards";
@@ -192,6 +193,7 @@ export default function DocketDetail({ id, docket: docketProp, onClose }) {
             <DocumentList
               documents={docket.documents || []}
               filterByStakeholderName={stakeholderFilter?.name}
+              docketHomeUrl={docket.home_url}
             />
             {stakeholderFilter && (
               <button

@@ -26,7 +26,21 @@ function formatKm(km) {
   return `${Math.round(km)} km`;
 }
 
-export default function AssessTwinLegend({ layers = {}, scaleKm = null, tech = null }) {
+// Legend key → Inspector selection mapping. Null = not inspectable.
+const LEGEND_INSPECTOR_KEY = {
+  polygon: "polygon",
+  substation: "poc",
+  grid_lines: null,   // individual lines are picked from the map, not the legend
+  buildable: null,
+  terrain: null,
+  landuse: null,
+  satellite: null,
+};
+
+export default function AssessTwinLegend({
+  layers = {}, scaleKm = null, tech = null,
+  selected = null, onLegendClick = null,
+}) {
   const active = SWATCHES.filter((s) => layers[s.key]);
 
   return (
@@ -40,19 +54,29 @@ export default function AssessTwinLegend({ layers = {}, scaleKm = null, tech = n
         <div className="atl-empty">No layers active.</div>
       ) : (
         <ul className="atl-list">
-          {active.map((s) => (
-            <li key={s.key} className="atl-row">
-              <span
-                className={"atl-dot" + (s.border ? " atl-dot-border" : "") + (s.line ? " atl-dot-line" : "")}
-                style={{
-                  background: s.line ? "transparent" : s.dot,
-                  borderColor: s.border ? s.dot : undefined,
-                  color: s.line ? s.dot : undefined,
-                }}
-              />
-              <span className="atl-label">{s.label}</span>
-            </li>
-          ))}
+          {active.map((s) => {
+            const inspectKey = LEGEND_INSPECTOR_KEY[s.key] ?? null;
+            const clickable = !!(inspectKey && onLegendClick);
+            const isSelected = inspectKey && selected === inspectKey;
+            return (
+              <li
+                key={s.key}
+                className={"atl-row" + (clickable ? " atl-row-clickable" : "") + (isSelected ? " atl-row-selected" : "")}
+                onClick={clickable ? () => onLegendClick(inspectKey) : undefined}
+                title={clickable ? "Click to inspect" : undefined}
+              >
+                <span
+                  className={"atl-dot" + (s.border ? " atl-dot-border" : "") + (s.line ? " atl-dot-line" : "")}
+                  style={{
+                    background: s.line ? "transparent" : s.dot,
+                    borderColor: s.border ? s.dot : undefined,
+                    color: s.line ? s.dot : undefined,
+                  }}
+                />
+                <span className="atl-label">{s.label}</span>
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -107,8 +131,16 @@ export default function AssessTwinLegend({ layers = {}, scaleKm = null, tech = n
         .atl-list { list-style: none; margin: 0 0 8px 0; padding: 0; }
         .atl-row {
           display: flex; align-items: center; gap: 8px;
-          padding: 2px 0;
+          padding: 2px 4px;
           font-size: 11px;
+          border-radius: 3px;
+          transition: background-color 120ms ease;
+        }
+        .atl-row-clickable { cursor: pointer; }
+        .atl-row-clickable:hover { background: rgba(245, 183, 49, 0.14); }
+        .atl-row-selected {
+          background: rgba(245, 183, 49, 0.24);
+          box-shadow: inset 2px 0 0 #F5B731;
         }
         .atl-dot {
           width: 12px; height: 12px; border-radius: 3px;

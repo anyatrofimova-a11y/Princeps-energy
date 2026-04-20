@@ -26,6 +26,18 @@ import mapboxgl from "mapbox-gl";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { PolygonLayer, PathLayer, ScatterplotLayer, TextLayer, IconLayer } from "@deck.gl/layers";
 
+/* ── Valid selection keys (anything else falls back to clearing selection).
+ *  shell / cooling / substation / cable / road / nearbySub:<id>
+ *  Kept as a small helper so we don't render an empty "Inspector" shell when
+ *  stale or unknown state sneaks in. */
+const VALID_SELECTED = new Set(["shell", "cooling", "substation", "cable", "road"]);
+function isValidSelection(s) {
+  if (!s) return false;
+  if (VALID_SELECTED.has(s)) return true;
+  if (typeof s === "string" && s.startsWith("nearbySub:")) return true;
+  return false;
+}
+
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
 const C = {
@@ -142,7 +154,9 @@ export default function DCDesignTwin({
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
+  const inspectorRef = useRef(null);
   const dragStateRef = useRef({ active: false, startLonLat: null, startMouse: null });
+  const orbitRafRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
   const [hoverInfo, setHoverInfo] = useState(null);
   const [showFence, setShowFence] = useState(true);
@@ -151,10 +165,17 @@ export default function DCDesignTwin({
   // Drag-moveable site centroid — initialised from props, then user-controlled
   const [lat, setLat] = useState(initialLat);
   const [lon, setLon] = useState(initialLon);
-  // Click-to-inspect selection (null | "shell" | "cooling" | "substation" | "nearbySub:<id>")
-  const [selected, setSelected] = useState(null);
+  // Click-to-inspect selection (null | "shell" | "cooling" | "substation"
+  //   | "cable" | "road" | "nearbySub:<id>"). Legacy/unknown values are
+  //   scrubbed by the guard at render time.
+  const [selectedRaw, setSelected] = useState(null);
+  const selected = isValidSelection(selectedRaw) ? selectedRaw : null;
   // Ambient grid overlay — nearby substations fetched from backend
   const [nearbySubs, setNearbySubs] = useState([]);
+  // Which inspector tab to show: "spec" | "cost" | "provenance"
+  const [inspectorTab, setInspectorTab] = useState("spec");
+  // Continuous orbit flag (driven by the "Orbit" camera preset button).
+  const [orbiting, setOrbiting] = useState(false);
 
   useEffect(() => { setLat(initialLat); setLon(initialLon); }, [initialLat, initialLon]);
 
@@ -179,7 +200,30 @@ export default function DCDesignTwin({
       pitch: 60,
       bearing: -25,
       antialias: true,
+      preserveDrawingBuffer: true,   // allow canvas.toBlob() for PNG snapshots
+      // Explicit interaction options — don't let anything fight the user.
+      interactive: true,
+      dragPan: true,
+      dragRotate: true,
+      pitchWithRotate: true,
+      scrollZoom: true,
+      boxZoom: true,
+      doubleClickZoom: true,
+      touchZoomRotate: true,
+      touchPitch: true,
+      keyboard: true,
+      // Widen pitch range so the preset "Side" (75°) works without clamping.
+      minPitch: 0,
+      maxPitch: 85,
     });
+    // Defence-in-depth: some Mapbox builds ship with dragRotate disabled when
+    // the container has a touch flag. Re-enable them after construction.
+    try {
+      map.dragRotate.enable();
+      map.touchZoomRotate.enable();
+      map.touchZoomRotate.enableRotation();
+      map.keyboard.enable();
+    } catch { /* noop */ }
 
     map.on("load", () => {
       // 3D terrain
@@ -300,6 +344,92 @@ export default function DCDesignTwin({
     if (mapRef.current) mapRef.current.dragPan.enable();
   }, []);
 
+  /* ── Escape clears selection; click outside the inspector clears too.
+        (The inspector pane has pointer-events, so a click inside it won't
+        bubble up to the map's container.) */
+  useEffect(() => {
+    if (!selected) return undefined;
+    const onKey = (e) => { if (e.key === "Escape") setSelected(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected]);
+
+  const handleCanvasBgClick = useCallback((e) => {
+    // If the click lands on empty map canvas (not on a pickable deck.gl object
+    // and not on the inspector pane), clear the selection. Deck.gl picks
+    // fire their own onClick which calls setSelected; those stop propagation.
+    if (inspectorRef.current && inspectorRef.current.contains(e.target)) return;
+    // Mapbox canvases carry class "mapboxgl-canvas"; only clear on those.
+    if (e.target && e.target.classList && e.target.classList.contains("mapboxgl-canvas")) {
+      setSelected(null);
+    }
+  }, []);
+
+  /* ── Camera preset helper — commits to Mapbox via easeTo/flyTo and toggles
+        the continuous orbit RAF loop when requested. */
+  const applyCameraPreset = useCallback((preset) => {
+    const map = mapRef.current;
+    if (!map) return;
+    // Always cancel any in-flight orbit first so presets don't stack.
+    if (orbitRafRef.current) {
+      cancelAnimationFrame(orbitRafRef.current);
+      orbitRafRef.current = null;
+    }
+    setOrbiting(false);
+    const center = [lon, lat];
+    const views = {
+      plan:    { pitch: 0,  bearing: 0,   zoom: 17.0 },
+      oblique: { pitch: 45, bearing: -25, zoom: 16.5 },
+      side:    { pitch: 75, bearing: 90,  zoom: 16.8 },
+      orbit:   { pitch: 55, bearing: 0,   zoom: 16.3 },
+      reset:   { pitch: 60, bearing: -25, zoom: 16.5 },
+    };
+    const v = views[preset] || views.oblique;
+    map.flyTo({ center, ...v, duration: 1000, essential: true });
+    if (preset === "orbit") {
+      setOrbiting(true);
+      let bearing = v.bearing;
+      const tick = () => {
+        bearing = (bearing + 0.15) % 360;
+        try { map.setBearing(bearing); } catch { /* noop */ }
+        orbitRafRef.current = requestAnimationFrame(tick);
+      };
+      // start after the flyTo settles
+      setTimeout(() => {
+        if (!mapRef.current) return;
+        orbitRafRef.current = requestAnimationFrame(tick);
+      }, 1050);
+    }
+  }, [lat, lon]);
+
+  /* Stop orbit when unmounting. */
+  useEffect(() => {
+    return () => {
+      if (orbitRafRef.current) cancelAnimationFrame(orbitRafRef.current);
+      orbitRafRef.current = null;
+    };
+  }, []);
+
+  /* ── Take snapshot PNG of the current viewport. */
+  const handleSnapshot = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    try {
+      const canvas = map.getCanvas();
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `princeps-dc-twin-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1200);
+      }, "image/png");
+    } catch { /* noop */ }
+  }, []);
+
   /* ── Build deck.gl layers from derived geometry ── */
   const deckLayers = useMemo(() => {
     if (!mapReady) return [];
@@ -382,25 +512,49 @@ export default function DCDesignTwin({
       } : null),
     }));
 
-    // Cable corridor
+    // Cable corridor — pickable so clicking opens the cable schedule drawer.
     layers.push(new PathLayer({
       id: "dc-cable",
       data: [{ path: [geom.cable.start, geom.cable.end] }],
       getPath: d => d.path,
-      getColor: C.cable,
-      widthMinPixels: 4,
+      getColor: selected === "cable" ? [255, 215, 0, 255] : C.cable,
+      widthMinPixels: selected === "cable" ? 7 : 4,
       capRounded: true,
       jointRounded: true,
+      pickable: true,
+      updateTriggers: { getColor: [selected], getWidth: [selected] },
+      onClick: ({ object }) => { if (object) setSelected("cable"); },
+      onHover: ({ object, x, y }) => setHoverInfo(object ? {
+        x, y,
+        title: "Cable corridor",
+        rows: [
+          ["Route", "Shell east edge → sub west edge"],
+          ["Sizing", "BS 7671 · armoured LV/HV"],
+          ["Click", "Open cable schedule"],
+        ],
+      } : null),
     }));
 
-    // Access road
+    // Access road — pickable so clicking opens the road spec drawer.
     layers.push(new PathLayer({
       id: "dc-road",
       data: [{ path: [geom.road.start, geom.road.end] }],
       getPath: d => d.path,
-      getColor: C.road,
-      widthMinPixels: 8,
+      getColor: selected === "road" ? [255, 215, 0, 255] : C.road,
+      widthMinPixels: selected === "road" ? 12 : 8,
       capRounded: true,
+      pickable: true,
+      updateTriggers: { getColor: [selected], getWidth: [selected] },
+      onClick: ({ object }) => { if (object) setSelected("road"); },
+      onHover: ({ object, x, y }) => setHoverInfo(object ? {
+        x, y,
+        title: "Access road spur",
+        rows: [
+          ["Width", "6.0 m (HGV-capable)"],
+          ["Surface", "Bitumen on Type 1 sub-base"],
+          ["Click", "Open loading / drainage spec"],
+        ],
+      } : null),
     }));
 
     // Perimeter fence as polygon outline
@@ -506,14 +660,17 @@ export default function DCDesignTwin({
     }
 
     return layers;
-  }, [geom, mapReady, showFence, showLabels, itLoadMw, redundancy, tier]);
+  }, [geom, mapReady, showFence, showLabels, showContext, selected, nearbySubs, itLoadMw, redundancy, tier, lat, lon, handleShellDragStart, handleShellDrag, handleShellDragEnd]);
 
   useEffect(() => {
     if (overlayRef.current) overlayRef.current.setProps({ layers: deckLayers });
   }, [deckLayers]);
 
   return (
-    <div style={{ position: "relative", width: "100%", height: "100%", minHeight: 480, background: "#0f172a" }}>
+    <div
+      style={{ position: "relative", width: "100%", height: "100%", minHeight: 480, background: "#0f172a" }}
+      onClickCapture={handleCanvasBgClick}
+    >
       <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
 
       {!mapboxgl.accessToken && (
@@ -531,16 +688,35 @@ export default function DCDesignTwin({
         </div>
       )}
 
-      {/* Layer toggle chip */}
+      {/* Layer toggle + camera preset chip bar */}
       <div style={{
-        position: "absolute", top: 12, left: 12, display: "flex", gap: 6,
-        background: "rgba(15,23,42,0.85)", padding: "6px 8px", borderRadius: 8,
+        position: "absolute", top: 12, left: 12, display: "flex",
+        flexDirection: "column", gap: 6,
         fontFamily: '"DM Sans", sans-serif', fontSize: 11, color: "#e2e8f0",
-        backdropFilter: "blur(6px)",
       }}>
-        <button onClick={() => setShowFence(s => !s)} style={chipBtn(showFence)}>Fence</button>
-        <button onClick={() => setShowLabels(s => !s)} style={chipBtn(showLabels)}>Labels</button>
-        <button onClick={() => setShowContext(s => !s)} style={chipBtn(showContext)}>Grid ({nearbySubs.length})</button>
+        {/* Row 1 — layer toggles */}
+        <div style={{
+          display: "flex", gap: 6,
+          background: "rgba(15,23,42,0.85)", padding: "6px 8px", borderRadius: 8,
+          backdropFilter: "blur(6px)",
+        }}>
+          <button onClick={() => setShowFence(s => !s)} style={chipBtn(showFence)}>Fence</button>
+          <button onClick={() => setShowLabels(s => !s)} style={chipBtn(showLabels)}>Labels</button>
+          <button onClick={() => setShowContext(s => !s)} style={chipBtn(showContext)}>Grid ({nearbySubs.length})</button>
+        </div>
+        {/* Row 2 — camera presets */}
+        <div style={{
+          display: "flex", gap: 6,
+          background: "rgba(15,23,42,0.85)", padding: "6px 8px", borderRadius: 8,
+          backdropFilter: "blur(6px)",
+        }}>
+          <button onClick={() => applyCameraPreset("plan")}    style={chipBtn(false)}>Plan</button>
+          <button onClick={() => applyCameraPreset("oblique")} style={chipBtn(false)}>45°</button>
+          <button onClick={() => applyCameraPreset("side")}    style={chipBtn(false)}>Side</button>
+          <button onClick={() => applyCameraPreset("orbit")}   style={chipBtn(orbiting)}>Orbit</button>
+          <button onClick={() => applyCameraPreset("reset")}   style={chipBtn(false)}>Reset</button>
+          <button onClick={handleSnapshot}                     style={chipBtn(false)}>PNG</button>
+        </div>
       </div>
 
       {/* Drag hint — only on first paint until the user has moved the shell */}
@@ -556,10 +732,23 @@ export default function DCDesignTwin({
         </div>
       )}
 
-      {/* Inspector pane — shows click-selected element detail */}
+      {/* Inspector pane — shows click-selected element detail
+       *  ┌──────────────────────────────────────────────┐
+       *  │ Building shell              [Spec|Cost|Prov] │
+       *  │ Footprint          1.80 ha                   │
+       *  │ Width × depth      134 × 134 m               │
+       *  │ Height             24.0 m (2-storey)         │
+       *  │ IT load            50 MW                     │
+       *  │ ...                                          │
+       *  │ [ Snap DC to this substation ]               │
+       *  └──────────────────────────────────────────────┘
+       */}
       {selected && (
         <InspectorPane
+          paneRef={inspectorRef}
           selected={selected}
+          activeTab={inspectorTab}
+          onTabChange={setInspectorTab}
           geom={geom}
           itLoadMw={itLoadMw}
           tier={tier}
@@ -578,7 +767,7 @@ export default function DCDesignTwin({
         />
       )}
 
-      {/* Legend */}
+      {/* Legend — each swatch is now a clickable chip that opens its sub-drawer */}
       <div style={{
         position: "absolute", bottom: 12, left: 12,
         background: "rgba(15,23,42,0.88)", padding: "10px 12px", borderRadius: 8,
@@ -588,11 +777,11 @@ export default function DCDesignTwin({
         <div style={{ fontWeight: 700, marginBottom: 4, letterSpacing: 0.4, textTransform: "uppercase", fontSize: 9, color: "#94a3b8" }}>
           Pre-FID layout · {itLoadMw} MW · Tier {tier} · {redundancy}
         </div>
-        <Swatch c={C.shell} label={`Shell ${(geom.shell.areaM2 / 10_000).toFixed(2)} ha · ${geom.shell.heightM.toFixed(0)} m`} />
-        <Swatch c={C.cooling} label={`Cooling ${(geom.cooling.areaM2 / 10_000).toFixed(2)} ha`} />
-        <Swatch c={C.substation} label={`On-site sub ${geom.substation.sideM} × ${geom.substation.sideM} m`} />
-        <Swatch c={C.cable} label="Cable corridor" />
-        <Swatch c={C.road} label="Access road" />
+        <Swatch c={C.shell}      label={`Shell ${(geom.shell.areaM2 / 10_000).toFixed(2)} ha · ${geom.shell.heightM.toFixed(0)} m`} active={selected === "shell"}      onClick={() => setSelected("shell")} />
+        <Swatch c={C.cooling}    label={`Cooling ${(geom.cooling.areaM2 / 10_000).toFixed(2)} ha`}                                active={selected === "cooling"}    onClick={() => setSelected("cooling")} />
+        <Swatch c={C.substation} label={`On-site sub ${geom.substation.sideM} × ${geom.substation.sideM} m`}                      active={selected === "substation"} onClick={() => setSelected("substation")} />
+        <Swatch c={C.cable}      label="Cable corridor"                                                                           active={selected === "cable"}      onClick={() => setSelected("cable")} />
+        <Swatch c={C.road}       label="Access road"                                                                              active={selected === "road"}       onClick={() => setSelected("road")} />
       </div>
 
       {/* Hover tip */}
@@ -617,16 +806,34 @@ export default function DCDesignTwin({
   );
 }
 
-function Swatch({ c, label }) {
+function Swatch({ c, label, active = false, onClick = null }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+    <Tag
+      onClick={onClick || undefined}
+      style={{
+        display: "flex", alignItems: "center", gap: 6,
+        width: "100%", textAlign: "left",
+        padding: onClick ? "3px 6px" : 0,
+        margin: onClick ? "0 -4px" : 0,
+        borderRadius: 4,
+        background: active ? "rgba(245,183,49,0.18)" : "transparent",
+        border: active ? "1px solid rgba(245,183,49,0.55)" : "1px solid transparent",
+        cursor: onClick ? "pointer" : "default",
+        color: "inherit",
+        fontFamily: "inherit",
+        fontSize: "inherit",
+        lineHeight: 1.3,
+      }}
+    >
       <span style={{
         width: 10, height: 10, borderRadius: 2,
         background: `rgba(${c[0]},${c[1]},${c[2]},${(c[3] || 255) / 255})`,
         display: "inline-block",
+        flexShrink: 0,
       }} />
       <span>{label}</span>
-    </div>
+    </Tag>
   );
 }
 

@@ -25,6 +25,37 @@ export async function getMemoHistory(projectId) {
   return r.json();
 }
 
+/** Fallback memo builder — produces a credible placeholder when the project
+ *  isn't in the mock fixture. Without this, clicking "Generate" on a live
+ *  project shows progress steps then silently sets latest=null and the UI
+ *  falls back to the empty state, which looks broken. */
+function synthesiseMemo(projectId) {
+  const stamp = new Date().toISOString();
+  const shortId = String(projectId || "site").slice(0, 8);
+  return {
+    memo_id: `memo-${shortId}-v1`,
+    version: 1,
+    generated_at: stamp,
+    investment_verdict: "CAUTION",
+    one_liner: "Auto-synthesised memo — connect backend /api/project/{id}/site-memo/stream for a Claude-generated version.",
+    key_strengths: [
+      "Grid headroom derived from nearest DNO substation in PostGIS.",
+      "Planning precedent drawn from REPD within 20 km.",
+    ],
+    critical_risks: [
+      "No live backend yet — numbers are derived client-side.",
+      "Set VITE_MOCK_MEMO=false once /api/project/{id}/site-memo/stream is wired.",
+    ],
+    next_milestones: [],
+    financial_headline: { npv_gbp_m: null, irr_pct: null, dscr: null },
+    grid_headline: { poc: "nearest-132 kV", firm_mw: null, estimated_cost_gbp_m: null, timeline_months: null },
+    planning_headline: { approval_pct: null, lpa: null, precedent_count: null },
+    regulatory_flags: [],
+    source_evidence: [],
+    stub: true,
+  };
+}
+
 export function generateMemoStream(projectId, onProgress) {
   if (USE_MOCK) {
     // Simulate SSE stream
@@ -45,7 +76,8 @@ export function generateMemoStream(projectId, onProgress) {
       } else {
         clearInterval(interval);
         const p = mock[projectId];
-        onProgress({ type: "done", memo: p?.latest_memo || null, pdf_url: "#mock-pdf" });
+        const memo = p?.latest_memo || synthesiseMemo(projectId);
+        onProgress({ type: "done", memo, pdf_url: "#mock-pdf" });
       }
     }, 420);
     return () => clearInterval(interval);

@@ -1,5 +1,5 @@
 import React from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
 // Gold/ink tokens — mirrors the Sidebar light-gold palette to stay
 // visually continuous with the rest of the Princeps chrome.
@@ -86,6 +86,7 @@ function SegmentedControl() {
  * routes are rendered via <Outlet />.
  */
 export default function IntelligenceShell() {
+  const navigate = useNavigate();
   return (
     <div
       style={{
@@ -111,6 +112,35 @@ export default function IntelligenceShell() {
         }}
       >
         <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
+          <button
+            onClick={() => navigate("/")}
+            title="Back to Princeps"
+            aria-label="Back to Princeps"
+            style={{
+              background: "transparent",
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              padding: "4px 10px",
+              fontSize: 12,
+              fontWeight: 600,
+              color: C.secondary,
+              cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif",
+              marginRight: 4,
+              alignSelf: "center",
+              transition: "all 120ms ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = C.goldBorder;
+              e.currentTarget.style.color = C.ink;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = C.border;
+              e.currentTarget.style.color = C.secondary;
+            }}
+          >
+            ← Princeps
+          </button>
           <h1
             style={{
               margin: 0,

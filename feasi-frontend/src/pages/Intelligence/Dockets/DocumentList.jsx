@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { COLOURS, SANS, MONO, STAGE_ORDER, formatDate } from "./tokens";
 
 // Grouped accordion by procedural stage. Filter bar at top (query + author).
-export default function DocumentList({ documents = [], filterByStakeholderName }) {
+export default function DocumentList({ documents = [], filterByStakeholderName, docketHomeUrl }) {
   const [q, setQ] = useState("");
   const [author, setAuthor] = useState("");
   const [openStages, setOpenStages] = useState(() =>
@@ -123,7 +123,7 @@ export default function DocumentList({ documents = [], filterByStakeholderName }
           {openStages[stage] && (
             <div>
               {byStage[stage].map((d) => (
-                <DocRow key={d.id} doc={d} />
+                <DocRow key={d.id} doc={d} docketHomeUrl={docketHomeUrl} />
               ))}
             </div>
           )}
@@ -133,7 +133,14 @@ export default function DocumentList({ documents = [], filterByStakeholderName }
   );
 }
 
-function DocRow({ doc }) {
+function DocRow({ doc, docketHomeUrl }) {
+  // Resolve the best URL we can offer today. Priority:
+  //   1. doc.url / doc.source_url / doc.pdf_url — if the ingester populated it
+  //   2. docket.home_url — the publisher's project/consultation page, which
+  //      carries the document list (PINS / Ofgem / DESNZ)
+  //   3. nothing — button is disabled with a tooltip explaining why
+  const href = doc.url || doc.source_url || doc.pdf_url || docketHomeUrl || null;
+  const disabled = !href;
   return (
     <div
       style={{
@@ -157,21 +164,30 @@ function DocRow({ doc }) {
       <span style={{ fontFamily: MONO, fontSize: 11, color: COLOURS.muted, width: 48, textAlign: "right", flexShrink: 0 }}>
         {doc.pages != null ? `${doc.pages}p` : "—"}
       </span>
-      <button
+      <a
+        href={href || undefined}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={disabled ? (e) => e.preventDefault() : undefined}
+        title={disabled
+          ? "No source URL on this document — awaiting PINS/Ofgem ingester"
+          : `Open at publisher (${new URL(href).hostname})`}
         style={{
           padding: "3px 8px",
           fontSize: 11,
           border: `1px solid ${COLOURS.border}`,
-          background: "#FFFFFF",
-          color: COLOURS.inkSoft,
+          background: disabled ? "#F5F5F5" : "#FFFFFF",
+          color: disabled ? COLOURS.muted : COLOURS.inkSoft,
           borderRadius: 4,
-          cursor: "pointer",
+          cursor: disabled ? "not-allowed" : "pointer",
           fontFamily: SANS,
           flexShrink: 0,
+          textDecoration: "none",
+          display: "inline-block",
         }}
       >
-        Open
-      </button>
+        Open ↗
+      </a>
     </div>
   );
 }

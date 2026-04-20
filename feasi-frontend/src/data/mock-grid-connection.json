@@ -1,0 +1,252 @@
+{
+  "_meta": {
+    "generated": "2026-04-19",
+    "region": "Slough, Berkshire",
+    "note": "Realistic DC-centric POC fixture for Slough hyperscaler corridor. Use when VITE_MOCK_GRID=true or /api/grid/assess is unavailable. Numbers align with SSEN Thames Valley ICP + NGET Iver GSP public capacity statements.",
+    "data_provenance": "mock_slough_fixture_v1",
+    "stale_days": 0
+  },
+  "default": {
+    "project_meta": {
+      "project_id": "dc-slough-001",
+      "name": "Slough DC Campus",
+      "lat": 51.5105,
+      "lon": -0.5950,
+      "target_capacity_mw": 65,
+      "workload_type": "dc"
+    },
+    "at_a_glance": {
+      "poc_substation": "Iver 132kV",
+      "dno": "SSEN",
+      "voltage_kv": 132,
+      "distance_km": 2.8,
+      "firm_headroom_mw": 72,
+      "non_firm_headroom_mw": 148,
+      "queue_depth": 7,
+      "queue_mw": 340,
+      "est_cost_p50_gbp_m": 12.8,
+      "commissioning_months": 34,
+      "verdict": "CAUTION",
+      "verdict_reason": "Firm headroom (72 MW) covers 65 MW ask, but ECR queue of 340 MW creates Gate 2 priority risk; request CCCM non-firm option."
+    },
+    "poc_options": [
+      {
+        "id": "iver-132",
+        "name": "Iver 132kV",
+        "dno": "SSEN",
+        "voltage_kv": 132,
+        "distance_km": 2.8,
+        "firm_mw": 72,
+        "non_firm_mw": 148,
+        "firm_post_reinforcement_mw": 340,
+        "reinforcement_date": "2028-Q4",
+        "queue_depth": 7,
+        "queue_mw": 340,
+        "est_cost_p10_gbp_m": 8.4,
+        "est_cost_p50_gbp_m": 12.8,
+        "est_cost_p90_gbp_m": 18.6,
+        "commissioning_months": 34,
+        "rag": "amber",
+        "preferred": true,
+        "notes": "Primary POC. 2.8 km 132kV cable route via M4 carriageway wayleave. Gate 2 submitted Q2-2026 beats 4 of 7 queued."
+      },
+      {
+        "id": "iver-400-gsp",
+        "name": "Iver 400kV Grid Supply Point",
+        "dno": "NGET",
+        "voltage_kv": 400,
+        "distance_km": 3.1,
+        "firm_mw": 450,
+        "non_firm_mw": 620,
+        "firm_post_reinforcement_mw": 620,
+        "reinforcement_date": null,
+        "queue_depth": 3,
+        "queue_mw": 220,
+        "est_cost_p10_gbp_m": 32.0,
+        "est_cost_p50_gbp_m": 44.0,
+        "est_cost_p90_gbp_m": 61.0,
+        "commissioning_months": 42,
+        "rag": "green",
+        "preferred": false,
+        "notes": "Transmission-level. Firm 450 MW abundant but requires 400/132 customer transformer and NESO bilateral — 42 mo to energisation."
+      },
+      {
+        "id": "uxbridge-moor-132",
+        "name": "Uxbridge Moor 132kV",
+        "dno": "SSEN",
+        "voltage_kv": 132,
+        "distance_km": 5.4,
+        "firm_mw": 28,
+        "non_firm_mw": 62,
+        "firm_post_reinforcement_mw": 120,
+        "reinforcement_date": "2029-Q2",
+        "queue_depth": 12,
+        "queue_mw": 410,
+        "est_cost_p10_gbp_m": 13.2,
+        "est_cost_p50_gbp_m": 19.8,
+        "est_cost_p90_gbp_m": 28.4,
+        "commissioning_months": 40,
+        "rag": "red",
+        "preferred": false,
+        "notes": "Thermal constrained. Only viable with full reinforcement by Q2-2029."
+      },
+      {
+        "id": "slough-33",
+        "name": "Slough 33kV (Cippenham)",
+        "dno": "SSEN",
+        "voltage_kv": 33,
+        "distance_km": 1.6,
+        "firm_mw": 14,
+        "non_firm_mw": 22,
+        "firm_post_reinforcement_mw": 18,
+        "reinforcement_date": "2027-Q1",
+        "queue_depth": 4,
+        "queue_mw": 38,
+        "est_cost_p10_gbp_m": 2.8,
+        "est_cost_p50_gbp_m": 4.2,
+        "est_cost_p90_gbp_m": 6.1,
+        "commissioning_months": 24,
+        "rag": "red",
+        "preferred": false,
+        "notes": "Too small for 65 MW ask. Included for reference — max 14 MW firm."
+      },
+      {
+        "id": "harmondsworth-132",
+        "name": "Harmondsworth 132kV",
+        "dno": "SSEN",
+        "voltage_kv": 132,
+        "distance_km": 7.2,
+        "firm_mw": 45,
+        "non_firm_mw": 92,
+        "firm_post_reinforcement_mw": 210,
+        "reinforcement_date": "2028-Q2",
+        "queue_depth": 9,
+        "queue_mw": 280,
+        "est_cost_p10_gbp_m": 14.8,
+        "est_cost_p50_gbp_m": 22.4,
+        "est_cost_p90_gbp_m": 31.2,
+        "commissioning_months": 38,
+        "rag": "amber",
+        "preferred": false,
+        "notes": "Heathrow airport wayleave complexity adds 8-12 mo schedule risk."
+      }
+    ],
+    "capacity_map_features": [
+      { "id": "iver-132", "name": "Iver 132kV", "lat": 51.5150, "lon": -0.5360, "voltage_kv": 132, "firm_mw": 72, "rag": "amber" },
+      { "id": "iver-400-gsp", "name": "Iver 400kV GSP", "lat": 51.5155, "lon": -0.5350, "voltage_kv": 400, "firm_mw": 450, "rag": "green" },
+      { "id": "uxbridge-moor-132", "name": "Uxbridge Moor 132kV", "lat": 51.5460, "lon": -0.4810, "voltage_kv": 132, "firm_mw": 28, "rag": "red" },
+      { "id": "slough-33", "name": "Slough 33kV", "lat": 51.5140, "lon": -0.5880, "voltage_kv": 33, "firm_mw": 14, "rag": "red" },
+      { "id": "harmondsworth-132", "name": "Harmondsworth 132kV", "lat": 51.4880, "lon": -0.4730, "voltage_kv": 132, "firm_mw": 45, "rag": "amber" },
+      { "id": "langley-66", "name": "Langley 66kV", "lat": 51.5075, "lon": -0.5470, "voltage_kv": 66, "firm_mw": 18, "rag": "red" }
+    ],
+    "cost_breakdown": {
+      "total_p50_gbp_m": 12.8,
+      "components": [
+        { "key": "regulatory_cccm", "label": "Regulatory (CCCM + SOCC)", "gbp_m": 0.8, "share": 0.063 },
+        { "key": "duos_tnuos_upfront", "label": "DUoS / TNUoS upfront", "gbp_m": 1.6, "share": 0.125 },
+        { "key": "reinforcement_allocation", "label": "Reinforcement allocation", "gbp_m": 4.2, "share": 0.328 },
+        { "key": "cable_civils", "label": "Cable 132kV + civils (2.8 km)", "gbp_m": 3.4, "share": 0.266 },
+        { "key": "switchgear_gis", "label": "132kV GIS switchgear", "gbp_m": 1.8, "share": 0.141 },
+        { "key": "g99_protection", "label": "G99 Annex C protection + witness", "gbp_m": 0.5, "share": 0.039 },
+        { "key": "design_legal", "label": "Design, legal, wayleaves", "gbp_m": 0.5, "share": 0.039 }
+      ]
+    },
+    "timeline_gantt": [
+      { "phase": "g99_application", "label": "G99 Annex C application", "start_month": 0, "duration_months": 3, "color": "#D4A018" },
+      { "phase": "offer_accept", "label": "DNO offer + Gate 2 milestone", "start_month": 3, "duration_months": 4, "color": "#C9A64B" },
+      { "phase": "design_detail", "label": "Detailed design + wayleaves", "start_month": 7, "duration_months": 6, "color": "#8B6F22" },
+      { "phase": "long_lead_switchgear", "label": "GIS switchgear lead-time", "start_month": 5, "duration_months": 14, "color": "#6A5A28" },
+      { "phase": "civils_cable", "label": "Civils + 132kV cable", "start_month": 13, "duration_months": 9, "color": "#3F8B6F" },
+      { "phase": "substation_build", "label": "Customer substation build", "start_month": 16, "duration_months": 10, "color": "#3F6F8B" },
+      { "phase": "witness_test", "label": "G99 witness test", "start_month": 30, "duration_months": 2, "color": "#8B3F6F" },
+      { "phase": "commissioning", "label": "Commissioning + in-service", "start_month": 32, "duration_months": 2, "color": "#24A148" }
+    ],
+    "compliance": {
+      "g99": {
+        "satisfies": true,
+        "citation": "Engineering Recommendation G99, Issue 2 (10 March 2025)",
+        "annex": "Annex C — storage/generation >1 MW and <50 MW on distribution network",
+        "notes": "Load-only DC connection — G99 applies via Annex C for on-site backup gensets and any behind-the-meter BESS. Witness test return window: 28 days post-synchronisation.",
+        "reg_key": "g99"
+      },
+      "g100": {
+        "satisfies": true,
+        "citation": "Engineering Recommendation G100, Issue 2 Amendment 1 (1 July 2022)",
+        "notes": "Export-limiting scheme required if site exports to grid. For pure-load DC, G100 is advisory only.",
+        "reg_key": "g100"
+      },
+      "gate_2": {
+        "satisfies": true,
+        "citation": "NESO Gate 2 (TMO4+, live 6 January 2026)",
+        "notes": "65 MW at 132kV — TEC queue submission requires planning consent evidence and 10% milestone payment."
+      }
+    },
+    "power_flow_stub": {
+      "converged": true,
+      "success": true,
+      "summary": {
+        "min_voltage_pu": 0.962,
+        "max_voltage_pu": 1.028,
+        "max_loading_pct": 68.4,
+        "voltage_rise_pu": 0.012,
+        "total_losses_mw": 0.18,
+        "thermal_headroom_mw": 22.0,
+        "reverse_power_flow": false
+      },
+      "bus_results": [
+        { "name": "Iver_132_B1", "vm_pu": 1.012 },
+        { "name": "Iver_132_B2", "vm_pu": 1.008 },
+        { "name": "DC_Connection_33", "vm_pu": 0.978 },
+        { "name": "DC_Customer_11", "vm_pu": 0.962 }
+      ],
+      "line_results": [
+        { "name": "line_iver_dc_132", "loading_pct": 68.4 },
+        { "name": "line_iver_gsp_400", "loading_pct": 42.1 },
+        { "name": "line_customer_33", "loading_pct": 54.2 }
+      ],
+      "trafo_results": [
+        { "name": "trafo_iver_400_132", "loading_pct": 61.0 },
+        { "name": "trafo_customer_132_33", "loading_pct": 72.6 }
+      ],
+      "contingency": {
+        "n1_secure": true,
+        "total_contingencies": 6,
+        "passed": 5,
+        "worst_case": "Loss of Iver–Harmondsworth 132kV circuit raises customer trafo loading to 91% — within emergency rating."
+      },
+      "reinforcement": [],
+      "violations": [],
+      "notes": [
+        "Tier 2 Newton-Raphson converged in 4 iterations.",
+        "Customer 132/33kV transformer utilisation 72.6% — room for 22 MW expansion.",
+        "All bus voltages within ±6% statutory limit (Eng Rec P28)."
+      ],
+      "elapsed_s": 2.1,
+      "network_size": { "substations": 8, "lines": 14 }
+    },
+    "power_chain": {
+      "it_load_mw": 50,
+      "total_facility_mw": 65,
+      "redundancy": "2N",
+      "voltage_primary_kv": 132,
+      "voltage_secondary_kv": 33,
+      "voltage_kv": 132,
+      "transformer_count": 4,
+      "transformer_unit_mva": 40,
+      "transformer_mva": 160,
+      "transformer_utilisation_pct": 46.9,
+      "switchgear_panels": 6,
+      "ups_modules": 152,
+      "ups_module_kw": 500,
+      "ups_capacity_kw": 76000,
+      "ups_autonomy_minutes": 5,
+      "generator_sets": 24,
+      "generator_unit_kw": 3000,
+      "generator_capacity_kw": 72000,
+      "generator_fuel_hours": 72,
+      "pdu_count": 2080,
+      "derived_from": "utils.dc_engineering_sizing (2N, 50 MW IT, PUE 1.30)",
+      "standards": ["IEEE 241 §10.3", "BS 7671 Ch 43", "EN 50600-2-2 §6", "BS EN ISO 8528-1", "Uptime Institute Tier III (72h fuel)"]
+    }
+  }
+}

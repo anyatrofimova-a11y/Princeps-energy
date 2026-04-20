@@ -5,6 +5,7 @@ import { MapboxOverlay } from "@deck.gl/mapbox";
 import { GeoJsonLayer, ScatterplotLayer, PathLayer, LineLayer } from "@deck.gl/layers";
 import AssessTwinToolbar from "./AssessTwinToolbar";
 import AssessTwinLegend from "./AssessTwinLegend";
+import AssessTwinInspector from "./AssessTwinInspector";
 import useProjectTwinLayers from "../../hooks/useProjectTwinLayers";
 import { fetchProjectTwinContext, isMockMode } from "../../api/projectTwin";
 
@@ -128,6 +129,20 @@ export default function AssessProjectTwin({
   const [loading, setLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [error, setError] = useState(null);
+  // Inspector — which element is click-selected. null = no panel.
+  //   'polygon'     — project site outline
+  //   'buildable'   — buildable mask
+  //   'poc'         — POC substation + line
+  //   `grid_line:<idx>` — specific grid line segment
+  const [selected, setSelected] = useState(null);
+
+  // ESC clears selection.
+  useEffect(() => {
+    if (!selected) return;
+    const onKey = (e) => { if (e.key === "Escape") setSelected(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selected]);
 
   const {
     layers, toggleLayer, setAllLayers,
@@ -319,7 +334,7 @@ export default function AssessProjectTwin({
       }));
     }
 
-    // Project polygon outline (gold, 2px stroke)
+    // Project polygon outline (gold, 2px stroke) — pickable → Inspector
     if (layers.polygon && ctx.polygon) {
       out.push(new GeoJsonLayer({
         id: "assess-polygon",
@@ -329,7 +344,15 @@ export default function AssessProjectTwin({
         getLineColor: [...GOLD_RGB, 230],
         lineWidthMinPixels: 2,
         pickable: true,
+        onClick: ({ object }) => { if (object) setSelected("polygon"); },
       }));
+    }
+
+    // Buildable mask click zone (invisible wider-hit) to give inspector access
+    if (layers.buildable && buildable) {
+      // already rendered above as pickable: false; add a thin invisible overlay
+      // to let users click buildable zone — kept non-pickable there to preserve
+      // hit priority; skip here.
     }
 
     // Grid lines within 5km of centroid (thin blue / voltage-coloured)
@@ -358,6 +381,7 @@ export default function AssessProjectTwin({
           pickable: true,
           capRounded: true,
           jointRounded: true,
+          onClick: ({ object, index }) => { if (object) setSelected(`grid_line:${index}`); },
         }));
       }
     }
@@ -387,6 +411,7 @@ export default function AssessProjectTwin({
         lineWidthMinPixels: 2,
         stroked: true,
         pickable: true,
+        onClick: ({ object }) => { if (object) setSelected("poc"); },
       }));
     }
 
@@ -454,6 +479,15 @@ export default function AssessProjectTwin({
             layers={layers}
             scaleKm={scaleKm}
             tech={ctx?.tech || tech}
+            selected={selected}
+            onLegendClick={setSelected}
+          />
+          <AssessTwinInspector
+            selected={selected}
+            ctx={ctx}
+            tech={ctx?.tech || tech}
+            capacity_mw={ctx?.capacity_mw || capacity_mw}
+            onClose={() => setSelected(null)}
           />
         </>
       )}

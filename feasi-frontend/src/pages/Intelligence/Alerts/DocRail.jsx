@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useState } from "react";
 import { getDocument } from "../../../api/alerts";
 
 const ChatRail = lazy(() => import("../../../components/shell/ChatRail"));
+const GridCanvas = lazy(() => import("../../../components/GridCanvas"));
 
 const C = {
   gold: "#F5B731",
@@ -135,15 +136,29 @@ function DocView({ docId }) {
 
   if (!docId) {
     return (
-      <div style={{ padding: 24, color: C.tertiary, fontSize: 12, lineHeight: 1.6 }}>
-        <div style={{
-          fontSize: 9, fontWeight: 700, color: C.tertiary,
-          letterSpacing: "0.08em", textTransform: "uppercase",
-          fontFamily: "'JetBrains Mono', monospace", marginBottom: 8,
-        }}>
-          Document viewer
+      <div style={{
+        position: "relative", flex: 1, minHeight: 0,
+        overflow: "hidden",
+      }}>
+        {/* Princeps moving-node ambient background */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.45 }}>
+          <Suspense fallback={null}>
+            <GridCanvas />
+          </Suspense>
         </div>
-        Select a document from the feed to read the extracted text and citations.
+        <div style={{
+          position: "relative", padding: 24,
+          color: C.tertiary, fontSize: 12, lineHeight: 1.6,
+        }}>
+          <div style={{
+            fontSize: 9, fontWeight: 700, color: C.tertiary,
+            letterSpacing: "0.08em", textTransform: "uppercase",
+            fontFamily: "'JetBrains Mono', monospace", marginBottom: 8,
+          }}>
+            Document viewer
+          </div>
+          Select a document from the feed to read the extracted text and citations.
+        </div>
       </div>
     );
   }

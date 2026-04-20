@@ -158,6 +158,32 @@ export default function App() {
     return () => window.removeEventListener("princeps-run-intent", handler);
   }, [parcelId, samCapacity, samDay]);
 
+  // Dataset-layer activation from Datasets tab "Show on Map" buttons.
+  // Reads ?dataset=<slug>&layer=<map_layer_slug> on mount, and also
+  // subscribes to the runtime event so tab-switches without a reload work.
+  useEffect(() => {
+    const applyDataset = (slug, layer) => {
+      if (!slug) return;
+      try {
+        window.dispatchEvent(new CustomEvent("princeps-apply-dataset-layer", {
+          detail: { slug, layer, ts: Date.now() },
+        }));
+      } catch {}
+    };
+    try {
+      const qs = new URLSearchParams(window.location.search);
+      const slug = qs.get("dataset");
+      const layer = qs.get("layer");
+      if (slug) applyDataset(slug, layer);
+    } catch {}
+    const onActivate = (e) => {
+      const { slug, layer } = e.detail || {};
+      applyDataset(slug, layer);
+    };
+    window.addEventListener("princeps-activate-dataset-layer", onActivate);
+    return () => window.removeEventListener("princeps-activate-dataset-layer", onActivate);
+  }, []);
+
   // ── Map drop handler: place asset at lat/lon ──
   const handleMapDrop = useCallback((e) => {
     e.preventDefault();

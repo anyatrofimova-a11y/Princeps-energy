@@ -1191,12 +1191,32 @@ function CostBreakdown({ costs }) {
 
 function PowerChainDiagram({ power }) {
   if (!power) return null;
+  // Per-unit transformer rating. Prefer the new `transformer_unit_mva` field
+  // emitted by utils.dc_engineering_sizing.size_transformers(). Fall back to
+  // (installed_mva / count) for legacy payloads. Never display the aggregate
+  // installed_mva as a per-unit rating — that was the "32× 78.7 MVA" bug.
+  const unitMva = power.transformer_unit_mva
+    ?? (power.transformer_count > 0
+        ? (power.transformer_mva / power.transformer_count)
+        : null);
+  const unitKw = power.generator_unit_kw;
+  const gensetLabel = unitKw
+    ? `${power.generator_sets}× ${(unitKw / 1000).toFixed(1)} MW`
+    : `${power.generator_sets} gensets`;
+  const upsLabel = power.ups_module_kw
+    ? `${power.ups_modules}× ${power.ups_module_kw}kW (${fmtKw(power.ups_capacity_kw)})`
+    : `${power.ups_modules} modules (${fmtKw(power.ups_capacity_kw)})`;
+  const voltageLabel = power.voltage_primary_kv
+    ? `${power.voltage_primary_kv}/${power.voltage_secondary_kv || 0.415}kV`
+    : `${power.voltage_kv}kV`;
   const items = [
-    { label: "Grid", val: `${power.voltage_kv}kV`, color: T.cyan },
+    { label: "Grid", val: voltageLabel, color: T.cyan },
     { label: "Switchgear", val: `${power.switchgear_panels} panels`, color: "#888" },
-    { label: "Transformers", val: `${power.transformer_count}× ${power.transformer_mva?.toFixed?.(1) || "--"} MVA`, color: T.purple },
-    { label: "UPS", val: `${power.ups_modules} modules (${fmtKw(power.ups_capacity_kw)})`, color: T.accent },
-    { label: "Generators", val: `${power.generator_sets} gensets`, color: T.orange },
+    { label: "Transformers", val: unitMva != null
+        ? `${power.transformer_count}× ${Number(unitMva).toFixed(1)} MVA`
+        : `${power.transformer_count} units`, color: T.purple },
+    { label: "UPS", val: upsLabel, color: T.accent },
+    { label: "Generators", val: gensetLabel, color: T.orange },
     { label: "PDUs", val: `${power.pdu_count} (${power.redundancy})`, color: T.green },
   ];
   return (

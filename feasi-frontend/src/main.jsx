@@ -30,6 +30,9 @@ const DocketsIndex = lazy(() => import("./pages/Intelligence/Dockets/DocketsInde
 const TrackerDashboard = lazy(() => import("./pages/Tracker/TrackerDashboard.jsx"));
 const DatasetsIndex = lazy(() => import("./pages/Intelligence/Datasets/DatasetsIndex.jsx"));
 
+// Global parcel drawer — listens on window event from any map.
+const ParcelDrawer = lazy(() => import("./components/parcel/ParcelDrawer.jsx"));
+
 // Tiny placeholder for the Dockets/Datasets sub-tabs — the Alerts tab is
 // the deliverable; these slots exist so the segmented control routes without
 // 404s. Keep inline to avoid a separate file.
@@ -107,6 +110,9 @@ const LegacyApp = () => (
 createRoot(document.getElementById("root")).render(
   <ErrorBoundary>
     <BrowserRouter>
+      <Suspense fallback={null}>
+        <ParcelDrawer />
+      </Suspense>
       <Routes>
         <Route
           path="/canvas/:projectId"
