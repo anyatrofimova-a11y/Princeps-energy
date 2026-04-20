@@ -50,23 +50,35 @@ log = logging.getLogger("princeps.agents.market_intel")
 
 
 # Primary watchlist. Swap to DB-backed config once an admin UI exists.
+#
+# URLs refreshed 2026-04-20 after all 4 non-NESO sources started returning
+# 404. Ofgem moved from /publications-and-updates to /publications with
+# search-type= query param; DESNZ news moved into the unified gov.uk
+# search surface; EMR Delivery Body redesigned (CM docs now discoverable
+# from site root); Ofgem's RIIO-ED2 long-path URL went away — scout now
+# uses a keyword search that surfaces latest ED2 decisions.
 _SOURCES: list[dict[str, Any]] = [
-    # Regulator
+    # Regulator — Ofgem
     {"name": "ofgem-consultations", "category": "regulator",
-     "url": "https://www.ofgem.gov.uk/publications-and-updates?publication_type=All&sort=updated_at"},
+     "url": "https://www.ofgem.gov.uk/publications?search-type=Consultation"},
     {"name": "ofgem-decisions",     "category": "regulator",
-     "url": "https://www.ofgem.gov.uk/publications-and-updates?publication_type=Decision"},
-    # System operator
+     "url": "https://www.ofgem.gov.uk/publications?search-type=Decision"},
+    # System operator — NESO
     {"name": "neso-news",            "category": "system-operator",
      "url": "https://www.neso.energy/news"},
     {"name": "neso-cm",              "category": "capacity-market",
-     "url": "https://www.emrdeliverybody.com/CM/Documents.aspx"},
-    # Govt
+     "url": "https://www.emrdeliverybody.com/"},
+    # Govt — DESNZ
     {"name": "desnz-news",           "category": "policy",
-     "url": "https://www.gov.uk/government/organisations/department-for-energy-security-and-net-zero/news-and-communications"},
+     "url": "https://www.gov.uk/search/news-and-communications?organisations%5B%5D=department-for-energy-security-and-net-zero"},
     # DNOs — Price Control
     {"name": "ed2-price-control",    "category": "network",
-     "url": "https://www.ofgem.gov.uk/energy-policy-and-regulation/policy-and-regulatory-programmes/riio-ed2-network-price-controls-2023-2028"},
+     "url": "https://www.ofgem.gov.uk/publications?keywords=RIIO-ED2"},
+    # 2026 additions — CfD + DUKES (per BOT-Y regulatory sweep 2026-04-19)
+    {"name": "cfd-ar7",              "category": "policy",
+     "url": "https://www.gov.uk/government/publications/contracts-for-difference-cfd-allocation-round-7-allocation-framework"},
+    {"name": "dukes",                "category": "statistics",
+     "url": "https://www.gov.uk/government/collections/digest-of-uk-energy-statistics-dukes"},
 ]
 
 
