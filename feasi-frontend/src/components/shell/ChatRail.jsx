@@ -1,4 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo, lazy, Suspense } from "react";
+import { useWorkspace } from "../../contexts/WorkspaceContext";
+import { getSuggestions } from "../../lib/chatSuggestions";
+import { buildPageContext } from "../../lib/pageContext";
+import useMapTime from "../../hooks/useMapTime";
 
 const GridCanvas = lazy(() => import("../GridCanvas"));
 
@@ -87,6 +91,148 @@ export default function ChatRail({
   const inputRef = useRef(null);
   const abortRef = useRef(null);
 
+  // ── Suggested-prompt context (pills on empty state) ──
+  // WorkspaceProvider is mounted at app root, but ChatRail can in theory be
+  // rendered before it — guard so we don't crash if that changes later.
+  let workspaceCtx = null;
+  try { workspaceCtx = useWorkspace(); } catch { workspaceCtx = null; }
+  const activeWorkspace = workspaceCtx?.activeWorkspace || "home";
+  const activeViewMode  = workspaceCtx?.activeViewMode  || null;
+
+  // lifecycleTab + projectContext + focus arrive via window CustomEvents.
+  //   - "princeps-chat-context" { lifecycleTab, projectContext } — page-level
+  //   - "princeps-chat-focus"   { type, id, label, data }        — entity click
+  // Pathname tracked separately for pushState-driven routes.
+  const [chatContext, setChatContext] = useState(() => ({
+    lifecycleTab: null,
+    projectContext: null,
+    project: null,       // full project record (id, name, lat, lon, tech, capacity_mw, stage, dno, tec_mw)
+    focus: null,
+    pathname: typeof window !== "undefined" ? window.location.pathname : "/",
+  }));
+  // Ref mirror so the send() closure + path poll always read the latest.
+  const chatContextRef = useRef(chatContext);
+  useEffect(() => { chatContextRef.current = chatContext; }, [chatContext]);
+
+  // Scrubber state — pathway + asOf flow into page_context so Claude knows
+  // which FES scenario/year the user is viewing. useMapTime is safe outside
+  // SiteProvider (vanilla external store) so no guard needed.
+  const mapTime = useMapTime();
+
+  useEffect(() => {
+    const onCtx = (e) => {
+      const d = e.detail || {};
+      setChatContext((prev) => ({
+        ...prev,
+        lifecycleTab:   d.lifecycleTab   ?? prev.lifecycleTab,
+        projectContext: d.projectContext ?? prev.projectContext,
+        project:        d.project        ?? prev.project,
+      }));
+    };
+    const onFocus = (e) => {
+      const d = e.detail || {};
+      setChatContext((prev) => ({
+        ...prev,
+        focus: d && (d.type || d.id || d.label) ? {
+          type: d.type || "unknown",
+          id: d.id ?? null,
+          label: d.label ?? null,
+          data: d.data ?? null,
+          at: Date.now(),
+        } : null,
+      }));
+    };
+    const onNav = () => {
+      setChatContext((prev) => ({ ...prev, pathname: window.location.pathname, focus: null }));
+    };
+    window.addEventListener("princeps-chat-context", onCtx);
+    window.addEventListener("princeps-chat-focus", onFocus);
+    window.addEventListener("popstate", onNav);
+    window.addEventListener("hashchange", onNav);
+    const pathTick = setInterval(() => {
+      if (window.location.pathname !== chatContextRef.current.pathname) {
+        setChatContext((p) => ({ ...p, pathname: window.location.pathname, focus: null }));
+      }
+    }, 1000);
+    return () => {
+      window.removeEventListener("princeps-chat-context", onCtx);
+      window.removeEventListener("princeps-chat-focus", onFocus);
+      window.removeEventListener("popstate", onNav);
+      window.removeEventListener("hashchange", onNav);
+      clearInterval(pathTick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Build a UI-context dict matching the backend's build_system_prompt
+  // shape. Called on every send() so the most recent focus/pathname wins.
+  // Starts from the shared buildPageContext collector (URL params, selected
+  // asset via window globals, FES pathway, as-of year) and overlays focus
+  // + projectContext fields this component owns.
+  const buildUiContext = useCallback(() => {
+    const ctx = chatContextRef.current;
+    const base = buildPageContext({
+      workspace: activeWorkspace || null,
+      viewMode: activeViewMode || null,
+      project: ctx.project || null,
+      lifecycleTab: ctx.lifecycleTab || null,
+      pathway: mapTime?.fesPathway || null,
+      asOf: mapTime?.asOf || null,
+    });
+    const ui = { ...base, pathname: ctx.pathname };
+    if (projectId) ui.project_id = projectId;
+    if (parcelId) ui.parcel_id = parcelId;
+    if (ctx.projectContext) {
+      const pc = ctx.projectContext;
+      if (pc.name) ui.project_name = pc.name;
+      if (pc.technology || pc.workload) ui.technology = pc.technology || pc.workload;
+      if (pc.capacity_mw != null) ui.capacity_mw = pc.capacity_mw;
+      if (pc.stage) ui.stage = pc.stage;
+      if (pc.verdict) ui.verdict = pc.verdict;
+      if (pc.region) ui.region = pc.region;
+      if (pc.lat != null && pc.lon != null) ui.picked_location = { lat: pc.lat, lon: pc.lon };
+      if (pc.candidate_count != null) ui.candidate_count = pc.candidate_count;
+    }
+    if (ctx.focus) {
+      ui.focus = {
+        type: ctx.focus.type,
+        id: ctx.focus.id,
+        label: ctx.focus.label,
+      };
+      const f = ctx.focus.data || {};
+      if (ctx.focus.type === "alert" && f.title) ui.focused_alert = f.title;
+      if (ctx.focus.type === "docket" && f.title) ui.focused_docket = f.title;
+      if (ctx.focus.type === "dataset" && f.title) ui.focused_dataset = f.title;
+      if (ctx.focus.type === "substation" && f.name) ui.focused_substation = f.name;
+      if (ctx.focus.type === "candidate_site" && f.name) ui.focused_site = f.name;
+    }
+
+    // BOT-CHC — page_context block. Merged under the `page_context` key so the
+    // backend can keep supporting the legacy flat shape while `build_system_prompt`
+    // reads the structured block (project.*, lifecycle_tab, pathway, as_of_year).
+    ui.page_context = buildPageContext({
+      workspace: activeWorkspace,
+      viewMode: activeViewMode,
+      project: ctx.project,
+      lifecycleTab: ctx.lifecycleTab,
+      pathway: mapTime?.fesPathway || null,
+      asOf: mapTime?.asOf || null,
+    });
+    return ui;
+  }, [activeWorkspace, activeViewMode, projectId, parcelId, mapTime?.fesPathway, mapTime?.asOf]);
+
+  const suggestions = useMemo(
+    () => getSuggestions({
+      workspace: activeWorkspace,
+      viewMode: activeViewMode,
+      lifecycleTab: chatContext.lifecycleTab,
+      pathname: chatContext.pathname,
+      projectContext: chatContext.projectContext || { hasProject: !!projectId },
+      focus: chatContext.focus,
+    }),
+    [activeWorkspace, activeViewMode, chatContext.lifecycleTab, chatContext.pathname, chatContext.projectContext, chatContext.focus, projectId],
+  );
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -126,8 +272,12 @@ export default function ChatRail({
     return null;
   }, [sessionId, parcelId, projectId]);
 
-  const send = useCallback(async () => {
-    const text = input.trim();
+  const send = useCallback(async (explicitText = null) => {
+    // Callers pass either a string (pill-click prompt) or nothing. onClick
+    // handlers pass an event — coerce anything non-string back to null so
+    // we read the input state instead.
+    const override = typeof explicitText === "string" ? explicitText : null;
+    const text = (override ?? input).trim();
     if (!text || streaming) return;
     setInput("");
     setStreaming(true);
@@ -152,7 +302,7 @@ export default function ChatRail({
       let res = await fetch(`/chat/${sid}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, context: buildUiContext() }),
         signal: abortRef.current.signal,
       });
 
@@ -170,7 +320,7 @@ export default function ChatRail({
             res = await fetch(`/chat/${ssd.session_id}/message`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ message: text }),
+              body: JSON.stringify({ message: text, context: buildUiContext() }),
               signal: abortRef.current.signal,
             });
           }
@@ -264,6 +414,16 @@ export default function ChatRail({
     }
   };
 
+  // Pill click → auto-send. Chosen over "fill + review" because the pills
+  // are curated prompts (not freeform user input), demo velocity matters,
+  // and the user can still edit before pressing Enter if they type first
+  // (pills are gated by an empty-message state). send() accepts an explicit
+  // text override so we bypass the input-state round trip.
+  const handlePillClick = useCallback((prompt) => {
+    if (streaming) return;
+    send(prompt);
+  }, [streaming, send]);
+
   // COLLAPSED — small floating bubble bottom-right, like the original
   // CopilotWidget. Click to expand into a floating chat card.
   // Skipped entirely in inline mode (the parent container hosts the chat).
@@ -271,14 +431,14 @@ export default function ChatRail({
     return (
       <>
         <button
-          className="cr-bubble"
+          className="cr-pill-collapsed"
           onClick={() => setCollapsed(false)}
           title="Open chat (⌘K)"
           aria-label="Open chat"
         >
-          <span className="cr-bubble-dot" />
-          <span className="cr-bubble-icon">◆</span>
-          <span className="cr-bubble-lbl">Ask Princeps</span>
+          <span className="cr-pill-collapsed-dot" />
+          <span className="cr-pill-collapsed-icon">◆</span>
+          <span className="cr-pill-collapsed-lbl">Ask Princeps</span>
         </button>
         <style>{baseCSS}</style>
       </>
@@ -308,7 +468,26 @@ export default function ChatRail({
             </Suspense>
             <div className="cr-empty-fg">
               <div className="cr-empty-title">How can I help?</div>
-              <div className="cr-empty-sub">Ask about grid connection, site scoring, demand, planning.</div>
+              <div className="cr-empty-sub">
+                {suggestions.header || "Ask about grid connection, site scoring, demand, planning."}
+              </div>
+              {suggestions.pills && suggestions.pills.length > 0 && (
+                <div className="cr-pills" role="list">
+                  {suggestions.pills.map((p, i) => (
+                    <button
+                      key={p.label + i}
+                      type="button"
+                      role="listitem"
+                      className="cr-pill"
+                      onClick={() => handlePillClick(p.prompt)}
+                      disabled={streaming}
+                      title={p.prompt}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="cr-hint">⌘K to focus input</div>
             </div>
           </div>
@@ -384,8 +563,10 @@ const baseCSS = `
     background: transparent;
   }
 
-  /* COLLAPSED — floating pill bubble bottom-right. */
-  .cr-bubble {
+  /* COLLAPSED — floating pill bubble bottom-right. Class is distinct from
+     .cr-bubble (thread message bubble) so fixed positioning never leaks
+     into the thread render. */
+  .cr-pill-collapsed {
     position: fixed;
     right: 20px; bottom: 52px;
     display: inline-flex; align-items: center; gap: 8px;
@@ -400,11 +581,11 @@ const baseCSS = `
     transition: transform 140ms, box-shadow 140ms;
     z-index: 990;
   }
-  .cr-bubble:hover {
+  .cr-pill-collapsed:hover {
     transform: translateY(-2px);
     box-shadow: 0 12px 32px rgba(0,0,0,0.22), 0 3px 8px rgba(0,0,0,0.14);
   }
-  .cr-bubble-dot {
+  .cr-pill-collapsed-dot {
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--gold);
     box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.35);
@@ -414,8 +595,8 @@ const baseCSS = `
     0%, 100% { box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.35); }
     50%      { box-shadow: 0 0 0 7px rgba(var(--accent-rgb), 0.08); }
   }
-  .cr-bubble-icon { font-size: 12px; color: var(--gold); }
-  .cr-bubble-lbl { font-size: 13px; }
+  .cr-pill-collapsed-icon { font-size: 12px; color: var(--gold); }
+  .cr-pill-collapsed-lbl { font-size: 13px; }
 
   .cr-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -485,15 +666,51 @@ const baseCSS = `
     letter-spacing: 0.04em;
   }
 
+  /* Suggested-prompt pills — shown in empty-state only, per-context content. */
+  .cr-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    max-width: 300px;
+    margin: 18px auto 0;
+  }
+  .cr-pill {
+    font-family: "DM Sans", -apple-system, sans-serif;
+    font-size: 11.5px; font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--accent-rgb), 0.45);
+    background: rgba(var(--accent-rgb), 0.04);
+    color: var(--cds-text-primary);
+    cursor: pointer;
+    line-height: 1.2;
+    white-space: nowrap;
+    transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  }
+  .cr-pill:hover:not(:disabled) {
+    background: rgba(201, 166, 75, 0.12);
+    border-color: var(--gold);
+    transform: translateY(-1px);
+  }
+  .cr-pill:active:not(:disabled) { transform: translateY(0); }
+  .cr-pill:disabled { opacity: 0.5; cursor: not-allowed; }
+
   .cr-msg { display: flex; }
   .cr-msg-user { justify-content: flex-end; }
   .cr-msg-assistant { justify-content: flex-start; }
+  /* Thread bubble — MUST be position: static (default flow) so it sits
+     inside .cr-list and scrolls with the thread. Explicit here to prevent
+     leaks from any other .cr-bubble rule that might survive a bundle. */
   .cr-bubble {
+    position: static;
+    right: auto; bottom: auto; left: auto; top: auto;
     max-width: 92%;
     padding: 10px 12px;
     border-radius: 12px;
     font-size: 13px; line-height: 1.5;
     white-space: pre-wrap; word-wrap: break-word;
+    box-shadow: none;
   }
   .cr-bubble-user {
     background: rgba(var(--accent-rgb), 0.12);

@@ -254,11 +254,26 @@ function RecentActivityCard({ activity = [], signals = [], loading, onActivityCl
    ─────────────────────────────────────────────────────────── */
 function ActiveProjectsTable({ projects, loading, onSelectProject }) {
   const [hover, setHover] = useState(null);
+  // Dedupe by project_id — backend mission-control feed occasionally returns
+  // the same project twice when joined against multi-verdict runs, which
+  // otherwise shows up as ghost duplicates (e.g. Thames BESS GO + CAUTION).
+  const dedupedProjects = React.useMemo(() => {
+    if (!Array.isArray(projects)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const p of projects) {
+      const id = p?.project_id;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push(p);
+    }
+    return out;
+  }, [projects]);
   return (
     <div className="mc-table-wrap">
       <div className="mc-table-head">
         <span className="mc-table-eyebrow">Active projects</span>
-        <span className="mc-table-count">{loading ? "—" : (projects?.length ?? 0)}</span>
+        <span className="mc-table-count">{loading ? "—" : dedupedProjects.length}</span>
       </div>
       <div className="mc-table-scroll">
         <table className="mc-table">
@@ -276,9 +291,9 @@ function ActiveProjectsTable({ projects, loading, onSelectProject }) {
                   <td key={j}><Sk w={j === 0 ? "70%" : "50%"} h={12} /></td>
                 ))}
               </tr>
-            )) : (projects?.length ?? 0) === 0 ? (
+            )) : dedupedProjects.length === 0 ? (
               <tr><td colSpan={8} className="mc-table-empty">No active projects.</td></tr>
-            ) : projects.map((p) => {
+            ) : dedupedProjects.map((p) => {
               const grid = GRID_DOT[p.grid_status] || { glyph: "\u25CB", color: "var(--cds-text-helper)" };
               const isHover = hover === p.project_id;
               return (

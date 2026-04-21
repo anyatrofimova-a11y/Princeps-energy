@@ -39,6 +39,18 @@ import { createAssetInstancedLayers } from './deck/AssetInstancedLayer.js';
 import { createShadowPolygonLayer } from './deck/ShadowPolygonLayer.js';
 import { useCameraMode } from './camera/useCameraMode.js';
 
+// UX chrome — wired in on top of the Mapbox/deck.gl canvas
+import ViewModeTabs from './ViewModeTabs.jsx';
+import ToolbarLeft from './ToolbarLeft.jsx';
+import LayerRailRight from './LayerRailRight.jsx';
+import AssetSpecDrawer from './AssetSpecDrawer.jsx';
+import TimeSlider from './TimeSlider.jsx';
+import ScaleReferences from './ScaleReferences.jsx';
+import SunSlider from './SunSlider.jsx';
+import Onboarding from './Onboarding.jsx';
+import AttributionFooter from './AttributionFooter.jsx';
+import ReferenceSourcesPanel from './ReferenceSourcesPanel.jsx';
+
 const MAPBOX_TOKEN = import.meta.env?.VITE_MAPBOX_TOKEN || '';
 
 // ------------------------------------------------------------------
@@ -317,11 +329,27 @@ export default function TwinRoot({
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
   const [mapReady, setMapReady] = useState(false);
+  const [referencesOpen, setReferencesOpen] = useState(false);
 
   const layerVisibility = useTwinStore((s) => s.layerVisibility);
   const selectedAssetId = useTwinStore((s) => s.selectedAssetId);
   const setSelected = useTwinStore((s) => s.setSelected);
   const sunDate = useTwinStore((s) => s.sunDate);
+  const activeTool = useTwinStore((s) => s.activeTool);
+
+  // Help tool → open the ReferenceSourcesPanel (internal dev drawer).
+  // Reset tool → close it as a side-effect.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const onHelp = () => setReferencesOpen(true);
+    const onReset = () => setReferencesOpen(false);
+    window.addEventListener('princeps:twin:help', onHelp);
+    window.addEventListener('princeps:twin:reset', onReset);
+    return () => {
+      window.removeEventListener('princeps:twin:help', onHelp);
+      window.removeEventListener('princeps:twin:reset', onReset);
+    };
+  }, []);
 
   // bind persistence namespace once on mount
   useEffect(() => {
@@ -495,6 +523,22 @@ export default function TwinRoot({
           Mapbox canvas.
         </div>
       )}
+
+      {/* UX chrome — all absolutely positioned inside the twin wrapper */}
+      <ToolbarLeft />
+      <ViewModeTabs />
+      <ScaleReferences />
+      <LayerRailRight />
+      <TimeSlider />
+      {activeTool === 'sun' && <SunSlider lat={centroid[1]} lon={centroid[0]} />}
+      <AssetSpecDrawer />
+      {/* drawer reads selectedAssetId + clearSelection from twinStore directly */}
+      <AttributionFooter />
+      <ReferenceSourcesPanel
+        open={referencesOpen}
+        onClose={() => setReferencesOpen(false)}
+      />
+      <Onboarding />
     </div>
   );
 }

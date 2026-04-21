@@ -1,0 +1,120 @@
+{#-
+  Section B — Generating Plant / Energy Storage Unit Data.
+  Heading verbatim from ENA EREC G99 Issue 2 application form.
+  Context:
+    section_b : dict with 'units' (list of unit dicts), 'totals', 'ride_through'.
+-#}
+<section class="g99-section section-b">
+  <h2>Section B &mdash; Generating Plant / Energy Storage Unit Data</h2>
+  <p class="section-lead">
+    Unit-level electrical characteristics, capability curve, fault current
+    contribution and ride-through. One sub-table per unit type.
+    <em>Clause 6, G99 Issue 2 (unit declaration) with reference to Annex A
+    (ride-through) and Annex B (type-test certification).</em>
+  </p>
+
+  <h3>B1. Plant totals</h3>
+  <table class="form">
+    <tr><td class="lbl">Total rated export capacity (MW)</td>
+        <td>{{ field(section_b.totals.export_mw) }} <span class="prov">[Princeps v{{ meta.princeps_version }}]</span></td></tr>
+    <tr><td class="lbl">Total rated import capacity (MW, BESS only)</td>
+        <td>{{ field(section_b.totals.import_mw) }}</td></tr>
+    <tr><td class="lbl">Total apparent power (MVA)</td>
+        <td>{{ field(section_b.totals.mva) }}</td></tr>
+    <tr><td class="lbl">Power factor range</td>
+        <td>{{ field(section_b.totals.power_factor_range) }}</td></tr>
+    <tr><td class="lbl">Reactive capability (at Pmax)</td>
+        <td>{{ field(section_b.totals.reactive_capability) }}</td></tr>
+    <tr><td class="lbl">Number of units</td>
+        <td>{{ field(section_b.totals.number_of_units) }}</td></tr>
+    <tr><td class="lbl">Rated frequency / phases</td>
+        <td>{{ field(section_b.totals.frequency_hz) }} Hz, {{ field(section_b.totals.phases) }}</td></tr>
+  </table>
+
+  <h3>B2. Generating unit schedule</h3>
+  <table class="set">
+    <tr>
+      <th>Unit</th><th>Type</th><th>Make / Model</th>
+      <th>Rated MW (export)</th><th>Rated MW (import)</th>
+      <th>MVA</th><th>PF range</th><th>G99 type-test ref</th>
+    </tr>
+    {% for u in section_b.units %}
+    <tr>
+      <td>{{ u.unit_id }}</td>
+      <td>{{ u.unit_type }}</td>
+      <td>{{ u.make_model }}</td>
+      <td>{{ field(u.rated_mw_export) }}</td>
+      <td>{{ field(u.rated_mw_import) }}</td>
+      <td>{{ field(u.mva) }}</td>
+      <td>{{ field(u.pf_range) }}</td>
+      <td>{{ field(u.type_test_certificate) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>B3. Synchronous short-circuit contribution (fault level at PoC)</h3>
+  <p class="note">Required for DNO fault-level study (G99 Issue 2 Clause 12).</p>
+  <table class="set">
+    <tr>
+      <th>Unit</th><th>Interface type</th>
+      <th>Sub-transient Isc (A)</th><th>Isc / Irated</th>
+      <th>X/R ratio</th><th>Contribution (MVA at PoC)</th>
+      <th>Basis</th>
+    </tr>
+    {% for u in section_b.units %}
+    <tr>
+      <td>{{ u.unit_id }}</td>
+      <td>{{ u.interface_type }}</td>
+      <td>{{ field(u.isc_sub_transient_a) }}</td>
+      <td>{{ field(u.isc_over_irated) }}</td>
+      <td>{{ field(u.xr_ratio) }}</td>
+      <td>{{ field(u.fault_contribution_mva) }} <span class="prov">[Princeps v{{ meta.princeps_version }}]</span></td>
+      <td>{{ u.fault_basis }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>B4. Voltage &amp; frequency ride-through (G99 Issue 2 Annex A)</h3>
+  <p class="note">
+    Type categorisation: <strong>{{ section_b.ride_through.type_category }}</strong> — envelopes apply.
+    Generating units must remain connected through all faults bounded by the
+    envelopes below. Clause references: LVRT = Clause 4.8 &amp; Annex A.7; HVRT = Clause 4.9 &amp; Annex A.8.
+  </p>
+  <div class="ride-through">
+    <div class="rt-card">
+      {{ lvrt_svg | safe }}
+    </div>
+    <div class="rt-card">
+      {{ hvrt_svg | safe }}
+    </div>
+  </div>
+  <table class="form">
+    <tr><td class="lbl">Frequency operating range (continuous)</td>
+        <td>{{ field(section_b.ride_through.freq_continuous) }}</td></tr>
+    <tr><td class="lbl">Frequency tolerance (limited time)</td>
+        <td>{{ field(section_b.ride_through.freq_extended) }}</td></tr>
+    <tr><td class="lbl">LFSM-O threshold / droop</td>
+        <td>{{ field(section_b.ride_through.lfsm_o) }}</td></tr>
+    <tr><td class="lbl">LFSM-U threshold / droop</td>
+        <td>{{ field(section_b.ride_through.lfsm_u) }}</td></tr>
+    <tr><td class="lbl">FSM deadband / droop</td>
+        <td>{{ field(section_b.ride_through.fsm) }}</td></tr>
+    <tr><td class="lbl">ROCOF withstand</td>
+        <td>{{ field(section_b.ride_through.rocof_withstand) }}</td></tr>
+  </table>
+
+  <h3>B5. Island detection (anti-islanding)</h3>
+  <table class="form">
+    <tr><td class="lbl">Primary scheme</td>
+        <td>{{ field(section_b.anti_islanding.primary_scheme) }}</td></tr>
+    <tr><td class="lbl">ROCOF setting</td>
+        <td>{{ field(section_b.anti_islanding.rocof_hz_per_s) }} Hz/s over
+            {{ field(section_b.anti_islanding.rocof_window_ms) }} ms</td></tr>
+    <tr><td class="lbl">ROCOF time delay</td>
+        <td>{{ field(section_b.anti_islanding.rocof_time_delay_s) }} s</td></tr>
+    <tr><td class="lbl">Vector shift (backup)</td>
+        <td>{{ field(section_b.anti_islanding.vector_shift) }}</td></tr>
+    <tr><td class="lbl">Intentional islanding</td>
+        <td>{{ field(section_b.anti_islanding.intentional_islanding) }}</td></tr>
+  </table>
+</section>

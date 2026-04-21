@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SiteProvider } from "./SiteContext";
 import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 import App from "./App";
+import Toast from "./components/Toast";
 import "normalize.css";
 import "@blueprintjs/core/lib/css/blueprint.css";
 import "@blueprintjs/icons/lib/css/blueprint-icons.css";
@@ -274,6 +275,10 @@ createRoot(document.getElementById("root")).render(
         </Route>
         <Route path="*" element={<LegacyApp />} />
       </Routes>
+      {/* Global toast render layer — driven by src/lib/toast.js. Mounted at
+          the router root so it covers every route (legacy App, Intelligence,
+          Canvas, Design, …). */}
+      <Toast />
     </BrowserRouter>
   </ErrorBoundary>
 );

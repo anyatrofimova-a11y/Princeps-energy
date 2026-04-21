@@ -1,0 +1,9 @@
+{# =========================================================================
+   _shared/_footer.html.j2 — confidentiality + document hash strip.
+
+   Expects:  doc_hash  (str | None)   short hash of content identity
+   ========================================================================= #}
+<footer class="pp-footer">
+  <span class="pp-conf">Princeps Energy &mdash; Confidential &mdash; for intended recipient only</span>
+  <span class="pp-dochash">{{ doc_hash or "—" }}</span>
+</footer>

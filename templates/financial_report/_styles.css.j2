@@ -1,0 +1,327 @@
+/* =====================================================================
+   Princeps Financial Viability Report — stylesheet (embedded)
+   Lender-grade A4 portrait, 15 mm margins, running header/footer,
+   web-safe fonts only.
+   ===================================================================== */
+
+@page {
+  size: A4 portrait;
+  margin: 22mm 15mm 22mm 15mm;
+  @top-left   { content: "Princeps FVR — {{ project.ref }}"; font-family: Georgia, serif;
+                font-size: 9pt; color: #697077; }
+  @top-right  { content: "Rev {{ project.revision }} · {{ project.date }}"; font-family: Georgia, serif;
+                font-size: 9pt; color: #697077; }
+  @bottom-left  { content: "Confidential — for intended recipient only"; font-family: Georgia, serif;
+                  font-size: 8pt; color: #697077; }
+  @bottom-right { content: "Page " counter(page) " of " counter(pages); font-family: Georgia, serif;
+                  font-size: 8pt; color: #697077; }
+}
+@page :first {
+  margin: 0; /* cover runs full-bleed */
+  @top-left { content: none; } @top-right { content: none; }
+  @bottom-left { content: none; } @bottom-right { content: none; }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 10.5pt; }
+body {
+  font-family: Georgia, "Times New Roman", serif;
+  color: #1a1a1a;
+  line-height: 1.45;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+h1, h2, h3, h4, .label, .kpi-label {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+}
+
+.page-break { page-break-after: always; break-after: page; }
+.avoid-break { page-break-inside: avoid; }
+
+/* -------- Cover -------- */
+.cover {
+  height: 297mm;
+  width: 210mm;
+  padding: 45mm 28mm 28mm 28mm;
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 70%, #f0e9d0 100%);
+  color: #1a1a1a;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.cover-brand {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 20pt;
+  font-weight: 800;
+  letter-spacing: 6pt;
+  color: #D4A018;
+  border-bottom: 3px solid #1a1a2e;
+  padding-bottom: 6mm;
+}
+.cover-doc-type {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 10pt;
+  letter-spacing: 4pt;
+  color: #697077;
+  text-transform: uppercase;
+  margin-top: 3mm;
+}
+.cover-title {
+  font-size: 26pt;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-top: 24mm;
+  line-height: 1.2;
+}
+.cover-subtitle {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 12pt;
+  color: #555;
+  margin-top: 4mm;
+  font-weight: 400;
+}
+.cover-meta {
+  margin-top: 22mm;
+  border-top: 1px solid #D4A018;
+  padding-top: 6mm;
+  font-size: 10pt;
+  color: #1a1a2e;
+}
+.cover-meta table { width: 100%; border-collapse: collapse; }
+.cover-meta td { padding: 3pt 0; vertical-align: top; }
+.cover-meta td.k {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 9pt;
+  letter-spacing: 0.5pt;
+  color: #697077;
+  text-transform: uppercase;
+  width: 42mm;
+}
+.cover-reliance {
+  margin-top: 18mm;
+  padding: 6mm;
+  border: 1px solid #D4A018;
+  background: #fdf9ec;
+  font-size: 9pt;
+  line-height: 1.55;
+  color: #333;
+}
+.cover-reliance .head {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 10pt;
+  font-weight: 700;
+  color: #1a1a2e;
+  letter-spacing: 1pt;
+  margin-bottom: 3mm;
+}
+.cover-footer {
+  border-top: 1px solid #e0e0e0;
+  padding-top: 4mm;
+  font-size: 8.5pt;
+  color: #697077;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* -------- Section & heading style -------- */
+.section {
+  margin-top: 6mm;
+}
+.section-title {
+  font-size: 14pt;
+  font-weight: 700;
+  color: #1a1a2e;
+  border-bottom: 2.5pt solid #D4A018;
+  padding-bottom: 1.5mm;
+  margin-bottom: 4mm;
+  letter-spacing: 0.3pt;
+}
+.section-intro {
+  font-size: 10pt;
+  color: #333;
+  margin-bottom: 4mm;
+}
+h3.sub {
+  font-size: 11pt;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-top: 4mm;
+  margin-bottom: 2mm;
+}
+
+/* -------- Verdict banner / KPI strip -------- */
+.verdict-bar {
+  display: flex;
+  align-items: stretch;
+  border-radius: 3pt;
+  overflow: hidden;
+  margin-bottom: 4mm;
+  border: 1px solid #ddd;
+}
+.verdict-pill {
+  padding: 5mm 8mm;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 14pt;
+  font-weight: 700;
+  letter-spacing: 1pt;
+  color: #fff;
+  min-width: 32mm;
+  text-align: center;
+}
+.verdict-GO        { background: #24a148; }
+.verdict-CAUTION   { background: #f1c21b; color: #1a1a2e; }
+.verdict-NO-GO     { background: #da1e28; }
+.verdict-detail {
+  flex: 1;
+  padding: 3mm 5mm;
+  font-size: 9.5pt;
+  color: #333;
+}
+.kpi-strip {
+  display: table;
+  width: 100%;
+  border-spacing: 2mm 0;
+  margin: 3mm 0;
+}
+.kpi-cell {
+  display: table-cell;
+  background: #f7f5ed;
+  border-left: 2pt solid #D4A018;
+  padding: 2.5mm 3mm;
+  width: 25%;
+}
+.kpi-cell .v {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 14pt;
+  font-weight: 700;
+  color: #1a1a2e;
+  line-height: 1.05;
+}
+.kpi-cell .l {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 7.5pt;
+  color: #697077;
+  letter-spacing: 0.5pt;
+  text-transform: uppercase;
+  margin-top: 1mm;
+}
+
+/* -------- Tables -------- */
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9pt;
+  margin: 2mm 0;
+}
+table.data th {
+  background: #1a1a2e;
+  color: #D4A018;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.3pt;
+  text-transform: uppercase;
+  padding: 2mm 2.5mm;
+  text-align: left;
+  border-bottom: 2pt solid #D4A018;
+}
+table.data td {
+  padding: 1.8mm 2.5mm;
+  border-bottom: 0.5pt solid #eeeae0;
+  color: #333;
+  vertical-align: top;
+}
+table.data tr.total td {
+  font-weight: 700;
+  background: #f7f5ed;
+  border-top: 1pt solid #D4A018;
+  border-bottom: 1pt solid #D4A018;
+  color: #1a1a2e;
+}
+table.data tr:nth-child(even):not(.total) td { background: #fafafa; }
+table.data .num { text-align: right; font-variant-numeric: tabular-nums; }
+table.data .small { font-size: 8pt; color: #697077; }
+
+/* -------- Source line -------- */
+.source {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 7.5pt;
+  color: #697077;
+  margin-top: 1mm;
+  font-style: italic;
+}
+
+/* -------- Risk register -------- */
+table.risk td.chip {
+  width: 16mm;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-weight: 700;
+  font-size: 8pt;
+  text-align: center;
+  color: #fff;
+}
+.chip-H  { background: #da1e28; }
+.chip-M  { background: #f1c21b; color: #1a1a2e; }
+.chip-L  { background: #24a148; }
+
+/* -------- Callout / risk bullets -------- */
+.callout {
+  border: 1px solid #D4A018;
+  background: #fdf9ec;
+  padding: 3mm 4mm;
+  margin: 2mm 0 3mm 0;
+  font-size: 9.5pt;
+  border-radius: 2pt;
+}
+.callout h3 {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 10pt;
+  color: #1a1a2e;
+  margin-bottom: 1.5mm;
+}
+.callout-red { border-color: #da1e28; background: #fdf2f2; }
+.callout-green { border-color: #24a148; background: #f1faf3; }
+
+ul.bullets { margin: 1.5mm 0 1.5mm 5mm; }
+ul.bullets li { margin-bottom: 1mm; font-size: 9.5pt; }
+
+/* -------- Charts -------- */
+.chart-wrap {
+  margin: 3mm 0;
+  border: 1px solid #e0e0e0;
+  padding: 3mm;
+  background: #fff;
+  page-break-inside: avoid;
+}
+.chart-wrap img { width: 100%; max-width: 100%; }
+.chart-caption {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-size: 8pt;
+  color: #697077;
+  margin-top: 1mm;
+  font-style: italic;
+}
+
+/* -------- Appendix definition list -------- */
+dl.assumptions {
+  font-size: 9pt;
+}
+dl.assumptions dt {
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-top: 2.5mm;
+}
+dl.assumptions dd {
+  color: #333;
+  margin-left: 0;
+  margin-top: 0.5mm;
+}
+dl.assumptions dd .src {
+  font-size: 8pt;
+  font-style: italic;
+  color: #697077;
+  margin-left: 2mm;
+}

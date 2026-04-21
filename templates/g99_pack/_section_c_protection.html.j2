@@ -1,0 +1,81 @@
+{#-
+  Section C — Interface Protection.
+  Heading verbatim from ENA EREC G99 Issue 2 application form.
+  Context:
+    section_c : dict with 'schedule', 'relay', 'ct_vt', 'intertrip'.
+-#}
+<section class="g99-section section-c">
+  <h2>Section C &mdash; Interface Protection</h2>
+  <p class="section-lead">
+    Full protection schedule per <em>G99 Issue 2 Section 13</em>. Each stage
+    below corresponds to a required protection function; thresholds and
+    operating times are the G99 Issue 2 canonical values and must be sealed
+    after commissioning per Clause 13.4.2.
+  </p>
+
+  <h3>C1. Interface protection relay</h3>
+  <table class="form">
+    <tr><td class="lbl">Relay manufacturer</td><td>{{ field(section_c.relay.manufacturer) }}</td></tr>
+    <tr><td class="lbl">Relay model</td><td>{{ field(section_c.relay.model) }}</td></tr>
+    <tr><td class="lbl">Firmware version</td><td>{{ field(section_c.relay.firmware_version) }}</td></tr>
+    <tr><td class="lbl">G99 Issue 2 Annex B type-test certificate</td>
+        <td>{{ field(section_c.relay.annex_b_certificate) }}</td></tr>
+    <tr><td class="lbl">Settings sealed after commissioning</td>
+        <td>{{ 'Yes' if section_c.relay.sealed_after_commissioning else 'No' }}</td></tr>
+  </table>
+
+  <h3>C2. Protection schedule — G99 Issue 2 Section 13</h3>
+  <table class="set protection-schedule">
+    <tr>
+      <th>Stage</th><th>ANSI / IEC device</th>
+      <th>Setting</th><th>Time (s)</th><th>Action</th><th>Clause</th>
+    </tr>
+    {% for r in section_c.schedule %}
+    <tr>
+      <td class="stage">{{ r.stage }}</td>
+      <td>{{ r.function }}</td>
+      <td>
+        {{ r.setting }}
+        {% if r.threshold_v_line is defined %}
+          <span class="note">({{ '%.0f'|format(r.threshold_v_line) }} V line-to-line)</span>
+        {% endif %}
+      </td>
+      <td>{{ r.time_s }}</td>
+      <td>{{ r.action }}</td>
+      <td class="clause">{{ r.clause }}</td>
+    </tr>
+    <tr class="note-row"><td></td>
+      <td colspan="5" class="stage-note">{{ r.note }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <h3>C3. Instrument transformers at PoC</h3>
+  <table class="form">
+    <tr><td class="lbl">CT ratio (main protection)</td>
+        <td>{{ field(section_c.ct_vt.ct_ratio_main) }}</td></tr>
+    <tr><td class="lbl">CT accuracy class (protection)</td>
+        <td>{{ field(section_c.ct_vt.ct_class_protection) }}</td></tr>
+    <tr><td class="lbl">CT ratio (metering)</td>
+        <td>{{ field(section_c.ct_vt.ct_ratio_metering) }}</td></tr>
+    <tr><td class="lbl">CT accuracy class (metering — Elexon)</td>
+        <td>{{ field(section_c.ct_vt.ct_class_metering) }}</td></tr>
+    <tr><td class="lbl">VT ratio</td>
+        <td>{{ field(section_c.ct_vt.vt_ratio) }}</td></tr>
+    <tr><td class="lbl">VT accuracy class</td>
+        <td>{{ field(section_c.ct_vt.vt_class) }}</td></tr>
+  </table>
+
+  <h3>C4. Intertrip provisions</h3>
+  <table class="form">
+    <tr><td class="lbl">Intertrip required (schemes &gt; 5 MW)</td>
+        <td>{{ 'Yes' if section_c.intertrip.required else 'No' }}</td></tr>
+    <tr><td class="lbl">Signalling medium</td>
+        <td>{{ field(section_c.intertrip.signalling_medium) }}</td></tr>
+    <tr><td class="lbl">Dependability requirement</td>
+        <td>{{ field(section_c.intertrip.dependability) }}</td></tr>
+    <tr><td class="lbl">Security requirement</td>
+        <td>{{ field(section_c.intertrip.security) }}</td></tr>
+    <tr><td class="lbl">Signals to be transferred</td>
+        <td>{{ field(section_c.intertrip.signals) }}</td></tr>
+  </table>
+</section>

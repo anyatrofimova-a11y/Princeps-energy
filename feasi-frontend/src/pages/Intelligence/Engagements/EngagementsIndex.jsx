@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { listEngagements } from "../../../api/engagements";
 
 /**
  * EngagementsIndex — Intelligence sub-tab at /intelligence/engagements.
@@ -103,36 +104,51 @@ export default function EngagementsIndex() {
     setErr(null);
     try {
       const q = FILTERS.find((f) => f.id === filter)?.query || {};
-      const params = new URLSearchParams();
-      if (q.status) params.set("status", q.status);
-      if (q.team && q.team !== "self") params.set("team", q.team);
-      const url = "/api/intelligence/engagements" + (params.toString() ? "?" + params : "");
-      const r = await fetch(url);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      setEngagements(Array.isArray(data.engagements) ? data.engagements : []);
+      const params = {};
+      if (q.status) params.status = q.status;
+      if (q.team) params.team = q.team;
 
-      // Best-effort project-name + IRR join. /api/v1/projects returns an
-      // array or {projects: [...]}.
+      // Unified API layer — falls back to /data/mock-engagements.json when
+      // VITE_MOCK_ENGAGEMENTS=true (default). Same pattern as dockets/alerts.
+      const data = await listEngagements(params);
+      const rows = Array.isArray(data?.engagements) ? data.engagements : [];
+      setEngagements(rows);
+
+      // Seed the project-name lookup from the engagements themselves so the
+      // table always renders a human-readable project column even when
+      // /api/v1/projects is offline. We still try the live endpoint for
+      // IRR pre-pack deltas, and overlay it on top if it succeeds.
+      const seeded = {};
+      rows.forEach((e) => {
+        const pid = String(e.project_id);
+        if (pid && !seeded[pid]) {
+          seeded[pid] = {
+            name: e.project_name || pid,
+            irr_pct: null,
+            irr_pct_pre_pack: null,
+          };
+        }
+      });
+
       try {
         const pr = await fetch("/api/v1/projects");
         if (pr.ok) {
           const pd = await pr.json();
           const arr = Array.isArray(pd) ? pd : (pd.projects || []);
-          const byId = {};
           arr.forEach((p) => {
             const pid = String(p.project_id || p.id);
-            byId[pid] = {
-              name: p.name || p.project_name || "(untitled)",
+            seeded[pid] = {
+              name: p.name || p.project_name || seeded[pid]?.name || "(untitled)",
               irr_pct: p.irr_pct ?? p.irr ?? null,
               irr_pct_pre_pack: p.irr_pct_pre_pack ?? null,
             };
           });
-          setProjects(byId);
         }
       } catch {
-        // Non-fatal — table just shows raw project UUIDs.
+        // Non-fatal — table falls back to the fixture-derived project names.
       }
+
+      setProjects(seeded);
     } catch (e) {
       setErr(e.message || String(e));
     } finally {

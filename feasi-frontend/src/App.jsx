@@ -174,15 +174,35 @@ export default function App() {
       const qs = new URLSearchParams(window.location.search);
       const slug = qs.get("dataset");
       const layer = qs.get("layer");
-      if (slug) applyDataset(slug, layer);
+      if (slug) {
+        applyDataset(slug, layer);
+        // Cross-route arrival from /intelligence/datasets — close the
+        // Mission Control overlay so the activated layer is visible.
+        try { setActiveViewMode("map"); } catch {}
+      }
     } catch {}
     const onActivate = (e) => {
       const { slug, layer } = e.detail || {};
       applyDataset(slug, layer);
+      // BOT-DM: when a dataset layer activates, the user's intent is to SEE
+      // the map. The Mission Control overlay occludes the map at
+      // `activeWorkspace === "home" && activeViewMode === "dashboard"`.
+      // Flip viewMode to "map" so the overlay unmounts.
+      try { setActiveViewMode("map"); } catch {}
+    };
+    // Separate dismiss event — useDatasetLayer dispatches this in parallel
+    // to the activate event so the overlay closes even if the consumer
+    // listening for activate hasn't mounted yet.
+    const onDismissMissionControl = () => {
+      try { setActiveViewMode("map"); } catch {}
     };
     window.addEventListener("princeps-activate-dataset-layer", onActivate);
-    return () => window.removeEventListener("princeps-activate-dataset-layer", onActivate);
-  }, []);
+    window.addEventListener("princeps-dismiss-mission-control", onDismissMissionControl);
+    return () => {
+      window.removeEventListener("princeps-activate-dataset-layer", onActivate);
+      window.removeEventListener("princeps-dismiss-mission-control", onDismissMissionControl);
+    };
+  }, [setActiveViewMode]);
 
   // ── Map drop handler: place asset at lat/lon ──
   const handleMapDrop = useCallback((e) => {
@@ -966,14 +986,22 @@ export default function App() {
           <Suspense fallback={<div style={{padding:40,fontFamily:"DM Sans"}}>Loading Mission Control…</div>}>
             <MissionControl
               onSelectProject={(pid) => {
-                // Flip redesign on + select project + switch viewMode so this
-                // overlay unmounts and the project page renders underneath.
+                if (!pid) return;
+                const idStr = String(pid);
+                // Stash so RedesignLayout's mount effect can pick it up even
+                // if the lazy import finishes after the event fires.
+                try { sessionStorage.setItem("princeps.pendingProjectId", idStr); } catch {}
                 const url = new URL(window.location.href);
                 url.searchParams.set("redesign", "1");
-                if (pid) url.searchParams.set("project", pid);
+                url.searchParams.set("project", idStr);
                 window.history.replaceState({}, "", url);
                 setActiveViewMode("map");
-                window.dispatchEvent(new CustomEvent("princeps-redesign-select-project", { detail: { projectId: pid } }));
+                // Fire multiple times — RedesignLayout is lazy, so the first
+                // dispatch can land before its listener attaches.
+                const detail = { projectId: idStr };
+                [0, 30, 400, 1200].forEach((ms) => setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent("princeps-redesign-select-project", { detail }));
+                }, ms));
               }}
               onNewProject={() => {
                 const url = new URL(window.location.href);

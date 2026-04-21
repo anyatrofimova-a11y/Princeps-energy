@@ -11,10 +11,23 @@
  * `data_subscriptions` rows are ingested. The card shape is stable so the
  * real feed can slot in without UI changes.
  */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import datasetsFixture from "../../../data/mock-datasets.json";
 import useDatasetLayer from "../../../hooks/useDatasetLayer";
 import DatasetChangeLogModal from "./DatasetChangeLogModal";
+
+// ── Sort vocabulary (kept near the top so the final set is easy to audit) ─
+const SORT_OPTIONS = [
+  { id: "recent",    label: "Recently updated" }, // default — refreshed desc
+  { id: "alpha",     label: "Alphabetical" },     // title asc
+  { id: "rows",      label: "Most rows" },        // row count desc
+];
+
+// Free-text search debounce window (ms). Kept tight — the dataset is 21
+// rows and running a substring filter on every keystroke is cheap — but
+// the 120ms window still dedupes rapid typing and keeps the count-badge
+// from flashing between values.
+const SEARCH_DEBOUNCE_MS = 120;
 
 // ── Design tokens ─────────────────────────────────────────────────────────
 const C = {
@@ -220,7 +233,7 @@ function Stat({ label, children }) {
 }
 
 // ── Dataset card ──────────────────────────────────────────────────────────
-function DatasetCard({ dataset, onOpenChangeLog }) {
+function DatasetCard({ dataset, onOpenChangeLog, glowing }) {
   const goToMap = useDatasetLayer();
   const refreshed = fmtRefreshed(dataset.refreshed);
   const delta = fmtDelta(dataset.delta_7d);
@@ -229,6 +242,11 @@ function DatasetCard({ dataset, onOpenChangeLog }) {
     if (!dataset.show_on_map) return;
     goToMap(dataset.slug, dataset.map_layer_slug);
   };
+
+  const glowStyle = glowing ? {
+    boxShadow: "0 0 0 2px rgba(245,183,49,0.85), 0 0 22px rgba(245,183,49,0.55)",
+    borderColor: C.goldDeep,
+  } : null;
 
   return (
     <div
@@ -240,13 +258,16 @@ function DatasetCard({ dataset, onOpenChangeLog }) {
         display: "flex",
         flexDirection: "column",
         gap: 10,
-        transition: "border-color 120ms ease, box-shadow 120ms ease",
+        transition: "border-color 120ms ease, box-shadow 300ms ease",
+        ...(glowStyle || {}),
       }}
       onMouseEnter={(e) => {
+        if (glowing) return;
         e.currentTarget.style.borderColor = C.goldBorder;
         e.currentTarget.style.boxShadow = "0 2px 8px rgba(15,19,24,0.04)";
       }}
       onMouseLeave={(e) => {
+        if (glowing) return;
         e.currentTarget.style.borderColor = C.border;
         e.currentTarget.style.boxShadow = "none";
       }}
@@ -466,8 +487,22 @@ export default function DatasetsIndex() {
   const [category, setCategory] = useState("all");
   const [badge, setBadge] = useState("all");
   const [cadence, setCadence] = useState("all");
+  const [sortBy, setSortBy] = useState("recent");
+  const [searchRaw, setSearchRaw] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [changeLogFor, setChangeLogFor] = useState(null);
+  // slug of the card currently showing its 1s gold glow — set when BOT-DM
+  // dispatches the layer-activation event so the click is ACK'd before the
+  // route transition.
+  const [glowingSlug, setGlowingSlug] = useState(null);
+  const glowTimerRef = useRef(null);
+
+  // Debounce the free-text search 120ms — see SEARCH_DEBOUNCE_MS note.
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearchQuery(searchRaw.trim().toLowerCase()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(t);
+  }, [searchRaw]);
 
   useEffect(() => {
     // Give the skeleton 300ms so tab switches don't flash empty.
@@ -475,21 +510,65 @@ export default function DatasetsIndex() {
     return () => window.clearTimeout(t);
   }, []);
 
+  // Card-glow ACK: when a "Show on Map" CTA dispatches the dataset-layer
+  // activation event we own here (BOT-DM's CTA wiring triggers it via
+  // useDatasetLayer), pulse a 1s gold halo on the matching card so the
+  // click is visibly confirmed before the route changes.
+  useEffect(() => {
+    const onActivate = (e) => {
+      const slug = e?.detail?.slug;
+      if (!slug) return;
+      setGlowingSlug(slug);
+      if (glowTimerRef.current) window.clearTimeout(glowTimerRef.current);
+      glowTimerRef.current = window.setTimeout(() => {
+        setGlowingSlug((s) => (s === slug ? null : s));
+      }, 1000);
+    };
+    window.addEventListener("princeps-activate-dataset-layer", onActivate);
+    return () => {
+      window.removeEventListener("princeps-activate-dataset-layer", onActivate);
+      if (glowTimerRef.current) window.clearTimeout(glowTimerRef.current);
+    };
+  }, []);
+
   const datasets = datasetsFixture.datasets || [];
 
   const filtered = useMemo(() => {
-    return datasets.filter((d) => {
+    const q = searchQuery;
+    const matched = datasets.filter((d) => {
       if (category !== "all" && d.category !== category) return false;
       if (badge !== "all" && d.badge !== badge) return false;
       if (cadence !== "all" && bucketForCadence(d.cadence) !== cadence) return false;
+      if (q) {
+        const title = (d.title || "").toLowerCase();
+        const desc  = (d.description || "").toLowerCase();
+        if (!title.includes(q) && !desc.includes(q)) return false;
+      }
       return true;
     });
-  }, [datasets, category, badge, cadence]);
+
+    const sorted = matched.slice();
+    if (sortBy === "alpha") {
+      sorted.sort((a, b) => (a.title || "").localeCompare(b.title || "", "en-GB"));
+    } else if (sortBy === "rows") {
+      sorted.sort((a, b) => (b.rows || 0) - (a.rows || 0));
+    } else {
+      // "recent" — refreshed desc; rows with no timestamp sink to the bottom.
+      sorted.sort((a, b) => {
+        const ta = a.refreshed ? new Date(a.refreshed).getTime() : 0;
+        const tb = b.refreshed ? new Date(b.refreshed).getTime() : 0;
+        return tb - ta;
+      });
+    }
+    return sorted;
+  }, [datasets, category, badge, cadence, searchQuery, sortBy]);
 
   const clearFilters = () => {
     setCategory("all");
     setBadge("all");
     setCadence("all");
+    setSearchRaw("");
+    setSearchQuery("");
   };
 
   return (
@@ -537,6 +616,99 @@ export default function DatasetsIndex() {
         borderRadius: 10,
         marginBottom: 18,
       }}>
+        {/* Search + count + sort (top row) */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: "1 1 260px", display: "flex", alignItems: "center", gap: 8,
+            background: C.ivory,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            padding: "6px 10px",
+          }}>
+            <span aria-hidden style={{ color: C.faint, fontSize: 12, lineHeight: 1 }}>⌕</span>
+            <input
+              type="text"
+              value={searchRaw}
+              onChange={(e) => setSearchRaw(e.target.value)}
+              placeholder="Search datasets by title or description"
+              aria-label="Search datasets"
+              style={{
+                flex: 1,
+                border: "none",
+                outline: "none",
+                background: "transparent",
+                fontSize: 12,
+                color: C.ink,
+                fontFamily: "'DM Sans', sans-serif",
+                letterSpacing: "-0.005em",
+                padding: "2px 0",
+              }}
+            />
+            {searchRaw && (
+              <button
+                type="button"
+                onClick={() => setSearchRaw("")}
+                aria-label="Clear search"
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  color: C.muted,
+                  fontSize: 14,
+                  cursor: "pointer",
+                  lineHeight: 1,
+                  padding: 0,
+                }}
+              >×</button>
+            )}
+          </div>
+
+          <span style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: C.muted,
+            fontFamily: "'JetBrains Mono', monospace",
+            letterSpacing: 0.3,
+            whiteSpace: "nowrap",
+          }}>
+            Showing {filtered.length} of {datasets.length}
+          </span>
+
+          {/* Segmented sort control */}
+          <div style={{
+            display: "inline-flex",
+            borderRadius: 8,
+            border: `1px solid ${C.border}`,
+            background: C.ivory,
+            overflow: "hidden",
+          }}>
+            {SORT_OPTIONS.map((opt, i) => {
+              const active = opt.id === sortBy;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setSortBy(opt.id)}
+                  aria-pressed={active}
+                  style={{
+                    padding: "6px 12px",
+                    border: "none",
+                    borderLeft: i === 0 ? "none" : `1px solid ${C.border}`,
+                    background: active ? C.gold : "transparent",
+                    color: active ? C.ink : C.body,
+                    fontSize: 11,
+                    fontWeight: active ? 700 : 600,
+                    fontFamily: "'DM Sans', sans-serif",
+                    letterSpacing: "-0.005em",
+                    cursor: "pointer",
+                    transition: "background 120ms ease",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <PillGroup label="Category" options={CATEGORIES} value={category} onChange={setCategory} />
         <PillGroup label="Badge" options={BADGES} value={badge} onChange={setBadge} />
         <PillGroup label="Cadence" options={CADENCES} value={cadence} onChange={setCadence} />
@@ -593,6 +765,7 @@ export default function DatasetsIndex() {
               key={d.slug}
               dataset={d}
               onOpenChangeLog={setChangeLogFor}
+              glowing={glowingSlug === d.slug}
             />
           ))}
         </div>
@@ -619,6 +792,87 @@ export default function DatasetsIndex() {
         dataset={changeLogFor}
         onClose={() => setChangeLogFor(null)}
       />
+
+      {/* CTA toast — "Activated: <layer>" pill, dispatched by
+          useDatasetLayer via `princeps-dataset-toast`. Minimal primitive
+          within BOT-DM scope; no styling coupling to BOT-DI search/sort. */}
+      <DatasetCtaToast />
+    </div>
+  );
+}
+
+// ── CTA toast ─────────────────────────────────────────────────────────────
+// Self-contained toast listener — keyed off the `princeps-dataset-toast`
+// event fired by `useDatasetLayer`. Shows a single latest message; auto
+// dismisses after 2.4s. Does not depend on any external toast primitive.
+function DatasetCtaToast() {
+  const [toast, setToast] = useState(null);
+  const timerRef = useRef(null);
+
+  useEffect(() => {
+    const onToast = (e) => {
+      const { message, variant } = e.detail || {};
+      if (!message) return;
+      setToast({ message, variant: variant || "success", ts: Date.now() });
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setToast(null), 2400);
+    };
+    window.addEventListener("princeps-dataset-toast", onToast);
+    return () => {
+      window.removeEventListener("princeps-dataset-toast", onToast);
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    };
+  }, []);
+
+  if (!toast) return null;
+
+  const accent =
+    toast.variant === "error" ? "#C64545"
+    : toast.variant === "warn" ? "#E89A2A"
+    : C.badgeWired;
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: "fixed",
+        bottom: 24,
+        right: 24,
+        zIndex: 1000,
+        padding: "10px 14px",
+        borderRadius: 10,
+        background: "#0F1318",
+        color: "#FBF8F2",
+        border: `1px solid ${accent}`,
+        boxShadow: "0 6px 24px rgba(15,19,24,0.18)",
+        fontSize: 12,
+        fontWeight: 600,
+        fontFamily: "'DM Sans', sans-serif",
+        letterSpacing: "-0.005em",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 10,
+        maxWidth: 360,
+        animation: "princepsToastIn 160ms ease-out",
+        pointerEvents: "none",
+      }}
+    >
+      <span
+        aria-hidden
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: 4,
+          background: accent,
+          flexShrink: 0,
+        }}
+      />
+      <span>{toast.message}</span>
+      <style>{`@keyframes princepsToastIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }`}</style>
     </div>
   );
 }

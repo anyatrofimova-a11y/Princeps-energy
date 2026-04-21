@@ -21,18 +21,43 @@ router = APIRouter(tags=["chat"])
 
 class ChatSessionRequest(BaseModel):
     parcel_id: str | None = None
+    # BOT-CHC 2026-04-19 — frontend was silently dropping project_id because
+    # the model omitted it; session then had no idea which project it was
+    # born under. Now persisted on ChatSession.project_id for every turn.
+    project_id: str | None = None
 
 
 class ChatMessageRequest(BaseModel):
     message: str
+    # Legacy flat UI context (workspace/view/pathname/focus + free-form keys).
+    # BOT-CHC 2026-04-19: the new nested `page_context` block lives inside
+    # `context.page_context` — see lib/pageContext.js for the wire shape.
     context: dict | None = None
 
 
 @router.post("/chat/session")
-async def create_chat_session(body: ChatSessionRequest = ChatSessionRequest()):
-    """Create a new chat session, optionally linked to a parcel."""
-    session = chat_module.create_session(parcel_id=body.parcel_id)
-    return {"session_id": session.id, "parcel_id": session.parcel_id}
+async def create_chat_session(
+    body: ChatSessionRequest = ChatSessionRequest(),
+    pool = Depends(get_pool),
+):
+    """Create a new chat session, optionally linked to a parcel + project."""
+    session = chat_module.create_session(
+        parcel_id=body.parcel_id,
+        project_id=body.project_id,
+    )
+    # Pre-fetch a project summary so even turn-1 system prompt knows name,
+    # technology, capacity, stage, DNO, TEC — before any page_context lands.
+    if body.project_id:
+        try:
+            await chat_module.hydrate_project_summary(session, body.project_id, pool)
+        except Exception:
+            # Summary is a nice-to-have; never block session creation.
+            pass
+    return {
+        "session_id": session.id,
+        "parcel_id": session.parcel_id,
+        "project_id": session.project_id,
+    }
 
 
 @router.post("/chat/{session_id}/message")

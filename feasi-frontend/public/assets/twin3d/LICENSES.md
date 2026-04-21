@@ -27,16 +27,16 @@ and exposes it as a footer link on the 3D twin.
 |---|---|---|---|---|---|---|
 | `bess/megapack_2xl.glb` | `bess.megapack_2xl` | [Tesla Batterie Pack v2 — Sketchfab](https://sketchfab.com/3d-models/tesla-batterie-pack-v2-2c31307729b74bbfbc150f4e6f93a54e) | Sketchfab author (TBC post-download) | CC-BY-4.0 | pending | Tesla Megapack 2XL silhouette; author MUST be added once asset downloaded. Placeholder box currently shipped. |
 | `bess/container_generic.glb` | `bess.container_generic` | [Kenney — Industrial Kit](https://kenney.nl/assets/industrial-kit) | Kenney (Kenney Vleugels) | CC0 | pending | 20 ft BESS-container stand-in from Kenney's Industrial Kit. No attribution required but credited in-product as a courtesy. |
-| `bess/pcs_skid.glb` | `bess.pcs_skid` | `<tbd>` — scout Sketchfab "inverter skid" CC-BY filter | TBC | CC-BY-4.0 | pending | 3 m × 1.2 m × 2.2 m inverter skid. Placeholder shipped. |
-| `bess/aux_tx.glb` | `bess.aux_tx_2_5mva` | `<tbd>` — scout Sketchfab "pad-mount transformer" CC-BY | TBC | CC-BY-4.0 | pending | 2.5 MVA auxiliary pad-mount transformer. Placeholder shipped. |
-| `solar/pv_table.glb` | `solar.table_4h_portrait` | `<tbd>` — NREL Sketchfab account, or Kenney PV module pack | NREL / TBC | CC-BY-4.0 | pending | 4-high portrait fixed-tilt PV table, 12 m × 4 m × 2.2 m. Placeholder shipped. |
+| `bess/pcs_skid.glb` | `bess.pcs_skid` | [Sketchfab CC-BY — "inverter skid"](https://sketchfab.com/search?q=inverter+skid&licenses=322a749bcfa841b29dff1e8a1bb74b0b&type=models) | TBC | CC-BY-4.0 | pending | 3 m × 1.2 m × 2.2 m inverter skid. Placeholder shipped. |
+| `bess/aux_tx.glb` | `bess.aux_tx_2_5mva` | [Sketchfab CC-BY — "pad mount transformer"](https://sketchfab.com/search?q=pad+mount+transformer&licenses=322a749bcfa841b29dff1e8a1bb74b0b&type=models) | TBC | CC-BY-4.0 | pending | 2.5 MVA auxiliary pad-mount transformer. Placeholder shipped. |
+| `solar/pv_table.glb` | `solar.table_4h_portrait` | [Sketchfab CC-BY — "solar panel array"](https://sketchfab.com/search?q=solar+panel+array&licenses=322a749bcfa841b29dff1e8a1bb74b0b&type=models) | TBC | CC-BY-4.0 | pending | 4-high portrait fixed-tilt PV table, 12 m × 4 m × 2.2 m. Placeholder shipped. |
 | `solar/inverter.glb` | `solar.central_inverter_3mva` | [Kenney — Industrial Kit](https://kenney.nl/assets/industrial-kit) | Kenney | CC0 | pending | 3 MVA central inverter station. Placeholder shipped. |
 | `data_centre/hall.glb` | `dc.it_hall_shell` | [Kenney — Industrial Kit](https://kenney.nl/assets/industrial-kit) | Kenney | CC0 | pending | Generic warehouse shell scaled to IT-hall dims 100 m × 60 m × 24 m. |
-| `data_centre/crac.glb` | `dc.crac_unit` | `<tbd>` — Kenney Industrial Kit HVAC or poly.pizza | Kenney / TBC | CC0 | pending | Precision CRAC 1.5 m × 1.0 m × 2.2 m. |
-| `data_centre/chiller.glb` | `dc.chiller_500kw` | `<tbd>` — Kenney Industrial Kit | Kenney | CC0 | pending | 500 kW chiller roof plant. |
-| `data_centre/genset.glb` | `dc.genset_enclosure_3mw` | `<tbd>` — Kenney Industrial Kit | Kenney | CC0 | pending | Containerised 3 MW diesel genset, 12 m × 2.5 m × 3.5 m. |
-| `wind/turbine_v172.glb` | `wind.turbine_v172` | `<tbd>` — Sketchfab "wind turbine" CC-BY filter | TBC | CC-BY-4.0 | pending | Vestas V172-7.2 MW onshore turbine, 125 m hub, 172 m rotor. Placeholder shipped as parametric cylinder + arms. |
-| `common/hgv.glb` | `common.hgv_truck` | `<tbd>` — Kenney vehicle kit or poly.pizza | Kenney / TBC | CC0 | pending | Articulated HGV for scale reference (16 m × 2.5 m × 4 m). |
+| `data_centre/crac.glb` | `dc.crac_unit` | [Kenney — Industrial Kit](https://kenney.nl/assets/industrial-kit) | Kenney | CC0 | pending | Precision CRAC 1.5 m × 1.0 m × 2.2 m. |
+| `data_centre/chiller.glb` | `dc.chiller_500kw` | [Kenney — Industrial Kit](https://kenney.nl/assets/industrial-kit) | Kenney | CC0 | pending | 500 kW chiller roof plant. |
+| `data_centre/genset.glb` | `dc.genset_enclosure_3mw` | [Kenney — Industrial Kit](https://kenney.nl/assets/industrial-kit) | Kenney | CC0 | pending | Containerised 3 MW diesel genset, 12 m × 2.5 m × 3.5 m. |
+| `wind/turbine_v172.glb` | `wind.turbine_v172` | [Sketchfab CC-BY — "wind turbine"](https://sketchfab.com/search?q=wind+turbine&licenses=322a749bcfa841b29dff1e8a1bb74b0b&type=models) | TBC | CC-BY-4.0 | pending | Vestas V172-7.2 MW onshore turbine, 125 m hub, 172 m rotor. Placeholder shipped as parametric cylinder + arms. |
+| `common/hgv.glb` | `common.hgv_truck` | [Kenney — Assets catalogue](https://kenney.nl/assets) | Kenney | CC0 | pending | Articulated HGV for scale reference (16 m × 2.5 m × 4 m). |
 
 ## Placeholder-only entries
 

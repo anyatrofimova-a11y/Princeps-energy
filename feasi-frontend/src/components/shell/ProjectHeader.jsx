@@ -108,34 +108,35 @@ export default function ProjectHeader({
 
       <style>{`
         .ph-root {
-          display: flex; align-items: flex-start; justify-content: space-between;
-          gap: 16px;
-          min-height: 92px;
-          padding: 14px 24px;
+          display: flex; align-items: center; justify-content: space-between;
+          gap: 14px;
+          min-height: 56px;
+          padding: 8px 20px;
           background: var(--cds-layer-01);
           border-bottom: 1px solid var(--cds-border-subtle);
           font-family: "DM Sans", -apple-system, sans-serif;
         }
         .ph-hero {
           flex: 1; min-width: 0;
-          display: flex; flex-direction: column; gap: 8px;
+          display: flex; flex-direction: row; align-items: center; gap: 10px;
+          flex-wrap: wrap;
         }
-        .ph-title-row { display: flex; align-items: center; gap: 10px; }
+        .ph-title-row { display: flex; align-items: center; gap: 8px; }
         .ph-title {
           margin: 0; padding: 0;
-          font-size: 22px; font-weight: 700;
+          font-size: 16px; font-weight: 700;
           color: var(--ink);
-          line-height: 1.2;
+          line-height: 1.25;
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
           max-width: 100%;
         }
         .ph-sub {
-          display: flex; align-items: center; gap: 10px;
+          display: flex; align-items: center; gap: 8px;
           flex-wrap: wrap;
-          font-size: 12px;
+          font-size: 11px;
           color: var(--cds-text-helper);
         }
-        .ph-coord { font-family: var(--mono); font-size: 11px; }
+        .ph-coord { font-family: var(--mono); font-size: 10px; }
         .ph-stage-badge {
           background: var(--cds-layer-03);
           color: var(--cds-text-secondary);

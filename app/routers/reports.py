@@ -177,16 +177,81 @@ class G99PackRequest(BaseModel):
 
 
 @router.post("/api/reports/g99-pack")
-async def api_g99_pack(req: G99PackRequest):
+async def api_g99_pack(
+    req: G99PackRequest | None = None,
+    project_id: str | None = Query(None, description="Project UUID — when given, payload is built from DB"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
     """Generate a pre-filled G99 application pack with all form fields,
     compliance checks, and connection parameters from Princeps assessment.
-    Returns JSON with form_data + HTML for PDF rendering."""
+
+    Two entry points:
+      - POST ?project_id=<uuid>       — payload built from DB (preferred)
+      - POST body={site, capacity, grid, technology, agent_result}
+    Returns a PDF when project_id given (Playwright), JSON (form_data+HTML)
+    when called with the explicit body (legacy)."""
+    payload: dict
+    return_pdf = False
+    if project_id:
+        from uuid import UUID as _UUID
+        from app.routers.project_actions import _load_project_summary
+        try:
+            pid = _UUID(project_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid project_id: {project_id!r}")
+        async with pool.acquire() as conn:
+            proj = await _load_project_summary(conn, pid)
+        wt = (proj.get("workload_type") or "solar").lower()
+        mw = float(proj.get("capacity_mw") or (40 if wt == "dc" else 50 if wt == "bess" else 100))
+        payload = {
+            "site": {
+                "name": proj.get("name") or "Project",
+                "lat": proj.get("lat"),
+                "lon": proj.get("lon"),
+                "project_id": str(pid),
+            },
+            "capacity": {"capacity_mw": mw, "capacity_kw": mw * 1000},
+            "grid": {},
+            "technology": {"type": "bess" if wt == "bess" else "wind" if wt == "wind" else "solar"},
+            "agent_result": {},
+        }
+        return_pdf = True
+    elif req is not None:
+        payload = req.model_dump()
+    else:
+        raise HTTPException(status_code=400, detail="Provide project_id or POST body.")
     try:
-        result = generate_g99_pack(req.model_dump())
+        result = generate_g99_pack(payload)
     except Exception as e:
         log.exception("G99 pack generation failed")
         raise HTTPException(status_code=500, detail=f"G99 pack generation failed: {e}")
-    return result
+    if not return_pdf:
+        return result
+    # PDF render path for the project_id entry
+    html = result["html"]
+    filename = result["filename"]
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            await page.set_content(html, wait_until="networkidle")
+            pdf_bytes = await page.pdf(
+                format="A4", print_background=True,
+                margin={"top": "15mm", "bottom": "15mm", "left": "12mm", "right": "12mm"},
+            )
+            await browser.close()
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ImportError:
+        return StreamingResponse(
+            iter([html.encode()]),
+            media_type="text/html",
+            headers={"Content-Disposition": f'attachment; filename="{filename.replace(".pdf", ".html")}"'},
+        )
 
 
 @router.post("/api/reports/g99-pdf")
@@ -226,8 +291,9 @@ async def api_g99_pdf(req: G99PackRequest):
 
 @router.post("/api/reports/financial")
 async def financial_report(
-    lat: float = Query(..., description="Latitude (WGS84)"),
-    lon: float = Query(..., description="Longitude (WGS84)"),
+    project_id: str | None = Query(None, description="Project UUID — when given, lat/lon/tech/capacity are derived from DB"),
+    lat: float | None = Query(None, description="Latitude (WGS84) — required if project_id not given"),
+    lon: float | None = Query(None, description="Longitude (WGS84) — required if project_id not given"),
     site_name: str = Query("Site", description="Site name for report title"),
     capacity_mw: float = Query(50.0, ge=0.1, le=5000, description="Proposed capacity in MW"),
     technology: str = Query("solar", description="Technology: solar, wind, offshore_wind, bess"),
@@ -235,7 +301,36 @@ async def financial_report(
         ppa_price_merchant("solar"), ge=1, le=500,
         description="PPA price in £/MWh (default: finance_benchmarks merchant midpoint)",
     ),
+    pool: asyncpg.Pool = Depends(get_pool),
 ):
+    # Project-id entry point — derive location/tech/capacity from DB so the
+    # frontend can fire a single "?project_id=<uuid>" call.
+    if project_id:
+        from uuid import UUID as _UUID
+        from app.routers.project_actions import _load_project_summary
+        try:
+            pid = _UUID(project_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid project_id: {project_id!r}")
+        async with pool.acquire() as conn:
+            proj = await _load_project_summary(conn, pid)
+        if proj.get("lat") is None or proj.get("lon") is None:
+            raise HTTPException(status_code=400, detail="Project has no geolocated parcel — add a site first.")
+        lat = proj["lat"]
+        lon = proj["lon"]
+        site_name = proj.get("name") or site_name
+        # Map workload_type → DCF technology domain
+        wt = (proj.get("workload_type") or "solar").lower()
+        technology = {
+            "bess": "bess", "solar": "solar", "pv": "solar",
+            "wind": "wind", "onshore_wind": "wind", "offshore_wind": "offshore_wind",
+            "dc": "solar",  # DC hyperscale financed as solar-style merchant; placeholder until DC DCF lands
+        }.get(wt, "solar")
+        # Capacity heuristic per workload; until parcel-aware sizing lands
+        capacity_mw = float(proj.get("capacity_mw") or (40 if wt == "dc" else 50 if wt == "bess" else 100))
+    elif lat is None or lon is None:
+        raise HTTPException(status_code=400, detail="Provide project_id or both lat and lon.")
+    _ = capacity_mw  # noqa: silence reuse warning below
     """Generate a comprehensive Financial Viability Assessment PDF.
 
     Runs a full 25-year DCF model with:

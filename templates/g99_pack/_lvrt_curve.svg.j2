@@ -1,0 +1,55 @@
+{#-
+  G99 Issue 2 Annex A — Low Voltage Ride-Through (LVRT) envelope.
+  Plots retained voltage (%Un) vs time (log ms). Generating units of Type
+  B/C/D must stay connected while the retained voltage at the PoC remains
+  above the envelope.
+
+  Context:
+    lvrt_svg_polyline  — e.g. "54,260 54,260 170,200 ..." (str, pre-computed)
+    lvrt_svg_polygon   — polyline + closure back to top-right (str, pre-computed)
+    lvrt_x_ticks       — list of (label_str, x_coord_float)
+    lvrt_y_ticks       — list of (label_str, y_coord_float)
+    width, height, pad_l, pad_r, pad_t, pad_b — chart geometry
+    lvrt_title         — title string
+-#}
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {{ width }} {{ height }}"
+     width="{{ width }}" height="{{ height }}"
+     font-family="Inter, Segoe UI, sans-serif" font-size="10">
+  <rect x="0" y="0" width="{{ width }}" height="{{ height }}" fill="#FFFDF7" stroke="#E6D9B8"/>
+  <text x="{{ (width / 2) | round }}" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="#1a1a1a">
+    {{ lvrt_title }}
+  </text>
+
+  {# Axes #}
+  <line x1="{{ pad_l }}" y1="{{ height - pad_b }}" x2="{{ width - pad_r }}" y2="{{ height - pad_b }}" stroke="#1a1a1a" stroke-width="1"/>
+  <line x1="{{ pad_l }}" y1="{{ pad_t }}" x2="{{ pad_l }}" y2="{{ height - pad_b }}" stroke="#1a1a1a" stroke-width="1"/>
+
+  {# Horizontal grid + Y labels #}
+  {% for label, y in lvrt_y_ticks %}
+    <line x1="{{ pad_l }}" y1="{{ y }}" x2="{{ width - pad_r }}" y2="{{ y }}" stroke="#EEE3C4" stroke-width="0.6" stroke-dasharray="2,3"/>
+    <text x="{{ pad_l - 6 }}" y="{{ y + 3 }}" text-anchor="end" fill="#4a4a4a">{{ label }}</text>
+  {% endfor %}
+
+  {# Vertical grid + X labels #}
+  {% for label, x in lvrt_x_ticks %}
+    <line x1="{{ x }}" y1="{{ pad_t }}" x2="{{ x }}" y2="{{ height - pad_b }}" stroke="#EEE3C4" stroke-width="0.6" stroke-dasharray="2,3"/>
+    <text x="{{ x }}" y="{{ height - pad_b + 14 }}" text-anchor="middle" fill="#4a4a4a">{{ label }}</text>
+  {% endfor %}
+
+  {# Shaded "must stay connected" region above envelope #}
+  <polygon fill="#F5E9C8" fill-opacity="0.45" stroke="none" points="{{ lvrt_svg_polygon }}"/>
+
+  {# Envelope polyline #}
+  <polyline fill="none" stroke="#C9A64B" stroke-width="2.2" points="{{ lvrt_svg_polyline }}"/>
+
+  {# Axis titles #}
+  <text x="{{ pad_l + (width - pad_l - pad_r) / 2 }}" y="{{ height - 6 }}"
+        text-anchor="middle" font-size="10" fill="#1a1a1a">Time since fault inception (log scale)</text>
+  <text x="14" y="{{ pad_t + (height - pad_t - pad_b) / 2 }}"
+        text-anchor="middle" font-size="10" fill="#1a1a1a"
+        transform="rotate(-90 14,{{ pad_t + (height - pad_t - pad_b) / 2 }})">Retained voltage (% Un)</text>
+
+  {# Legend #}
+  <rect x="{{ width - pad_r - 180 }}" y="{{ pad_t + 4 }}" width="12" height="10" fill="#F5E9C8" stroke="#C9A64B"/>
+  <text x="{{ width - pad_r - 164 }}" y="{{ pad_t + 13 }}" fill="#4a4a4a">Must stay connected (above envelope)</text>
+</svg>

@@ -1,0 +1,386 @@
+{# =========================================================================
+   _shared/_styles.css.j2 — single Princeps stylesheet for institutional PDFs.
+
+   Consumed by _base.html.j2 inside a <style>{% include %}</style> block.
+   No external assets; print-safe; no box-shadow, transforms, or Grid layout
+   at page-break boundaries.
+
+   Tokens:
+     Palette  — gold #F5B731 · ink #0F1318 · cream #FBF8F2 · rule #E8E0C8
+     Fonts    — Inter (body, web-safe) · JetBrains Mono fallback Menlo
+     Page     — A4 portrait · 15mm margins
+   ========================================================================= #}
+
+/* ---------- Princeps palette tokens ---------- */
+:root {
+  --pp-gold:        #F5B731;
+  --pp-gold-ink:    #8A6313;
+  --pp-gold-tint:   #FBEFCB;
+  --pp-ink:         #0F1318;
+  --pp-ink-muted:   #3E444C;
+  --pp-ink-soft:    #6B7280;
+  --pp-cream:       #FBF8F2;
+  --pp-rule:        #E5DCC0;
+  --pp-rule-soft:   #EEE9DA;
+
+  --pp-rag-green:   #1E7B3A;
+  --pp-rag-amber:   #B8860B;
+  --pp-rag-red:     #B23B3B;
+
+  --pp-body-font:   "Inter", "Geist", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  --pp-mono-font:   "JetBrains Mono", "Menlo", "Consolas", monospace;
+}
+
+/* ---------- Reset ---------- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ---------- Page geometry ---------- */
+@page {
+  size: A4 portrait;
+  margin: 22mm 15mm 20mm 15mm;
+}
+@page:first {
+  margin: 0;   /* cover takes full bleed; inner cover content has its own padding */
+}
+
+html { font-size: 10.5pt; }
+body {
+  font-family: var(--pp-body-font);
+  color: var(--pp-ink);
+  background: #ffffff;
+  line-height: 1.5;
+  font-feature-settings: "ss01", "tnum";
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ---------- Typographic scale ---------- */
+.pp-eyebrow {
+  font-size: 9pt;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--pp-gold-ink);
+  font-weight: 600;
+}
+h1, .pp-h1 {
+  font-size: 26pt;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--pp-ink);
+  margin: 0 0 8px 0;
+}
+h2, .pp-h2 {
+  font-size: 13pt;
+  font-weight: 700;
+  color: var(--pp-ink);
+  margin: 18px 0 10px 0;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--pp-gold);
+}
+h3, .pp-h3 {
+  font-size: 11pt;
+  font-weight: 600;
+  color: var(--pp-ink);
+  margin: 14px 0 6px 0;
+}
+h4, .pp-h4 {
+  font-size: 9.5pt;
+  font-weight: 600;
+  color: var(--pp-ink-muted);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  margin: 10px 0 4px 0;
+}
+p { margin: 0 0 8px 0; }
+.pp-lead { font-size: 11pt; color: var(--pp-ink-muted); line-height: 1.55; }
+.pp-muted { color: var(--pp-ink-soft); }
+.pp-italic-muted { color: var(--pp-ink-soft); font-style: italic; }
+.pp-mono { font-family: var(--pp-mono-font); font-size: 9.5pt; }
+
+/* Numeric columns get tabular-nums */
+.pp-num { font-variant-numeric: tabular-nums; }
+
+/* ---------- Section container ---------- */
+.pp-section {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin: 14px 0 18px 0;
+}
+.pp-page-break { page-break-after: always; break-after: page; }
+
+/* ---------- Header & footer strips ---------- */
+.pp-header {
+  position: running(pageHeader);
+  display: flex; align-items: center; justify-content: space-between;
+  height: 36px;
+  padding: 0 15mm;
+  border-bottom: 2px solid var(--pp-gold);
+  background: #ffffff;
+}
+.pp-header-logo {
+  font-size: 10pt; font-weight: 700; letter-spacing: 2.5px;
+  color: var(--pp-ink);
+}
+.pp-header-logo::before {
+  content: "\25C6";
+  color: var(--pp-gold);
+  margin-right: 6px;
+}
+.pp-header-meta {
+  font-size: 8pt; color: var(--pp-ink-soft);
+  letter-spacing: 0.5px;
+}
+.pp-header-pages {
+  font-family: var(--pp-mono-font);
+  font-size: 8pt; color: var(--pp-ink-soft);
+}
+
+.pp-footer {
+  position: running(pageFooter);
+  display: flex; align-items: center; justify-content: space-between;
+  height: 24px;
+  padding: 0 15mm;
+  border-top: 1px solid var(--pp-rule);
+  font-size: 7.5pt; color: var(--pp-ink-soft);
+  background: #ffffff;
+}
+.pp-footer .pp-conf { letter-spacing: 1.2px; font-weight: 600; color: var(--pp-ink-muted); }
+.pp-footer .pp-dochash { font-family: var(--pp-mono-font); }
+
+/* ---------- Cover ---------- */
+.pp-cover {
+  page-break-after: always; break-after: page;
+  height: 297mm;
+  padding: 30mm 22mm 22mm 22mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background:
+    linear-gradient(180deg, var(--pp-cream) 0%, #ffffff 55%);
+  border-top: 8px solid var(--pp-gold);
+}
+.pp-cover-band {
+  display: inline-block;
+  padding: 6px 14px;
+  background: var(--pp-gold);
+  color: var(--pp-ink);
+  font-weight: 700; letter-spacing: 3px; font-size: 10pt;
+}
+.pp-cover-title {
+  font-size: 34pt;
+  font-weight: 800;
+  letter-spacing: -0.8px;
+  color: var(--pp-ink);
+  margin: 28px 0 6px 0;
+  line-height: 1.08;
+}
+.pp-cover-tagline {
+  font-size: 14pt; color: var(--pp-ink-muted);
+  font-weight: 400;
+  margin-bottom: 20px;
+}
+.pp-cover-ref {
+  font-family: var(--pp-mono-font);
+  font-size: 9pt;
+  color: var(--pp-ink-muted);
+  line-height: 1.7;
+}
+.pp-cover-ref .pp-k {
+  display: inline-block;
+  width: 130px;
+  color: var(--pp-ink-soft);
+}
+.pp-cover-rule {
+  border: none;
+  border-top: 2px solid var(--pp-gold);
+  margin: 18px 0 14px 0;
+}
+.pp-cover-reliance {
+  border-left: 4px solid var(--pp-gold);
+  padding: 10px 14px;
+  background: var(--pp-cream);
+  font-size: 9pt;
+  color: var(--pp-ink-muted);
+  line-height: 1.55;
+  margin-top: 14px;
+}
+.pp-cover-reliance strong { color: var(--pp-ink); letter-spacing: 1px; }
+
+/* ---------- Tables ---------- */
+table.pp-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0 12px 0;
+  font-size: 9.5pt;
+  font-variant-numeric: tabular-nums;
+}
+table.pp-table thead tr th {
+  background: #ffffff;
+  color: var(--pp-ink);
+  font-weight: 700;
+  text-align: left;
+  padding: 6px 8px 5px 8px;
+  font-size: 8.5pt;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 2px solid var(--pp-gold);
+  border-left: 3px solid var(--pp-gold);
+}
+table.pp-table thead tr th:not(:first-child) { border-left: none; }
+table.pp-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--pp-rule-soft);
+  vertical-align: top;
+}
+table.pp-table tbody tr:nth-child(even) td { background: var(--pp-cream); }
+table.pp-table td.pp-right, table.pp-table th.pp-right { text-align: right; }
+table.pp-table td.pp-center, table.pp-table th.pp-center { text-align: center; }
+table.pp-table td.pp-lbl { font-weight: 600; width: 36%; color: var(--pp-ink-muted); }
+
+/* ---------- Metric cards ---------- */
+.pp-metric-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0 14px 0;
+}
+.pp-metric {
+  flex: 1 1 0;
+  min-width: 110px;
+  border: 1px solid var(--pp-rule);
+  border-left: 4px solid var(--pp-gold);
+  padding: 10px 12px 9px 12px;
+  background: #ffffff;
+}
+.pp-metric-label {
+  font-size: 8pt;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--pp-ink-soft);
+}
+.pp-metric-value {
+  font-size: 18pt;
+  font-weight: 700;
+  color: var(--pp-ink);
+  line-height: 1.1;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.pp-metric-sub {
+  font-size: 8.5pt;
+  color: var(--pp-ink-muted);
+  margin-top: 3px;
+}
+.pp-metric.pp-metric-feature {
+  background: var(--pp-ink);
+  border-color: var(--pp-ink);
+}
+.pp-metric.pp-metric-feature .pp-metric-label { color: var(--pp-gold); }
+.pp-metric.pp-metric-feature .pp-metric-value { color: #ffffff; }
+.pp-metric.pp-metric-feature .pp-metric-sub   { color: #C9CDD3; }
+
+/* ---------- Verdict badges ---------- */
+.pp-verdict {
+  display: inline-block;
+  padding: 5px 14px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  font-size: 10pt;
+  text-transform: uppercase;
+  border-radius: 3px;
+}
+.pp-verdict-go       { background: #DDF3E3; color: var(--pp-rag-green); }
+.pp-verdict-caution  { background: var(--pp-gold-tint); color: var(--pp-rag-amber); }
+.pp-verdict-nogo     { background: #F9DDDD; color: var(--pp-rag-red); }
+.pp-verdict-viable           { background: #DDF3E3; color: var(--pp-rag-green); }
+.pp-verdict-viable-with-works{ background: var(--pp-gold-tint); color: var(--pp-rag-amber); }
+.pp-verdict-not-viable       { background: #F9DDDD; color: var(--pp-rag-red); }
+.pp-verdict-green    { background: #DDF3E3; color: var(--pp-rag-green); }
+.pp-verdict-amber    { background: var(--pp-gold-tint); color: var(--pp-rag-amber); }
+.pp-verdict-red      { background: #F9DDDD; color: var(--pp-rag-red); }
+
+/* ---------- Inline RAG dots ---------- */
+.pp-rag-dot {
+  display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  margin-right: 6px; vertical-align: middle;
+}
+.pp-rag-green { background: var(--pp-rag-green); }
+.pp-rag-amber { background: var(--pp-rag-amber); }
+.pp-rag-red   { background: var(--pp-rag-red); }
+.pp-rag-grey  { background: var(--pp-ink-soft); }
+
+/* ---------- Source citation pill ---------- */
+.pp-cite {
+  display: inline-block;
+  font-size: 8pt;
+  color: var(--pp-ink-soft);
+  font-style: italic;
+  margin-top: 4px;
+}
+.pp-cite::before { content: "Source: "; color: var(--pp-gold-ink); font-style: normal; font-weight: 600; }
+
+/* ---------- Callout ---------- */
+.pp-callout {
+  background: var(--pp-cream);
+  border-left: 4px solid var(--pp-gold);
+  padding: 10px 14px;
+  margin: 10px 0;
+  font-size: 9.5pt;
+  line-height: 1.55;
+}
+.pp-callout-amber { border-left-color: var(--pp-rag-amber); background: #FFF8E4; }
+.pp-callout-red   { border-left-color: var(--pp-rag-red);   background: #FCEDED; }
+.pp-callout-green { border-left-color: var(--pp-rag-green); background: #E9F6EE; }
+.pp-callout h4 { margin: 0 0 4px 0; color: var(--pp-ink); }
+
+/* ---------- Split columns ---------- */
+.pp-two-col {
+  display: flex; gap: 16px;
+  margin: 8px 0 12px 0;
+}
+.pp-two-col > div { flex: 1 1 0; }
+
+/* ---------- Image / chart ---------- */
+.pp-chart {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 6px auto;
+}
+.pp-chart-caption {
+  font-size: 8pt;
+  color: var(--pp-ink-soft);
+  text-align: center;
+  margin: 2px 0 10px 0;
+  font-style: italic;
+}
+
+/* ---------- SVG inline chart ---------- */
+svg.pp-svg-chart {
+  display: block;
+  margin: 4px auto;
+  max-width: 100%;
+}
+
+/* ---------- Risk register ---------- */
+.pp-risk-row td.pp-risk-lh, .pp-risk-row td.pp-risk-im {
+  text-align: center;
+  font-weight: 600;
+}
+.pp-risk-L1, .pp-risk-I1 { color: var(--pp-rag-green); }
+.pp-risk-L2, .pp-risk-I2 { color: var(--pp-rag-green); }
+.pp-risk-L3, .pp-risk-I3 { color: var(--pp-rag-amber); }
+.pp-risk-L4, .pp-risk-I4 { color: var(--pp-rag-red); }
+.pp-risk-L5, .pp-risk-I5 { color: var(--pp-rag-red); }
+
+/* ---------- Utilities ---------- */
+.pp-right  { text-align: right; }
+.pp-center { text-align: center; }
+.pp-small  { font-size: 8.5pt; }
+.pp-xs     { font-size: 7.5pt; }
+.pp-bold   { font-weight: 700; }
+.pp-spacer-8  { height: 8px; }
+.pp-spacer-16 { height: 16px; }
+.pp-spacer-24 { height: 24px; }
+.pp-rule     { border: none; border-top: 1px solid var(--pp-rule); margin: 12px 0; }
+.pp-rule-gold{ border: none; border-top: 2px solid var(--pp-gold); margin: 12px 0; }

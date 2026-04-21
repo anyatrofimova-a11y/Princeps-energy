@@ -1,0 +1,72 @@
+{# =========================================================================
+   _shared/_cover.html.j2 — Princeps cover page.
+
+   Expects:
+     report_type      (str)           "Grid Connection Report"
+     project_title    (str)           e.g. project name
+     tagline          (str | None)    one-liner under title
+     revision         (str | None)    "P01"
+     revision_date    (str | None)    "2026-04-21"
+     recipient        (str | None)    addressee line
+     reliance_type    (str | None)    "investor" | "dno" | "client" | "planning" | "lender"
+     client_ref       (str | None)    client reference number
+     doc_ref          (str | None)    internal document reference
+     prepared_by      (str | None)    default "Princeps Energy"
+   ========================================================================= #}
+<section class="pp-cover">
+  <div>
+    <div class="pp-cover-band">PRINCEPS</div>
+    <h1 class="pp-cover-title">{{ project_title or "Untitled Project" }}</h1>
+    <div class="pp-cover-tagline">{{ tagline or report_type }}</div>
+    <hr class="pp-cover-rule" />
+    <div class="pp-cover-ref">
+      <div><span class="pp-k">Report type</span>{{ report_type }}</div>
+      <div><span class="pp-k">Revision</span>{{ revision or "P01" }} &mdash; {{ revision_date or "—" }}</div>
+      <div><span class="pp-k">Document ref.</span>{{ doc_ref or "—" }}</div>
+      <div><span class="pp-k">Client ref.</span>{{ client_ref or "—" }}</div>
+      <div><span class="pp-k">Prepared for</span>{{ recipient or "Client" }}</div>
+      <div><span class="pp-k">Prepared by</span>{{ prepared_by or "Princeps Energy" }}</div>
+    </div>
+  </div>
+  <div>
+    <div class="pp-cover-reliance">
+      <strong>RELIANCE STATEMENT</strong><br/>
+      {% if reliance_type == "dno" %}
+        This document is submitted to the distribution network operator named above in
+        support of an application or enquiry under ENA EREC G99 Issue 2 (10 March 2025) and
+        the Common Connection Charging Methodology v19 (2024). The DNO may rely on this
+        document for connection assessment purposes only. Princeps Energy retains
+        professional liability subject to the engagement letter; no third-party reliance
+        is granted without Princeps' prior written consent.
+      {% elif reliance_type == "investor" %}
+        This memorandum has been prepared for the investment committee of the named fund
+        solely for the purpose of evaluating the investment described on the cover page.
+        It is not an offer, solicitation, or investment advice within the meaning of the
+        Financial Services and Markets Act 2000. Forward-looking statements are estimates
+        and actual outcomes may differ materially. No reliance is granted to any third
+        party without Princeps Energy's prior written consent.
+      {% elif reliance_type == "planning" %}
+        This document is submitted to the named planning authority in support of the
+        application described on the cover page. Statements of fact are believed accurate
+        as at the retrieval dates listed in the References section. Professional
+        judgements are those of the named signatories in the Revision Control block.
+        No third party other than the named planning authority and the applicant is
+        entitled to rely on this document.
+      {% elif reliance_type == "lender" %}
+        This report has been prepared for the named addressees in connection with
+        financing of the Project. Reliance is extended under a separate reliance letter.
+        Princeps Energy accepts no duty of care and no liability to any third party who
+        may come into possession of this report. Aggregate liability is limited to the
+        fees paid under the relevant engagement. Nothing herein constitutes investment,
+        legal or tax advice.
+      {% else %}
+        This report has been prepared by Princeps Energy solely for the named client and
+        solely for the purpose stated on this cover page. No third party is entitled to
+        rely on this report without Princeps Energy's prior written consent. Princeps
+        Energy accepts no duty of care and no liability to any third party. This document
+        must be read in conjunction with the References and the underlying data sources
+        cited inline.
+      {% endif %}
+    </div>
+  </div>
+</section>

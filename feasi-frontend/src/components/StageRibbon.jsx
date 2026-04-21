@@ -131,9 +131,9 @@ export default function StageRibbon({
       <style>{`
         .srx-root {
           display: grid;
-          grid-template-columns: 1fr minmax(260px, 420px);
-          gap: 20px; align-items: center;
-          padding: 12px 24px;
+          grid-template-columns: minmax(0, 1fr) minmax(220px, 360px);
+          gap: 16px; align-items: center;
+          padding: 12px 20px;
           background: var(--cds-layer-01);
           border-bottom: 1px solid var(--cds-border-subtle);
           font-family: "DM Sans", -apple-system, sans-serif;
@@ -145,6 +145,8 @@ export default function StageRibbon({
           list-style: none; margin: 0; padding: 0;
           display: flex; align-items: center; gap: 2px;
           overflow-x: auto;
+          min-width: 0;
+          scrollbar-width: thin;
         }
         .srx-stage {
           display: flex; flex-direction: column; align-items: center; gap: 4px;
@@ -230,7 +232,7 @@ export default function StageRibbon({
           flex-shrink: 0;
         }
 
-        @media (max-width: 900px) {
+        @media (max-width: 1100px) {
           .srx-root {
             grid-template-columns: 1fr;
             padding: 12px 16px;

@@ -1,6 +1,13 @@
 import React from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 
+// Session key for remembering where the user came from before entering
+// /intelligence/*. Set by callers (e.g. Sidebar/CommandPalette) just
+// before they route into Intelligence; consumed by the "← Princeps"
+// back button below so we don't dump users onto Mission Control's
+// overlay when they only wanted to return to their previous view.
+const RETURN_KEY = "princeps.intelligenceReturnUrl";
+
 // Gold/ink tokens — mirrors the Sidebar light-gold palette to stay
 // visually continuous with the rest of the Princeps chrome.
 const C = {
@@ -88,6 +95,32 @@ function SegmentedControl() {
  */
 export default function IntelligenceShell() {
   const navigate = useNavigate();
+
+  // Back-to-Princeps handler. The root route re-mounts App.jsx which,
+  // when activeWorkspace === "home" and activeViewMode is empty/dashboard,
+  // renders Mission Control as a full-screen overlay on top of AppShell
+  // (see App.jsx:958 in the 2026-04-19 redesign). Navigating bare "/"
+  // from here would strand the user under that overlay.
+  //
+  // Strategy: restore the exact URL the user came from if we captured
+  // one (sessionStorage, written by upstream callers). If not, fall back
+  // to "/?redesign=1" — that flag puts App.jsx into RedesignLayout mode
+  // and sidesteps the Mission Control overlay gate, landing the user on
+  // the standard project-first workspace rather than an empty overlay.
+  const handleBack = React.useCallback(() => {
+    let target = "/?redesign=1";
+    try {
+      const stored = sessionStorage.getItem(RETURN_KEY);
+      if (stored && !stored.startsWith("/intelligence")) {
+        target = stored;
+      }
+      sessionStorage.removeItem(RETURN_KEY);
+    } catch {
+      // sessionStorage unavailable (private mode / SSR) — use fallback.
+    }
+    navigate(target);
+  }, [navigate]);
+
   return (
     <div
       style={{
@@ -114,7 +147,7 @@ export default function IntelligenceShell() {
       >
         <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
           <button
-            onClick={() => navigate("/")}
+            onClick={handleBack}
             title="Back to Princeps"
             aria-label="Back to Princeps"
             style={{

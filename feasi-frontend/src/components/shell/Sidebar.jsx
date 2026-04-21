@@ -103,7 +103,9 @@ const NAV_ITEMS = [
   // unread count badge injected at render time).
   { id: "intelligence", label: "Intelligence",    icon: I.bell,   collapsible: true, badge: true },
   { id: "gridtwin",     label: "Grid Twin",       icon: I.cube },
-  { id: "sitetwin",     label: "Site Twin",       icon: I.siteCube },
+  // "Site Designer 3D" disambiguates from Grid Twin (network-scale) and matches
+  // the underlying /design/:projectId page (DesignCanvas.jsx). Was: "Site Twin".
+  { id: "sitetwin",     label: "Site Designer 3D", icon: I.siteCube, disabledHint: "select project ↗" },
   { id: "chat",         label: "Chat",            icon: I.chat },
   { id: "settings",     label: "Settings",        icon: I.gear },
 ];
@@ -116,7 +118,7 @@ const INTEL_CHILDREN = [
 ];
 
 // ────────────────────────────────────────────────────────────────
-function NavRow({ item, active, expanded, onClick, onToggleExpand, badgeCount, disabled, disabledTooltip }) {
+function NavRow({ item, active, expanded, onClick, onToggleExpand, badgeCount, disabled, disabledTooltip, disabledHint, onDisabledClick }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -126,13 +128,14 @@ function NavRow({ item, active, expanded, onClick, onToggleExpand, badgeCount, d
         display: "flex", alignItems: "stretch",
         borderLeft: active ? `3px solid ${C.gold}` : "3px solid transparent",
         background: active ? C.goldSurface : (hovered && !disabled) ? "rgba(201,166,75,0.04)" : "transparent",
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled ? 0.55 : 1,
+        cursor: disabled ? "not-allowed" : "default",
       }}
       title={disabled ? disabledTooltip : undefined}
     >
       <button
-        onClick={disabled ? undefined : onClick}
-        disabled={disabled}
+        onClick={disabled ? onDisabledClick : onClick}
+        aria-disabled={disabled || undefined}
         style={{
           flex: 1,
           display: "flex",
@@ -152,7 +155,21 @@ function NavRow({ item, active, expanded, onClick, onToggleExpand, badgeCount, d
         <span style={{ color: active ? C.gold : C.tertiary, flexShrink: 0, display: "flex" }}>
           {item.icon}
         </span>
-        <span style={{ flex: 1 }}>{item.label}</span>
+        <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+          <span style={{ lineHeight: 1.2 }}>{item.label}</span>
+          {disabled && disabledHint && (
+            <span style={{
+              fontSize: 10,
+              fontWeight: 400,
+              color: C.tertiary,
+              fontFamily: "'DM Sans', sans-serif",
+              lineHeight: 1.2,
+              letterSpacing: "0.01em",
+            }}>
+              {disabledHint}
+            </span>
+          )}
+        </span>
         {badgeCount > 0 && (
           <span
             aria-label={`${badgeCount} unread`}
@@ -430,7 +447,20 @@ export default function Sidebar({ onGridTwin, onPipeline, onDcTwin, onBessFacili
               }
               badgeCount={item.id === "intelligence" ? unreadCount : 0}
               disabled={disabled}
-              disabledTooltip={disabled ? "Pin a project first" : undefined}
+              disabledTooltip={disabled
+                ? "Open a project first — Site Designer 3D renders a 3D design canvas for the selected project's site."
+                : undefined}
+              disabledHint={disabled ? item.disabledHint : undefined}
+              onDisabledClick={disabled && item.id === "sitetwin"
+                ? () => {
+                    // Soft-nudge: auto-expand Projects so the user sees where
+                    // to click to pin a project, and route into Projects view.
+                    setProjectsOpen(true);
+                    setActive("projects");
+                    setActiveWorkspace?.("home");
+                    setActiveViewMode?.("projects");
+                  }
+                : undefined}
             />
             {item.id === "intelligence" && intelligenceOpen && (
               <div

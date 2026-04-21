@@ -1,0 +1,22 @@
+{# =========================================================================
+   _shared/_header.html.j2 — 36px running banner.
+
+   Expects:  report_type  (str)          e.g. "Grid Connection Report"
+             project_ref  (str | None)   e.g. "PPS-24-0117"
+             revision     (str | None)   e.g. "P02"
+             page_n       (int | None)   rendered page number (Playwright
+                                          auto-fills when omitted).
+             page_total   (int | None)   total pages.
+   ========================================================================= #}
+<header class="pp-header">
+  <div class="pp-header-logo">PRINCEPS</div>
+  <div class="pp-header-meta">
+    {{ report_type or "Technical Report" }}
+    {% if project_ref %} &middot; {{ project_ref }}{% endif %}
+    {% if revision %} &middot; Rev {{ revision }}{% endif %}
+  </div>
+  <div class="pp-header-pages">
+    Page {% if page_n %}{{ page_n }}{% else %}<span class="pageNumber"></span>{% endif %}
+    of {% if page_total %}{{ page_total }}{% else %}<span class="totalPages"></span>{% endif %}
+  </div>
+</header>

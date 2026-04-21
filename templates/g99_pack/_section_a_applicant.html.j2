@@ -1,0 +1,59 @@
+{#-
+  Section A — Applicant, Site and Proposed Connection.
+  Heading verbatim from ENA EREC G99 Issue 2 application form.
+  Context:
+    section_a : dict returned by utils.g99_pack_generator._build_section_a()
+-#}
+<section class="g99-section section-a">
+  <h2>Section A &mdash; Applicant, Site and Proposed Connection Details</h2>
+  <p class="section-lead">
+    Applicant / legal signatory, site location, and proposed connection voltage.
+    Complete all fields. <em>Clause 5.1 &amp; 5.2, G99 Issue 2.</em>
+  </p>
+
+  <h3>A1. Applicant (company details)</h3>
+  <table class="form">
+    <tr><td class="lbl">Applicant company name</td><td>{{ field(section_a.applicant.company) }}</td></tr>
+    <tr><td class="lbl">Registered office address</td><td>{{ field(section_a.applicant.address) }}</td></tr>
+    <tr><td class="lbl">Companies House number</td><td>{{ field(section_a.applicant.company_number) }}</td></tr>
+    <tr><td class="lbl">Primary contact (name, role)</td><td>{{ field(section_a.applicant.primary_contact) }}</td></tr>
+    <tr><td class="lbl">Contact telephone</td><td>{{ field(section_a.applicant.telephone) }}</td></tr>
+    <tr><td class="lbl">Contact email</td><td>{{ field(section_a.applicant.email) }}</td></tr>
+    <tr><td class="lbl">Authorised signatory</td><td>{{ field(section_a.applicant.signatory) }}</td></tr>
+    <tr><td class="lbl">Signature date</td><td>{{ field(section_a.applicant.signature_date) }}</td></tr>
+  </table>
+
+  <h3>A2. Installer / contractor</h3>
+  <table class="form">
+    <tr><td class="lbl">Installer company</td><td>{{ field(section_a.installer.company) }}</td></tr>
+    <tr><td class="lbl">Accreditation scheme</td><td>{{ field(section_a.installer.accreditation_scheme) }}</td></tr>
+    <tr><td class="lbl">Accreditation number</td><td>{{ field(section_a.installer.accreditation_number) }}</td></tr>
+    <tr><td class="lbl">Installer contact</td><td>{{ field(section_a.installer.contact_email) }} / {{ field(section_a.installer.contact_phone) }}</td></tr>
+  </table>
+
+  <h3>A3. Site details</h3>
+  <table class="form">
+    <tr><td class="lbl">Site / project name</td><td>{{ field(section_a.site.name) }}</td></tr>
+    <tr><td class="lbl">Site address</td><td>{{ field(section_a.site.address) }}</td></tr>
+    <tr><td class="lbl">Postcode</td><td>{{ field(section_a.site.postcode) }}</td></tr>
+    <tr><td class="lbl">Local Planning Authority (LPA)</td><td>{{ field(section_a.site.lpa) }}</td></tr>
+    <tr><td class="lbl">Councillor ward</td><td>{{ field(section_a.site.ward) }}</td></tr>
+    <tr><td class="lbl">MPAN core (where applicable)</td><td>{{ field(section_a.site.mpan) }}</td></tr>
+    <tr><td class="lbl">OSGB36 National Grid Reference</td><td>{{ field(section_a.site.ngr) }}</td></tr>
+    <tr><td class="lbl">WGS84 (lat, lon)</td><td>{{ field(section_a.site.wgs84) }}</td></tr>
+    <tr><td class="lbl">Land area (hectares)</td><td>{{ field(section_a.site.land_area_ha) }}</td></tr>
+  </table>
+
+  <h3>A4. Proposed connection</h3>
+  <table class="form">
+    <tr><td class="lbl">DNO licence area</td><td>{{ field(section_a.connection.dno_licence_area) }}</td></tr>
+    <tr><td class="lbl">Local DNO primary / BSP substation ID</td><td>{{ field(section_a.connection.substation_id) }}</td></tr>
+    <tr><td class="lbl">Proposed connection voltage</td><td>{{ field(section_a.connection.proposed_voltage_kv) }} kV</td></tr>
+    <tr><td class="lbl">Existing voltage at Point of Connection</td><td>{{ field(section_a.connection.existing_voltage_kv) }} kV</td></tr>
+    <tr><td class="lbl">Connection type</td><td>{{ field(section_a.connection.type) }}</td></tr>
+    <tr><td class="lbl">Distance to PoC (km)</td><td>{{ field(section_a.connection.distance_km) }}</td></tr>
+    <tr><td class="lbl">Meter point arrangement</td><td>{{ field(section_a.connection.metering_arrangement) }}</td></tr>
+    <tr><td class="lbl">Applicable G99 Type category</td><td>{{ field(section_a.connection.g99_type) }}</td></tr>
+    <tr><td class="lbl">ENA category</td><td>{{ field(section_a.connection.ena_category) }}</td></tr>
+  </table>
+</section>

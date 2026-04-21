@@ -413,12 +413,33 @@ export function SiteProvider({ children }) {
       gridcapacity:  "gridCapacity",
       repd:          "repdProjects",
       repdprojects:  "repdProjects",
-      nsip:          "repdProjects",          // fallback — best surface today
-      flood_zones:   "envConstraints",
-      floodzones:    "envConstraints",
-      flood:         "envConstraints",
-      planning:      "planningConstraints",
-      lpa:           "planningConstraints",
+      // NSIP — disambiguated from REPD. We expose `nsipProjects` as its own
+      // layer key; MapView can register a filtered view (>50MW solar /
+      // >100MW onshore wind per Energy Act 2023). Until a dedicated NSIP
+      // layer ships, the URL fallback also activates `repdProjects` as the
+      // honest surface (data overlap) — consumers can filter on
+      // sessionStorage flag `princeps_nsip_scale_filter` which the bridge
+      // sets when a NSIP CTA is fired.
+      nsip:          ["nsipProjects", "repdProjects"],
+      nsipprojects:  ["nsipProjects", "repdProjects"],
+      // Grid reliability — N-1 contingency heatmap; falls back to the
+      // gridCapacity surface until a dedicated `n1Heat` layer lands.
+      n1_reliability_heat: ["n1Heat", "gridCapacity"],
+      n1heat:              ["n1Heat", "gridCapacity"],
+      // Flood maps — EA Flood Map for Planning → existing env constraints surface
+      ea_flood_planning:   "envConstraints",
+      flood_zones:         "envConstraints",
+      floodzones:          "envConstraints",
+      flood:               "envConstraints",
+      // Planning / aviation / defence safeguarding — all map to the
+      // shared planning-constraints surface for now; each gets its own
+      // virtual id so future dedicated layers can be slotted in without
+      // renaming call-sites in mock-datasets.json.
+      planning:            "planningConstraints",
+      lpa:                 "planningConstraints",
+      mod_safeguarding:         ["modSafeguarding", "planningConstraints"],
+      caa_aerodrome_safeguarding: ["caaAerodromeSafeguarding", "planningConstraints"],
+      aerodrome_safeguarding:     ["caaAerodromeSafeguarding", "planningConstraints"],
       grid_lines:    "osmPower",
       osm_power:     "osmPower",
       substations:   "gridFlow",
@@ -432,7 +453,13 @@ export function SiteProvider({ children }) {
       return raw;
     };
     const activate = (rawIds) => {
-      const ids = rawIds.map(resolve).filter(Boolean);
+      // Flatten: a single slug may resolve to an array of layer ids
+      // (primary + honest fallback for slugs whose dedicated layer hasn't
+      // shipped yet). Filter out nulls after resolution.
+      const ids = rawIds
+        .map(resolve)
+        .flatMap(r => Array.isArray(r) ? r : [r])
+        .filter(Boolean);
       if (ids.length === 0) return;
       setLayers(l => {
         const next = { ...l };

@@ -274,78 +274,98 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
     window.open("?grid-twin=1", "_blank");
   };
 
+  // Project tree is only relevant on the Projects view. On Map / Grid Twin /
+  // Pulse / DC Twin / Dashboard routes the tree just wastes a ~60-80px column
+  // (even when collapsed the chevron-stub leaks through) and crushes the
+  // ProjectPage header. BOT-LX 2026-04-19: gate the PanelGroup on
+  // activeViewMode === "projects" and otherwise render the center pane at
+  // full width.
+  const showTreePane = workspace?.activeViewMode === "projects";
+
+  const centerPane = (
+    <div className="rd-center">
+      {loading && !project ? (
+        <div className="rd-loading">Loading portfolios…</div>
+      ) : loadError ? (
+        <div className="rd-error">
+          <div className="rd-error-title">Could not load</div>
+          <div className="rd-error-sub">{loadError}</div>
+          <button className="rd-retry" onClick={reloadTree}>Retry</button>
+        </div>
+      ) : (
+        <ProjectPage
+          portfolio={currentPortfolio}
+          project={project}
+          sites={sites}
+          activeTab={activeTab}
+          activeSubTab={activeSubTab}
+          onTabChange={(t) => { setActiveTab(t); setActiveSubTab(null); }}
+          onPopOutTwin={actions?.gridTwin || onPopOutTwin}
+          onAddCandidate={() => onNewProject(selectedPortfolioId)}
+          onSelectSite={(s) => setSelectedCandidateId(s.candidate_id)}
+          actions={actions}
+          mapSlot={activeTab === "overview" ? mapSlot : null}
+          onViewMap={onViewMap || (() => {})}
+          onNavigate={(href) => {
+            if (!href) return;
+            const match = href.match(/\/p\/([^/]+)(?:\/project\/([^/]+))?/);
+            if (match) {
+              setSelectedPortfolioId(match[1]);
+              setSelectedProjectId(match[2] || null);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+
   return (
     <div className="rd-root">
-      {/* Resizable + collapsible split between project tree and main canvas.
-          Sizes persist to localStorage via autoSaveId. Drag the gold rule to
-          resize; double-click to snap-collapse the project tree. */}
-      <PanelGroup
-        direction="horizontal"
-        autoSaveId="princeps-rd-layout"
-        style={{ height: "100%", width: "100%" }}
-      >
-        <Panel
-          id="rd-tree"
-          order={1}
-          defaultSize={20}
-          minSize={12}
-          maxSize={40}
-          collapsible
-          collapsedSize={0}
-          className="rd-pane rd-pane-tree"
+      {showTreePane ? (
+        /* Resizable + collapsible split between project tree and main canvas.
+           Sizes persist to localStorage via autoSaveId. Drag the gold rule to
+           resize; double-click to snap-collapse the project tree. */
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId="princeps-rd-layout"
+          style={{ height: "100%", width: "100%" }}
         >
-          <ProjectTree
-            portfolios={tree}
-            selectedPortfolioId={selectedPortfolioId}
-            selectedProjectId={selectedProjectId}
-            selectedSiteId={selectedCandidateId}
-            onSelectPortfolio={setSelectedPortfolioId}
-            onSelectProject={onSelectProject}
-            onSelectSite={onSelectSite}
-            onNewProject={onNewProject}
-            onNewPortfolio={() => { /* TODO: portfolio create modal */ }}
-          />
-        </Panel>
+          <Panel
+            id="rd-tree"
+            order={1}
+            defaultSize={20}
+            minSize={12}
+            maxSize={40}
+            collapsible
+            collapsedSize={0}
+            className="rd-pane rd-pane-tree"
+          >
+            <ProjectTree
+              portfolios={tree}
+              selectedPortfolioId={selectedPortfolioId}
+              selectedProjectId={selectedProjectId}
+              selectedSiteId={selectedCandidateId}
+              onSelectPortfolio={setSelectedPortfolioId}
+              onSelectProject={onSelectProject}
+              onSelectSite={onSelectSite}
+              onNewProject={onNewProject}
+              onNewPortfolio={() => { /* TODO: portfolio create modal */ }}
+            />
+          </Panel>
 
-        <PanelResizeHandle className="rd-resize-handle" />
+          <PanelResizeHandle className="rd-resize-handle" />
 
-        <Panel id="rd-center" order={2} defaultSize={80} minSize={50}>
-          <div className="rd-center">
-            {loading && !project ? (
-              <div className="rd-loading">Loading portfolios…</div>
-            ) : loadError ? (
-              <div className="rd-error">
-                <div className="rd-error-title">Could not load</div>
-                <div className="rd-error-sub">{loadError}</div>
-                <button className="rd-retry" onClick={reloadTree}>Retry</button>
-              </div>
-            ) : (
-              <ProjectPage
-                portfolio={currentPortfolio}
-                project={project}
-                sites={sites}
-                activeTab={activeTab}
-                activeSubTab={activeSubTab}
-                onTabChange={(t) => { setActiveTab(t); setActiveSubTab(null); }}
-                onPopOutTwin={actions?.gridTwin || onPopOutTwin}
-                onAddCandidate={() => onNewProject(selectedPortfolioId)}
-                onSelectSite={(s) => setSelectedCandidateId(s.candidate_id)}
-                actions={actions}
-                mapSlot={activeTab === "overview" ? mapSlot : null}
-                onViewMap={onViewMap || (() => {})}
-                onNavigate={(href) => {
-                  if (!href) return;
-                  const match = href.match(/\/p\/([^/]+)(?:\/project\/([^/]+))?/);
-                  if (match) {
-                    setSelectedPortfolioId(match[1]);
-                    setSelectedProjectId(match[2] || null);
-                  }
-                }}
-              />
-            )}
-          </div>
-        </Panel>
-      </PanelGroup>
+          <Panel id="rd-center" order={2} defaultSize={80} minSize={50}>
+            {centerPane}
+          </Panel>
+        </PanelGroup>
+      ) : (
+        /* Non-Projects routes: render the center pane full-width. Tree is
+           still reachable from the Sidebar's Projects row expander. */
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex" }}>
+          {centerPane}
+        </div>
+      )}
 
       {/* ChatRail mounted globally in App.jsx (2026-04-19 chat consolidation).
           Project context flows via window event 'princeps-chat-context'. */}

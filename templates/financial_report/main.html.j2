@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Princeps FVR — {{ project.site_name }}</title>
+  <style>{% include "_styles.css.j2" %}</style>
+</head>
+<body>
+
+{# ========================================================================= #}
+{# 1. Cover + reliance                                                       #}
+{# ========================================================================= #}
+{% include "_cover.html.j2" %}
+
+{# ========================================================================= #}
+{# 2. Executive summary                                                      #}
+{# ========================================================================= #}
+<section class="section avoid-break">
+  <h2 class="section-title">1. Executive Summary</h2>
+
+  <div class="verdict-bar">
+    <div class="verdict-pill verdict-{{ verdict.status }}">{{ verdict.status }}</div>
+    <div class="verdict-detail">
+      <b>{{ verdict.headline }}</b>
+      &nbsp;·&nbsp; Equity IRR P50 <b>{{ '%.1f'|format(exec_summary.equity_irr_p50) }}%</b>
+      (P10 {{ '%.1f'|format(exec_summary.equity_irr_p10) }}% / P90 {{ '%.1f'|format(exec_summary.equity_irr_p90) }}%)
+      &nbsp;·&nbsp; Min DSCR under stress <b>{{ '%.2f'|format(exec_summary.min_dscr_stress) }}x</b>
+    </div>
+  </div>
+
+  <div class="kpi-strip">
+    <div class="kpi-cell"><div class="v">{{ exec_summary.capex_display }}</div>
+      <div class="l">Total CapEx ({{ '%.0f'|format(exec_summary.capex_per_mw_k) }} £k/MW)</div></div>
+    <div class="kpi-cell"><div class="v">£{{ '%.0f'|format(exec_summary.ppa_strike) }}/MWh</div>
+      <div class="l">PPA Strike · {{ exec_summary.ppa_source }}</div></div>
+    <div class="kpi-cell"><div class="v">{{ exec_summary.gearing_pct }}% / {{ '%.0f'|format(exec_summary.debt_tenor) }} yr</div>
+      <div class="l">Senior Gearing · Tenor</div></div>
+    <div class="kpi-cell"><div class="v">{{ '%.2f'|format(exec_summary.mean_dscr) }}x</div>
+      <div class="l">Mean DSCR (base case)</div></div>
+  </div>
+
+  <h3 class="sub">Three Critical Risks</h3>
+  <ul class="bullets">
+    {% for r in exec_summary.critical_risks %}
+      <li><b>{{ r.title }}</b> — {{ r.detail }}</li>
+    {% endfor %}
+  </ul>
+
+  <p style="margin-top: 3mm; font-size: 9.5pt;">
+  The project is assessed <b>{{ verdict.status }}</b> on a senior-secured project-finance
+  basis at the base-case PPA of £{{ '%.0f'|format(exec_summary.ppa_strike) }}/MWh, 2.4% long-run CPI,
+  SONIA+{{ exec_summary.margin_bps }} bps senior debt over {{ '%.0f'|format(exec_summary.debt_tenor) }} years,
+  25% UK corporation tax, and 25-year project life with Gordon-growth terminal value.
+  <span class="source">Source: utils.finance_benchmarks (Princeps SSOT, {{ project.date }}).</span>
+  </p>
+</section>
+
+<div class="page-break"></div>
+
+{# ========================================================================= #}
+{# 3. Project description                                                    #}
+{# ========================================================================= #}
+<section class="section avoid-break">
+  <h2 class="section-title">2. Project Description</h2>
+  <table class="data">
+    <tr><td style="width: 45mm;"><b>Site name</b></td><td>{{ project.site_name }}</td></tr>
+    <tr><td><b>Location</b></td><td>{{ '%.4f'|format(project.lat) }}° N, {{ '%.4f'|format(project.lon) }}° E ({{ project.region }})</td></tr>
+    <tr><td><b>Technology</b></td><td>{{ project.technology_label }}</td></tr>
+    <tr><td><b>Nameplate capacity</b></td><td>{{ '%.1f'|format(project.capacity_mw) }} MW (AC) · {{ '%.2f'|format(project.capacity_dc_mw) }} MW (DC)</td></tr>
+    <tr><td><b>Layout area</b></td><td>{{ '%.1f'|format(project.layout_ha) }} hectares</td></tr>
+    <tr><td><b>Accessing substation</b></td><td>{{ project.substation }} ({{ project.voltage_kv }} kV), GSP: {{ project.gsp }}</td></tr>
+    <tr><td><b>Planning status</b></td><td>{{ project.planning_status }}</td></tr>
+    <tr><td><b>Expected COD</b></td><td>{{ project.expected_cod }}</td></tr>
+    <tr><td><b>Project life</b></td><td>{{ project.project_life_years }} years (operational) + {{ project.construction_years }} yr construction</td></tr>
+    <tr><td><b>Capacity factor / cycles</b></td><td>{{ '%.1f'|format(project.capacity_factor_pct) }}%{% if project.technology == "bess" %} effective (revenue-stack blended){% endif %}</td></tr>
+  </table>
+  <div class="source">Sources: Princeps site DB (lat/lon, substation, capacity); Ofgem Connection Offer register; LPA planning portal lookup.</div>
+</section>
+
+{# ========================================================================= #}
+{# 4. Revenue stack                                                          #}
+{# ========================================================================= #}
+<section class="section">
+  <h2 class="section-title">3. Revenue Stack</h2>
+  <p class="section-intro">
+    Blended £/MWh revenue across the 25-year life, shown at nominal prices (CPI indexed
+    at 2.4%). For solar and onshore wind, the base case assumes merchant PPA from COD
+    through Year 15, with an indicative AR7 Pot 1 CfD floor of £67/MWh (2026 prices)
+    used as the downside pricing comparator.
+  </p>
+
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Revenue source</th>
+        <th class="num">Yr 1 (£/MWh)</th>
+        <th class="num">Yr 5</th>
+        <th class="num">Yr 10</th>
+        <th class="num">Yr 15</th>
+        <th class="num">Yr 20</th>
+        <th class="num">25-yr avg</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in revenue_stack.rows %}
+      <tr{% if row.is_total %} class="total"{% endif %}>
+        <td>{{ row.source }}</td>
+        <td class="num">£{{ '%.1f'|format(row.y1) }}</td>
+        <td class="num">£{{ '%.1f'|format(row.y5) }}</td>
+        <td class="num">£{{ '%.1f'|format(row.y10) }}</td>
+        <td class="num">£{{ '%.1f'|format(row.y15) }}</td>
+        <td class="num">£{{ '%.1f'|format(row.y20) }}</td>
+        <td class="num">£{{ '%.1f'|format(row.avg) }}</td>
+        <td class="small">{{ row.notes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="source">
+    Sources: Cornwall Insight UK Benchmark Q1 2026 (merchant + embedded benefits);
+    LCP Delta — AR7 Pot 1 clearing Jan 2026 (£67/MWh solar/onshore, 2026 prices);
+    NESO T-4 Capacity Market 2028/29 auction (Feb 2026, £45/kW/yr clearing).
+  </div>
+</section>
+
+<div class="page-break"></div>
+
+{# ========================================================================= #}
+{# 5. CapEx breakdown                                                        #}
+{# ========================================================================= #}
+<section class="section">
+  <h2 class="section-title">4. CapEx Breakdown</h2>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Component</th>
+        <th class="num">£ / kW</th>
+        <th class="num">£ total</th>
+        <th class="num">% of total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in capex_breakdown %}
+      <tr{% if row.is_total %} class="total"{% endif %}>
+        <td>{{ row.component }}</td>
+        <td class="num">{{ '%.0f'|format(row.per_kw) }}</td>
+        <td class="num">{{ row.total_display }}</td>
+        <td class="num">{{ '%.1f'|format(row.pct) }}%</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="source">Source: Cornwall Insight UK Renewables Benchmark Q1 2026;
+  LCP Delta DC &amp; Renewables Cost Tracker Mar 2026; DESNZ Generation Cost Report 2025.</div>
+</section>
+
+{# ========================================================================= #}
+{# 6. OpEx & asset management                                                #}
+{# ========================================================================= #}
+<section class="section">
+  <h2 class="section-title">5. OpEx &amp; Asset Management</h2>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Line item</th>
+        <th class="num">Yr 1 (£/MW/yr)</th>
+        <th class="num">Yr 1 (£ total)</th>
+        <th>Basis / notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in opex_breakdown %}
+      <tr{% if row.is_total %} class="total"{% endif %}>
+        <td>{{ row.component }}</td>
+        <td class="num">{{ '%.0f'|format(row.per_mw_yr) }}</td>
+        <td class="num">{{ row.total_display }}</td>
+        <td class="small">{{ row.notes }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="source">Source: UK OFR PPA Reports H2 2025; Greencoat + JLEN 2025 annual accounts;
+  DESNZ OpEx benchmark (RIIO-ED2 comparator); utils.finance_benchmarks.</div>
+</section>
+
+<div class="page-break"></div>
+
+{# ========================================================================= #}
+{# 7. 25-yr DCF schedule                                                     #}
+{# ========================================================================= #}
+<section class="section">
+  <h2 class="section-title">6. 25-Year DCF Schedule</h2>
+  <p class="section-intro">
+    Nominal cashflow schedule. Rows shown: construction years 0-1, operating years 1-5,
+    and every 5th year thereafter to Year 25.
+  </p>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Yr</th>
+        <th class="num">Gen (GWh)</th>
+        <th class="num">Price £/MWh</th>
+        <th class="num">Revenue</th>
+        <th class="num">OpEx</th>
+        <th class="num">EBITDA</th>
+        <th class="num">Debt svc</th>
+        <th class="num">CFADS</th>
+        <th class="num">DSCR</th>
+        <th class="num">FCFE</th>
+        <th class="num">Cum. NPV</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in dcf_schedule %}
+      <tr>
+        <td>{{ r.year }}</td>
+        <td class="num">{{ '%.1f'|format(r.gen_gwh) }}</td>
+        <td class="num">{{ '%.1f'|format(r.price) }}</td>
+        <td class="num">{{ r.revenue_display }}</td>
+        <td class="num">{{ r.opex_display }}</td>
+        <td class="num">{{ r.ebitda_display }}</td>
+        <td class="num">{{ r.debt_service_display }}</td>
+        <td class="num">{{ r.cfads_display }}</td>
+        <td class="num">{% if r.dscr %}{{ '%.2f'|format(r.dscr) }}x{% else %}—{% endif %}</td>
+        <td class="num">{{ r.fcfe_display }}</td>
+        <td class="num">{{ r.cum_npv_display }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="source">Source: DCF run via utils.dcf_evaluator.DCFEvaluator; 25-yr horizon,
+  Gordon-growth terminal at g=0%, WACC {{ '%.2f'|format(dcf_summary.wacc_pct) }}%.
+  Discount + tax from utils.finance_benchmarks.</div>
+</section>
+
+{# ========================================================================= #}
+{# 8. Debt structure                                                         #}
+{# ========================================================================= #}
+<section class="section avoid-break">
+  <h2 class="section-title">7. Debt Structure &amp; Lender Covenants</h2>
+
+  <div class="kpi-strip">
+    <div class="kpi-cell"><div class="v">{{ '%.0f'|format(debt.gearing_pct) }}%</div>
+      <div class="l">Senior gearing</div></div>
+    <div class="kpi-cell"><div class="v">{{ '%.0f'|format(debt.tenor_years) }} yr</div>
+      <div class="l">Tenor</div></div>
+    <div class="kpi-cell"><div class="v">{{ '%.2f'|format(debt.all_in_rate_pct) }}%</div>
+      <div class="l">All-in rate (SONIA + {{ debt.margin_bps }} bps)</div></div>
+    <div class="kpi-cell"><div class="v">{{ debt.debt_amount_display }}</div>
+      <div class="l">Senior debt quantum</div></div>
+  </div>
+
+  <table class="data">
+    <thead>
+      <tr><th>Metric</th><th class="num">Base case</th><th class="num">Threshold</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Min. DSCR (through tenor)</td><td class="num">{{ '%.2f'|format(debt.min_dscr) }}x</td>
+        <td class="num">1.20x (base) / 1.15x (lock-up)</td>
+        <td>{% if debt.min_dscr >= 1.20 %}<b style="color:#24a148">PASS</b>{% elif debt.min_dscr >= 1.15 %}<b style="color:#f1c21b">LOCK-UP</b>{% else %}<b style="color:#da1e28">BREACH</b>{% endif %}</td></tr>
+      <tr><td>Mean DSCR</td><td class="num">{{ '%.2f'|format(debt.mean_dscr) }}x</td>
+        <td class="num">1.30x target</td>
+        <td>{% if debt.mean_dscr >= 1.30 %}<b style="color:#24a148">PASS</b>{% else %}<b style="color:#f1c21b">MARGINAL</b>{% endif %}</td></tr>
+      <tr><td>LLCR (loan-life)</td><td class="num">{{ '%.2f'|format(debt.llcr) }}x</td>
+        <td class="num">1.30x</td>
+        <td>{% if debt.llcr >= 1.30 %}<b style="color:#24a148">PASS</b>{% else %}<b style="color:#da1e28">BREACH</b>{% endif %}</td></tr>
+      <tr><td>PLCR (project-life)</td><td class="num">{{ '%.2f'|format(debt.plcr) }}x</td>
+        <td class="num">1.40x</td>
+        <td>{% if debt.plcr >= 1.40 %}<b style="color:#24a148">PASS</b>{% else %}<b style="color:#da1e28">BREACH</b>{% endif %}</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Debt-service schedule (first 5 + every 5th year)</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Yr</th><th class="num">Opening bal</th><th class="num">Interest</th>
+        <th class="num">Principal</th><th class="num">Debt svc</th>
+        <th class="num">Closing bal</th><th class="num">DSCR</th></tr>
+    </thead>
+    <tbody>
+      {% for r in debt.amortising_rows %}
+      <tr>
+        <td>{{ r.year }}</td>
+        <td class="num">{{ r.opening_display }}</td>
+        <td class="num">{{ r.interest_display }}</td>
+        <td class="num">{{ r.principal_display }}</td>
+        <td class="num">{{ r.ds_display }}</td>
+        <td class="num">{{ r.closing_display }}</td>
+        <td class="num">{% if r.dscr %}{{ '%.2f'|format(r.dscr) }}x{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="source">
+    Source: SONIA reference {{ '%.2f'|format(debt.sonia_ref_pct) }}% (BoE, Apr 2026);
+    senior margin {{ debt.margin_bps }} bps (utils.finance_benchmarks); debt sized by
+    sculpted 1.30x target DSCR via utils.investment_appraisal.debt_structure.
+  </div>
+</section>
+
+<div class="page-break"></div>
+
+{# ========================================================================= #}
+{# 9. Equity returns                                                         #}
+{# ========================================================================= #}
+<section class="section avoid-break">
+  <h2 class="section-title">8. Equity Returns</h2>
+  <div class="kpi-strip">
+    <div class="kpi-cell"><div class="v">{{ '%.1f'|format(equity.unlevered_irr_pct) }}%</div>
+      <div class="l">Unlevered IRR</div></div>
+    <div class="kpi-cell"><div class="v">{{ '%.1f'|format(equity.levered_irr_pre_tax_pct) }}%</div>
+      <div class="l">Levered Equity IRR (pre-tax)</div></div>
+    <div class="kpi-cell"><div class="v">{{ '%.1f'|format(equity.levered_irr_post_tax_pct) }}%</div>
+      <div class="l">Levered Equity IRR (post-tax)</div></div>
+    <div class="kpi-cell"><div class="v">{{ '%.2f'|format(equity.equity_multiple) }}x</div>
+      <div class="l">Equity multiple</div></div>
+  </div>
+
+  <table class="data">
+    <tr><td><b>Cash-on-cash yield (avg)</b></td><td class="num">{{ '%.2f'|format(equity.cash_on_cash_pct) }}%</td>
+      <td><b>Equity cheque</b></td><td class="num">{{ equity.equity_amount_display }}</td></tr>
+    <tr><td><b>Payback year</b></td><td class="num">{% if equity.payback_year %}Year {{ equity.payback_year }}{% else %}&gt; 25 yrs{% endif %}</td>
+      <td><b>WACC (reference)</b></td><td class="num">{{ '%.2f'|format(equity.wacc_pct) }}%</td></tr>
+    <tr><td><b>Total dividends</b></td><td class="num">{{ equity.total_dividends_display }}</td>
+      <td><b>Cost of equity (Ke)</b></td><td class="num">{{ '%.2f'|format(equity.cost_of_equity_pct) }}%</td></tr>
+  </table>
+  <div class="source">Source: utils.investment_appraisal.equity_returns (pre/post-tax IRR, dividend waterfall);
+  utils.finance_benchmarks (WACC by technology, stabilised).</div>
+</section>
+
+{# ========================================================================= #}
+{# 10. Sensitivity tornado                                                   #}
+{# ========================================================================= #}
+<section class="section">
+  <h2 class="section-title">9. Sensitivity Analysis</h2>
+  <p class="section-intro">
+    Tornado chart of equity-IRR sensitivity to 8 key drivers. Each bar shows the swing
+    between the pessimistic and optimistic case while all other parameters are held at
+    base case. Ranked by |Δ| top to bottom.
+  </p>
+  <div class="chart-wrap">
+    {% include "_tornado.svg.j2" %}
+    <div class="chart-caption">
+      Figure 1 — 8-factor equity-IRR tornado. Base case {{ '%.1f'|format(tornado.base_irr_pct) }}%.
+      Source: utils.fvr_sensitivity.compute_tornado (run {{ project.date }}).
+    </div>
+  </div>
+
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Driver</th>
+        <th>Pessimistic</th>
+        <th class="num">IRR (low)</th>
+        <th>Optimistic</th>
+        <th class="num">IRR (high)</th>
+        <th class="num">Range (pp)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in tornado.rows %}
+      <tr>
+        <td><b>{{ r.factor }}</b></td>
+        <td>{{ r.low_case }}</td>
+        <td class="num">{{ '%.1f'|format(r.irr_low) }}%</td>
+        <td>{{ r.high_case }}</td>
+        <td class="num">{{ '%.1f'|format(r.irr_high) }}%</td>
+        <td class="num">{{ '%.1f'|format(r.range) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="page-break"></div>
+
+{# ========================================================================= #}
+{# 11. Stress cases                                                          #}
+{# ========================================================================= #}
+<section class="section avoid-break">
+  <h2 class="section-title">10. Stress Cases</h2>
+
+  <div class="callout callout-red">
+    <h3>Downside — {{ stress_downside.case }}</h3>
+    <table class="data" style="margin-top: 2mm;">
+      <tr><td><b>Base equity IRR</b></td><td class="num">{{ '%.2f'|format(stress_downside.base_irr_pct) }}%</td>
+        <td><b>Stressed equity IRR</b></td><td class="num"><b>{{ '%.2f'|format(stress_downside.stressed_irr_pct) }}%</b></td></tr>
+      <tr><td><b>Δ vs base</b></td><td class="num">{{ '%.2f'|format(stress_downside.delta_pp) }} pp</td>
+        <td><b>DSCR breach?</b></td>
+        <td>{% if stress_downside.dscr_breach %}<b style="color:#da1e28">YES — lock-up in Year {{ stress_downside.breach_year }}</b>{% else %}<b style="color:#24a148">No breach</b>{% endif %}</td></tr>
+    </table>
+    <p style="margin-top: 2mm; font-size: 9.5pt;">
+      <b>Cure path.</b> {{ stress_downside.cure_path }}
+    </p>
+  </div>
+
+  <div class="callout callout-green">
+    <h3>Upside — {{ stress_upside.case }}</h3>
+    <table class="data" style="margin-top: 2mm;">
+      <tr><td><b>Base equity IRR</b></td><td class="num">{{ '%.2f'|format(stress_upside.base_irr_pct) }}%</td>
+        <td><b>Upside equity IRR</b></td><td class="num"><b>{{ '%.2f'|format(stress_upside.upside_irr_pct) }}%</b></td></tr>
+      <tr><td><b>Δ vs base</b></td><td class="num">+{{ '%.2f'|format(stress_upside.delta_pp) }} pp</td>
+        <td><b>Catalyst window</b></td>
+        <td>AR7 clearing Jan 2026 (closed); T-4 2028/29 auction Feb 2026.</td></tr>
+    </table>
+  </div>
+  <div class="source">Source: utils.fvr_sensitivity.stress_downside / stress_upside.
+  Grid-slip carry modelled as +6% CapEx uplift (1 yr × SONIA+{{ debt.margin_bps }} bps on senior debt).</div>
+</section>
+
+{# ========================================================================= #}
+{# 12. Risk register                                                         #}
+{# ========================================================================= #}
+<section class="section">
+  <h2 class="section-title">11. Risk Register</h2>
+  <table class="data risk">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Risk</th>
+        <th>Likelihood</th>
+        <th>Impact</th>
+        <th>Mitigation</th>
+        <th>Residual</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in risk_register %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><b>{{ r.title }}</b><br><span class="small">{{ r.description }}</span></td>
+        <td class="chip chip-{{ r.likelihood_chip }}">{{ r.likelihood }}</td>
+        <td class="chip chip-{{ r.impact_chip }}">{{ r.impact }}</td>
+        <td class="small">{{ r.mitigation }}</td>
+        <td class="chip chip-{{ r.residual_chip }}">{{ r.residual }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<div class="page-break"></div>
+
+{# ========================================================================= #}
+{# 13. Assumptions appendix                                                  #}
+{# ========================================================================= #}
+<section class="section">
+  <h2 class="section-title">12. Assumptions Appendix</h2>
+  <dl class="assumptions">
+    {% for a in assumptions %}
+      <dt>{{ a.key }}</dt>
+      <dd>{{ a.value }}<span class="src">— {{ a.source }}</span></dd>
+    {% endfor %}
+  </dl>
+  <div class="source" style="margin-top: 6mm;">
+    All figures in nominal GBP unless otherwise stated. Figures rounded. Subprocess
+    runs recorded against Princeps run ID <b>{{ project.run_id }}</b>.
+  </div>
+</section>
+
+</body>
+</html>

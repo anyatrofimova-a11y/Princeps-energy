@@ -16,7 +16,7 @@ from utils.site_prospector import (
     UK_REGIONAL_RESOURCE,
 )
 
-router = APIRouter(tags=["prospector"])
+router = APIRouter(prefix="/api", tags=["prospector"])
 
 
 @router.get("/prospector/score")
@@ -68,7 +68,7 @@ class PlanningRiskRequest(BaseModel):
     technology: str = "solar"
 
 
-@router.post("/api/prospector/planning-risk")
+@router.post("/prospector/planning-risk")
 async def planning_risk(
     body: PlanningRiskRequest,
     pool: asyncpg.Pool = Depends(get_pool),
@@ -97,7 +97,7 @@ class BatchScreenRequest(BaseModel):
     top_n: int = 20
 
 
-@router.post("/api/prospector/batch-screen")
+@router.post("/prospector/batch-screen")
 async def batch_screen(
     body: BatchScreenRequest,
     pool: asyncpg.Pool = Depends(get_pool),

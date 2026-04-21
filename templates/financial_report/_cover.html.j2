@@ -1,0 +1,47 @@
+{# Cover page + reliance statement. Expects `project`, `recipient`, `verdict` in context. #}
+<section class="cover">
+  <div>
+    <div class="cover-brand">PRINCEPS</div>
+    <div class="cover-doc-type">Financial Viability Report (FVR)</div>
+    <div class="cover-title">{{ project.site_name }}</div>
+    <div class="cover-subtitle">
+      {{ project.technology_label }} · {{ '%.0f'|format(project.capacity_mw) }} MW ·
+      Proposed Commercial Operation Date (COD) {{ project.expected_cod }}
+    </div>
+
+    <div class="cover-meta">
+      <table>
+        <tr><td class="k">Project Reference</td><td>{{ project.ref }}</td></tr>
+        <tr><td class="k">Revision</td><td>{{ project.revision }} ({{ project.revision_stage }})</td></tr>
+        <tr><td class="k">Issue Date</td><td>{{ project.date }}</td></tr>
+        <tr><td class="k">Location</td><td>{{ '%.4f'|format(project.lat) }}° N, {{ '%.4f'|format(project.lon) }}° E</td></tr>
+        <tr><td class="k">Prepared for</td><td>{{ recipient.name }} — Credit Committee</td></tr>
+        <tr><td class="k">Prepared by</td><td>Princeps Energy — Infrastructure Analytics</td></tr>
+      </table>
+    </div>
+
+    <div class="cover-reliance">
+      <div class="head">RELIANCE STATEMENT</div>
+      <p>This Financial Viability Report (FVR) has been prepared by Princeps Energy
+      Limited at the request of {{ recipient.name }} in connection with the proposed
+      senior-secured project financing of the {{ project.site_name }} project.</p>
+      <p style="margin-top: 2mm;">This report <b>may be relied upon</b> by
+      {{ recipient.name }} and its professional advisors (legal, technical, insurance,
+      tax) in evaluating the Loan Proposal, subject to the terms of the reliance
+      letter dated {{ project.date }}. No other party may rely on this report
+      without the prior written consent of Princeps Energy Limited.</p>
+      <p style="margin-top: 2mm;">All valuations are in nominal GBP unless otherwise
+      stated. Discount rate, inflation, tax and capital-structure assumptions are
+      sourced from <code>utils.finance_benchmarks</code> (Princeps single source of
+      truth, revision {{ project.date }}). Revenue, CapEx and OpEx benchmarks are
+      Cornwall Insight UK Benchmark Q1 2026 and LCP Delta CfD AR7 Pot 1 clearing
+      (Jan 2026).</p>
+    </div>
+  </div>
+
+  <div class="cover-footer">
+    <div>Princeps Energy Limited · Confidential</div>
+    <div>princeps.energy · {{ project.date }}</div>
+  </div>
+</section>
+<div class="page-break"></div>

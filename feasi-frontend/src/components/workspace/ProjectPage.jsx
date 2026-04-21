@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import Breadcrumb from "../shell/Breadcrumb";
 import ProjectHeader from "../shell/ProjectHeader";
 // MarketRibbon import removed (BOT-VV 2026-04-19) — duplicate live-data strip on project view. Component still lives at shell/MarketRibbon.jsx for Pulse / Markets surfaces.
@@ -48,6 +48,45 @@ export default function ProjectPage({
   actions = null,
   mapSlot = null,
 }) {
+  // BOT-CHC 2026-04-19 — broadcast the current project + lifecycle tab to the
+  // global ChatRail so every chat turn carries project.id / lat / lon / tech /
+  // capacity_mw / stage / dno / tec_mw. Without this, Claude has no idea what
+  // page the user is on and correctly asks for coordinates it already has.
+  // Fires on mount, on project swap, and on tab change.
+  useEffect(() => {
+    if (!project) return;
+    const meta = project.metadata || {};
+    const payload = {
+      lifecycleTab: activeTab,
+      project: {
+        project_id: project.project_id,
+        name: project.name,
+        lat: project.lat ?? null,
+        lon: project.lon ?? null,
+        technology: project.technology,
+        capacity_mw: project.capacity_mw,
+        stage: project.stage,
+        verdict: project.verdict,
+        dno: project.dno || meta.dno || null,
+        tec_mw: project.tec_mw ?? meta.tec_mw ?? meta.tec_capacity_mw ?? null,
+        metadata: meta,
+      },
+      projectContext: {
+        hasProject: true,
+        name: project.name,
+        technology: project.technology,
+        capacity_mw: project.capacity_mw,
+        stage: project.stage,
+        verdict: project.verdict,
+        lat: project.lat,
+        lon: project.lon,
+      },
+    };
+    try {
+      window.dispatchEvent(new CustomEvent("princeps-chat-context", { detail: payload }));
+    } catch { /* ignore */ }
+  }, [project?.project_id, project?.name, project?.lat, project?.lon, project?.capacity_mw, project?.stage, activeTab]);
+
   const breadcrumbItems = [];
   if (portfolio) breadcrumbItems.push({ label: portfolio.name, href: `/p/${portfolio.portfolio_id}` });
   if (project) breadcrumbItems.push({
@@ -121,15 +160,22 @@ export default function ProjectPage({
         }
         .pp-tabs {
           display: flex; gap: 2px;
-          padding: 0 20px;
+          padding: 0 16px;
           background: var(--cds-layer-01);
           border-bottom: 1px solid var(--cds-border-subtle);
           flex-shrink: 0;
+          /* Allow horizontal scroll at narrow widths so all 6 verbs remain
+             reachable; at >= 820 px all six fit natively (see padding math). */
+          overflow-x: auto;
+          flex-wrap: nowrap;
+          scrollbar-width: thin;
         }
+        .pp-tabs::-webkit-scrollbar { height: 4px; }
+        .pp-tabs::-webkit-scrollbar-thumb { background: var(--cds-border-subtle); border-radius: 2px; }
         .pp-tab {
           background: none;
           border: none;
-          padding: 12px 16px;
+          padding: 12px 14px;
           font-family: "DM Sans", -apple-system, sans-serif;
           font-size: 13px; font-weight: 600;
           color: var(--cds-text-secondary);
@@ -137,6 +183,8 @@ export default function ProjectPage({
           border-bottom: 2px solid transparent;
           transition: all 120ms;
           margin-bottom: -1px;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
         .pp-tab:hover { color: var(--gold-dark); }
         .pp-tab-active {

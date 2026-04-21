@@ -105,8 +105,8 @@ export default function StageRibbon({
 
       <style>{`
         .sr-root {
-          display: grid; grid-template-columns: auto auto 1fr; gap: 20px;
-          align-items: center; padding: 12px 24px;
+          display: grid; grid-template-columns: auto auto 1fr; gap: 14px;
+          align-items: center; padding: 6px 20px;
           background: var(--cds-layer-01);
           border-bottom: 1px solid var(--cds-border-subtle);
           font-family: "DM Sans", -apple-system, sans-serif;

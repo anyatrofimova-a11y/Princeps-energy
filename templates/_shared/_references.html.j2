@@ -1,0 +1,35 @@
+{# =========================================================================
+   _shared/_references.html.j2 — numbered references block.
+
+   Expects:
+     references  (list[dict]) — each {n, title, publisher, year, url}
+                                (any field may be None)
+   ========================================================================= #}
+{% if references %}
+<section class="pp-section">
+  <h2>References</h2>
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th style="width: 38px;">No.</th>
+        <th>Document</th>
+        <th style="width: 36%;">Publisher</th>
+        <th style="width: 14%;" class="pp-right">Year</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in references %}
+      <tr>
+        <td class="pp-mono">[{{ r.n or loop.index }}]</td>
+        <td>
+          {{ r.title or "—" }}
+          {% if r.url %}<br/><span class="pp-xs pp-muted">{{ r.url }}</span>{% endif %}
+        </td>
+        <td>{{ r.publisher or "—" }}</td>
+        <td class="pp-right pp-num">{{ r.year or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}

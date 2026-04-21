@@ -1,0 +1,117 @@
+{# -------------------------------------------------------------------------- #}
+{# Tornado chart — inline SVG                                                #}
+{# Context required:                                                          #}
+{#   tornado.rows  : list of {factor, low_case, high_case,                    #}
+{#                            irr_low, irr_high, delta_low, delta_high}       #}
+{#   tornado.base_irr_pct : float                                             #}
+{# -------------------------------------------------------------------------- #}
+{% set base = tornado.base_irr_pct %}
+{% set rows = tornado.rows %}
+{% set n    = rows|length %}
+
+{# Chart geometry (all px) #}
+{% set WIDTH = 720 %}
+{% set HEIGHT = 60 + n * 36 + 40 %}
+{% set LABEL_W = 220 %}
+{% set PAD_R   = 60 %}
+{% set CHART_W = WIDTH - LABEL_W - PAD_R %}
+{% set CENTRE_X = LABEL_W + CHART_W / 2 %}
+{% set BAR_H = 22 %}
+
+{# X-axis scaling — find largest |delta| across all rows #}
+{% set max_abs = namespace(v=0.5) %}
+{% for r in rows %}
+  {% if (r.delta_low|abs) > max_abs.v %}{% set max_abs.v = r.delta_low|abs %}{% endif %}
+  {% if (r.delta_high|abs) > max_abs.v %}{% set max_abs.v = r.delta_high|abs %}{% endif %}
+{% endfor %}
+{% set scale = (CHART_W / 2) / max_abs.v %}
+
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 {{ WIDTH }} {{ HEIGHT }}"
+     width="100%" font-family="Inter, Arial, sans-serif">
+  <!-- background -->
+  <rect x="0" y="0" width="{{ WIDTH }}" height="{{ HEIGHT }}" fill="#ffffff"/>
+  <!-- chart plot area -->
+  <rect x="{{ LABEL_W }}" y="30"
+        width="{{ CHART_W }}" height="{{ n * 36 }}"
+        fill="#fafafa" stroke="#e0e0e0"/>
+
+  <!-- Centre (base IRR) line -->
+  <line x1="{{ CENTRE_X }}" y1="30"
+        x2="{{ CENTRE_X }}" y2="{{ 30 + n * 36 }}"
+        stroke="#D4A018" stroke-width="2"/>
+
+  <!-- Base IRR label above centre -->
+  <text x="{{ CENTRE_X }}" y="22"
+        text-anchor="middle" font-size="11" font-weight="700" fill="#1a1a2e">
+    Base Equity IRR: {{ '%.1f'|format(base) }}%
+  </text>
+
+  {% for r in rows %}
+    {% set y0 = 30 + loop.index0 * 36 %}
+    {% set yc = y0 + 18 %}
+    {# Negative (pessimistic) bar extends LEFT of centre #}
+    {% set wlo = (r.delta_low|abs) * scale %}
+    {% set xlo = CENTRE_X - wlo %}
+    {# Positive (optimistic) bar extends RIGHT of centre #}
+    {% set whi = (r.delta_high|abs) * scale %}
+    {% set xhi = CENTRE_X %}
+    {# If the "delta_high" is actually negative (curtailment case),
+       swap so the green/red convention stays intuitive.  Both bars
+       render as the signed deviation so the viewer sees the true
+       direction of impact. #}
+
+    <!-- pessimistic side (red) -->
+    {% if r.delta_low < 0 %}
+      <rect x="{{ xlo }}" y="{{ yc - BAR_H/2 }}"
+            width="{{ wlo }}" height="{{ BAR_H }}"
+            fill="#da1e28" opacity="0.85"/>
+    {% else %}
+      <rect x="{{ CENTRE_X }}" y="{{ yc - BAR_H/2 }}"
+            width="{{ wlo }}" height="{{ BAR_H }}"
+            fill="#24a148" opacity="0.85"/>
+    {% endif %}
+
+    <!-- optimistic side (green) -->
+    {% if r.delta_high > 0 %}
+      <rect x="{{ CENTRE_X }}" y="{{ yc - BAR_H/2 }}"
+            width="{{ whi }}" height="{{ BAR_H }}"
+            fill="#24a148" opacity="0.85"/>
+    {% elif r.delta_high < 0 %}
+      <rect x="{{ CENTRE_X - whi }}" y="{{ yc - BAR_H/2 }}"
+            width="{{ whi }}" height="{{ BAR_H }}"
+            fill="#da1e28" opacity="0.85"/>
+    {% endif %}
+
+    <!-- Factor label (left gutter) -->
+    <text x="{{ LABEL_W - 8 }}" y="{{ yc + 3 }}"
+          text-anchor="end" font-size="10" font-weight="600" fill="#1a1a2e">
+      {{ r.factor }}
+    </text>
+
+    <!-- Low-case IRR tag (outside bar) -->
+    <text x="{{ xlo - 4 }}" y="{{ yc + 3 }}"
+          text-anchor="end" font-size="9" fill="#da1e28" font-weight="600">
+      {{ '%.1f'|format(r.irr_low) }}%
+    </text>
+    <!-- High-case IRR tag (outside bar) -->
+    <text x="{{ CENTRE_X + whi + 4 }}" y="{{ yc + 3 }}"
+          text-anchor="start" font-size="9" fill="#24a148" font-weight="600">
+      {{ '%.1f'|format(r.irr_high) }}%
+    </text>
+  {% endfor %}
+
+  <!-- X-axis delta labels -->
+  <text x="{{ LABEL_W }}" y="{{ HEIGHT - 10 }}"
+        font-size="9" fill="#697077">
+    −{{ '%.1f'|format(max_abs.v) }} pp
+  </text>
+  <text x="{{ WIDTH - PAD_R }}" y="{{ HEIGHT - 10 }}"
+        font-size="9" text-anchor="end" fill="#697077">
+    +{{ '%.1f'|format(max_abs.v) }} pp
+  </text>
+  <text x="{{ CENTRE_X }}" y="{{ HEIGHT - 10 }}"
+        font-size="9" text-anchor="middle" fill="#697077">
+    Δ equity IRR (pp)
+  </text>
+</svg>

@@ -42,6 +42,14 @@ class ChatSession:
     id: str
     messages: list[dict] = field(default_factory=list)
     parcel_id: str | None = None
+    # BOT-CHC 2026-04-19 — session remembers the project it was born under
+    # and the most recent UI snapshot the frontend sent. Either may be None.
+    project_id: str | None = None
+    ui_context: dict | None = None
+    # Project summary hydrated once at session create from /api/v1/projects/{id}
+    # so turn-1 system prompt has name/tech/capacity/stage/DNO/TEC even if the
+    # frontend page_context hasn't landed yet.
+    project_summary: dict | None = None
     uploaded_files: list[dict] = field(default_factory=list)
     map_layers: list[dict] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
@@ -76,9 +84,12 @@ async def _db_persist_session(session: ChatSession) -> None:
         log.warning("Failed to persist chat session %s: %s", session.id, e)
 
 
-def create_session(parcel_id: str | None = None) -> ChatSession:
+def create_session(
+    parcel_id: str | None = None,
+    project_id: str | None = None,
+) -> ChatSession:
     sid = uuid.uuid4().hex[:12]
-    session = ChatSession(id=sid, parcel_id=parcel_id)
+    session = ChatSession(id=sid, parcel_id=parcel_id, project_id=project_id)
     _sessions[sid] = session
     # Fire-and-forget persistence
     if _pool is not None:
@@ -88,6 +99,59 @@ def create_session(parcel_id: str | None = None) -> ChatSession:
 
 def get_session(session_id: str) -> ChatSession | None:
     return _sessions.get(session_id)
+
+
+async def hydrate_project_summary(
+    session: ChatSession,
+    project_id: str,
+    pool,
+) -> dict | None:
+    """
+    BOT-CHC 2026-04-19 — pre-fetch project name/tech/capacity/stage/DNO/TEC/lat/lon
+    and stash on ``session.project_summary`` so build_system_prompt can render a
+    "You are currently viewing project: …" block from turn 1, before any
+    page_context arrives over the wire.
+
+    Best-effort: returns None on any failure; never raises.
+    """
+    if not project_id or pool is None:
+        return None
+    try:
+        from uuid import UUID as _UUID
+        try:
+            pid = _UUID(project_id)
+        except (ValueError, TypeError):
+            return None
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM projects WHERE project_id = $1", pid,
+            )
+        if not row:
+            return None
+        meta = row["metadata"]
+        if isinstance(meta, str):
+            try:
+                meta = json.loads(meta)
+            except Exception:
+                meta = {}
+        meta = meta or {}
+        summary = {
+            "id": str(row["project_id"]),
+            "name": row["name"],
+            "technology": row["technology"],
+            "capacity_mw": float(row["capacity_mw"]) if row["capacity_mw"] else None,
+            "stage": row["stage"],
+            "verdict": row["verdict"],
+            "lat": float(row["lat"]) if row["lat"] else None,
+            "lon": float(row["lon"]) if row["lon"] else None,
+            "dno": meta.get("dno"),
+            "tec_mw": meta.get("tec_mw") or meta.get("tec_capacity_mw"),
+        }
+        session.project_summary = summary
+        return summary
+    except Exception as e:
+        log.warning("hydrate_project_summary(%s) failed: %s", project_id, e)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1119,6 +1183,187 @@ TOOLS: list[dict] = [
             "required": ["project_id"],
         },
     },
+    # ──────────────────────────────────────────────────────────────────────
+    # BOT-CHT 2026-04-21 — P0 wiring pack. Each tool wraps an existing FastAPI
+    # router endpoint or utils module. Handlers call the internal function
+    # directly (not HTTP) to avoid the self-request loop.
+    # ──────────────────────────────────────────────────────────────────────
+    {
+        "name": "list_projects",
+        "description": (
+            "List projects in the user's pipeline. Returns id, name, technology, "
+            "capacity_mw, stage, verdict, lat, lon, blocker, portfolio_id. Use this "
+            "when the user asks 'what projects do I have', 'list my portfolio', "
+            "'show pipeline', etc. Wraps GET /api/v1/projects."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "portfolio_id": {"type": "string", "description": "Filter to a single portfolio UUID"},
+                "stage": {"type": "string", "description": "Filter by stage (prospect|screened|grid_applied|grid_offer|planning|fid|construction|energised)"},
+                "technology": {"type": "string", "description": "solar|bess|wind|dc|hybrid"},
+                "verdict": {"type": "string", "description": "GO|CAUTION|NO-GO"},
+                "limit": {"type": "integer", "default": 25, "minimum": 1, "maximum": 200},
+            },
+        },
+    },
+    {
+        "name": "get_project",
+        "description": (
+            "Return full detail for a single project: name, technology, capacity_mw, "
+            "stage, verdict, lat/lon, blocker, linked parcels, metadata (DNO, TEC, "
+            "queue position, next_action). Wraps GET /api/v1/projects/{id}."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "Princeps project UUID"},
+            },
+            "required": ["project_id"],
+        },
+    },
+    {
+        "name": "list_portfolios",
+        "description": (
+            "List the user's portfolios. Returns id, name, description, created_at. "
+            "Wraps GET /api/v1/portfolios."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_portfolio_mission_control",
+        "description": (
+            "Portfolio-level KPIs: total_projects, total_mw, GO/CAUTION counts, "
+            "in_queue count, next filing deadline, active_projects (top 12 by "
+            "recency with IRR/grid/planning badges), recent activity. Use when the "
+            "user asks 'how is my portfolio doing' or 'mission control'. Wraps "
+            "GET /api/portfolios/mission-control."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "get_substation",
+        "description": (
+            "Enriched 8-section detail for a substation (identity, electrical, "
+            "capacity_state, connections, queue, regulatory, environment, "
+            "engineering). Wraps GET /api/grid/substation/{id}/detail. "
+            "Accepts an integer substation_id (e.g. 9886 = Imperial Park)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "substation_id": {"type": "integer", "description": "Integer substation id from grid_substations"},
+            },
+            "required": ["substation_id"],
+        },
+    },
+    {
+        "name": "get_project_grid_connection",
+        "description": (
+            "Tier-1 grid connection summary for a project (by project_id): nearest "
+            "substation, distance, headroom, capacity, cost estimate. Uses the "
+            "project's stored lat/lon and capacity_mw. For a parcel-based lookup "
+            "use get_grid_connection instead. Wraps utils.grid_connection_analyser."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "Princeps project UUID"},
+            },
+            "required": ["project_id"],
+        },
+    },
+    {
+        "name": "list_alerts",
+        "description": (
+            "List the alert library (Ofgem decisions, DNO updates, policy changes, "
+            "etc.) grouped by cluster. Returns id, slug, title, cluster, cadence. "
+            "Use when user asks 'what alerts are available' or 'search Ofgem "
+            "decisions'. Wraps GET /api/alerts/library. Supports optional free-text "
+            "`query` that filters title+slug+cluster client-side."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Free-text filter on title/slug/cluster"},
+                "cluster": {"type": "string", "description": "Filter to a single cluster name"},
+                "limit": {"type": "integer", "default": 25, "minimum": 1, "maximum": 100},
+            },
+        },
+    },
+    {
+        "name": "list_dockets",
+        "description": (
+            "List regulatory dockets (NSIP DCO exams, Ofgem code mods, LPA "
+            "planning apps, CfD rounds, s36 consents, DNO cases). Filterable by "
+            "case_type, publisher, status, region, free-text. If project_id is "
+            "given, limits to dockets pinned to that project. Wraps "
+            "GET /api/dockets/library."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "If set, only return dockets pinned to this project"},
+                "case_type": {"type": "string", "description": "nsip_dco|ofgem_code_mod|lpa_planning|cfd|s36|dno_case|custom"},
+                "publisher": {"type": "string", "description": "Authority slug (e.g. 'ofgem', 'pins')"},
+                "status": {"type": "string", "description": "e.g. 'open', 'decided', 'withdrawn'"},
+                "region": {"type": "string", "description": "UK region / devolved nation (E/W/S/NI)"},
+                "query": {"type": "string", "description": "Free-text filter on title + applicant"},
+                "limit": {"type": "integer", "default": 25, "minimum": 1, "maximum": 100},
+            },
+        },
+    },
+    {
+        "name": "list_repd",
+        "description": (
+            "Search the UK Renewable Energy Planning Database (REPD) for projects "
+            "by technology, status, location, or capacity. Returns a compact list. "
+            "Wraps GET /tracker/repd and utils.repd_tracker.query_repd."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "tech": {"type": "string", "description": "solar|wind|battery|bess|hybrid"},
+                "status": {"type": "string", "description": "e.g. 'Application Approved', 'Operational', 'Under Construction'"},
+                "developer": {"type": "string", "description": "Developer/applicant name substring"},
+                "near_lat": {"type": "number", "description": "Centre latitude for radius search"},
+                "near_lon": {"type": "number", "description": "Centre longitude for radius search"},
+                "radius_km": {"type": "number", "default": 25},
+                "min_mw": {"type": "number", "description": "Minimum capacity in MW"},
+                "limit": {"type": "integer", "default": 25, "minimum": 1, "maximum": 100},
+            },
+        },
+    },
+    {
+        "name": "get_regulatory_version",
+        "description": (
+            "Return the current canonical version + publication date + URL of a UK "
+            "energy-development standard (G99, G100, NPPF, EN-1, EN-3, BNG, CDM, "
+            "etc.). Use this whenever you need to cite a regulation in a response "
+            "— never inline a hard-coded issue number. Wraps app.regulatory.versions. "
+            "If key is omitted, returns the list of available keys."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string", "description": "Registry key, e.g. 'g99', 'nppf', 'en1', 'bng'"},
+            },
+        },
+    },
+    # BOT-CHC 2026-04-19 — lets Claude refresh its view of the current page
+    # mid-conversation (e.g. user navigates to a different project without
+    # opening a new chat). Returns the live session.ui_context dict.
+    {
+        "name": "current_page_context",
+        "description": (
+            "Return the user's current page context (workspace, viewMode, route, "
+            "current project {id,name,lat,lon,tech,capacity_mw,stage,dno,tec_mw}, "
+            "selected asset, FES pathway, as-of year). Call this whenever you "
+            "need to know what page the user is on or which project they are "
+            "looking at — do NOT ask the user for coordinates or project details."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -1139,6 +1384,428 @@ async def execute_tool(
 ) -> Any:
     """Execute a tool call and return the result dict."""
     try:
+        if name == "current_page_context":
+            # BOT-CHC 2026-04-19 — thin reflection of the session's live UI
+            # snapshot. Falls back to the project_summary stash so Claude still
+            # gets the project name/tech/capacity even before the first
+            # page_context has landed over the wire.
+            pg = None
+            if session.ui_context and isinstance(session.ui_context.get("page_context"), dict):
+                pg = session.ui_context["page_context"]
+            out = {
+                "has_context": bool(session.ui_context),
+                "session_project_id": session.project_id,
+                "session_parcel_id": session.parcel_id,
+                "page_context": pg,
+                "project_summary": session.project_summary,
+            }
+            # Surface flat-shape fields for convenience.
+            if session.ui_context:
+                for k in ("workspace", "view", "viewMode", "lifecycle_tab",
+                          "pathname", "picked_location", "project_id"):
+                    v = session.ui_context.get(k)
+                    if v is not None:
+                        out[k] = v
+            return out
+
+        # ──────────────────────────────────────────────────────────────────
+        # BOT-CHT 2026-04-21 — P0 tool handlers. Each block compacts the
+        # upstream payload so the result fits inside _compact_tool_result's
+        # 4000-char cap without losing critical fields.
+        # ──────────────────────────────────────────────────────────────────
+        if name == "list_projects":
+            conds, params = [], []
+            idx = 1
+            if args.get("portfolio_id"):
+                conds.append(f"portfolio_id = ${idx}::uuid"); params.append(args["portfolio_id"]); idx += 1
+            if args.get("stage"):
+                conds.append(f"stage = ${idx}"); params.append(args["stage"]); idx += 1
+            if args.get("technology"):
+                conds.append(f"technology = ${idx}"); params.append(args["technology"]); idx += 1
+            if args.get("verdict"):
+                conds.append(f"verdict = ${idx}"); params.append(args["verdict"]); idx += 1
+            where = f"WHERE {' AND '.join(conds)}" if conds else ""
+            lim = max(1, min(int(args.get("limit", 25) or 25), 200))
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    f"""SELECT project_id, name, technology, capacity_mw, stage,
+                               verdict, lat, lon, blocker, portfolio_id,
+                               updated_at
+                        FROM projects {where}
+                        ORDER BY updated_at DESC NULLS LAST LIMIT ${idx}""",
+                    *params, lim,
+                )
+                total = await conn.fetchval(f"SELECT count(*) FROM projects {where}", *params)
+            items = [
+                {
+                    "id": str(r["project_id"]),
+                    "name": r["name"],
+                    "tech": r["technology"],
+                    "mw": float(r["capacity_mw"]) if r["capacity_mw"] else None,
+                    "stage": r["stage"],
+                    "verdict": r["verdict"],
+                    "lat": float(r["lat"]) if r["lat"] else None,
+                    "lon": float(r["lon"]) if r["lon"] else None,
+                    "blocker": r["blocker"],
+                    "portfolio_id": str(r["portfolio_id"]) if r["portfolio_id"] else None,
+                }
+                for r in rows
+            ]
+            out = {"count": len(items), "total": int(total or 0), "projects": items}
+            if not items:
+                out["_explanation"] = (
+                    "No projects match the filters. Try removing filters or calling "
+                    "list_portfolios() first to find the user's portfolios."
+                )
+            return out
+
+        if name == "get_project":
+            from uuid import UUID as _UUID
+            try:
+                pid = _UUID(args["project_id"])
+            except (ValueError, TypeError):
+                return {"error": f"Invalid project_id UUID: {args.get('project_id')}"}
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT * FROM projects WHERE project_id = $1", pid,
+                )
+                if not row:
+                    return {"error": f"Project {args['project_id']} not found"}
+                parcels = await conn.fetch(
+                    """SELECT ps.parcel_id,
+                              ST_Y(ST_Transform(p.centroid, 4326)) AS lat,
+                              ST_X(ST_Transform(p.centroid, 4326)) AS lon,
+                              p.area_m2
+                       FROM project_sites ps
+                       LEFT JOIN parcels p ON p.parcel_id = ps.parcel_id
+                       WHERE ps.project_id = $1""",
+                    pid,
+                )
+            meta = row["metadata"]
+            if isinstance(meta, str):
+                try:
+                    meta = json.loads(meta)
+                except Exception:
+                    meta = {}
+            meta = meta or {}
+            return {
+                "id": str(row["project_id"]),
+                "name": row["name"],
+                "description": row["description"],
+                "technology": row["technology"],
+                "capacity_mw": float(row["capacity_mw"]) if row["capacity_mw"] else None,
+                "stage": row["stage"],
+                "verdict": row["verdict"],
+                "lat": float(row["lat"]) if row["lat"] else None,
+                "lon": float(row["lon"]) if row["lon"] else None,
+                "blocker": row["blocker"],
+                "repd_id": row["repd_id"],
+                "tec_id": row["tec_id"],
+                "dno": meta.get("dno"),
+                "tec_mw": meta.get("tec_mw") or meta.get("tec_capacity_mw"),
+                "queue_position": meta.get("queue_position"),
+                "next_action": meta.get("next_action"),
+                "portfolio_id": str(row["portfolio_id"]) if row["portfolio_id"] else None,
+                "parcels": [
+                    {
+                        "parcel_id": str(p["parcel_id"]),
+                        "lat": float(p["lat"]) if p["lat"] else None,
+                        "lon": float(p["lon"]) if p["lon"] else None,
+                        "area_m2": float(p["area_m2"]) if p["area_m2"] else None,
+                    }
+                    for p in parcels[:10]
+                ],
+                "parcel_count": len(parcels),
+                "updated_at": row["updated_at"].isoformat() if row["updated_at"] else None,
+            }
+
+        if name == "list_portfolios":
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """SELECT portfolio_id, name, description, created_at,
+                              (SELECT count(*) FROM projects pr
+                                WHERE pr.portfolio_id = p.portfolio_id) AS project_count
+                         FROM portfolios p
+                        ORDER BY created_at DESC LIMIT 50"""
+                )
+            items = [
+                {
+                    "id": str(r["portfolio_id"]),
+                    "name": r["name"],
+                    "description": r["description"],
+                    "project_count": int(r["project_count"] or 0),
+                    "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                }
+                for r in rows
+            ]
+            out = {"count": len(items), "portfolios": items}
+            if not items:
+                out["_explanation"] = "No portfolios yet. Create one via the Portfolios tab."
+            return out
+
+        if name == "get_portfolio_mission_control":
+            try:
+                from app.routers.project_actions import api_mission_control as _mc
+                data = await _mc(pool=pool)
+            except Exception as exc:
+                return {"error": f"mission_control raised {type(exc).__name__}: {exc}"}
+            # Compact for history. Upstream nests KPIs under `metrics`.
+            metrics = data.get("metrics") or {}
+            active = (data.get("active_projects") or [])[:8]
+            return {
+                "total_projects": metrics.get("total_projects"),
+                "total_mw": metrics.get("total_mw"),
+                "go_count": metrics.get("go_count"),
+                "caution_count": metrics.get("caution_count"),
+                "in_queue": metrics.get("in_queue"),
+                "next_filing": metrics.get("next_filing_deadline"),
+                "active_projects_preview": [
+                    {
+                        "project_id": p.get("project_id"),
+                        "name": p.get("name"),
+                        "workload_type": p.get("workload_type"),
+                        "verdict": p.get("verdict"),
+                        "stage": p.get("stage"),
+                        "capacity_mw": p.get("capacity_mw"),
+                        "blocker": p.get("blocker"),
+                        "grid_status": p.get("grid_status"),
+                        "next_action": p.get("next_action"),
+                        "next_action_due_days": p.get("next_action_due_days"),
+                    }
+                    for p in active
+                ],
+                "active_projects_total": len(data.get("active_projects") or []),
+                "live_signals_count": len(data.get("live_signals") or []),
+                "activity_feed_count": len(data.get("activity_feed") or []),
+            }
+
+        if name == "get_substation":
+            try:
+                sub_id = int(args["substation_id"])
+            except (TypeError, ValueError):
+                return {"error": f"substation_id must be integer, got {args.get('substation_id')!r}"}
+            try:
+                from utils.substation_detail import enriched_substation_detail
+                result = await enriched_substation_detail(pool, sub_id)
+            except Exception as exc:
+                return {"error": f"enriched_substation_detail raised {type(exc).__name__}: {exc}"}
+            if result is None:
+                return {"error": f"Substation {sub_id} not found",
+                        "_explanation": "Try search_substations(lat, lon, radius_km) to find ids near a point."}
+            # Keep full result — _compact_tool_result will trim if >4000 chars.
+            return result
+
+        if name == "get_project_grid_connection":
+            from uuid import UUID as _UUID
+            try:
+                pid = _UUID(args["project_id"])
+            except (ValueError, TypeError):
+                return {"error": f"Invalid project_id UUID: {args.get('project_id')}"}
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow(
+                    """SELECT project_id, name, technology, capacity_mw, lat, lon, metadata
+                         FROM projects WHERE project_id = $1""",
+                    pid,
+                )
+            if not row:
+                return {"error": f"Project {args['project_id']} not found"}
+            if row["lat"] is None or row["lon"] is None:
+                return {"error": "Project has no coordinates; set lat/lon first",
+                        "project_id": str(row["project_id"]), "name": row["name"]}
+            cap_mw = float(row["capacity_mw"] or 5.0)
+            tech = (row["technology"] or "solar").lower()
+            try:
+                from app.routers.grid import api_grid_assess as _gc_assess
+                result = await _gc_assess(
+                    lat=float(row["lat"]), lon=float(row["lon"]),
+                    capacity_mw=cap_mw, technology=tech, radius_km=30.0,
+                    pool=pool,
+                )
+            except Exception as exc:
+                return {"error": f"grid_assess raised {type(exc).__name__}: {exc}",
+                        "project_id": str(row["project_id"])}
+            # Compact: verdict + top-3 substation candidates
+            candidates = (result.get("substations") or result.get("candidates") or [])[:3]
+            return {
+                "project_id": str(row["project_id"]),
+                "project_name": row["name"],
+                "capacity_mw": cap_mw,
+                "technology": tech,
+                "verdict": result.get("verdict") or result.get("overall_verdict"),
+                "headroom_mw": result.get("headroom_mw"),
+                "nearest_substation": result.get("nearest_substation") or (candidates[0] if candidates else None),
+                "connection_cost": result.get("estimated_connection_cost") or result.get("cost_estimate"),
+                "candidates": candidates,
+                "notes": result.get("notes") or result.get("_explanation"),
+            }
+
+        if name == "list_alerts":
+            q = (args.get("query") or "").strip().lower()
+            cluster_f = (args.get("cluster") or "").strip().lower()
+            lim = max(1, min(int(args.get("limit", 25) or 25), 100))
+            async with pool.acquire() as conn:
+                try:
+                    rows = await conn.fetch(
+                        """SELECT id, slug, title, description, cluster, cadence
+                             FROM alert_definitions
+                            WHERE is_public = TRUE
+                            ORDER BY cluster NULLS LAST, title
+                            LIMIT 300"""
+                    )
+                except Exception as exc:
+                    return {"error": f"alert_definitions query failed: {exc}",
+                            "_explanation": "Alerts table may not be seeded. Run ingestion."}
+            items = []
+            for r in rows:
+                title = (r["title"] or "")
+                slug = (r["slug"] or "")
+                cl = (r["cluster"] or "Other")
+                if q and q not in title.lower() and q not in slug.lower() and q not in cl.lower():
+                    continue
+                if cluster_f and cluster_f != cl.lower():
+                    continue
+                items.append({
+                    "id": str(r["id"]),
+                    "slug": slug,
+                    "title": title,
+                    "cluster": cl,
+                    "cadence": r["cadence"],
+                })
+                if len(items) >= lim:
+                    break
+            out = {"count": len(items), "alerts": items}
+            if not items:
+                out["_explanation"] = (
+                    "No alerts match. Try removing filters. Alert library is seeded "
+                    "from the regulatory registry + Ofgem/DNO sources."
+                )
+            return out
+
+        if name == "list_dockets":
+            conds = ["1=1"]
+            params: list = []
+            def _p(v):
+                params.append(v); return f"${len(params)}"
+            if args.get("case_type"):
+                conds.append(f"d.case_type = {_p(args['case_type'])}")
+            if args.get("publisher"):
+                conds.append(f"a.slug = {_p(args['publisher'])}")
+            if args.get("status"):
+                conds.append(f"d.status = {_p(args['status'])}")
+            if args.get("region"):
+                conds.append(f"a.jurisdiction = {_p(args['region'])}")
+            if args.get("query"):
+                qv = f"%{args['query']}%"
+                conds.append(f"(d.title ILIKE {_p(qv)} OR d.applicant_name ILIKE {_p(qv)})")
+            join = "LEFT JOIN authorities a ON a.id = d.publisher_id"
+            if args.get("project_id"):
+                # Restrict to pinned dockets for the project
+                join += f" JOIN project_docket_pins pdp ON pdp.docket_id = d.docket_id"
+                conds.append(f"pdp.project_id = {_p(args['project_id'])}::uuid")
+            lim = max(1, min(int(args.get("limit", 25) or 25), 100))
+            sql = f"""SELECT d.docket_id, d.title, d.case_type, d.status, d.applicant_name,
+                             d.opened_at, d.updated_at, a.slug AS publisher_slug,
+                             a.name AS publisher_name
+                        FROM dockets d {join}
+                       WHERE {' AND '.join(conds)}
+                       ORDER BY d.updated_at DESC NULLS LAST LIMIT {lim}"""
+            try:
+                async with pool.acquire() as conn:
+                    rows = await conn.fetch(sql, *params)
+            except Exception as exc:
+                return {"error": f"dockets query failed: {type(exc).__name__}: {exc}"}
+            items = [
+                {
+                    "id": str(r["docket_id"]),
+                    "title": r["title"],
+                    "case_type": r["case_type"],
+                    "status": r["status"],
+                    "applicant": r["applicant_name"],
+                    "publisher": r["publisher_slug"],
+                    "opened_at": r["opened_at"].isoformat() if r["opened_at"] else None,
+                    "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+                }
+                for r in rows
+            ]
+            out = {"count": len(items), "dockets": items}
+            if not items:
+                out["_explanation"] = (
+                    "No dockets match. If filtering by project_id, the project may "
+                    "have no pinned dockets yet. Use list_alerts() or the Docket "
+                    "Library to discover and pin."
+                )
+            return out
+
+        if name == "list_repd":
+            try:
+                from utils.repd_tracker import query_repd as _query_repd
+            except Exception as exc:
+                return {"error": f"repd_tracker import failed: {exc}"}
+            tech = args.get("tech")
+            if tech == "bess":
+                tech = "battery"  # REPD calls it 'Battery'
+            try:
+                async with pool.acquire() as conn:
+                    rows = await _query_repd(
+                        conn,
+                        tech_category=tech,
+                        status=args.get("status"),
+                        developer=args.get("developer"),
+                        min_capacity_mw=args.get("min_mw"),
+                        lat=args.get("near_lat"),
+                        lon=args.get("near_lon"),
+                        radius_km=float(args.get("radius_km", 25) or 25),
+                        page=1,
+                        limit=max(1, min(int(args.get("limit", 25) or 25), 100)),
+                    )
+            except Exception as exc:
+                return {"error": f"query_repd raised {type(exc).__name__}: {exc}",
+                        "_explanation": "REPD table may not be ingested. Run POST /tracker/repd/ingest."}
+            items = [
+                {
+                    "ref_id": r.get("ref_id") or r.get("id"),
+                    "name": r.get("site_name") or r.get("name"),
+                    "tech": r.get("tech_category") or r.get("technology"),
+                    "mw": r.get("capacity_mw"),
+                    "status": r.get("status"),
+                    "developer": r.get("developer"),
+                    "region": r.get("region"),
+                    "lat": r.get("lat"),
+                    "lon": r.get("lon"),
+                }
+                for r in rows[:50]
+            ]
+            out = {"count": len(items), "projects": items}
+            if not items:
+                out["_explanation"] = "No REPD matches. Try widening the radius or dropping tech filter."
+            return out
+
+        if name == "get_regulatory_version":
+            try:
+                from app.regulatory import versions as _vers
+            except Exception as exc:
+                return {"error": f"regulatory.versions import failed: {exc}"}
+            key = (args.get("key") or "").strip().lower()
+            if not key:
+                return {"available_keys": _vers.all_keys(),
+                        "_explanation": "Pass key=<slug> (e.g. 'g99', 'nppf') to get a record."}
+            try:
+                rec = _vers.get(key)
+            except KeyError as exc:
+                return {"error": str(exc), "available_keys": _vers.all_keys()}
+            return {
+                "key": key,
+                "name": rec.get("name"),
+                "subtitle": rec.get("subtitle"),
+                "version": rec.get("version"),
+                "published": rec.get("published"),
+                "effective": rec.get("effective"),
+                "url": rec.get("url"),
+                "notes": (rec.get("notes") or "")[:600],
+                "supersedes": rec.get("supersedes") or [],
+                "citation": _vers.cite(key, include_url=False),
+            }
+
         if name == "get_pinned_dockets":
             from uuid import UUID as _UUID
             from app.dockets.agent_tool import get_pinned_dockets
@@ -2346,22 +3013,76 @@ def build_system_prompt(session: ChatSession, ui_context: dict | None = None) ->
     if session.map_layers:
         parts.append(f"\nMap layers created in this session: {len(session.map_layers)}")
 
+    # BOT-CHC 2026-04-19 — project summary block. Rendered even when the
+    # frontend page_context hasn't arrived yet (turn 1), as long as the
+    # session was created with a project_id that we pre-fetched. The block
+    # wins over generic "I need a location" behaviour because we tell Claude
+    # explicitly to use these values directly.
+    proj = None
+    if ui_context and isinstance(ui_context.get("page_context"), dict):
+        proj = ui_context["page_context"].get("project") or None
+    if not proj and session.project_summary:
+        proj = session.project_summary
+    if proj and proj.get("id"):
+        parts.append("")
+        name = proj.get("name") or "(unnamed)"
+        pid = proj.get("id")
+        parts.append(f"You are currently viewing project: {name} (id={pid}).")
+        if proj.get("lat") is not None and proj.get("lon") is not None:
+            parts.append(f"- Coordinates: {proj['lat']}, {proj['lon']}")
+        details = []
+        if proj.get("technology") or proj.get("tech"):
+            details.append(f"Technology: {proj.get('technology') or proj.get('tech')}")
+        if proj.get("capacity_mw") is not None:
+            details.append(f"Capacity: {proj['capacity_mw']} MW")
+        if proj.get("stage"):
+            details.append(f"Stage: {proj['stage']}")
+        if details:
+            parts.append("- " + "  .  ".join(details))
+        grid_bits = []
+        if proj.get("dno"):
+            grid_bits.append(f"DNO: {proj['dno']}")
+        if proj.get("tec_mw") is not None:
+            grid_bits.append(f"TEC contracted: {proj['tec_mw']} MW")
+        if grid_bits:
+            parts.append("- " + "  .  ".join(grid_bits))
+        parts.append("Use these values directly — never ask the user for them.")
+
     # UI context — tells you what the user is currently seeing on screen
     if ui_context:
         parts.append("\n--- Current UI State (what the user sees right now) ---")
         if ui_context.get("workspace"):
             parts.append(f"Active workspace: {ui_context['workspace']}")
-        if ui_context.get("view"):
-            parts.append(f"Active view: {ui_context['view']}")
+        if ui_context.get("view") or ui_context.get("viewMode"):
+            parts.append(f"Active view: {ui_context.get('view') or ui_context.get('viewMode')}")
         if ui_context.get("stage"):
             parts.append(f"Workflow stage: {ui_context['stage']}")
         if ui_context.get("intent"):
             parts.append(f"Active intent/analysis: {ui_context['intent']}")
+        if ui_context.get("lifecycle_tab"):
+            parts.append(f"Active lifecycle tab: {ui_context['lifecycle_tab']}")
         if ui_context.get("parcel_id"):
             parts.append(f"Selected parcel: {ui_context['parcel_id']}")
         if ui_context.get("picked_location"):
             loc = ui_context["picked_location"]
             parts.append(f"Picked location: {loc.get('lat')}, {loc.get('lon')}")
+        # BOT-CHC — page_context nested block adds selected_asset + pathway + year.
+        pg = ui_context.get("page_context") if isinstance(ui_context.get("page_context"), dict) else None
+        if pg:
+            sel = pg.get("selected_asset")
+            if sel and (sel.get("id") or sel.get("name")):
+                parts.append(
+                    f"Selected asset: {sel.get('kind') or 'asset'} "
+                    f"{sel.get('name') or sel.get('id')}"
+                )
+            if pg.get("pathway"):
+                parts.append(f"FES pathway: {pg['pathway']}")
+            if pg.get("as_of_year"):
+                parts.append(f"As-of year (scrubber): {pg['as_of_year']}")
+            url_params = pg.get("url_params") or {}
+            if url_params:
+                kvs = ", ".join(f"{k}={v}" for k, v in url_params.items())
+                parts.append(f"URL params: {kvs}")
         if ui_context.get("visible_data"):
             parts.append(f"Data visible on screen: {', '.join(ui_context['visible_data'])}")
         if ui_context.get("open_panels"):
@@ -2408,10 +3129,33 @@ async def stream_chat_response(
       data: {"type": "done"}
       data: {"type": "error", "message": "..."}
     """
+    # BOT-CHC 2026-04-19 — thread the page_context snapshot onto the session.
+    # This makes the most recent UI state reachable from the `current_page_context`
+    # tool (Claude can refresh mid-turn if the user switches pages). We merge
+    # rather than overwrite so legacy flat-shape fields still land.
+    if ui_context:
+        prev = session.ui_context or {}
+        session.ui_context = {**prev, **ui_context}
+        # Lazy-hydrate project_summary if the frontend just revealed a new
+        # project_id and we have no summary yet (e.g. session was created
+        # before the project was known).
+        pg = ui_context.get("page_context") if isinstance(ui_context.get("page_context"), dict) else None
+        pid_from_ctx = None
+        if pg and isinstance(pg.get("project"), dict):
+            pid_from_ctx = pg["project"].get("id")
+        pid_from_ctx = pid_from_ctx or ui_context.get("project_id")
+        if pid_from_ctx and not session.project_summary and pool is not None:
+            if not session.project_id:
+                session.project_id = pid_from_ctx
+            try:
+                await hydrate_project_summary(session, pid_from_ctx, pool)
+            except Exception:
+                pass
+
     # Append user message
     session.messages.append({"role": "user", "content": user_message})
 
-    system_prompt = build_system_prompt(session, ui_context=ui_context)
+    system_prompt = build_system_prompt(session, ui_context=ui_context or session.ui_context)
     max_turns = 10  # prevent infinite tool loops
 
     for turn in range(max_turns):

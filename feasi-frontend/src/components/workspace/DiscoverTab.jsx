@@ -65,17 +65,23 @@ function deriveRows(sitesProp, project) {
     ? sitesProp
     : (Array.isArray(project?.sites) ? project.sites : null);
   if (source && source.length > 0) {
-    return source.map((s, i) => ({
-      raw: s,
-      name: s.name || s.label || `Site ${i + 1}`,
-      area_ha: s.scores?.area_ha ?? s.area_ha ?? s.area_hectares ?? "—",
-      resource_score: s.scores?.resource ?? s.resource_score ?? "—",
-      headroom: s.grid_headroom || s.headroom || (s.scores?.grid != null ? `${s.scores.grid}` : "—"),
-      planning_risk: s.planning_risk || (s.scores?.planning != null ? `${s.scores.planning}` : "—"),
-      composite: s.composite_score ?? s.score ?? (s.scores ?
-        Math.round(Object.values(s.scores).filter((v) => typeof v === "number").reduce((a, b) => a + b, 0) /
-          Math.max(1, Object.values(s.scores).filter((v) => typeof v === "number").length)) : null),
-    }));
+    return source.map((s, i) => {
+      // Compute area_ha from any available geometry hint; fall back to dash.
+      const area_m2 = s.area_m2 ?? s.parcel?.area_m2 ?? s.scores?.area_m2;
+      const areaHaRaw = s.scores?.area_ha ?? s.area_ha ?? s.area_hectares ??
+        (typeof area_m2 === "number" ? area_m2 / 10000 : null);
+      return {
+        raw: s,
+        name: s.name || s.label || `Site ${i + 1}`,
+        area_ha: typeof areaHaRaw === "number" ? areaHaRaw.toFixed(1) : (areaHaRaw ?? "—"),
+        resource_score: s.scores?.resource ?? s.resource_score ?? "—",
+        headroom: s.grid_headroom || s.headroom || (s.scores?.grid != null ? `${s.scores.grid}` : "—"),
+        planning_risk: s.planning_risk || (s.scores?.planning != null ? `${s.scores.planning}` : "—"),
+        composite: s.composite_score ?? s.score ?? (s.scores ?
+          Math.round(Object.values(s.scores).filter((v) => typeof v === "number").reduce((a, b) => a + b, 0) /
+            Math.max(1, Object.values(s.scores).filter((v) => typeof v === "number").length)) : null),
+      };
+    });
   }
   return STUB_SITES.map((s) => ({ ...s, raw: null }));
 }
@@ -86,24 +92,101 @@ export default function DiscoverTab({ project, sites = null, mapSlot = null }) {
   const workload = project?.workload_type || project?.technology || "bess";
   const [scanning, setScanning] = useState(false);
 
-  const rows = useMemo(() => deriveRows(sites, project), [sites, project]);
+  const [scanned, setScanned] = useState(null); // { count, items }
+  const [scanError, setScanError] = useState(null);
+  const [hoverIdx, setHoverIdx] = useState(null);
+
+  // Merge real-scan candidates with the passed-in `sites` so the table shows
+  // everything the user has pulled in this session.
+  const rows = useMemo(() => {
+    const scannedRows = scanned?.items ? deriveRows(scanned.items, project) : [];
+    const baseRows = deriveRows(sites, project);
+    return [...baseRows, ...scannedRows];
+  }, [sites, project, scanned]);
   const [designingSite, setDesigningSite] = useState(null);
 
+  // Hovering a row pushes the coords onto a window event so the mini-map
+  // (embedded TwinLazy / SiteMapPin) can highlight the parcel. Falls back
+  // to a no-op when the row has no geolocation.
+  useEffect(() => {
+    if (hoverIdx == null) return;
+    const r = rows[hoverIdx];
+    const lat = r?.raw?.lat;
+    const lon = r?.raw?.lon;
+    if (lat == null || lon == null) return;
+    try {
+      window.dispatchEvent(new CustomEvent("princeps-discover-site-hover", {
+        detail: { lat, lon, name: r.name, raw: r.raw },
+      }));
+      window.dispatchEvent(new CustomEvent("princeps-chat-focus", {
+        detail: {
+          type: "candidate_site",
+          id: r.raw?.candidate_id || r.raw?.site_id || r.name,
+          label: r.name,
+          data: { ...r.raw, name: r.name, composite: r.composite, resource: r.resource_score },
+        },
+      }));
+    } catch {}
+  }, [hoverIdx, rows]);
+
+  // Publish current Discover-tab context to the chat rail so Ask Princeps
+  // surfaces pills + tools relevant to candidate-site work.
+  useEffect(() => {
+    try {
+      window.dispatchEvent(new CustomEvent("princeps-chat-context", {
+        detail: {
+          lifecycleTab: "discover",
+          projectContext: {
+            hasProject: !!project?.project_id,
+            workload,
+            candidate_count: rows.length,
+            region: region || null,
+          },
+        },
+      }));
+    } catch {}
+  }, [project?.project_id, workload, rows.length, region]);
+
   const onAddSite = () => {
-    // Placeholder — real wiring will open the Add Site modal.
-    console.log("[DiscoverTab] Add candidate site clicked", { project: project?.project_id });
+    // Drop the user into map-pick mode so clicking the map creates a parcel.
+    try {
+      window.dispatchEvent(new CustomEvent("princeps-pick-location", {
+        detail: { purpose: "discover_add_site", project_id: project?.project_id },
+      }));
+    } catch {}
   };
 
   const onScan = async () => {
     setScanning(true);
-    console.log("[DiscoverTab] Run regional scan clicked", {
-      project_id: project?.project_id,
-      region,
-      min_capacity_mw: minCapacity,
-      workload,
-    });
-    // Stub — real call will be: await fetch('/api/prospector/scan', { ... })
-    setTimeout(() => setScanning(false), 600);
+    setScanError(null);
+    try {
+      // Backend expects a region key (east_midlands, south_west, ...). Map
+      // free-text region to the API vocabulary; else pass the raw input.
+      const regionKey = (region || "").trim().toLowerCase().replace(/\s+/g, "_")
+        || (workload === "solar" ? "south_west" : "east_midlands");
+      const params = new URLSearchParams({
+        region: regionKey,
+        technology: workload === "dc" ? "solar" : (workload || "solar"),
+        grid_points: "25",
+      });
+      const res = await fetch(`/api/prospector/scan?${params}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      // Response shape from utils.site_prospector.regional_scan:
+      //   { region, count, top_sites: [{lat, lon, scores, composite, ...}] }
+      const items = Array.isArray(data?.top_sites) ? data.top_sites
+        : Array.isArray(data?.sites) ? data.sites
+        : Array.isArray(data) ? data : [];
+      const minMw = Number(minCapacity) || 0;
+      const filtered = minMw > 0
+        ? items.filter((it) => (it.capacity_mw ?? it.scores?.capacity_mw ?? 9999) >= minMw)
+        : items;
+      setScanned({ count: filtered.length, items: filtered });
+    } catch (err) {
+      setScanError(err.message || "Scan failed");
+    } finally {
+      setScanning(false);
+    }
   };
 
   return (
@@ -166,7 +249,12 @@ export default function DiscoverTab({ project, sites = null, mapSlot = null }) {
               </thead>
               <tbody>
                 {rows.map((r, i) => (
-                  <tr key={i}>
+                  <tr
+                    key={i}
+                    onMouseEnter={() => setHoverIdx(i)}
+                    onMouseLeave={() => setHoverIdx((v) => (v === i ? null : v))}
+                    style={hoverIdx === i ? { background: "rgba(245,183,49,0.06)" } : undefined}
+                  >
                     <td className="dsc-name">{r.name}</td>
                     <td className="dsc-num">{r.area_ha}</td>
                     <td className="dsc-num">{r.resource_score}</td>
@@ -274,6 +362,16 @@ export default function DiscoverTab({ project, sites = null, mapSlot = null }) {
         <button className="dsc-scan" onClick={onScan} disabled={scanning}>
           {scanning ? "Scanning…" : "Run regional scan"}
         </button>
+        {scanError && (
+          <span style={{ color: "var(--cds-support-error, #da1e28)", fontSize: 12, fontWeight: 600 }}>
+            {scanError}
+          </span>
+        )}
+        {scanned && !scanError && (
+          <span style={{ color: "var(--cds-support-success, #198038)", fontSize: 12, fontWeight: 600 }}>
+            {scanned.count} new candidates added
+          </span>
+        )}
         <span className="dsc-scan-hint">
           Sweeps the region for parcels matching your filters and ranks them by composite score.
         </span>
