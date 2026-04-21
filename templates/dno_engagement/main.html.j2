@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Princeps DNO Engagement Pack &mdash; {{ p.project_name }}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 12.5px; }
+  body {
+    font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: {{ brand.navy }};
+    background: #fff;
+    line-height: 1.55;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .page-break { page-break-after: always; break-after: page; }
+  .section { page-break-inside: avoid; }
+
+  .page-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 24px; background: {{ brand.dark }}; color: #fff;
+    margin-bottom: 18px; border-bottom: 3px solid {{ brand.gold }};
+  }
+  .page-header .logo { font-size: 17px; font-weight: 800; letter-spacing: 3px; color: {{ brand.gold }}; }
+  .page-header .meta { font-size: 10px; color: #a0a0a0; letter-spacing: 0.5px; }
+
+  .section-title {
+    font-size: 17px; font-weight: 700; color: {{ brand.dark }};
+    border-bottom: 3px solid {{ brand.gold }};
+    padding-bottom: 5px; margin-bottom: 12px; letter-spacing: 0.3px;
+  }
+  .section-subtitle {
+    font-size: 13px; font-weight: 600; color: {{ brand.dark }};
+    margin: 10px 0 6px; padding-bottom: 3px; border-bottom: 1px solid #e0e0e0;
+  }
+
+  .card { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px;
+          padding: 12px 14px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+  .card-accent { border-left: 4px solid {{ brand.gold }}; }
+  .card-accent-green { border-left: 4px solid {{ brand.green }}; }
+  .card-accent-amber { border-left: 4px solid {{ brand.amber }}; }
+  .card-accent-red { border-left: 4px solid {{ brand.red }}; }
+  .card-accent-navy { border-left: 4px solid {{ brand.navy }}; }
+
+  .kpi-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .kpi-box { flex: 1; min-width: 110px; background: {{ brand.light }};
+             border-radius: 6px; padding: 10px 8px; text-align: center;
+             border: 1px solid #e8e8e8; }
+  .kpi-box-highlight { background: linear-gradient(135deg, {{ brand.dark }} 0%, #16213e 100%); border: none; }
+  .kpi-box-highlight .kpi-value { color: {{ brand.gold }}; }
+  .kpi-box-highlight .kpi-label { color: #a0a0a0; }
+  .kpi-value { font-size: 18px; font-weight: 800; color: {{ brand.dark }}; }
+  .kpi-label { font-size: 9px; color: {{ brand.grey }};
+               text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+  .verdict-badge { display: inline-block; padding: 8px 22px; border-radius: 5px;
+                   font-size: 15px; font-weight: 800; letter-spacing: 1px; color: #fff;
+                   text-transform: uppercase; }
+  .verdict-VIABLE { background: {{ brand.green }}; }
+  .verdict-VIABLE-WITH-WORKS { background: {{ brand.amber }}; color: {{ brand.dark }}; }
+  .verdict-AT-RISK { background: {{ brand.red }}; }
+  .verdict-TBD { background: {{ brand.grey }}; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-bottom: 8px; }
+  th { background: {{ brand.dark }}; color: #fff; padding: 6px 9px;
+       text-align: left; font-weight: 600; font-size: 9.5px;
+       text-transform: uppercase; letter-spacing: 0.4px; }
+  td { padding: 5px 9px; border-bottom: 1px solid #e8e8e8; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .td-right { text-align: right; }
+
+  .two-col { display: flex; gap: 14px; margin-bottom: 10px; }
+  .two-col > div { flex: 1; }
+
+  .stat-row { display: flex; justify-content: space-between;
+              padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
+  .stat-label { color: {{ brand.grey }}; font-size: 10.5px; }
+  .stat-value { font-weight: 700; font-size: 10.5px; color: {{ brand.dark }}; }
+
+  .footnote { font-size: 9px; color: {{ brand.grey }}; line-height: 1.4;
+              border-top: 1px dotted #d0d0d0; padding-top: 4px; margin-top: 6px; }
+  sup.fn { color: {{ brand.teal }}; font-weight: 700; }
+
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 4px;
+         font-size: 9px; font-weight: 600; letter-spacing: 0.3px; }
+  .tag-green { background: #e8f5ea; color: {{ brand.green }}; }
+  .tag-amber { background: #fdf6e0; color: {{ brand.gold_dark }}; }
+  .tag-red { background: #fbeaec; color: {{ brand.red }}; }
+  .tag-navy { background: #e1e7f0; color: {{ brand.navy }}; }
+
+  .priority-p1 { border-left: 4px solid {{ brand.red }}; }
+  .priority-p2 { border-left: 4px solid {{ brand.amber }}; }
+  .priority-p3 { border-left: 4px solid {{ brand.grey }}; }
+
+  .page-footer { text-align: center; font-size: 9px; color: #a0a0a0;
+                 padding: 8px 0; border-top: 1px solid #e8e8e8; margin-top: 16px; }
+
+  .text-muted { color: {{ brand.grey }}; }
+  .text-sm { font-size: 10.5px; }
+  .text-xs { font-size: 9px; }
+  .bold { font-weight: 700; }
+  .center { text-align: center; }
+
+  .sparkbar { display: inline-block; height: 8px; background: {{ brand.gold }};
+              border-radius: 2px; vertical-align: middle; }
+
+  @page { size: A4; margin: 18mm 15mm; }
+  @media print { .page-break { page-break-after: always; break-after: page; height: 0; } }
+</style>
+</head>
+<body>
+
+{# ============================== 1 — COVER ============================== #}
+<div style="height: 100vh; display: flex; flex-direction: column; justify-content: center;
+            align-items: center; background: linear-gradient(135deg, {{ brand.dark }} 0%, #16213e 50%, #0d1b3e 100%);
+            color: #fff; padding: 50px; position: relative;">
+  <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px;
+              background: linear-gradient(90deg, {{ brand.gold }}, {{ brand.gold_light }}, {{ brand.gold }});"></div>
+
+  <div style="font-size: 40px; font-weight: 800; letter-spacing: 6px; color: {{ brand.gold }}; margin-bottom: 4px;">PRINCEPS</div>
+  <div style="font-size: 11px; letter-spacing: 3px; color: #a0a0a0; margin-bottom: 50px; text-transform: uppercase;">
+    DNO Engagement Pack
+  </div>
+
+  <div style="width: 80px; height: 2px; background: {{ brand.gold }}; margin-bottom: 36px;"></div>
+
+  <div style="font-size: 24px; font-weight: 700; margin-bottom: 6px; text-align: center; letter-spacing: 0.5px;">
+    Pre-Application Engagement Pack
+  </div>
+  <div style="font-size: 17px; color: #c0c0c0; margin-bottom: 20px; text-align: center; font-weight: 300;">
+    {{ p.project_name }}
+  </div>
+
+  <div class="verdict-badge verdict-{{ p.executive_verdict|replace(' ', '-')|upper }}" style="margin-bottom: 12px; font-size: 17px;">
+    {{ p.executive_verdict|upper }}
+  </div>
+
+  <div style="font-size: 11px; color: #a0a0a0; margin-bottom: 36px;">
+    Pack {{ p.pack_version }} &middot; {{ p.generated_at }}
+  </div>
+
+  <table style="border: none; font-size: 11px; color: #c0c0c0; background: transparent;">
+    <tr style="background: transparent;">
+      <td style="border: none; color: #888; padding: 4px 12px;">Addressee</td>
+      <td style="border: none; color: #fff; padding: 4px 12px; font-weight: 600;">{{ p.addressee }}</td>
+    </tr>
+    <tr style="background: transparent;">
+      <td style="border: none; color: #888; padding: 4px 12px;">DNO</td>
+      <td style="border: none; color: #fff; padding: 4px 12px; font-weight: 600;">
+        {{ p.dno_profile.name or p.target_dno or "Unresolved" }}
+      </td>
+    </tr>
+    <tr style="background: transparent;">
+      <td style="border: none; color: #888; padding: 4px 12px;">Project ID</td>
+      <td style="border: none; color: #fff; padding: 4px 12px; font-weight: 600;">{{ p.project_id }}</td>
+    </tr>
+    <tr style="background: transparent;">
+      <td style="border: none; color: #888; padding: 4px 12px;">Capacity</td>
+      <td style="border: none; color: #fff; padding: 4px 12px; font-weight: 600;">{{ p.capacity_mw }} MW {{ p.technology|title }}</td>
+    </tr>
+    <tr style="background: transparent;">
+      <td style="border: none; color: #888; padding: 4px 12px;">Regulatory period</td>
+      <td style="border: none; color: #fff; padding: 4px 12px; font-weight: 600;">{{ p.dno_profile.riio_period or "RIIO-ED2" }}</td>
+    </tr>
+  </table>
+
+  <div style="position: absolute; bottom: 24px; text-align: center;">
+    <div style="font-size: 10px; color: #555;">Commercial in Confidence &mdash; {{ p.generated_at }}</div>
+    <div style="font-size: 9px; color: #444; margin-top: 3px;">Prepared by Princeps Platform for pre-application review</div>
+  </div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 2 — RELIANCE ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Reliance &amp; Regulatory Framework</div></div>
+
+  <h2 class="section-title">Reliance Statement</h2>
+  <div class="card card-accent">
+    <p class="text-sm">{{ p.reliance_statement }}</p>
+  </div>
+
+  <h2 class="section-title mt-8">Regulatory Framework</h2>
+  <div class="card card-accent-navy">
+    <table>
+      <tr><th>Standard</th><th>Role</th></tr>
+      <tr><td>ENA EREC G99 Issue 2 (10 Mar 2025)</td><td>Type A/B/C/D connection; Table 10.1 protection; fault ride-through; Q(V)</td></tr>
+      <tr><td>Ofgem CCCM v19</td><td>Cost allocation (Sole / Shared / Reinforcement / Security)</td></tr>
+      <tr><td>ENA EREC P28 Issue 2</td><td>Voltage fluctuations, flicker Pst/Plt at POC</td></tr>
+      <tr><td>ENA EREC P29</td><td>Voltage unbalance &le; 1.3% 10-min</td></tr>
+      <tr><td>ENA EREC P2 Issue 7</td><td>Security of supply / N-1 obligation</td></tr>
+      <tr><td>ENA EREC G5 Issue 5</td><td>Harmonic distortion THDv &le; 5%</td></tr>
+      <tr><td>BS EN ISO 8528-1</td><td>Reciprocating genset class G1-G4</td></tr>
+      <tr><td>NESO System Operability Framework 2024</td><td>Demand + generation scenario envelope to 2050</td></tr>
+      <tr><td>Distribution Code v43 (DPC4, DPC4.5, DPC9)</td><td>Ancillary service agreements + islanding</td></tr>
+    </table>
+  </div>
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Reliance &amp; Regulatory &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 3 — EXECUTIVE SUMMARY ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Executive Summary</div></div>
+
+  <h2 class="section-title">Executive Summary</h2>
+
+  <div class="kpi-strip">
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value" style="font-size: 15px;">{{ p.executive_verdict }}</div>
+      <div class="kpi-label">Verdict</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ p.capacity_mw }} MW</div>
+      <div class="kpi-label">Nameplate</div>
+    </div>
+    {% if p.mitigation.firm_request_mw is not none %}
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.mitigation.firm_request_mw) }} MW</div>
+      <div class="kpi-label">Firm Ask</div>
+    </div>
+    {% endif %}
+    {% if p.best_candidate and p.best_candidate.name %}
+    <div class="kpi-box">
+      <div class="kpi-value" style="font-size: 12px;">{{ p.best_candidate.name[:18] }}</div>
+      <div class="kpi-label">POC</div>
+    </div>
+    {% endif %}
+    {% if p.cccm and p.cccm.totals %}
+    <div class="kpi-box">
+      <div class="kpi-value">{{ fmt_gbp_k(p.cccm.totals.grand_total.p50) }}</div>
+      <div class="kpi-label">CCCM P50</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card card-accent">
+    <p class="text-sm">{{ p.executive_summary }}</p>
+  </div>
+
+  <h3 class="section-subtitle">Sixteen-section structure</h3>
+  <div class="card text-sm">
+    <ol style="padding-left: 18px;">
+      <li>Cover</li>
+      <li>Reliance &amp; regulatory framework</li>
+      <li>Executive summary (this page)</li>
+      <li>Site</li>
+      <li>Proposal</li>
+      <li>Hypothetical demand profile (seasonal &amp; diurnal)</li>
+      <li>Mitigation stack (BESS + DSR + BTM + genset)</li>
+      <li>Constraint analysis (Tier 2 power flow)</li>
+      <li>Disruption Monte Carlo</li>
+      <li>Reactive power offer (Q(V), STATCOM, overnight)</li>
+      <li>Risk &amp; MC register</li>
+      <li>Connection options (ranked)</li>
+      <li>CCCM v19 cost breakdown</li>
+      <li>Timeline</li>
+      <li>Asks to the DNO</li>
+      <li>Appendices</li>
+    </ol>
+  </div>
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Executive &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 4 — SITE ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Site</div></div>
+  <h2 class="section-title">Site</h2>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="section-subtitle">Location</div>
+      <div class="stat-row"><div class="stat-label">Project name</div><div class="stat-value">{{ p.project_name }}</div></div>
+      <div class="stat-row"><div class="stat-label">Project ID</div><div class="stat-value">{{ p.project_id }}</div></div>
+      <div class="stat-row"><div class="stat-label">Latitude</div><div class="stat-value">{{ "%.5f"|format(p.lat) if p.lat else "n/a" }}</div></div>
+      <div class="stat-row"><div class="stat-label">Longitude</div><div class="stat-value">{{ "%.5f"|format(p.lon) if p.lon else "n/a" }}</div></div>
+      <div class="stat-row"><div class="stat-label">Stage</div><div class="stat-value">{{ p.site.stage or "pre-app" }}</div></div>
+    </div>
+    <div class="card">
+      <div class="section-subtitle">DNO licence area</div>
+      <div class="stat-row"><div class="stat-label">DNO</div><div class="stat-value">{{ p.dno_profile.name or "Unresolved" }}</div></div>
+      <div class="stat-row"><div class="stat-label">Code</div><div class="stat-value">{{ p.dno_profile.code or "N/A" }}</div></div>
+      <div class="stat-row"><div class="stat-label">Licence areas</div><div class="stat-value">{{ p.dno_profile.licence_areas|join(", ") if p.dno_profile.licence_areas else "—" }}</div></div>
+      <div class="stat-row"><div class="stat-label">RIIO period</div><div class="stat-value">{{ p.dno_profile.riio_period }}</div></div>
+      <div class="stat-row"><div class="stat-label">LTDS</div><div class="stat-value text-xs">{{ p.dno_profile.ltds_publication }}</div></div>
+    </div>
+  </div>
+
+  {% if p.dno_profile.g99_notes %}
+  <h3 class="section-subtitle mt-8">DNO-specific notes</h3>
+  <div class="card text-sm">
+    <ul style="padding-left: 18px;">
+      {% for n in p.dno_profile.g99_notes %}<li>{{ n }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Site &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 5 — PROPOSAL ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Proposal</div></div>
+  <h2 class="section-title">Proposal</h2>
+
+  <div class="card card-accent">
+    <table>
+      <tr><th>Parameter</th><th>Value</th><th>Notes</th></tr>
+      <tr><td>Technology</td><td class="bold">{{ p.technology|title }}</td><td>Analytical shape library applied</td></tr>
+      <tr><td>Nameplate</td><td class="bold">{{ p.capacity_mw }} MW</td><td>Apparent power envelope at POC</td></tr>
+      <tr><td>Gross demand (pre-mitigation)</td><td class="bold">
+        {% if p.proposal.gross_demand_mw is not none %}{{ "%.1f"|format(p.proposal.gross_demand_mw) }} MW{% else %}—{% endif %}
+      </td><td>Before BESS + DSR + BTM</td></tr>
+      <tr><td>Firm request (post-mitigation)</td><td class="bold">
+        {% if p.proposal.firm_request_mw is not none %}{{ "%.1f"|format(p.proposal.firm_request_mw) }} MW{% else %}—{% endif %}
+      </td><td>Net ask from the DNO</td></tr>
+      <tr><td>POC substation</td><td class="bold">{{ p.proposal.connection_substation or "TBD" }}</td>
+          <td>{{ "%.1f"|format(p.proposal.poc_distance_km) if p.proposal.poc_distance_km is not none else "—" }} km</td></tr>
+      <tr><td>Connection voltage</td><td class="bold">{{ p.proposal.connection_voltage_kv or "—" }} kV</td>
+          <td>Within DNO voltage ladder {{ p.dno_profile.voltage_ladder_kv|join(" / ") }}</td></tr>
+    </table>
+  </div>
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Proposal &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 6 — HYPOTHETICAL DEMAND PROFILE ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Hypothetical Demand Profile</div></div>
+  <h2 class="section-title">Hypothetical Demand Profile</h2>
+
+  <p class="text-sm text-muted">
+    Seasonal and diurnal envelope derived from technology-specific analytical
+    shapes. P10/P90 bands at &plusmn;12% per Prophet calibration; Prophet / TFT
+    quantile overlay available when subprocess is enabled. Cited:
+    <sup class="fn">[NESO SOF 2024 §3]</sup>
+    <sup class="fn">[P2 Issue 7 §4]</sup>
+    <sup class="fn">[G99 Issue 2 §7]</sup>.
+  </p>
+
+  <div class="kpi-strip">
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.seasonal_profile.annual_peak_mw or 0) }}</div>
+      <div class="kpi-label">Annual Peak MW</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.seasonal_profile.annual_min_mw or 0) }}</div>
+      <div class="kpi-label">Annual Min MW</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.0f"|format((p.seasonal_profile.annual_load_factor or 0) * 100) }}%</div>
+      <div class="kpi-label">Load Factor</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.0f"|format((p.seasonal_profile.annual_capacity_factor or 0) * 100) }}%</div>
+      <div class="kpi-label">Capacity Factor</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.0f"|format(p.seasonal_profile.annual_mwh or 0) }}</div>
+      <div class="kpi-label">Annual MWh</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Season</th><th>Peak MW</th><th>Min MW</th><th>Mean MW</th><th>LF</th><th>Peak HH</th><th>Min HH</th></tr>
+    {% for s in ['winter', 'spring', 'summer', 'autumn'] %}
+    {% set env = p.seasonal_profile[s] %}
+    {% if env %}
+    <tr>
+      <td class="bold">{{ s|title }}</td>
+      <td>{{ "%.2f"|format(env.peak_mw) }}</td>
+      <td>{{ "%.2f"|format(env.min_mw) }}</td>
+      <td>{{ "%.2f"|format(env.mean_mw) }}</td>
+      <td>{{ "%.2f"|format(env.load_factor) }}</td>
+      <td>{{ env.peak_time_hh }}</td>
+      <td>{{ env.min_time_hh }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+  </table>
+
+  <div class="footnote">
+    Model: {{ p.seasonal_profile.model or "analytical" }} &middot; generated
+    {{ p.seasonal_profile.generated_at or p.generated_at }}
+  </div>
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Hypothetical Demand &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 7 — MITIGATION STACK ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Mitigation Stack</div></div>
+  <h2 class="section-title">Mitigation Stack</h2>
+
+  <p class="text-sm text-muted">
+    BTM &plus; BESS &plus; DSR &plus; Standby genset. Firm request = gross demand
+    &minus; active mitigation.
+    <sup class="fn">[CCCM v19 Sch.1 §C]</sup>
+    <sup class="fn">[G99 Issue 2 §9]</sup>
+    <sup class="fn">[BS EN ISO 8528-1]</sup>.
+  </p>
+
+  <div class="kpi-strip">
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.mitigation.gross_demand_mw or 0) }}</div>
+      <div class="kpi-label">Gross MW</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.mitigation.mitigation_mw_total or 0) }}</div>
+      <div class="kpi-label">Mitigation MW</div>
+    </div>
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ "%.1f"|format(p.mitigation.firm_request_mw or 0) }}</div>
+      <div class="kpi-label">Firm Request MW</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ fmt_gbp_k(p.mitigation.total_capex_gbp or 0) }}</div>
+      <div class="kpi-label">CAPEX</div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>Layer</th><th>Rated MW</th><th>Detail</th><th>CAPEX</th><th>Citation</th></tr>
+    {% for L in p.mitigation.layers %}
+    <tr>
+      <td class="bold">{{ L.layer }}</td>
+      <td>{{ "%.2f"|format(L.rated_mw) }}</td>
+      <td class="text-xs">
+        {% if L.rated_mwh %}{{ "%.1f"|format(L.rated_mwh) }} MWh ({{ L.duration_h }}h){% endif %}
+        {% if L.technology_hint %}{{ L.technology_hint }}{% endif %}
+        {% if L.class %}{{ L.class }}{% endif %}
+        {% if L.baseline %}{{ L.baseline }}{% endif %}
+      </td>
+      <td>{{ fmt_gbp_k(L.capex_gbp) }}</td>
+      <td class="text-xs">{{ L.citation }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  {% if p.mitigation.g99_notes %}
+  <h3 class="section-subtitle mt-8">G99 notes for the stack</h3>
+  <div class="card text-sm">
+    <ul style="padding-left: 18px;">
+      {% for n in p.mitigation.g99_notes %}<li>{{ n }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Mitigation Stack &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 8 — CONSTRAINT ANALYSIS ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Constraint Analysis</div></div>
+  <h2 class="section-title">Constraint Analysis (Tier 2 power flow)</h2>
+
+  {% if p.constraint.success %}
+  <div class="card card-accent{{ '-green' if p.constraint.verdict == 'PASS' else '-amber' if p.constraint.verdict == 'MARGINAL' else '-red' }}">
+    <div class="section-subtitle">Verdict:
+      <span class="tag tag-{{ 'green' if p.constraint.verdict == 'PASS' else 'amber' if p.constraint.verdict == 'MARGINAL' else 'red' }}">
+        {{ p.constraint.verdict }}
+      </span>
+    </div>
+    <div class="kpi-strip">
+      <div class="kpi-box"><div class="kpi-value">{{ "%.2f"|format(p.constraint.max_voltage_pu) }}</div><div class="kpi-label">Max V (pu)</div></div>
+      <div class="kpi-box"><div class="kpi-value">{{ "%.2f"|format(p.constraint.min_voltage_pu) }}</div><div class="kpi-label">Min V (pu)</div></div>
+      <div class="kpi-box"><div class="kpi-value">{{ "%.0f"|format(p.constraint.max_loading_pct) }}%</div><div class="kpi-label">Max Loading</div></div>
+      <div class="kpi-box"><div class="kpi-value">{{ "%.1f"|format(p.constraint.thermal_headroom_mw) }}</div><div class="kpi-label">Thermal Headroom MW</div></div>
+      <div class="kpi-box"><div class="kpi-value">{{ p.constraint.n1_failures }}/{{ p.constraint.n1_cases_analysed }}</div><div class="kpi-label">N-1 Fails</div></div>
+    </div>
+  </div>
+  {% else %}
+  <div class="card card-accent-amber">
+    <p class="text-sm">
+      Tier 2 power flow subprocess unavailable or degraded:
+      <span class="bold">{{ p.constraint.error or "no result" }}</span>.
+      Pack cites CAUTION on constraint analysis; DNO to confirm via own study.
+    </p>
+  </div>
+  {% endif %}
+
+  {% if p.constraint.notes %}
+  <h3 class="section-subtitle mt-8">Engineer notes</h3>
+  <div class="card text-sm">
+    <ul style="padding-left: 18px;">
+      {% for n in p.constraint.notes %}<li>{{ n }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <div class="footnote">
+    P28 Issue 2 voltage envelope applied: &plusmn;6% at 11/33 kV, &plusmn;5% at 66 kV+. Violations counted
+    against the POC voltage level &mdash; {{ p.constraint.statutory_limit_used|join(" to ") }}.
+  </div>
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Constraint &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 9 — DISRUPTION MC ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Disruption Monte Carlo</div></div>
+  <h2 class="section-title">Disruption &mdash; Monte Carlo</h2>
+
+  <p class="text-sm text-muted">
+    {{ p.disruption.n_runs or 0 }} runs, seed = {{ p.disruption.seed or 42 }}. Demand growth
+    &plusmn;15% (NESO FES), weather factor lognormal, outage coincidence 8%, reinforcement delay 0&ndash;18 months.
+    <sup class="fn">[P2 Issue 7 §7]</sup>
+    <sup class="fn">[NESO SOF 2024 §4]</sup>.
+  </p>
+
+  <div class="kpi-strip">
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.disruption.p99_peak_mw or 0) }}</div>
+      <div class="kpi-label">P99 peak MW</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.disruption.p90_peak_mw or 0) }}</div>
+      <div class="kpi-label">P90 peak MW</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.disruption.mean_peak_mw or 0) }}</div>
+      <div class="kpi-label">Mean peak MW</div>
+    </div>
+    <div class="kpi-box kpi-box-highlight">
+      <div class="kpi-value">{{ "%.1f"|format((p.disruption.prob_firm_breach or 0) * 100) }}%</div>
+      <div class="kpi-label">P(firm breach)</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.0f"|format(p.disruption.expected_unserved_energy_mwh or 0) }}</div>
+      <div class="kpi-label">E[unserved MWh]</div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">Top 10 worst runs</h3>
+  <table>
+    <tr><th>Growth %</th><th>Weather</th><th>Outage</th><th>Delay (mo)</th><th>Peak MW</th><th>Shortfall MW</th></tr>
+    {% for r in p.disruption.worst_runs %}
+    <tr>
+      <td>{{ "%+.1f"|format(r.growth_pct) }}</td>
+      <td>{{ "%.3f"|format(r.weather_factor) }}</td>
+      <td>{{ "yes" if r.outage_coincidence else "no" }}</td>
+      <td>{{ r.delay_months }}</td>
+      <td class="bold">{{ "%.1f"|format(r.peak_mw) }}</td>
+      <td class="bold">{{ "%.1f"|format(r.shortfall_mw) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Disruption MC &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 10 — REACTIVE OFFER ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Reactive Offer</div></div>
+  <h2 class="section-title">Reactive Power Offer</h2>
+
+  <p class="text-sm text-muted">
+    Q(V) curve + STATCOM envelope + overnight reactive import schedule + voltage droop slope.
+    <sup class="fn">[G99 Issue 2 §9.3]</sup>
+    <sup class="fn">[P28 Issue 2 §5]</sup>
+    <sup class="fn">[DPC4.5]</sup>.
+  </p>
+
+  <div class="kpi-strip">
+    <div class="kpi-box">
+      <div class="kpi-value">&plusmn;{{ "%.1f"|format(p.reactive.q_max_export_mvar or 0) }}</div>
+      <div class="kpi-label">Q envelope MVAr</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.reactive.droop_slope_pct or 4.0) }}%</div>
+      <div class="kpi-label">Droop slope</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ "%.1f"|format(p.reactive.statcom_mvar_offered or 0) }}</div>
+      <div class="kpi-label">STATCOM MVAr</div>
+    </div>
+    <div class="kpi-box">
+      <div class="kpi-value">{{ p.reactive.statcom_response_ms or 100 }} ms</div>
+      <div class="kpi-label">STATCOM response</div>
+    </div>
+  </div>
+
+  <h3 class="section-subtitle">Q(V) control points</h3>
+  <table>
+    <tr><th>V (p.u.)</th><th>Q (MVAr)</th></tr>
+    {% for pt in p.reactive.qv_curve %}
+    <tr><td>{{ pt.v_pu }}</td><td>{{ pt.q_mvar }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <h3 class="section-subtitle mt-8">Overnight reactive import (voluntary ancillary)</h3>
+  <table>
+    <tr><th>Window</th><th>Q offer MVAr</th><th>Mode</th></tr>
+    {% for s in p.reactive.overnight_import_schedule %}
+    <tr><td>{{ s.start_hh }} &ndash; {{ s.end_hh }}</td><td>{{ s.q_offer_mvar }}</td><td>{{ s.mode }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <div class="footnote">Fault ride-through: {{ p.reactive.fault_ride_through }}</div>
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Reactive &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 11 — RISK MC ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Risk Register</div></div>
+  <h2 class="section-title">Risk Register (combined MC + qualitative)</h2>
+
+  {% if p.risks %}
+  <table>
+    <tr><th>ID</th><th>Title</th><th>Severity</th><th>Source</th><th>Mitigation</th><th>Citation</th></tr>
+    {% for r in p.risks %}
+    <tr>
+      <td class="bold">{{ r.id }}</td>
+      <td>{{ r.title }}</td>
+      <td><span class="tag tag-{{ 'red' if r.severity == 'HIGH' else 'amber' if r.severity == 'MEDIUM' else 'green' }}">{{ r.severity }}</span></td>
+      <td class="text-xs">{{ r.source }}</td>
+      <td class="text-xs">{{ r.mitigation }}</td>
+      <td class="text-xs">{{ r.citation }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="card"><p class="text-sm">No material risks identified above threshold.</p></div>
+  {% endif %}
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Risks &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 12 — CONNECTION OPTIONS ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Connection Options</div></div>
+  <h2 class="section-title">Connection Options</h2>
+
+  {% if p.connection_options %}
+  <table>
+    <tr><th>#</th><th>Substation</th><th>Voltage</th><th>Distance</th><th>Firm MW</th><th>Score</th><th>Verdict</th></tr>
+    {% for opt in p.connection_options %}
+    <tr>
+      <td class="bold">{{ opt.rank }}</td>
+      <td>{{ opt.name }}</td>
+      <td>{{ opt.voltage_kv }} kV</td>
+      <td>{{ "%.1f"|format(opt.distance_km or 0) }} km</td>
+      <td>{{ "%.1f"|format(opt.gen_headroom_mw or opt.demand_headroom_mw or 0) }}</td>
+      <td>{{ opt.suitability_score or "—" }}</td>
+      <td>{{ opt.verdict or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% else %}
+  <div class="card"><p class="text-sm">No connection candidates resolved — DB did not return any within search radius.</p></div>
+  {% endif %}
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Connection Options &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 13 — CCCM COST ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">CCCM v19 Cost</div></div>
+  <h2 class="section-title">CCCM v19 Cost Breakdown</h2>
+
+  {% if p.cccm and p.cccm.totals %}
+  <div class="kpi-strip">
+    <div class="kpi-box"><div class="kpi-value">{{ fmt_gbp_k(p.cccm.totals.sole_use.p50) }}</div><div class="kpi-label">Sole Use</div></div>
+    <div class="kpi-box"><div class="kpi-value">{{ fmt_gbp_k(p.cccm.totals.shared_use.p50) }}</div><div class="kpi-label">Shared Use</div></div>
+    <div class="kpi-box"><div class="kpi-value">{{ fmt_gbp_k(p.cccm.totals.reinforcement.p50) }}</div><div class="kpi-label">Reinforcement</div></div>
+    <div class="kpi-box"><div class="kpi-value">{{ fmt_gbp_k(p.cccm.totals.security_payment.p50) }}</div><div class="kpi-label">Security</div></div>
+    <div class="kpi-box kpi-box-highlight"><div class="kpi-value">{{ fmt_gbp_k(p.cccm.totals.grand_total.p50) }}</div><div class="kpi-label">Grand Total</div></div>
+  </div>
+
+  <table>
+    <tr><th>CCCM Ref</th><th>Item</th><th>P10</th><th>P50</th><th>P90</th></tr>
+    {% for L in p.cccm.lines %}
+    <tr>
+      <td class="text-xs">{{ L.cccm_ref }}</td>
+      <td>{{ L.item }}</td>
+      <td>{{ fmt_gbp(L.range.p10) }}</td>
+      <td class="bold">{{ fmt_gbp(L.range.p50) }}</td>
+      <td>{{ fmt_gbp(L.range.p90) }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div class="footnote">{{ p.cccm.commit_vs_aggregated }}</div>
+  {% else %}
+  <div class="card"><p class="text-sm">CCCM v19 cost breakdown unavailable.</p></div>
+  {% endif %}
+
+  <div class="page-footer">DNO Engagement Pack &mdash; CCCM v19 &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 14 — TIMELINE ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Timeline</div></div>
+  <h2 class="section-title">Indicative Timeline</h2>
+
+  <table>
+    <tr><th>Stage</th><th>Weeks</th><th>Owner</th><th>Output</th><th>Fee</th><th>Citation</th></tr>
+    {% for t in p.timeline %}
+    <tr>
+      <td class="bold">{{ t.stage }}</td>
+      <td>{{ t.duration_weeks }}</td>
+      <td class="text-xs">{{ t.owner }}</td>
+      <td class="text-xs">{{ t.output }}</td>
+      <td>{{ fmt_gbp(t.cost_gbp) if t.cost_gbp else "—" }}</td>
+      <td class="text-xs">{{ t.citation }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div class="footnote">
+    Cumulative critical path from Stage 1 enquiry to FON is typically
+    {{ p.timeline|map(attribute='duration_weeks')|sum }} weeks for a
+    {{ p.capacity_mw }} MW {{ p.technology }} at the proposed POC.
+  </div>
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Timeline &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 15 — ASKS ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Asks to the DNO</div></div>
+  <h2 class="section-title">Asks to the DNO</h2>
+
+  {% if p.asks %}
+  {% for a in p.asks %}
+  <div class="card priority-{{ a.priority|lower }}">
+    <div class="section-subtitle">
+      <span class="tag tag-{{ 'red' if a.priority == 'P1' else 'amber' if a.priority == 'P2' else 'navy' }}">{{ a.priority }}</span>
+      <span class="tag tag-navy">{{ a.category }}</span>
+      &nbsp;{{ a.title }}
+    </div>
+    <p class="text-sm">{{ a.body }}</p>
+    <div class="footnote">
+      Citation: {{ a.citation }}. Decision SLA requested: {{ a.decision_sla_days }} days.
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="card"><p class="text-sm">No asks generated — pack is fully self-consistent.</p></div>
+  {% endif %}
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Asks &mdash; {{ p.generated_at }}</div>
+</div>
+<div class="page-break"></div>
+
+{# ============================== 16 — APPENDICES ============================== #}
+<div style="padding: 18px 24px;">
+  <div class="page-header"><div class="logo">PRINCEPS</div><div class="meta">Appendices</div></div>
+  <h2 class="section-title">Appendices</h2>
+
+  <h3 class="section-subtitle">A. Regulatory register</h3>
+  <div class="card text-sm">
+    <ul style="padding-left: 18px;">
+      {% for c in p.appendices.regulatory_register %}<li>{{ c }}</li>{% endfor %}
+    </ul>
+  </div>
+
+  <h3 class="section-subtitle mt-8">B. DNO profile</h3>
+  <div class="card text-sm">
+    <div class="stat-row"><div class="stat-label">LTDS publication</div><div class="stat-value">{{ p.dno_profile.ltds_publication }}</div></div>
+    <div class="stat-row"><div class="stat-label">LTDS date</div><div class="stat-value">{{ p.dno_profile.ltds_publication_date }}</div></div>
+    <div class="stat-row"><div class="stat-label">Primary table</div><div class="stat-value">{{ p.dno_profile.ltds_primary_table }}</div></div>
+    <div class="stat-row"><div class="stat-label">Page ref</div><div class="stat-value text-xs">{{ p.dno_profile.ltds_page_ref }}</div></div>
+    <div class="stat-row"><div class="stat-label">RIIO</div><div class="stat-value">{{ p.dno_profile.riio_window }}</div></div>
+    <div class="stat-row"><div class="stat-label">Portal</div><div class="stat-value text-xs">{{ p.dno_profile.connection_portal_url }}</div></div>
+    <div class="stat-row"><div class="stat-label">Pre-app email</div><div class="stat-value">{{ p.dno_profile.pre_app_enquiry_email }}</div></div>
+  </div>
+
+  {% if p.appendices.provenance and p.appendices.provenance.sub_module_errors %}
+  <h3 class="section-subtitle mt-8">C. Sub-module provenance / errors</h3>
+  <div class="card text-sm">
+    <table>
+      <tr><th>Module</th><th>Error</th></tr>
+      {% for mod, err in p.appendices.provenance.sub_module_errors.items() %}
+      <tr><td class="bold">{{ mod }}</td><td class="text-xs">{{ err }}</td></tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="page-footer">DNO Engagement Pack &mdash; Appendices &mdash; {{ p.generated_at }}</div>
+</div>
+
+</body>
+</html>

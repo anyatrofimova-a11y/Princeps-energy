@@ -1,0 +1,740 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "updated": "2026-04-19",
+    "source": "Princeps asset-pack spec — rewrite #7 paperwork, council+bots 2026-04",
+    "standards_index": {
+      "BS 8629": "Electrical energy storage safety — design, installation",
+      "BS EN IEC 63056": "Lithium battery systems for stationary storage",
+      "BS 7698-12": "Reciprocating internal combustion engine driven alternating current generating sets",
+      "BS EN 61439": "Low-voltage switchgear assemblies",
+      "BS EN 62271-200": "AC metal-enclosed switchgear for rated voltages above 1 kV and up to 52 kV",
+      "BS EN 62271-203": "Gas-insulated metal-enclosed switchgear for rated voltages above 52 kV",
+      "BS EN 62305": "Protection against lightning",
+      "BS EN 60076": "Power transformers",
+      "BS 7671": "Requirements for electrical installations (IET Wiring Regulations)",
+      "G99 Issue 2": "ENA EREC G99 — Requirements for the connection of generation equipment",
+      "IEA Wind Task 37": "System engineering for wind power plant design",
+      "ANSI/NEMA ICS 6": "Industrial control and systems enclosures",
+      "IEC 62446-1": "Photovoltaic systems — requirements for testing, documentation",
+      "CPNI CNI B3/C5": "Centre for Protection of National Infrastructure blast standards",
+      "LPS 1175": "Loss Prevention Standards — security rating for doors and enclosures",
+      "EN 16247": "Energy audits",
+      "EN 50550": "Power frequency overvoltage protective device",
+      "NFPA 855": "Standard for the Installation of Stationary Energy Storage Systems"
+    }
+  },
+
+  "primitives": [
+
+    { "id": "bess.megapack_2xl",
+      "workload": "bess", "type": "container", "label": "Tesla Megapack 2XL (3.9 MWh)",
+      "vendor": "Tesla",
+      "dimensions_m": {"length_m": 8.99, "width_m": 1.66, "height_m": 2.89, "clearance_m": 2.0},
+      "glb_path": "/models/assets/megapack_2xl.glb", "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mwh", "formula": "ceil(mwh / 3.9)", "count_min": 1, "count_max": 2000,
+         "spacing_m": 2.0, "row_length_max": 8}
+      ],
+      "standards_cited": ["BS 8629", "BS EN IEC 63056", "NFPA 855", "G99 Issue 2"],
+      "material": "steel", "colour_hex": "#2a2a2a", "fire_zone": true, "cni_grade": "none",
+      "capacity_rating": {"mwh": 3.9, "mw_ac_peak": 1.9, "duration_h": 2.0}
+    },
+
+    { "id": "bess.megapack_xl",
+      "workload": "bess", "type": "container", "label": "Tesla Megapack XL (3.0 MWh)",
+      "vendor": "Tesla",
+      "dimensions_m": {"length_m": 8.22, "width_m": 1.66, "height_m": 2.52, "clearance_m": 2.0},
+      "glb_path": "/models/assets/megapack_xl.glb", "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mwh", "formula": "ceil(mwh / 3.0)", "count_min": 1, "count_max": 2500,
+         "spacing_m": 2.0, "row_length_max": 8}
+      ],
+      "standards_cited": ["BS 8629", "BS EN IEC 63056", "NFPA 855"],
+      "material": "steel", "colour_hex": "#2f2f2f", "fire_zone": true,
+      "capacity_rating": {"mwh": 3.0, "mw_ac_peak": 1.5, "duration_h": 2.0}
+    },
+
+    { "id": "bess.sungrow_st2752ux",
+      "workload": "bess", "type": "container", "label": "Sungrow ST2752UX (2.75 MWh)",
+      "vendor": "Sungrow",
+      "dimensions_m": {"length_m": 6.06, "width_m": 2.44, "height_m": 2.90, "clearance_m": 2.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mwh", "formula": "ceil(mwh / 2.75)", "count_min": 1, "count_max": 2500,
+         "spacing_m": 2.0, "row_length_max": 8}
+      ],
+      "standards_cited": ["BS 8629", "BS EN IEC 63056", "NFPA 855"],
+      "material": "steel", "colour_hex": "#3a3a3a", "fire_zone": true,
+      "capacity_rating": {"mwh": 2.75, "mw_ac_peak": 1.375}
+    },
+
+    { "id": "bess.catl_energy_tensor",
+      "workload": "bess", "type": "container", "label": "CATL EnerC 20 ft (5.0 MWh)",
+      "vendor": "CATL",
+      "dimensions_m": {"length_m": 6.10, "width_m": 2.44, "height_m": 2.90, "clearance_m": 2.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mwh", "formula": "ceil(mwh / 5.0)", "count_min": 1, "count_max": 2500,
+         "spacing_m": 2.0, "row_length_max": 8}
+      ],
+      "standards_cited": ["BS 8629", "BS EN IEC 63056", "NFPA 855"],
+      "material": "steel", "colour_hex": "#383838", "fire_zone": true,
+      "capacity_rating": {"mwh": 5.0, "mw_ac_peak": 2.5}
+    },
+
+    { "id": "bess.pcs_2mva_skid",
+      "workload": "bess", "type": "pcs_skid", "label": "Power Conversion Skid 2 MVA (Sungrow SC2000UD-MV)",
+      "vendor": "Sungrow",
+      "dimensions_m": {"length_m": 6.10, "width_m": 2.44, "height_m": 2.75, "clearance_m": 1.5},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "ceil(mw_ac / 2.0)", "count_min": 1, "count_max": 500,
+         "spacing_m": 3.0, "row_length_max": null}
+      ],
+      "standards_cited": ["BS EN 61439", "G99 Issue 2", "BS 7671"],
+      "material": "steel", "colour_hex": "#5b6a80",
+      "capacity_rating": {"mva": 2.0, "kv_primary": 33, "kv_secondary": 0.69}
+    },
+
+    { "id": "bess.pcs_4mva_skid",
+      "workload": "bess", "type": "pcs_skid", "label": "PCS Skid 4.4 MVA (Power Electronics FS3425K)",
+      "vendor": "Power Electronics",
+      "dimensions_m": {"length_m": 12.19, "width_m": 2.44, "height_m": 2.90, "clearance_m": 1.5},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "ceil(mw_ac / 4.4)", "count_min": 1, "count_max": 250,
+         "spacing_m": 3.0}
+      ],
+      "standards_cited": ["BS EN 61439", "G99 Issue 2"],
+      "material": "steel", "colour_hex": "#556275",
+      "capacity_rating": {"mva": 4.4}
+    },
+
+    { "id": "bess.auxiliary_transformer",
+      "workload": "bess", "type": "transformer", "label": "Auxiliary Transformer 500 kVA",
+      "dimensions_m": {"length_m": 2.20, "width_m": 1.60, "height_m": 2.00, "clearance_m": 2.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "max(1, ceil(mw_ac / 50.0))", "count_min": 1, "count_max": 10}
+      ],
+      "standards_cited": ["BS EN 60076"],
+      "material": "steel", "colour_hex": "#3c4655",
+      "capacity_rating": {"kva": 500, "kv_primary": 0.4, "kv_secondary": 0.4}
+    },
+
+    { "id": "bess.hv_transformer",
+      "workload": "bess", "type": "transformer", "label": "Grid Transformer 33/132 kV (60 MVA)",
+      "dimensions_m": {"length_m": 7.50, "width_m": 4.50, "height_m": 5.20, "clearance_m": 5.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "max(1, ceil(mw_ac / 60.0))", "count_min": 1, "count_max": 4}
+      ],
+      "standards_cited": ["BS EN 60076", "G99 Issue 2"],
+      "material": "steel", "colour_hex": "#4a5568", "fire_zone": true,
+      "capacity_rating": {"mva": 60, "kv_primary": 33, "kv_secondary": 132}
+    },
+
+    { "id": "bess.gis_132kv_bay",
+      "workload": "bess", "type": "switchgear", "label": "132 kV GIS Bay (Hitachi EXK-1)",
+      "vendor": "Hitachi Energy",
+      "dimensions_m": {"length_m": 8.00, "width_m": 3.50, "height_m": 4.50, "clearance_m": 3.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "1", "count_min": 1, "count_max": 1}
+      ],
+      "standards_cited": ["BS EN 62271-203", "G99 Issue 2"],
+      "material": "steel", "colour_hex": "#6c757d", "cni_grade": "B3",
+      "capacity_rating": {"kv": 132, "ka_short_circuit": 40}
+    },
+
+    { "id": "bess.gis_33kv_bay",
+      "workload": "bess", "type": "switchgear", "label": "33 kV GIS Bay (ABB UniGear ZS1)",
+      "vendor": "ABB",
+      "dimensions_m": {"length_m": 3.60, "width_m": 1.20, "height_m": 2.60, "clearance_m": 1.5},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "ceil(mw_ac / 30.0) + 1", "count_min": 2, "count_max": 20}
+      ],
+      "standards_cited": ["BS EN 62271-200", "G99 Issue 2"],
+      "material": "steel", "colour_hex": "#7a8491",
+      "capacity_rating": {"kv": 33, "ka_short_circuit": 25}
+    },
+
+    { "id": "bess.control_building",
+      "workload": "bess", "type": "building", "label": "Control & SCADA Building",
+      "dimensions_m": {"length_m": 12.0, "width_m": 6.0, "height_m": 3.5, "clearance_m": 3.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "1", "count_min": 1, "count_max": 2}
+      ],
+      "standards_cited": ["BS 7671", "BS EN 61439"],
+      "material": "steel", "colour_hex": "#c0a77a"
+    },
+
+    { "id": "bess.auxiliary_cabinet",
+      "workload": "bess", "type": "cabinet", "label": "BMS Auxiliary Cabinet",
+      "dimensions_m": {"length_m": 2.0, "width_m": 1.0, "height_m": 2.2, "clearance_m": 0.8},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mwh", "formula": "max(1, ceil(mwh / 40.0))", "count_min": 1, "count_max": 50}
+      ],
+      "standards_cited": ["BS EN 61439"],
+      "material": "steel", "colour_hex": "#8a92a0"
+    },
+
+    { "id": "bess.fire_tank",
+      "workload": "bess", "type": "tank", "label": "Fire-Fighting Water Tank (50 m³)",
+      "dimensions_m": {"length_m": 4.5, "width_m": 4.5, "height_m": 3.0, "diameter_m": 4.5, "clearance_m": 3.0},
+      "fallback_geometry": "cylinder",
+      "parametric_rules": [
+        {"driver": "mwh", "formula": "max(1, ceil(mwh / 100.0))", "count_min": 1, "count_max": 10}
+      ],
+      "standards_cited": ["BS 8629", "NFPA 855"],
+      "material": "steel", "colour_hex": "#a33a3a", "fire_zone": true,
+      "capacity_rating": {"m3": 50}
+    },
+
+    { "id": "bess.perimeter_fence",
+      "workload": "bess", "type": "fence", "label": "CPNI Perimeter Fence (2.4 m palisade)",
+      "dimensions_m": {"length_m": 3.0, "width_m": 0.05, "height_m": 2.4, "clearance_m": 0.0},
+      "fallback_geometry": "box",
+      "standards_cited": ["LPS 1175", "CPNI CNI B3/C5"],
+      "material": "steel", "colour_hex": "#6b7280", "cni_grade": "SR1"
+    },
+
+    { "id": "solar.fixed_tilt_table_2x10",
+      "workload": "solar", "type": "table", "label": "Fixed-Tilt 2x10 PV Table (550 Wp ×20)",
+      "dimensions_m": {"length_m": 20.8, "width_m": 4.2, "height_m": 2.8, "clearance_m": 0.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mwp", "formula": "ceil(mwp / 0.011)", "count_min": 1, "count_max": 200000,
+         "spacing_m": 8.0}
+      ],
+      "standards_cited": ["IEC 62446-1", "BS 7671"],
+      "material": "aluminium", "colour_hex": "#2b3a5a",
+      "capacity_rating": {"kwp": 11.0}
+    },
+
+    { "id": "solar.tracker_table_1p_48",
+      "workload": "solar", "type": "table", "label": "Horizontal-Axis Tracker 1P x48 (Array Tech)",
+      "vendor": "Array Technologies",
+      "dimensions_m": {"length_m": 50.0, "width_m": 2.4, "height_m": 2.2, "clearance_m": 0.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mwp", "formula": "ceil(mwp / 0.0264)", "count_min": 1, "count_max": 100000,
+         "spacing_m": 6.0}
+      ],
+      "standards_cited": ["IEC 62446-1"],
+      "material": "steel", "colour_hex": "#2f4061",
+      "capacity_rating": {"kwp": 26.4, "modules": 48}
+    },
+
+    { "id": "solar.central_inverter_2500kw",
+      "workload": "solar", "type": "inverter_station", "label": "Central Inverter Station 2.5 MW (Sungrow SG3125HV)",
+      "vendor": "Sungrow",
+      "dimensions_m": {"length_m": 6.10, "width_m": 2.44, "height_m": 2.90, "clearance_m": 2.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "ceil(mw_ac / 2.5)", "count_min": 1, "count_max": 400,
+         "spacing_m": 4.0}
+      ],
+      "standards_cited": ["BS EN 61439", "G99 Issue 2", "IEC 62446-1"],
+      "material": "steel", "colour_hex": "#4a5d80",
+      "capacity_rating": {"mw_ac": 2.5, "kv_out": 33}
+    },
+
+    { "id": "solar.string_inverter_250kw",
+      "workload": "solar", "type": "inverter_station", "label": "String Inverter 250 kW (Sungrow SG250HX)",
+      "vendor": "Sungrow",
+      "dimensions_m": {"length_m": 1.05, "width_m": 0.55, "height_m": 1.10, "clearance_m": 0.5},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "ceil(mw_ac / 0.25)", "count_min": 1, "count_max": 4000,
+         "spacing_m": 20.0}
+      ],
+      "standards_cited": ["BS EN 61439", "G99 Issue 2"],
+      "material": "steel", "colour_hex": "#5b6e90",
+      "capacity_rating": {"kw_ac": 250}
+    },
+
+    { "id": "solar.lv_hv_transformer_2_5mva",
+      "workload": "solar", "type": "transformer", "label": "LV/HV Transformer 2.5 MVA 0.69/33 kV",
+      "dimensions_m": {"length_m": 2.80, "width_m": 2.00, "height_m": 2.40, "clearance_m": 2.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "ceil(mw_ac / 2.5)", "count_min": 1, "count_max": 400}
+      ],
+      "standards_cited": ["BS EN 60076"],
+      "material": "steel", "colour_hex": "#475569",
+      "capacity_rating": {"mva": 2.5, "kv_primary": 0.69, "kv_secondary": 33}
+    },
+
+    { "id": "solar.dc_combiner",
+      "workload": "solar", "type": "combiner", "label": "DC Combiner Box 1500 V",
+      "dimensions_m": {"length_m": 1.00, "width_m": 0.60, "height_m": 1.40, "clearance_m": 0.4},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mwp", "formula": "ceil(mwp * 2.5)", "count_min": 1, "count_max": 2000}
+      ],
+      "standards_cited": ["IEC 62446-1", "BS 7671"],
+      "material": "aluminium", "colour_hex": "#6b7ba0",
+      "capacity_rating": {"vdc_max": 1500}
+    },
+
+    { "id": "solar.weather_station",
+      "workload": "solar", "type": "instrumentation", "label": "IEC 61724 Weather Station",
+      "dimensions_m": {"length_m": 1.0, "width_m": 1.0, "height_m": 3.0, "clearance_m": 3.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mwp", "formula": "max(1, ceil(mwp / 50.0))", "count_min": 1, "count_max": 10}
+      ],
+      "standards_cited": ["IEC 61724-1"],
+      "material": "aluminium", "colour_hex": "#d4a018"
+    },
+
+    { "id": "solar.cable_trench",
+      "workload": "solar", "type": "civil", "label": "DC Cable Trench (direct-buried)",
+      "dimensions_m": {"length_m": 10.0, "width_m": 0.6, "height_m": 1.0, "clearance_m": 0.0},
+      "fallback_geometry": "box",
+      "standards_cited": ["BS 7671", "BS 6480"],
+      "material": "concrete", "colour_hex": "#8a7b66"
+    },
+
+    { "id": "solar.access_track",
+      "workload": "solar", "type": "civil", "label": "Internal Access Track (4 m, MOT Type 1)",
+      "dimensions_m": {"length_m": 50.0, "width_m": 4.0, "height_m": 0.15, "clearance_m": 0.0},
+      "fallback_geometry": "box",
+      "standards_cited": ["DMRB CD 143"],
+      "material": "concrete", "colour_hex": "#a39485"
+    },
+
+    { "id": "solar.poc_switchroom",
+      "workload": "solar", "type": "building", "label": "POC Switchroom & Control Building",
+      "dimensions_m": {"length_m": 15.0, "width_m": 8.0, "height_m": 3.8, "clearance_m": 3.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "1", "count_min": 1, "count_max": 1}
+      ],
+      "standards_cited": ["BS EN 61439", "G99 Issue 2", "BS 7671"],
+      "material": "steel", "colour_hex": "#c0a77a"
+    },
+
+    { "id": "solar.met_compound",
+      "workload": "solar", "type": "compound", "label": "Met & Telemetry Compound",
+      "dimensions_m": {"length_m": 10.0, "width_m": 10.0, "height_m": 3.0, "clearance_m": 3.0},
+      "fallback_geometry": "box",
+      "standards_cited": ["IEC 61724-1"],
+      "material": "aluminium", "colour_hex": "#b8b8b8"
+    },
+
+    { "id": "dc.hall_modular_10mw",
+      "workload": "data_centre", "type": "hall", "label": "Data Hall Shell 10 MW (100×60×24)",
+      "dimensions_m": {"length_m": 100.0, "width_m": 60.0, "height_m": 24.0, "clearance_m": 15.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "ceil(mw_it / 10.0)", "count_min": 1, "count_max": 50,
+         "spacing_m": 20.0}
+      ],
+      "standards_cited": ["Uptime Tier III", "EN 50600", "BS 7671"],
+      "material": "concrete", "colour_hex": "#c8cdd4", "cni_grade": "B3",
+      "capacity_rating": {"mw_it": 10.0, "rack_count_typ": 800}
+    },
+
+    { "id": "dc.hall_hyperscale_50mw",
+      "workload": "data_centre", "type": "hall", "label": "Hyperscale Hall 50 MW (240×120×28)",
+      "dimensions_m": {"length_m": 240.0, "width_m": 120.0, "height_m": 28.0, "clearance_m": 20.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "ceil(mw_it / 50.0)", "count_min": 1, "count_max": 20,
+         "spacing_m": 30.0}
+      ],
+      "standards_cited": ["Uptime Tier III", "EN 50600"],
+      "material": "concrete", "colour_hex": "#c8cdd4", "cni_grade": "C5",
+      "capacity_rating": {"mw_it": 50.0}
+    },
+
+    { "id": "dc.adiabatic_cooler",
+      "workload": "data_centre", "type": "cooler", "label": "Adiabatic Dry Cooler 2.5 MW thermal (Evapco ATWB)",
+      "vendor": "Evapco",
+      "dimensions_m": {"length_m": 13.5, "width_m": 6.0, "height_m": 4.5, "clearance_m": 4.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "ceil(mw_it * 1.3 / 2.5)", "count_min": 1, "count_max": 200,
+         "spacing_m": 5.0}
+      ],
+      "standards_cited": ["EN 378", "BS EN 14511"],
+      "material": "aluminium", "colour_hex": "#9ca3af",
+      "capacity_rating": {"mw_thermal": 2.5}
+    },
+
+    { "id": "dc.chiller_3mw",
+      "workload": "data_centre", "type": "cooler", "label": "Water-Cooled Chiller 3 MW (Trane CDHG)",
+      "vendor": "Trane",
+      "dimensions_m": {"length_m": 10.0, "width_m": 3.5, "height_m": 3.8, "clearance_m": 4.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "ceil(mw_it * 1.2 / 3.0)", "count_min": 1, "count_max": 200}
+      ],
+      "standards_cited": ["EN 378", "BS EN 14511"],
+      "material": "steel", "colour_hex": "#7e8695",
+      "capacity_rating": {"mw_thermal": 3.0}
+    },
+
+    { "id": "dc.diesel_genset_3mva",
+      "workload": "data_centre", "type": "genset", "label": "Diesel Genset 3 MVA (Cummins C3000 D5)",
+      "vendor": "Cummins",
+      "dimensions_m": {"length_m": 13.0, "width_m": 3.0, "height_m": 4.0, "clearance_m": 10.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "ceil(mw_it * 1.2 / 3.0) + 1", "count_min": 2, "count_max": 80,
+         "spacing_m": 10.0}
+      ],
+      "standards_cited": ["BS 7698-12", "ISO 8528"],
+      "material": "steel", "colour_hex": "#4a4a4a", "fire_zone": true,
+      "capacity_rating": {"mva": 3.0, "kw": 2400}
+    },
+
+    { "id": "dc.ups_module_1250kva",
+      "workload": "data_centre", "type": "ups", "label": "UPS Module 1.25 MVA (ABB DPA 250 S4)",
+      "vendor": "ABB",
+      "dimensions_m": {"length_m": 2.40, "width_m": 1.20, "height_m": 2.00, "clearance_m": 1.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "ceil(mw_it / 1.25)", "count_min": 1, "count_max": 200}
+      ],
+      "standards_cited": ["BS EN 62040", "BS EN 61439"],
+      "material": "steel", "colour_hex": "#5e6b82",
+      "capacity_rating": {"kva": 1250}
+    },
+
+    { "id": "dc.hv_transformer_33_11kv_20mva",
+      "workload": "data_centre", "type": "transformer", "label": "HV Transformer 33/11 kV 20 MVA",
+      "dimensions_m": {"length_m": 5.5, "width_m": 3.0, "height_m": 3.8, "clearance_m": 4.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "ceil(mw_it / 20.0) + 1", "count_min": 2, "count_max": 20}
+      ],
+      "standards_cited": ["BS EN 60076"],
+      "material": "steel", "colour_hex": "#515b72", "fire_zone": true,
+      "capacity_rating": {"mva": 20.0, "kv_primary": 33, "kv_secondary": 11}
+    },
+
+    { "id": "dc.on_site_substation",
+      "workload": "data_centre", "type": "substation", "label": "132/33 kV On-Site Substation (GIS)",
+      "dimensions_m": {"length_m": 60.0, "width_m": 40.0, "height_m": 8.0, "clearance_m": 10.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "1", "count_min": 1, "count_max": 2}
+      ],
+      "standards_cited": ["BS EN 62271-203", "G99 Issue 2"],
+      "material": "concrete", "colour_hex": "#7a8491", "cni_grade": "C5"
+    },
+
+    { "id": "dc.admin_building",
+      "workload": "data_centre", "type": "building", "label": "Admin & Security Building",
+      "dimensions_m": {"length_m": 30.0, "width_m": 15.0, "height_m": 5.0, "clearance_m": 5.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "1", "count_min": 1, "count_max": 2}
+      ],
+      "standards_cited": ["Building Regulations Part B"],
+      "material": "concrete", "colour_hex": "#d4a018", "cni_grade": "B3"
+    },
+
+    { "id": "dc.fuel_tank_bunded_50k_l",
+      "workload": "data_centre", "type": "tank", "label": "Bunded Diesel Tank 50 kL",
+      "dimensions_m": {"length_m": 12.0, "width_m": 3.0, "height_m": 3.0, "clearance_m": 5.0},
+      "fallback_geometry": "cylinder",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "max(1, ceil(mw_it / 30.0))", "count_min": 1, "count_max": 20}
+      ],
+      "standards_cited": ["BS EN 12285", "COMAH 2015"],
+      "material": "steel", "colour_hex": "#a66b3a", "fire_zone": true,
+      "capacity_rating": {"litres": 50000}
+    },
+
+    { "id": "dc.cooling_tower_closed",
+      "workload": "data_centre", "type": "cooler", "label": "Closed-Circuit Cooling Tower (Baltimore Aircoil)",
+      "vendor": "Baltimore Aircoil",
+      "dimensions_m": {"length_m": 8.0, "width_m": 4.0, "height_m": 6.0, "clearance_m": 4.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "max(1, ceil(mw_it / 8.0))", "count_min": 1, "count_max": 40}
+      ],
+      "standards_cited": ["EN 378"],
+      "material": "steel", "colour_hex": "#8b97a8",
+      "capacity_rating": {"mw_thermal": 8.0}
+    },
+
+    { "id": "dc.battery_room_lithium",
+      "workload": "data_centre", "type": "building", "label": "Lithium Battery Room (UPS)",
+      "dimensions_m": {"length_m": 15.0, "width_m": 10.0, "height_m": 4.5, "clearance_m": 5.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_it", "formula": "max(1, ceil(mw_it / 25.0))", "count_min": 1, "count_max": 20}
+      ],
+      "standards_cited": ["BS EN IEC 63056", "NFPA 855", "BS 8629"],
+      "material": "concrete", "colour_hex": "#6b7280", "fire_zone": true
+    },
+
+    { "id": "wind.turbine_4_5mw_rotor150",
+      "workload": "wind", "type": "turbine", "label": "4.5 MW Turbine (150 m rotor, 120 m hub)",
+      "dimensions_m": {"length_m": 150.0, "width_m": 150.0, "height_m": 195.0, "diameter_m": 5.5, "clearance_m": 450.0},
+      "fallback_geometry": "cylinder",
+      "parametric_rules": [
+        {"driver": "turbines", "formula": "turbines", "count_min": 1, "count_max": 200,
+         "spacing_m": 750.0}
+      ],
+      "standards_cited": ["IEA Wind Task 37", "IEC 61400-1", "G99 Issue 2"],
+      "material": "steel", "colour_hex": "#eaeaea",
+      "capacity_rating": {"mw": 4.5, "rotor_d_m": 150.0, "hub_h_m": 120.0}
+    },
+
+    { "id": "wind.turbine_6mw_rotor170",
+      "workload": "wind", "type": "turbine", "label": "6.0 MW Turbine (170 m rotor, 135 m hub)",
+      "dimensions_m": {"length_m": 170.0, "width_m": 170.0, "height_m": 220.0, "diameter_m": 6.0, "clearance_m": 510.0},
+      "fallback_geometry": "cylinder",
+      "parametric_rules": [
+        {"driver": "turbines", "formula": "turbines", "count_min": 1, "count_max": 200,
+         "spacing_m": 850.0}
+      ],
+      "standards_cited": ["IEA Wind Task 37", "IEC 61400-1"],
+      "material": "steel", "colour_hex": "#eaeaea",
+      "capacity_rating": {"mw": 6.0, "rotor_d_m": 170.0, "hub_h_m": 135.0}
+    },
+
+    { "id": "wind.crane_pad",
+      "workload": "wind", "type": "civil", "label": "Turbine Crane Hardstanding",
+      "dimensions_m": {"length_m": 40.0, "width_m": 25.0, "height_m": 0.5, "clearance_m": 5.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "turbines", "formula": "turbines", "count_min": 1, "count_max": 200}
+      ],
+      "standards_cited": ["DMRB CD 143", "BS EN 14227"],
+      "material": "concrete", "colour_hex": "#a39485"
+    },
+
+    { "id": "wind.substation_compound",
+      "workload": "wind", "type": "substation", "label": "Wind Farm Substation 33/132 kV",
+      "dimensions_m": {"length_m": 60.0, "width_m": 40.0, "height_m": 8.0, "clearance_m": 10.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "turbines", "formula": "1", "count_min": 1, "count_max": 2}
+      ],
+      "standards_cited": ["BS EN 62271-203", "G99 Issue 2"],
+      "material": "concrete", "colour_hex": "#7a8491", "cni_grade": "B3"
+    },
+
+    { "id": "wind.met_mast",
+      "workload": "wind", "type": "instrumentation", "label": "Meteorological Mast (80 m)",
+      "dimensions_m": {"length_m": 2.0, "width_m": 2.0, "height_m": 80.0, "clearance_m": 50.0},
+      "fallback_geometry": "truss",
+      "parametric_rules": [
+        {"driver": "turbines", "formula": "max(1, ceil(turbines / 10))", "count_min": 1, "count_max": 5}
+      ],
+      "standards_cited": ["IEC 61400-12-1"],
+      "material": "steel", "colour_hex": "#cccccc"
+    },
+
+    { "id": "wind.access_track",
+      "workload": "wind", "type": "civil", "label": "Wind Farm Access Track (5 m)",
+      "dimensions_m": {"length_m": 100.0, "width_m": 5.0, "height_m": 0.15, "clearance_m": 0.0},
+      "fallback_geometry": "box",
+      "standards_cited": ["DMRB CD 143"],
+      "material": "concrete", "colour_hex": "#a39485"
+    },
+
+    { "id": "ev.supercharger_v4_stall",
+      "workload": "ev", "type": "charger", "label": "Tesla Supercharger V4 Stall (350 kW)",
+      "vendor": "Tesla",
+      "dimensions_m": {"length_m": 0.9, "width_m": 0.5, "height_m": 2.2, "clearance_m": 1.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "vehicles", "formula": "vehicles", "count_min": 1, "count_max": 400,
+         "spacing_m": 5.5}
+      ],
+      "standards_cited": ["BS EN 61851", "IEC 61851-23", "OZEV CP"],
+      "material": "aluminium", "colour_hex": "#cc2020",
+      "capacity_rating": {"kw_peak": 350}
+    },
+
+    { "id": "ev.hpc_400kw_stall",
+      "workload": "ev", "type": "charger", "label": "HPC Stall 400 kW (Alpitronic Hypercharger HYC400)",
+      "vendor": "Alpitronic",
+      "dimensions_m": {"length_m": 1.2, "width_m": 0.8, "height_m": 2.3, "clearance_m": 1.2},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "vehicles", "formula": "vehicles", "count_min": 1, "count_max": 200,
+         "spacing_m": 5.5}
+      ],
+      "standards_cited": ["BS EN 61851"],
+      "material": "aluminium", "colour_hex": "#203060",
+      "capacity_rating": {"kw_peak": 400}
+    },
+
+    { "id": "ev.canopy_solar",
+      "workload": "ev", "type": "canopy", "label": "Solar Canopy (2-row 20 stalls)",
+      "dimensions_m": {"length_m": 60.0, "width_m": 14.0, "height_m": 4.5, "clearance_m": 2.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "vehicles", "formula": "max(1, ceil(vehicles / 20))", "count_min": 1, "count_max": 20}
+      ],
+      "standards_cited": ["IEC 62446-1", "BS 7671"],
+      "material": "steel", "colour_hex": "#5e6b82"
+    },
+
+    { "id": "ev.forecourt_transformer_2mva",
+      "workload": "ev", "type": "transformer", "label": "Forecourt Transformer 11/0.4 kV 2 MVA",
+      "dimensions_m": {"length_m": 2.6, "width_m": 1.8, "height_m": 2.2, "clearance_m": 2.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "vehicles", "formula": "max(1, ceil(vehicles * 0.35 / 2.0))", "count_min": 1, "count_max": 20}
+      ],
+      "standards_cited": ["BS EN 60076"],
+      "material": "steel", "colour_hex": "#515b72",
+      "capacity_rating": {"mva": 2.0, "kv_primary": 11, "kv_secondary": 0.4}
+    },
+
+    { "id": "ev.amenity_building",
+      "workload": "ev", "type": "building", "label": "Amenity & WC Building",
+      "dimensions_m": {"length_m": 20.0, "width_m": 10.0, "height_m": 4.0, "clearance_m": 3.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "vehicles", "formula": "1", "count_min": 1, "count_max": 2}
+      ],
+      "standards_cited": ["Building Regulations Part M"],
+      "material": "concrete", "colour_hex": "#c0a77a"
+    },
+
+    { "id": "ev.perimeter_bollard",
+      "workload": "ev", "type": "bollard", "label": "Hostile-Vehicle Mitigation Bollard",
+      "dimensions_m": {"length_m": 0.3, "width_m": 0.3, "height_m": 1.2, "clearance_m": 0.5},
+      "fallback_geometry": "cylinder",
+      "standards_cited": ["PAS 68"],
+      "material": "steel", "colour_hex": "#444444", "cni_grade": "B3"
+    },
+
+    { "id": "h2.pem_electrolyser_5mw",
+      "workload": "hydrogen", "type": "electrolyser", "label": "PEM Electrolyser 5 MW (ITM HGas3SP)",
+      "vendor": "ITM Power",
+      "dimensions_m": {"length_m": 12.2, "width_m": 2.44, "height_m": 2.9, "clearance_m": 4.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "kg_day", "formula": "ceil(kg_day / 2160.0)", "count_min": 1, "count_max": 100,
+         "spacing_m": 4.0}
+      ],
+      "standards_cited": ["ISO 22734", "HSE DSEAR", "BS EN 60079"],
+      "material": "steel", "colour_hex": "#30a5cc", "fire_zone": true,
+      "capacity_rating": {"mw": 5.0, "kg_day_nominal": 2160}
+    },
+
+    { "id": "h2.alkaline_electrolyser_10mw",
+      "workload": "hydrogen", "type": "electrolyser", "label": "Alkaline Electrolyser 10 MW (NEL A3880)",
+      "vendor": "NEL Hydrogen",
+      "dimensions_m": {"length_m": 18.0, "width_m": 4.0, "height_m": 3.2, "clearance_m": 5.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "kg_day", "formula": "ceil(kg_day / 4320.0)", "count_min": 1, "count_max": 50}
+      ],
+      "standards_cited": ["ISO 22734", "HSE DSEAR"],
+      "material": "steel", "colour_hex": "#2891b8", "fire_zone": true,
+      "capacity_rating": {"mw": 10.0, "kg_day_nominal": 4320}
+    },
+
+    { "id": "h2.storage_vessel_350bar",
+      "workload": "hydrogen", "type": "storage", "label": "H2 Storage Vessel 350 bar (600 kg)",
+      "dimensions_m": {"length_m": 12.0, "width_m": 2.5, "height_m": 3.0, "diameter_m": 2.5, "clearance_m": 25.0},
+      "fallback_geometry": "cylinder",
+      "parametric_rules": [
+        {"driver": "kg_day", "formula": "max(1, ceil(kg_day * 0.25 / 600.0))", "count_min": 1, "count_max": 40,
+         "spacing_m": 5.0}
+      ],
+      "standards_cited": ["PED 2014/68/EU", "HSE COMAH 2015", "BS EN 17339"],
+      "material": "steel", "colour_hex": "#9ab4d4", "fire_zone": true,
+      "capacity_rating": {"kg": 600, "bar": 350}
+    },
+
+    { "id": "h2.compressor_station",
+      "workload": "hydrogen", "type": "compressor", "label": "H2 Compressor 2 MW (Howden)",
+      "vendor": "Howden",
+      "dimensions_m": {"length_m": 8.0, "width_m": 3.0, "height_m": 3.5, "clearance_m": 5.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "kg_day", "formula": "max(1, ceil(kg_day / 4000.0))", "count_min": 1, "count_max": 20}
+      ],
+      "standards_cited": ["BS EN 1012", "ATEX 2014/34/EU"],
+      "material": "steel", "colour_hex": "#5f7896", "fire_zone": true,
+      "capacity_rating": {"mw_input": 2.0}
+    },
+
+    { "id": "h2.water_treatment_skid",
+      "workload": "hydrogen", "type": "skid", "label": "DI Water Treatment Skid",
+      "dimensions_m": {"length_m": 12.0, "width_m": 3.0, "height_m": 2.9, "clearance_m": 2.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "kg_day", "formula": "max(1, ceil(kg_day / 5000.0))", "count_min": 1, "count_max": 10}
+      ],
+      "standards_cited": ["BS EN 12873"],
+      "material": "steel", "colour_hex": "#90a3b8"
+    },
+
+    { "id": "h2.dispenser_350bar",
+      "workload": "hydrogen", "type": "dispenser", "label": "H2 Dispenser 350 bar",
+      "dimensions_m": {"length_m": 2.0, "width_m": 1.0, "height_m": 2.6, "clearance_m": 10.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "kg_day", "formula": "max(1, ceil(kg_day / 1000.0))", "count_min": 1, "count_max": 10}
+      ],
+      "standards_cited": ["SAE J2601", "ISO 19880"],
+      "material": "steel", "colour_hex": "#30a5cc"
+    },
+
+    { "id": "common.poc_compound",
+      "workload": "common", "type": "compound", "label": "Point of Connection Compound",
+      "dimensions_m": {"length_m": 25.0, "width_m": 15.0, "height_m": 0.3, "clearance_m": 5.0},
+      "fallback_geometry": "box",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "1", "count_min": 1, "count_max": 1}
+      ],
+      "standards_cited": ["G99 Issue 2"],
+      "material": "concrete", "colour_hex": "#9ba3af"
+    },
+
+    { "id": "common.perimeter_fence_cpni",
+      "workload": "common", "type": "fence", "label": "CPNI SR1 Perimeter Fence (2.4 m)",
+      "dimensions_m": {"length_m": 3.0, "width_m": 0.05, "height_m": 2.4, "clearance_m": 0.0},
+      "fallback_geometry": "box",
+      "standards_cited": ["LPS 1175", "CPNI CNI B3/C5"],
+      "material": "steel", "colour_hex": "#6b7280", "cni_grade": "SR1"
+    },
+
+    { "id": "common.gatehouse",
+      "workload": "common", "type": "building", "label": "Manned Gatehouse",
+      "dimensions_m": {"length_m": 6.0, "width_m": 4.0, "height_m": 3.0, "clearance_m": 2.0},
+      "fallback_geometry": "box",
+      "standards_cited": ["PAS 68", "LPS 1175"],
+      "material": "concrete", "colour_hex": "#d4a018", "cni_grade": "B3"
+    },
+
+    { "id": "common.lightning_mast",
+      "workload": "common", "type": "instrumentation", "label": "Lightning Protection Mast",
+      "dimensions_m": {"length_m": 1.0, "width_m": 1.0, "height_m": 12.0, "clearance_m": 5.0},
+      "fallback_geometry": "truss",
+      "parametric_rules": [
+        {"driver": "mw_ac", "formula": "max(2, ceil(mw_ac / 50.0))", "count_min": 2, "count_max": 20}
+      ],
+      "standards_cited": ["BS EN 62305"],
+      "material": "steel", "colour_hex": "#a0a0a0"
+    },
+
+    { "id": "common.car_park",
+      "workload": "common", "type": "civil", "label": "Operations Car Park",
+      "dimensions_m": {"length_m": 30.0, "width_m": 20.0, "height_m": 0.15, "clearance_m": 0.0},
+      "fallback_geometry": "box",
+      "standards_cited": ["BS 6100"],
+      "material": "concrete", "colour_hex": "#6f7880"
+    }
+
+  ]
+}

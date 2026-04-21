@@ -1,0 +1,358 @@
+{# templates/ga_drawing/a1_landscape.html.j2
+   A1 landscape General Arrangement drawing template for the Princeps
+   3D twin. Rendered by POST /api/twin/ga-drawing/{project_id}.
+
+   Layout:
+     +-----------------------------------------------------------------+
+     | PLAN VIEW (1:{{ scale }})                | TITLE BLOCK          |
+     | oriented with north up                   | project meta         |
+     |                                          | OSGB grid ref        |
+     |                                          | date + revision      |
+     |------------------------------------------|----------------------|
+     | CROSS-SECTION A-A                        | LAYER LEGEND         |
+     |------------------------------------------|                      |
+     | CROSS-SECTION B-B  /  C-C                | COMPLIANCE NOTES     |
+     +-----------------------------------------------------------------+
+     | footer: Princeps mark + reliance statement                      |
+     +-----------------------------------------------------------------+
+
+   All SVG is rendered inline (no external assets) so the Playwright PDF
+   path works offline without network access.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ project.name }} — GA ({{ revision }})</title>
+<style>
+  @page { size: 841mm 594mm landscape; margin: 0; }
+  html, body { margin: 0; padding: 0; background: #ffffff; color: #111827;
+               font-family: 'Inter','Helvetica Neue',Arial,sans-serif;
+               -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { width: 841mm; height: 594mm; box-sizing: border-box;
+         display: grid;
+         grid-template-columns: 1fr 260mm;
+         grid-template-rows: 22mm 1fr 18mm;
+         grid-template-areas:
+           "header    header"
+           "drawing   sidebar"
+           "footer    footer"; }
+
+  header.sheet {
+    grid-area: header;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6mm 10mm; border-bottom: 0.5mm solid #d4a018;
+    background: #111827; color: #f4f4f4;
+  }
+  header.sheet .brand { font-size: 16pt; font-weight: 800; letter-spacing: 2px; color: #d4a018; }
+  header.sheet .brand span { color: #ffffff; font-weight: 400; margin-left: 6mm; font-size: 10pt; letter-spacing: 0; }
+  header.sheet .meta { font-size: 9pt; color: #d1d5db; text-align: right; }
+  header.sheet .meta strong { color: #ffffff; }
+
+  .drawing-area {
+    grid-area: drawing;
+    padding: 4mm 6mm; box-sizing: border-box;
+    display: flex; flex-direction: column; gap: 4mm;
+  }
+  .plan-wrap, .section-wrap {
+    border: 0.3mm solid #374151; border-radius: 2mm; padding: 3mm;
+    background: #f9fafb; position: relative;
+  }
+  .plan-wrap { flex: 1 1 58%; min-height: 280mm; }
+  .section-wrap { flex: 0 1 auto; min-height: 60mm; }
+  .wrap-title {
+    position: absolute; top: 2mm; left: 4mm;
+    font-size: 10pt; font-weight: 700; color: #374151; letter-spacing: 1px;
+    background: rgba(255,255,255,0.9); padding: 0 2mm;
+  }
+  .plan-svg, .section-svg { width: 100%; height: 100%; display: block; }
+
+  aside.sidebar {
+    grid-area: sidebar;
+    padding: 4mm 6mm 4mm 0; box-sizing: border-box;
+    display: flex; flex-direction: column; gap: 3mm;
+  }
+
+  .title-block {
+    border: 0.5mm solid #111827; border-radius: 2mm;
+    padding: 3mm 4mm; background: #ffffff;
+  }
+  .title-block h1 {
+    margin: 0 0 1mm 0; font-size: 14pt; color: #111827;
+    border-bottom: 0.3mm solid #d4a018; padding-bottom: 1mm;
+  }
+  .title-block table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+  .title-block td { padding: 0.7mm 1.5mm 0.7mm 0; vertical-align: top; }
+  .title-block td.k { color: #6b7280; width: 38%; font-weight: 500; }
+  .title-block td.v { color: #111827; font-weight: 600; }
+
+  .north-arrow {
+    width: 18mm; height: 18mm; margin: 2mm auto;
+  }
+
+  .legend {
+    border: 0.3mm solid #374151; border-radius: 2mm; padding: 3mm 4mm;
+    background: #ffffff; flex: 1 1 auto; overflow: hidden;
+  }
+  .legend h2 {
+    margin: 0 0 2mm 0; font-size: 10pt; color: #374151;
+    text-transform: uppercase; letter-spacing: 1.2px;
+    border-bottom: 0.3mm solid #d4a018; padding-bottom: 1mm;
+  }
+  .legend table { width: 100%; border-collapse: collapse; font-size: 7.5pt; }
+  .legend td { padding: 0.6mm 1.5mm; border-bottom: 0.1mm solid #e5e7eb; vertical-align: middle; }
+  .legend .sw { width: 5mm; height: 3mm; display: inline-block; border: 0.1mm solid #374151; }
+  .legend .count { text-align: right; font-variant-numeric: tabular-nums; color: #6b7280; }
+  .legend .std { color: #6b7280; font-size: 6.8pt; font-style: italic; }
+
+  .compliance {
+    border: 0.3mm solid #374151; border-radius: 2mm; padding: 3mm 4mm;
+    background: #fff9ec;
+  }
+  .compliance h2 {
+    margin: 0 0 2mm 0; font-size: 9.5pt; color: #8a6b0a;
+    text-transform: uppercase; letter-spacing: 1.2px;
+  }
+  .compliance ul { margin: 0; padding-left: 4mm; font-size: 8pt; color: #4b5563; }
+  .compliance li { margin-bottom: 0.8mm; }
+
+  footer.sheet {
+    grid-area: footer;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 3mm 10mm; border-top: 0.3mm solid #d4a018;
+    background: #111827; color: #d1d5db; font-size: 7.5pt;
+  }
+  footer.sheet .mark { color: #d4a018; font-weight: 800; letter-spacing: 2px; }
+  footer.sheet .reliance { max-width: 60%; line-height: 1.3; }
+
+  .hatch-road {
+    fill: url(#hatchRoad);
+  }
+</style>
+</head>
+<body>
+
+{# ── Header ──────────────────────────────────────────────────────────── #}
+<header class="sheet">
+  <div class="brand">PRINCEPS <span>General Arrangement</span></div>
+  <div class="meta">
+    <strong>{{ project.name }}</strong> &nbsp; | &nbsp;
+    Workload: <strong>{{ workload | upper }}</strong> &nbsp; | &nbsp;
+    Capacity: <strong>{{ '%.1f'|format(project.capacity_mw or 0) }} MW</strong> &nbsp; | &nbsp;
+    Scale <strong>1:{{ scale }}</strong> on {{ paper_size }} &nbsp; | &nbsp;
+    Revision <strong>{{ revision }}</strong>
+  </div>
+</header>
+
+{# ── Main drawing area (plan + two section bands) ────────────────────── #}
+<div class="drawing-area">
+
+  {# Plan view #}
+  <div class="plan-wrap">
+    <div class="wrap-title">PLAN VIEW — 1:{{ scale }}</div>
+    {% set bbox = layout.bbox_m or (-100.0, -100.0, 100.0, 100.0) %}
+    {% set minx = bbox[0] %}{% set miny = bbox[1] %}
+    {% set maxx = bbox[2] %}{% set maxy = bbox[3] %}
+    {% set pad = 25.0 %}
+    {% set vb_x = minx - pad %}{% set vb_y = -(maxy + pad) %}
+    {% set vb_w = (maxx - minx) + 2*pad %}{% set vb_h = (maxy - miny) + 2*pad %}
+    <svg class="plan-svg" xmlns="http://www.w3.org/2000/svg"
+         viewBox="{{ vb_x }} {{ vb_y }} {{ vb_w }} {{ vb_h }}"
+         preserveAspectRatio="xMidYMid meet">
+      <defs>
+        <pattern id="hatchRoad" patternUnits="userSpaceOnUse" width="3" height="3" patternTransform="rotate(45)">
+          <rect width="3" height="3" fill="#e5e7eb"/>
+          <line x1="0" y1="0" x2="0" y2="3" stroke="#9ca3af" stroke-width="0.3"/>
+        </pattern>
+        <marker id="arrowN" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#d4a018"/>
+        </marker>
+      </defs>
+
+      {# grid 10 m minor, 50 m major #}
+      {% for gx in range((vb_x|int // 10) * 10, (vb_x|int + vb_w|int) + 10, 10) %}
+        <line x1="{{ gx }}" y1="{{ vb_y }}" x2="{{ gx }}" y2="{{ vb_y + vb_h }}"
+              stroke="#e5e7eb" stroke-width="0.15"/>
+      {% endfor %}
+      {% for gy in range((vb_y|int // 10) * 10, (vb_y|int + vb_h|int) + 10, 10) %}
+        <line x1="{{ vb_x }}" y1="{{ gy }}" x2="{{ vb_x + vb_w }}" y2="{{ gy }}"
+              stroke="#e5e7eb" stroke-width="0.15"/>
+      {% endfor %}
+
+      {# site centroid marker #}
+      <circle cx="0" cy="0" r="0.8" fill="#d4a018" stroke="#111827" stroke-width="0.2"/>
+      <text x="1.5" y="1.0" fill="#111827" font-size="2.5" font-family="monospace">centroid</text>
+
+      {# placed assets — SVG y-axis is inverted so we negate north #}
+      {% for a in layout.placed_assets %}
+        {% set hl = a.length / 2.0 %}
+        {% set hw = a.width / 2.0 %}
+        <g transform="translate({{ a.x }},{{ -a.y }}) rotate({{ -a.rot }})">
+          <rect x="{{ -hl }}" y="{{ -hw }}"
+                width="{{ a.length }}" height="{{ a.width }}"
+                fill="{{ a.colour }}"
+                fill-opacity="0.78"
+                stroke="#111827" stroke-width="0.15"/>
+        </g>
+      {% endfor %}
+    </svg>
+
+    {# scale bar #}
+    <svg style="position:absolute; bottom:3mm; left:4mm;" width="40mm" height="6mm" viewBox="0 0 400 60">
+      <rect x="0" y="0" width="100" height="10" fill="#111827"/>
+      <rect x="100" y="0" width="100" height="10" fill="#ffffff" stroke="#111827" stroke-width="1"/>
+      <rect x="200" y="0" width="100" height="10" fill="#111827"/>
+      <rect x="300" y="0" width="100" height="10" fill="#ffffff" stroke="#111827" stroke-width="1"/>
+      <text x="0"   y="30" font-size="14" fill="#111827" font-family="monospace">0</text>
+      <text x="100" y="30" font-size="14" fill="#111827" font-family="monospace">25</text>
+      <text x="200" y="30" font-size="14" fill="#111827" font-family="monospace">50</text>
+      <text x="300" y="30" font-size="14" fill="#111827" font-family="monospace">75</text>
+      <text x="390" y="30" font-size="14" fill="#111827" font-family="monospace">100 m</text>
+    </svg>
+  </div>
+
+  {# Section bands #}
+  <div class="section-wrap" style="flex: 0 0 50mm;">
+    <div class="wrap-title">SECTION A-A (looking north)</div>
+    <svg class="section-svg" xmlns="http://www.w3.org/2000/svg"
+         viewBox="{{ vb_x }} -30 {{ vb_w }} 40" preserveAspectRatio="xMidYMid meet">
+      {# ground line #}
+      <line x1="{{ vb_x }}" y1="0" x2="{{ vb_x + vb_w }}" y2="0"
+            stroke="#6b7280" stroke-width="0.4"/>
+      {% for a in layout.placed_assets %}
+        {% if (a.y | abs) < 15 %}
+          <rect x="{{ a.x - a.length/2.0 }}" y="{{ -a.height }}"
+                width="{{ a.length }}" height="{{ a.height }}"
+                fill="{{ a.colour }}" fill-opacity="0.78"
+                stroke="#111827" stroke-width="0.12"/>
+        {% endif %}
+      {% endfor %}
+    </svg>
+  </div>
+
+  <div class="section-wrap" style="flex: 0 0 50mm;">
+    <div class="wrap-title">SECTION B-B / C-C (typical equipment row — looking east)</div>
+    <svg class="section-svg" xmlns="http://www.w3.org/2000/svg"
+         viewBox="{{ vb_y }} -30 {{ vb_h }} 40" preserveAspectRatio="xMidYMid meet">
+      <line x1="{{ vb_y }}" y1="0" x2="{{ vb_y + vb_h }}" y2="0"
+            stroke="#6b7280" stroke-width="0.4"/>
+      {% for a in layout.placed_assets %}
+        {% if (a.x | abs) < 30 %}
+          <rect x="{{ -a.y - a.width/2.0 }}" y="{{ -a.height }}"
+                width="{{ a.width }}" height="{{ a.height }}"
+                fill="{{ a.colour }}" fill-opacity="0.78"
+                stroke="#111827" stroke-width="0.12"/>
+        {% endif %}
+      {% endfor %}
+    </svg>
+  </div>
+</div>
+
+{# ── Sidebar: title block, north arrow, legend, compliance ──────────── #}
+<aside class="sidebar">
+
+  <div class="title-block">
+    <h1>Title Block</h1>
+    <table>
+      <tr><td class="k">Project</td><td class="v">{{ project.name }}</td></tr>
+      <tr><td class="k">Project ID</td><td class="v">{{ project.id }}</td></tr>
+      <tr><td class="k">Workload</td><td class="v">{{ workload | upper }}</td></tr>
+      <tr><td class="k">Technology</td><td class="v">{{ project.technology or '—' }}</td></tr>
+      <tr><td class="k">Capacity</td><td class="v">{{ '%.1f'|format(project.capacity_mw or 0) }} MW</td></tr>
+      <tr><td class="k">Stage</td><td class="v">{{ project.stage or '—' }}</td></tr>
+      <tr><td class="k">Verdict</td><td class="v">{{ project.verdict or '—' }}</td></tr>
+      <tr><td colspan="2" style="padding-top:2mm; border-top:0.15mm solid #e5e7eb;"></td></tr>
+      <tr><td class="k">WGS84</td><td class="v">
+        {% if project.lat and project.lon %}
+          {{ '%.5f'|format(project.lat) }}, {{ '%.5f'|format(project.lon) }}
+        {% else %}—{% endif %}
+      </td></tr>
+      <tr><td class="k">OSGB36</td><td class="v">
+        {% if layout.centroid_osgb %}
+          E {{ '%d'|format(layout.centroid_osgb[0]) }}
+          N {{ '%d'|format(layout.centroid_osgb[1]) }}
+        {% else %}—{% endif %}
+      </td></tr>
+      <tr><td class="k">Grid ref</td><td class="v">{{ grid_ref or '—' }}</td></tr>
+      <tr><td colspan="2" style="padding-top:2mm; border-top:0.15mm solid #e5e7eb;"></td></tr>
+      <tr><td class="k">Scale</td><td class="v">1:{{ scale }} on {{ paper_size }}</td></tr>
+      <tr><td class="k">Revision</td><td class="v">{{ revision }}</td></tr>
+      <tr><td class="k">Date</td><td class="v">{{ now }}</td></tr>
+      <tr><td class="k">Prepared</td><td class="v">Princeps Energy (autonomous)</td></tr>
+    </table>
+
+    {# north arrow #}
+    <svg class="north-arrow" viewBox="0 0 60 60">
+      <circle cx="30" cy="30" r="28" fill="#ffffff" stroke="#111827" stroke-width="0.8"/>
+      <path d="M30,6 L42,40 L30,32 L18,40 Z" fill="#d4a018" stroke="#111827" stroke-width="0.5"/>
+      <text x="30" y="54" text-anchor="middle" font-size="10" font-weight="700" fill="#111827">N</text>
+    </svg>
+  </div>
+
+  <div class="legend">
+    <h2>Layer Legend</h2>
+    <table>
+      {% for item in legend %}
+      <tr>
+        <td style="width:8mm;"><span class="sw" style="background: {{ item.colour }};"></span></td>
+        <td>
+          <div><strong>{{ item.label }}</strong></div>
+          {% if item.standards %}
+          <div class="std">{{ item.standards }}</div>
+          {% endif %}
+        </td>
+        <td class="count">×{{ item.count }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  <div class="compliance">
+    <h2>Compliance Notes</h2>
+    <ul>
+      {% if workload == 'bess' %}
+      <li><strong>BS 8629</strong> — BESS containers grid-packed in rows of ≤8 with 8 m inter-row firebreak and 2 m intra-row pitch.</li>
+      <li><strong>G99 Issue 2 (10 Mar 2025)</strong> — grid connection protection + interface settings to be agreed at POC.</li>
+      <li><strong>BS EN IEC 63056</strong> — lithium battery installation safety standard applied.</li>
+      {% elif workload == 'solar' %}
+      <li><strong>IEC 62446-1</strong> — PV system commissioning, documentation and inspection applied to all strings and inverter stations.</li>
+      <li><strong>G99 Issue 2</strong> — grid connection protection settings agreed at POC switchroom.</li>
+      <li>4 m MOT Type 1 access tracks laid every three rows for IEC 61724 O&M compliance.</li>
+      {% elif workload == 'dc' %}
+      <li><strong>BS 7698-12</strong> — diesel gensets sited ≥10 m east of data-hall shell with individual bunded fuel tanks.</li>
+      <li><strong>Uptime Tier III</strong> — N+1 redundancy on active electrical path (gensets, UPS modules).</li>
+      <li><strong>EN 50600</strong> — data centre facilities & infrastructure standard applied to hall shells and cooling.</li>
+      {% elif workload == 'wind' %}
+      <li><strong>IEA Wind Task 37</strong> — turbine spacing 5 × rotor diameter downwind, 3 × crosswind.</li>
+      <li><strong>IEC 61400-1</strong> — structural design load cases applied.</li>
+      {% elif workload == 'ev' %}
+      <li><strong>BS EN 61851</strong> — EV supply equipment protection + earthing compliance.</li>
+      <li>HVM bollards around perimeter per <strong>PAS 68</strong>.</li>
+      {% elif workload == 'h2' %}
+      <li><strong>HSE COMAH 2015 / DSEAR</strong> — 25 m exclusion zone around storage vessels; ATEX zoning applied around compressors.</li>
+      <li><strong>ISO 22734</strong> — electrolyser safety standard applied.</li>
+      {% endif %}
+      <li>Standards cited this drawing: {{ standards | join(', ') }}.</li>
+      {% if layout.notes %}
+      {% for n in layout.notes %}<li>{{ n }}</li>{% endfor %}
+      {% endif %}
+    </ul>
+  </div>
+</aside>
+
+{# ── Footer ─────────────────────────────────────────────────────────── #}
+<footer class="sheet">
+  <div class="mark">PRINCEPS</div>
+  <div class="reliance">
+    Issued for information only. Layout is parametric and <em>preliminary</em>;
+    construction issue requires independent verification against the final
+    surveyed site polygon, DNO-agreed POC, and signed-off equipment schedules.
+    © {{ now[:4] }} Princeps Energy. Model ID: twin.v1.
+  </div>
+  <div style="text-align:right; color:#d4a018; font-weight:700;">
+    Sheet 1 of 1 &nbsp;·&nbsp; {{ revision }}
+  </div>
+</footer>
+
+</body>
+</html>

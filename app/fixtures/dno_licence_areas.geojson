@@ -1,0 +1,390 @@
+{
+  "type": "FeatureCollection",
+  "name": "dno_licence_areas",
+  "crs": {
+    "type": "name",
+    "properties": { "name": "urn:ogc:def:crs:EPSG::4326" }
+  },
+  "meta": {
+    "description": "Princeps seed of UK DNO, IDNO, and TO licence areas. Polygons are approximate bounding envelopes drawn from GB geography — NOT official Ofgem licence-area shapefiles. Use for filter/overlay UX only. Replace with authoritative shapes before production routing / connection attribution.",
+    "srid_note": "Geometry is WGS84 (EPSG:4326) — Princeps DB stores reprojected to EPSG:27700 OSGB36.",
+    "version": "2026-04-19.1"
+  },
+  "features": [
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "ukpn-lpn",
+        "operator_class": "DNO",
+        "display_name": "UK Power Networks — London (LPN)",
+        "licence_region": "London",
+        "parent_slug": "ukpn",
+        "effective_from": "2002-10-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.ukpowernetworks.co.uk/our-business/our-networks",
+        "note": "(approximate) Greater London bounding polygon — M25 ring."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-0.51, 51.29], [ 0.34, 51.29], [ 0.34, 51.70], [-0.51, 51.70], [-0.51, 51.29]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "ukpn-epn",
+        "operator_class": "DNO",
+        "display_name": "UK Power Networks — Eastern (EPN)",
+        "licence_region": "Eastern England",
+        "parent_slug": "ukpn",
+        "effective_from": "2002-10-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.ukpowernetworks.co.uk/our-business/our-networks",
+        "note": "(approximate) East Anglia, Essex, Herts, Beds, Cambs, Norfolk, Suffolk."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-0.60, 51.50], [ 1.80, 51.50], [ 1.80, 52.98], [-0.60, 52.98], [-0.60, 51.50]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "ukpn-spn",
+        "operator_class": "DNO",
+        "display_name": "UK Power Networks — South East (SPN)",
+        "licence_region": "South East England",
+        "parent_slug": "ukpn",
+        "effective_from": "2002-10-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.ukpowernetworks.co.uk/our-business/our-networks",
+        "note": "(approximate) Kent, Sussex, most of Surrey."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-0.95, 50.72], [ 1.45, 50.72], [ 1.45, 51.55], [-0.95, 51.55], [-0.95, 50.72]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "ssen-shepd",
+        "operator_class": "DNO",
+        "display_name": "SSEN — Scottish Hydro Electric Power Distribution (North Scotland)",
+        "licence_region": "North Scotland",
+        "parent_slug": "ssen",
+        "effective_from": "1995-07-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.ssen.co.uk/our-services/our-network-area",
+        "note": "(approximate) Highlands, Islands, Grampian, Tayside, Argyll."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-8.70, 55.80], [-1.40, 55.80], [-1.40, 60.90], [-8.70, 60.90], [-8.70, 55.80]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "ssen-sepd",
+        "operator_class": "DNO",
+        "display_name": "SSEN — Southern Electric Power Distribution (Southern England)",
+        "licence_region": "Central Southern England",
+        "parent_slug": "ssen",
+        "effective_from": "1998-12-14",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.ssen.co.uk/our-services/our-network-area",
+        "note": "(approximate) Hants, Berks, Oxon, Wilts, Dorset, IoW, parts of W.Sussex."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-2.90, 50.50], [-0.30, 50.50], [-0.30, 52.10], [-2.90, 52.10], [-2.90, 50.50]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "spen-spd",
+        "operator_class": "DNO",
+        "display_name": "SP Energy Networks — SP Distribution (Central & Southern Scotland)",
+        "licence_region": "Central & Southern Scotland",
+        "parent_slug": "spen",
+        "effective_from": "1995-07-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.spenergynetworks.co.uk/pages/our_licence_areas.aspx",
+        "note": "(approximate) Central Belt, Strathclyde, Dumfries & Galloway, Borders."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-5.40, 54.60], [-1.70, 54.60], [-1.70, 56.30], [-5.40, 56.30], [-5.40, 54.60]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "spen-spm",
+        "operator_class": "DNO",
+        "display_name": "SP Energy Networks — SP Manweb (Merseyside, Cheshire, N.Wales, Shropshire)",
+        "licence_region": "Merseyside / N.Wales",
+        "parent_slug": "spen",
+        "effective_from": "1995-07-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.spenergynetworks.co.uk/pages/our_licence_areas.aspx",
+        "note": "(approximate) Cheshire, Merseyside, North Wales, N.Shropshire."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-4.80, 52.20], [-2.25, 52.20], [-2.25, 53.55], [-4.80, 53.55], [-4.80, 52.20]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "nged-westmidlands",
+        "operator_class": "DNO",
+        "display_name": "National Grid ED — West Midlands (ex-WPD WMID)",
+        "licence_region": "West Midlands",
+        "parent_slug": "nged",
+        "effective_from": "2004-04-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.nationalgrid.co.uk/our-network",
+        "note": "(approximate) Birmingham, Black Country, Staffs, Warwicks, Worcs, Herefordshire, Shropshire (S)."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-3.15, 51.85], [-1.20, 51.85], [-1.20, 53.10], [-3.15, 53.10], [-3.15, 51.85]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "nged-eastmidlands",
+        "operator_class": "DNO",
+        "display_name": "National Grid ED — East Midlands (ex-WPD EMID)",
+        "licence_region": "East Midlands",
+        "parent_slug": "nged",
+        "effective_from": "2011-04-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.nationalgrid.co.uk/our-network",
+        "note": "(approximate) Derbys, Notts, Leics, Lincs, Northants, Rutland."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-1.85, 52.10], [ 0.30, 52.10], [ 0.30, 53.75], [-1.85, 53.75], [-1.85, 52.10]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "nged-southwales",
+        "operator_class": "DNO",
+        "display_name": "National Grid ED — South Wales (ex-WPD SWALES)",
+        "licence_region": "South Wales",
+        "parent_slug": "nged",
+        "effective_from": "2000-09-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.nationalgrid.co.uk/our-network",
+        "note": "(approximate) Glamorgan, Gwent, Carmarthenshire, Pembrokeshire, Ceredigion, Powys (S)."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-5.40, 51.35], [-2.65, 51.35], [-2.65, 52.70], [-5.40, 52.70], [-5.40, 51.35]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "nged-southwest",
+        "operator_class": "DNO",
+        "display_name": "National Grid ED — South West (ex-WPD SWEST)",
+        "licence_region": "South West England",
+        "parent_slug": "nged",
+        "effective_from": "1990-03-31",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.nationalgrid.co.uk/our-network",
+        "note": "(approximate) Cornwall, Devon, Somerset, Dorset (W), Gloucs (S), Bristol."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-6.50, 49.85], [-2.10, 49.85], [-2.10, 52.10], [-6.50, 52.10], [-6.50, 49.85]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "npg",
+        "operator_class": "DNO",
+        "display_name": "Northern Powergrid (North East + Yorkshire)",
+        "licence_region": "North East England & Yorkshire",
+        "parent_slug": null,
+        "effective_from": "1990-03-31",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.northernpowergrid.com/who-we-are",
+        "note": "(approximate) Northumberland, Tyne & Wear, Durham, Yorkshire, N.Lincs."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-2.80, 53.20], [ 0.30, 53.20], [ 0.30, 55.85], [-2.80, 55.85], [-2.80, 53.20]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "enwl",
+        "operator_class": "DNO",
+        "display_name": "Electricity North West (Cumbria + Lancashire + Gtr Manchester)",
+        "licence_region": "North West England",
+        "parent_slug": null,
+        "effective_from": "1990-03-31",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.enwl.co.uk/our-network",
+        "note": "(approximate) Cumbria, Lancashire, Greater Manchester, part of Cheshire."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-3.80, 53.15], [-1.85, 53.15], [-1.85, 55.20], [-3.80, 55.20], [-3.80, 53.15]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "nie",
+        "operator_class": "DNO",
+        "display_name": "NIE Networks (Northern Ireland)",
+        "licence_region": "Northern Ireland",
+        "parent_slug": null,
+        "effective_from": "1993-04-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.nienetworks.co.uk/about-us",
+        "note": "(approximate) All of Northern Ireland — distribution + transmission combined."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-8.20, 54.00], [-5.35, 54.00], [-5.35, 55.30], [-8.20, 55.30], [-8.20, 54.00]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "nget",
+        "operator_class": "TO",
+        "display_name": "National Grid Electricity Transmission (England & Wales)",
+        "licence_region": "England & Wales",
+        "parent_slug": null,
+        "effective_from": "1990-03-31",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.nationalgrid.com/electricity-transmission/about-us",
+        "note": "(approximate) Transmission owner for England + Wales (275 kV and 400 kV)."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-6.50, 49.85], [ 1.80, 49.85], [ 1.80, 55.85], [-6.50, 55.85], [-6.50, 49.85]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "spt",
+        "operator_class": "TO",
+        "display_name": "SP Transmission (Southern Scotland)",
+        "licence_region": "Southern Scotland",
+        "parent_slug": null,
+        "effective_from": "2005-04-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.spenergynetworks.co.uk/pages/transmission.aspx",
+        "note": "(approximate) Transmission owner for central and southern Scotland."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-5.40, 54.60], [-1.70, 54.60], [-1.70, 56.30], [-5.40, 56.30], [-5.40, 54.60]
+        ]]]
+      }
+    },
+
+    {
+      "type": "Feature",
+      "properties": {
+        "dno_slug": "she-t",
+        "operator_class": "TO",
+        "display_name": "SHE Transmission (North Scotland)",
+        "licence_region": "North Scotland",
+        "parent_slug": null,
+        "effective_from": "2005-04-01",
+        "effective_to": null,
+        "source": "fixture:approximate",
+        "source_url": "https://www.ssen-transmission.co.uk/who-we-are/",
+        "note": "(approximate) Transmission owner for north of Scotland, including Hebrides + Shetland."
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [[[
+          [-8.70, 55.80], [-1.40, 55.80], [-1.40, 60.90], [-8.70, 60.90], [-8.70, 55.80]
+        ]]]
+      }
+    }
+
+  ]
+}
