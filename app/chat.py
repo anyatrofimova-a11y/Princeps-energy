@@ -1097,6 +1097,28 @@ TOOLS: list[dict] = [
             "required": ["project_id"],
         },
     },
+    {
+        "name": "get_dno_engagement_status",
+        "description": (
+            "Return a compact JSON digest of the project's DNO engagement workflow: the latest "
+            "pack version sent, status (drafting/previewing/sent/responded/withdrawn/superseded), "
+            "a summary of the most recent DNO response (sentiment, requested_info, proposed_poc, "
+            "timeline_revision), any outstanding deadlines derived from the response, and the "
+            "delta between the latest response and the previous one (firm/non-firm split change, "
+            "timeline shift, POC changes, newly requested info, capacity_mw delta). Use this "
+            "when the user asks about connection application status, when the agent needs to "
+            "factor DNO feedback into a GO/CAUTION/NO-GO verdict, or when drafting a follow-up "
+            "pack. Returns `{latest_pack_version: 0, status: 'none'}` if no pack has ever been "
+            "sent for this project."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "Princeps project UUID"},
+            },
+            "required": ["project_id"],
+        },
+    },
 ]
 
 
@@ -1122,6 +1144,10 @@ async def execute_tool(
             from app.dockets.agent_tool import get_pinned_dockets
             async with pool.acquire() as conn:
                 return await get_pinned_dockets(conn, _UUID(args["project_id"]))
+
+        if name == "get_dno_engagement_status":
+            from app.dockets.dno_engagement_tool import get_dno_engagement_status
+            return await get_dno_engagement_status(pool, args["project_id"])
 
         if name == "run_solar_yield":
             return await run_sam_subprocess(

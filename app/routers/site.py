@@ -35,6 +35,7 @@ from utils.solar_inventory import (
     check_bom_availability,
     SOLAR_CATALOGUE,
 )
+from utils import solar_benchmarks
 from utils.grid_data_platform import (
     find_nearest_substation as gdp_nearest_sub,
     substations_in_radius,
@@ -500,12 +501,14 @@ def _deterministic_agent(ctx: dict) -> dict:
         max_cap = area * 0.01  # kW
         rec_cap = min(rec_cap, max_cap)
 
-    # ROI estimate
+    # ROI estimate — 2026 UK merchant PPA midpoint (utils.solar_benchmarks)
     roi = None
     if sam.get("annual_energy_kwh") and rec_cap:
-        # UK export tariff ~5p/kWh, install cost ~800/kW
-        annual_revenue = sam["annual_energy_kwh"] * 0.05
-        install_cost = rec_cap * 800
+        # £/kWh from £/MWh benchmark (£45/MWh merchant → £0.045/kWh)
+        ppa_gbp_kwh = solar_benchmarks.ppa_price_merchant_mid() / 1000.0
+        capex_gbp_kw = solar_benchmarks.solar_capex_per_kw()
+        annual_revenue = sam["annual_energy_kwh"] * ppa_gbp_kwh
+        install_cost = rec_cap * capex_gbp_kw
         if annual_revenue > 0:
             roi = round(install_cost / annual_revenue, 1)
 

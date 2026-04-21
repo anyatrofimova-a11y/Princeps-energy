@@ -3,16 +3,33 @@ Investment appraisal — 25-year project finance model.
 
 Standalone subprocess script (stdin JSON → stdout JSON).
 
+All financial defaults (WACC, gearing, tax, CPI, PPA) sourced from
+:mod:`utils.finance_benchmarks`. Technology-specific CapEx/OpEx/CF/revenue
+come from :mod:`utils.solar_benchmarks` and :mod:`utils.bess_benchmarks`.
+
 Commands:
-  {"command": "project_finance", "capacity_mw": 50, "technology": "wind", "region": "Scotland", "ppa_price": 55}
-  {"command": "debt_structure", "capacity_mw": 50, "technology": "wind", "target_dscr": 1.3, "gearing": 0.7}
-  {"command": "equity_returns", "capacity_mw": 50, "technology": "wind", "gearing": 0.7, "ppa_price": 55}
+  {"command": "project_finance", "capacity_mw": 50, "technology": "wind", "region": "Scotland", "ppa_price": 52}
+  {"command": "debt_structure", "capacity_mw": 50, "technology": "wind", "target_dscr": 1.3, "gearing": 0.65}
+  {"command": "equity_returns", "capacity_mw": 50, "technology": "wind", "gearing": 0.65, "ppa_price": 52}
 """
 from __future__ import annotations
 
 import json
 import math
 import sys
+
+from utils.bess_benchmarks import bess_revenue_mid
+from utils.finance_benchmarks import (
+    corporation_tax_rate,
+    cpi_long_run,
+    debt_tenor_years,
+    debt_to_equity,
+    egl_applies_to,
+    egl_threshold_gbp_mwh,
+    ppa_price_merchant,
+    senior_debt_all_in_rate,
+    wacc,
+)
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -37,42 +54,60 @@ CAPACITY_FACTORS = {
     "offshore_wind": 0.40,
 }
 
-# BESS earns from arbitrage, frequency response, capacity market — not generation
+# BESS earns from arbitrage, frequency response, capacity market — not generation.
+# Sourced from Modo Energy GB BESS index, Mar 2026 (2h P50 benchmark).
 REVENUE_PER_MW = {
-    "bess": 75_000,          # £/MW/yr blended revenue (UK 2h BESS)
+    "bess": bess_revenue_mid(2),  # £/MW/yr blended revenue (UK 2h BESS)
 }
 
-WACC_BENCHMARK = 0.075       # 7.5% nominal pre-tax WACC
-TYPICAL_GEARING = 0.70       # 70% debt
+# Project-wide financial benchmarks — centralised in utils.finance_benchmarks.
+# Kept as module-level constants to minimise churn with downstream callers.
+WACC_BENCHMARK = wacc("solar", "stabilised")            # 8.5% stabilised
+TYPICAL_GEARING = debt_to_equity("solar")[0]            # 65% senior debt
 INTEREST_RATES = {
-    "senior": 0.055,         # 5.5% senior debt
-    "mezzanine": 0.085,
+    "senior": senior_debt_all_in_rate("solar"),         # SONIA + 250bp
+    "mezzanine": senior_debt_all_in_rate("solar") + 0.030,
 }
-DEBT_TERM_YEARS = 18
+DEBT_TERM_YEARS = debt_tenor_years("solar")             # 18y
 DEGRADATION_RATE = 0.005     # 0.5% p.a. for wind/solar
-CORPORATION_TAX = 0.25
-DEFAULT_PPA_PRICE = 55.0     # £/MWh
+CORPORATION_TAX = corporation_tax_rate()                # 25%
+# Merchant PPA reference — tech-keyed at call site via ppa_price_merchant().
+# This module-level constant is a fallback for legacy callers that omit tech.
+DEFAULT_PPA_PRICE = ppa_price_merchant("solar")         # £48/MWh
 CONSTRUCTION_YEARS = 2
 PROJECT_LIFE = 25
-INFLATION = 0.025            # 2.5% CPI
+INFLATION = cpi_long_run()                              # 2.4% long-run CPI
 DISCOUNT_RATES = [0.06, 0.08, 0.10]
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _irr_newton(cashflows: list[float], guess: float = 0.10, tol: float = 1e-8, max_iter: int = 200) -> float | None:
-    """Solve IRR via Newton-Raphson on NPV function."""
+    """Solve IRR via Newton-Raphson on NPV function.
+
+    Clamps r into (-0.95, 5.0) each iteration so runaway Newton steps
+    cannot explode `(1+r)**t` on 25-year cashflows.
+    """
     r = guess
     for _ in range(max_iter):
-        npv = sum(cf / (1 + r) ** t for t, cf in enumerate(cashflows))
-        dnpv = sum(-t * cf / (1 + r) ** (t + 1) for t, cf in enumerate(cashflows))
+        r = max(-0.95, min(5.0, r))
+        try:
+            npv = sum(cf / (1 + r) ** t for t, cf in enumerate(cashflows))
+            dnpv = sum(-t * cf / (1 + r) ** (t + 1) for t, cf in enumerate(cashflows))
+        except (OverflowError, ZeroDivisionError):
+            return None
         if abs(dnpv) < 1e-14:
             return None
         r_new = r - npv / dnpv
         if abs(r_new - r) < tol:
             return r_new
         r = r_new
-    return r if abs(sum(cf / (1 + r) ** t for t, cf in enumerate(cashflows))) < 1.0 else None
+    r = max(-0.95, min(5.0, r))
+    try:
+        resid = abs(sum(cf / (1 + r) ** t for t, cf in enumerate(cashflows)))
+    except (OverflowError, ZeroDivisionError):
+        return None
+    return r if resid < 1.0 else None
 
 
 def _npv(rate: float, cashflows: list[float]) -> float:
@@ -90,9 +125,16 @@ def _lcoe(total_capex: float, annual_opex: float, annual_gen_mwh: float,
 # ── Commands ───────────────────────────────────────────────────────────────────
 
 def project_finance(capacity_mw: float = 50, technology: str = "wind",
-                    region: str = "Scotland", ppa_price: float = DEFAULT_PPA_PRICE,
+                    region: str = "Scotland", ppa_price: float | None = None,
                     discount_rate: float = 0.08) -> dict:
-    """Full DCF cashflow model — construction + operating periods."""
+    """Full DCF cashflow model — construction + operating periods.
+
+    ``ppa_price`` defaults to ``finance_benchmarks.ppa_price_merchant(tech)``
+    so a caller that omits it gets a sensible tech-specific benchmark
+    (solar £48, wind £52, BESS £68, offshore £60, DC £75).
+    """
+    if ppa_price is None:
+        ppa_price = ppa_price_merchant(technology)
     capex_mw = CAPEX_PER_MW.get(technology, CAPEX_PER_MW["wind"])
     opex_mw = OPEX_PER_MW.get(technology, OPEX_PER_MW["wind"])
     cf = CAPACITY_FACTORS.get(technology, 0.28)
@@ -161,13 +203,24 @@ def project_finance(capacity_mw: float = 50, technology: str = "wind",
         "project_life_years": PROJECT_LIFE,
         "construction_years": CONSTRUCTION_YEARS,
         "cashflow_truncated": truncated,
+        "egl_applies": egl_applies_to(technology),
+        "egl_threshold_gbp_mwh": egl_threshold_gbp_mwh(),
     }
 
 
 def debt_structure(capacity_mw: float = 50, technology: str = "wind",
-                   target_dscr: float = 1.3, gearing: float = TYPICAL_GEARING,
-                   ppa_price: float = DEFAULT_PPA_PRICE) -> dict:
-    """Senior debt sizing with sculpted repayment profile."""
+                   target_dscr: float = 1.3, gearing: float | None = None,
+                   ppa_price: float | None = None) -> dict:
+    """Senior debt sizing with sculpted repayment profile.
+
+    ``gearing`` defaults to tech-specific UK 2026 market norms
+    (solar/wind 65%, offshore 55%, BESS 50%, DC 60%).
+    ``ppa_price`` defaults to ``finance_benchmarks.ppa_price_merchant(tech)``.
+    """
+    if gearing is None:
+        gearing = debt_to_equity(technology)[0]
+    if ppa_price is None:
+        ppa_price = ppa_price_merchant(technology)
     capex_mw = CAPEX_PER_MW.get(technology, CAPEX_PER_MW["wind"])
     opex_mw = OPEX_PER_MW.get(technology, OPEX_PER_MW["wind"])
     cf = CAPACITY_FACTORS.get(technology, 0.28)
@@ -241,9 +294,18 @@ def debt_structure(capacity_mw: float = 50, technology: str = "wind",
 
 
 def equity_returns(capacity_mw: float = 50, technology: str = "wind",
-                   gearing: float = TYPICAL_GEARING, ppa_price: float = DEFAULT_PPA_PRICE,
+                   gearing: float | None = None,
+                   ppa_price: float | None = None,
                    tax_rate: float = CORPORATION_TAX) -> dict:
-    """Pre/post-tax equity IRR, cash-on-cash yield, dividend waterfall."""
+    """Pre/post-tax equity IRR, cash-on-cash yield, dividend waterfall.
+
+    ``gearing`` defaults to UK 2026 tech-specific capital-stack norms;
+    ``ppa_price`` defaults to ``finance_benchmarks.ppa_price_merchant(tech)``.
+    """
+    if gearing is None:
+        gearing = debt_to_equity(technology)[0]
+    if ppa_price is None:
+        ppa_price = ppa_price_merchant(technology)
     capex_mw = CAPEX_PER_MW.get(technology, CAPEX_PER_MW["wind"])
     opex_mw = OPEX_PER_MW.get(technology, OPEX_PER_MW["wind"])
     cf = CAPACITY_FACTORS.get(technology, 0.28)
@@ -327,6 +389,8 @@ def equity_returns(capacity_mw: float = 50, technology: str = "wind",
         "cash_on_cash_yield_pct": round(avg_coc, 2),
         "total_dividends": round(total_dividends),
         "distribution_schedule_truncated": truncated,
+        "egl_applies": egl_applies_to(technology),
+        "egl_threshold_gbp_mwh": egl_threshold_gbp_mwh(),
     }
 
 
@@ -347,7 +411,7 @@ def main():
                 capacity_mw=req.get("capacity_mw", 50),
                 technology=req.get("technology", "wind"),
                 region=req.get("region", "Scotland"),
-                ppa_price=req.get("ppa_price", DEFAULT_PPA_PRICE),
+                ppa_price=req.get("ppa_price"),    # None → tech-keyed benchmark
                 discount_rate=req.get("discount_rate", 0.08),
             )
             json.dump(result, sys.stdout)
@@ -356,16 +420,16 @@ def main():
                 capacity_mw=req.get("capacity_mw", 50),
                 technology=req.get("technology", "wind"),
                 target_dscr=req.get("target_dscr", 1.3),
-                gearing=req.get("gearing", TYPICAL_GEARING),
-                ppa_price=req.get("ppa_price", DEFAULT_PPA_PRICE),
+                gearing=req.get("gearing"),         # None → tech-keyed benchmark
+                ppa_price=req.get("ppa_price"),
             )
             json.dump(result, sys.stdout)
         elif cmd == "equity_returns":
             result = equity_returns(
                 capacity_mw=req.get("capacity_mw", 50),
                 technology=req.get("technology", "wind"),
-                gearing=req.get("gearing", TYPICAL_GEARING),
-                ppa_price=req.get("ppa_price", DEFAULT_PPA_PRICE),
+                gearing=req.get("gearing"),         # None → tech-keyed benchmark
+                ppa_price=req.get("ppa_price"),
                 tax_rate=req.get("tax_rate", CORPORATION_TAX),
             )
             json.dump(result, sys.stdout)

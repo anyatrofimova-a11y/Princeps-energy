@@ -5,6 +5,10 @@ LCOE, plus a correlation-aware tornado chart.
 Design: treat the deterministic project-finance call as a black-box; wrap
 with numpy.random correlated draws over capex, opex, curtailment, price,
 timeline slip. 1000 runs typically finishes in <500 ms.
+
+All cost/price defaults come from :mod:`utils.finance_benchmarks` — no
+stale magic numbers live here. When the caller passes a ``technology``
+field on the scenario dict, the evaluator picks tech-specific defaults.
 """
 
 from __future__ import annotations
@@ -14,6 +18,15 @@ import math
 import random
 from dataclasses import dataclass
 from typing import Any, Callable
+
+from utils.finance_benchmarks import (
+    debt_to_equity,
+    egl_applies_to,
+    egl_threshold_gbp_mwh,
+    ppa_price_merchant,
+    senior_debt_all_in_rate,
+    wacc,
+)
 
 log = logging.getLogger("princeps.mc_finance")
 
@@ -172,7 +185,16 @@ def run_mc(
 
 def default_evaluator(sc: dict) -> dict:
     """Quick deterministic IRR/NPV/DSCR from a scenario dict. Not as rich
-    as /api/finance/project-finance but works standalone."""
+    as /api/finance/project-finance but works standalone.
+
+    All cost/price assumptions come from :mod:`utils.finance_benchmarks`.
+    Pass ``technology`` on the scenario dict ("solar"|"wind"|"bess"|"dc"|
+    "offshore_wind") to get tech-specific gearing, debt rate, and merchant
+    PPA reference price. Pass ``apply_egl=True`` to tag the EGL windfall
+    in the output (EGL itself is not applied to IRR here — see
+    :mod:`utils.project_finance` for the full cashflow treatment).
+    """
+    tech = (sc.get("technology") or "solar").lower()
     capex = sc["capex_gbp_m"] * 1_000_000
     rev_yr = sc["revenue_gbp_m_yr"] * 1_000_000 * (1 - sc.get("curtail_pct", 0) / 100)
     opex_yr = sc["opex_gbp_m_yr"] * 1_000_000
@@ -192,17 +214,23 @@ def default_evaluator(sc: dict) -> dict:
         else:
             hi = mid
     irr = (lo + hi) / 2
-    # DSCR — 60% senior debt, 15y, interest at rate+2pp
-    debt = capex * 0.60
-    debt_rate = r + 0.02
+    # DSCR — tech-keyed gearing + SONIA-referenced all-in rate
+    debt_frac, _ = debt_to_equity(tech)
+    debt = capex * float(sc.get("gearing", debt_frac))
+    debt_rate = float(sc.get("debt_rate", senior_debt_all_in_rate(tech)))
     annuity = debt * debt_rate / (1 - (1 + debt_rate) ** -n) if debt_rate else 0
     dscr = net / annuity if annuity else 0
-    # LCOE
-    total_energy = rev_yr * n / 55  # rough £55/MWh implied price
+    # LCOE: use a tech-specific merchant price as the implied £/MWh divisor
+    implied_price = float(sc.get("implied_price_gbp_mwh") or ppa_price_merchant(tech))
+    total_energy = rev_yr * n / max(1.0, implied_price)
     lcoe = (capex + opex_yr * n) / max(1, total_energy)
-    return {
+
+    out = {
         "irr_pct": round(irr * 100, 2),
         "npv_gbp_m": round(npv / 1_000_000, 2),
         "dscr": round(dscr, 3),
         "lcoe_gbp_mwh": round(lcoe, 2),
+        "egl_applies": egl_applies_to(tech),
+        "egl_threshold_gbp_mwh": egl_threshold_gbp_mwh(),
     }
+    return out

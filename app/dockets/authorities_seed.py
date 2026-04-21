@@ -8,10 +8,18 @@ survive re-seeds.
 
 Called from ``app/startup.py`` when ``PRINCEPS_SEED_AUTHORITIES=true``.
 
-TODO — expand LPA coverage to the full 317/32/22/11 set by pulling the
-ONS LAD24CD/LAD24NM register. The current JSON has the most docket-active
-councils; the resolver and consultee rules degrade gracefully for unknown
-LPAs (they still surface via the geometry intersection layer).
+Coverage — full UK LPA set sourced from the ONS LAD24 register:
+  - England: 296 LPAs (63 unitary + 36 metropolitan + 33 London boroughs +
+    164 non-metropolitan districts) + 22 County Councils (minerals/waste)
+    + 10 National Park Authorities
+  - Scotland: 32 councils
+  - Wales: 22 principal councils
+  - Northern Ireland: 11 councils
+
+Non-LPA entries (DNOs, TOs, regulators, statutory consultees, crown bodies)
+are curated and preserved across regenerations. Rebuild the JSON via
+``python3 scripts/build_lpa_seed.py`` which pulls ONS live with a bundled
+CSV fallback at ``app/dockets/data/lpa_registry_2024.csv``.
 """
 
 from __future__ import annotations

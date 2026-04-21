@@ -385,6 +385,23 @@ def generate_site_bom(
     total_weight = sum(item["total_weight_kg"] for item in bom)
     cost_per_kw = total_cost / capacity_kw if capacity_kw > 0 else 0
 
+    # Cross-check BOM roll-up against the UK 2026 all-in £/kWp benchmark.
+    # Component catalogue tracks hardware only — dev, EPC, grid-side works
+    # and contingency push all-in CapEx higher. Benchmark comes from
+    # Solar Media Q4 2025 (see utils.solar_benchmarks).
+    try:
+        from utils import solar_benchmarks as _sb
+        benchmark_kw = _sb.solar_capex_per_kw()
+        benchmark_range = (
+            _sb.solar_capex_per_kw("low"),
+            _sb.solar_capex_per_kw("high"),
+        )
+        benchmark_citation = _sb.cite()
+    except Exception:
+        benchmark_kw = None
+        benchmark_range = None
+        benchmark_citation = None
+
     # Group by category
     categories = {}
     for item in bom:
@@ -417,6 +434,12 @@ def generate_site_bom(
             "total_weight_kg": round(total_weight, 1),
             "cost_per_kw_gbp": round(cost_per_kw, 2),
             "component_count": len(bom),
+        },
+        "benchmark": {
+            "all_in_capex_gbp_per_kw_mid": benchmark_kw,
+            "all_in_capex_gbp_per_kw_range": benchmark_range,
+            "source": benchmark_citation,
+            "note": "Hardware-only BOM; all-in benchmark includes dev, EPC, grid works.",
         },
     }
 

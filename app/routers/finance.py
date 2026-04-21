@@ -20,7 +20,29 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from utils.finance_benchmarks import (
+    corporation_tax_rate,
+    cpi_long_run,
+    debt_tenor_years,
+    debt_to_equity,
+    ppa_price_merchant,
+    senior_debt_all_in_rate,
+    wacc,
+)
+
 log = logging.getLogger("princeps.finance")
+
+# Pre-resolve tech-neutral defaults at import time so Pydantic Field()
+# descriptors stay simple. Tech-specific values still flow through at
+# subprocess level when `technology` is explicit.
+_DEFAULT_PPA_SOLAR = ppa_price_merchant("solar")          # 48
+_DEFAULT_PPA_WIND = ppa_price_merchant("wind")            # 52
+_DEFAULT_WACC = wacc("solar", "stabilised")               # 0.085
+_DEFAULT_GEARING = debt_to_equity("solar")[0]             # 0.65
+_DEFAULT_SENIOR_RATE = senior_debt_all_in_rate("solar")   # 0.0725
+_DEFAULT_DEBT_TERM = debt_tenor_years("solar")            # 18
+_DEFAULT_TAX = corporation_tax_rate()                     # 0.25
+_DEFAULT_CPI = cpi_long_run()                             # 0.024
 
 # ── Subprocess script paths ───────────────────────────────────────────────
 _UTILS = Path(__file__).resolve().parent.parent.parent / "utils"
@@ -143,12 +165,17 @@ class OEMTier(str, Enum):
 # ── Request models ────────────────────────────────────────────────────────
 
 class ProjectFinanceRequest(BaseModel):
-    """Project finance DCF model parameters."""
+    """Project finance DCF model parameters.
+
+    All £/%/year defaults resolve through :mod:`utils.finance_benchmarks`.
+    ``ppa_price`` defaults to the wind merchant PPA midpoint; the subprocess
+    will re-resolve to the correct tech if the caller changes `technology`.
+    """
     capacity_mw: float = Field(50, gt=0, description="Installed capacity in MW")
     technology: Technology = Technology.wind
     region: str = Field("Scotland", description="UK region")
-    ppa_price: float = Field(55.0, gt=0, description="PPA strike price GBP/MWh")
-    discount_rate: float = Field(0.08, ge=0, le=0.25, description="Discount rate for NPV")
+    ppa_price: float = Field(_DEFAULT_PPA_WIND, gt=0, description="PPA strike price GBP/MWh (merchant benchmark)")
+    discount_rate: float = Field(_DEFAULT_WACC, ge=0, le=0.25, description="Discount rate / WACC for NPV")
 
 
 class DebtStructureRequest(BaseModel):
@@ -156,17 +183,17 @@ class DebtStructureRequest(BaseModel):
     capacity_mw: float = Field(50, gt=0)
     technology: Technology = Technology.wind
     target_dscr: float = Field(1.3, ge=1.0, le=3.0, description="Target debt service coverage ratio")
-    gearing: float = Field(0.7, ge=0.1, le=0.95, description="Debt-to-total-capital ratio")
-    ppa_price: float = Field(55.0, gt=0)
+    gearing: float = Field(_DEFAULT_GEARING, ge=0.1, le=0.95, description="Debt-to-total-capital ratio (UK 2026 typical 65%)")
+    ppa_price: float = Field(_DEFAULT_PPA_WIND, gt=0)
 
 
 class EquityReturnsRequest(BaseModel):
     """Equity return analysis parameters."""
     capacity_mw: float = Field(50, gt=0)
     technology: Technology = Technology.wind
-    gearing: float = Field(0.7, ge=0.1, le=0.95)
-    ppa_price: float = Field(55.0, gt=0)
-    tax_rate: float = Field(0.25, ge=0, le=0.5, description="Corporation tax rate")
+    gearing: float = Field(_DEFAULT_GEARING, ge=0.1, le=0.95)
+    ppa_price: float = Field(_DEFAULT_PPA_WIND, gt=0)
+    tax_rate: float = Field(_DEFAULT_TAX, ge=0, le=0.5, description="Corporation tax rate")
 
 
 class PPAPriceRequest(BaseModel):
@@ -217,7 +244,7 @@ class CurtailmentRequest(BaseModel):
         "estimate_annual",
         description="One of: estimate_annual, monthly_profile, revenue_impact",
     )
-    wholesale_price_mwh: float = Field(55, gt=0, description="Wholesale price for revenue_impact")
+    wholesale_price_mwh: float = Field(_DEFAULT_PPA_SOLAR, gt=0, description="Wholesale price for revenue_impact")
     cfd_price_mwh: float = Field(0, ge=0, description="CfD top-up for revenue_impact")
     roc_value_mwh: float = Field(0, ge=0, description="ROC value for revenue_impact")
     years: int = Field(25, ge=1, le=40, description="Project life for revenue_impact")
@@ -256,7 +283,7 @@ class DueDiligenceRequest(BaseModel):
     has_ppa: bool = True
     has_planning: bool = False
     grid_offer: bool = False
-    ppa_price: float = Field(55.0, gt=0)
+    ppa_price: float = Field(_DEFAULT_PPA_WIND, gt=0)
 
 
 class DispatchRequest(BaseModel):
@@ -298,26 +325,28 @@ class ProjectModelRequest(BaseModel):
     technology: Technology = Technology.solar
 
     # ── Revenue ──
-    ppa_price_mwh: float = Field(55.0, gt=0, description="PPA strike price £/MWh")
+    # Defaults resolve through utils.finance_benchmarks for solar; subprocess
+    # re-resolves per `technology` when the caller picks a different tech.
+    ppa_price_mwh: float = Field(_DEFAULT_PPA_SOLAR, gt=0, description="PPA strike price £/MWh (tech-keyed merchant default)")
     ppa_term_years: int = Field(15, ge=1, le=30, description="PPA contract term")
-    merchant_price_mwh: float = Field(45.0, gt=0, description="Post-PPA merchant price £/MWh")
+    merchant_price_mwh: float = Field(_DEFAULT_PPA_SOLAR - 8, gt=0, description="Post-PPA merchant tail price £/MWh")
     merchant_escalation: float = Field(0.02, ge=0, le=0.10, description="Annual merchant price escalation")
     subsidy_type: SubsidyType = SubsidyType.none
     subsidy_value: float = Field(0.0, ge=0, description="ROC buyout or CfD strike £/MWh")
     capacity_market_rev: float = Field(0.0, ge=0, description="Capacity market revenue £/MW/yr (BESS)")
     ancillary_rev: float = Field(0.0, ge=0, description="Ancillary services revenue £/MW/yr (BESS)")
 
-    # ── Financial structure ──
-    discount_rate: float = Field(0.08, ge=0.01, le=0.25, description="Nominal WACC / discount rate")
-    gearing: float = Field(0.70, ge=0.0, le=0.95, description="Debt-to-total-capital ratio")
-    senior_interest: float = Field(0.055, ge=0.01, le=0.15, description="Senior debt interest rate")
-    debt_term_years: int = Field(18, ge=5, le=30, description="Senior debt tenor")
+    # ── Financial structure (UK 2026 benchmarks — utils.finance_benchmarks) ──
+    discount_rate: float = Field(_DEFAULT_WACC, ge=0.01, le=0.25, description="Nominal WACC / discount rate (solar stabilised default 8.5%)")
+    gearing: float = Field(_DEFAULT_GEARING, ge=0.0, le=0.95, description="Debt-to-total-capital ratio (UK 2026 typical 65%)")
+    senior_interest: float = Field(_DEFAULT_SENIOR_RATE, ge=0.01, le=0.15, description="Senior debt all-in rate (SONIA+margin)")
+    debt_term_years: int = Field(_DEFAULT_DEBT_TERM, ge=5, le=30, description="Senior debt tenor")
     target_dscr: float = Field(1.30, ge=1.0, le=3.0, description="Target DSCR for sculpted repayment")
-    corporation_tax: float = Field(0.25, ge=0, le=0.5, description="Corporation tax rate")
+    corporation_tax: float = Field(_DEFAULT_TAX, ge=0, le=0.5, description="Corporation tax rate")
     project_life_years: int = Field(25, ge=10, le=40, description="Total project operating life")
     construction_months: Optional[int] = Field(None, ge=3, le=60, description="Construction period (months)")
     degradation_rate: float = Field(0.005, ge=0, le=0.03, description="Annual output degradation")
-    cpi_escalation: float = Field(0.025, ge=0, le=0.10, description="CPI escalation rate")
+    cpi_escalation: float = Field(_DEFAULT_CPI, ge=0, le=0.10, description="CPI escalation rate (BoE long-run)")
 
     # ── CAPEX overrides (£/kW or kWp) ──
     capex_modules_per_kw: Optional[float] = Field(None, ge=0, description="Module cost £/kWp override")
@@ -664,7 +693,8 @@ class _MCRequest(_MCBM):
     revenue_gbp_yr: _MCVar
     curtailment_pct: _MCVar | None = None
     timeline_months: _MCVar | None = None
-    discount_rate_pct: float = 8.0
+    # Default WACC resolves to solar-stabilised 8.5% from finance_benchmarks.
+    discount_rate_pct: float = round(_DEFAULT_WACC * 100, 2)
     project_life_yr: int = 20
     n_runs: int = 1000
     correlation_capex_timeline: float = 0.35

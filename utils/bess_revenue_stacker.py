@@ -22,6 +22,12 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from utils.bess_benchmarks import (
+    BESS_REVENUE_GBP_MW_YR as _BENCH_REV,
+    bess_fixed_opex_gbp_mw_yr,
+    bess_capex_per_kwh,
+)
+
 # ---------------------------------------------------------------------------
 # Revenue stream benchmarks (£/MW installed/yr) — UK market 2024-2026
 # ---------------------------------------------------------------------------
@@ -170,7 +176,9 @@ REGIONAL_FACTORS: dict[str, dict[str, float]] = {
     },
 }
 
-# Modo Energy published BESS revenue benchmarks (£/MW installed/yr)
+# Modo Energy published BESS revenue benchmarks (£/MW installed/yr).
+# 2024/2025 are historical outturns; 2026 is the live Mar-2026 index and
+# is sourced from utils/bess_benchmarks.py (single source of truth).
 MODO_BENCHMARKS: dict[str, dict[str, Any]] = {
     "2024": {
         "1h": {"low": 35_000, "mid": 45_000, "high": 55_000},
@@ -183,21 +191,24 @@ MODO_BENCHMARKS: dict[str, dict[str, Any]] = {
         "4h": {"low": 75_000, "mid": 95_000, "high": 115_000},
     },
     "2026": {
-        "1h": {"low": 32_000, "mid": 41_000, "high": 52_000},
-        "2h": {"low": 41_000, "mid": 52_000, "high": 65_000},
-        "4h": {"low": 58_000, "mid": 72_000, "high": 88_000},
+        "1h": _BENCH_REV[1],
+        "2h": _BENCH_REV[2],
+        "4h": _BENCH_REV[4],
     },
 }
 
-# BESS CAPEX benchmarks (£/kWh installed) for IRR calculations
+# BESS CAPEX benchmarks (£/kWh installed) for IRR calculations.
+# Anchored to bess_benchmarks.bess_capex_per_kwh (2026 mid £310/kWh);
+# 1h carries a PCS premium, 4h amortises BoS across more kWh.
+_CAPEX_MID = bess_capex_per_kwh("mid")
 CAPEX_GBP_KWH: dict[str, float] = {
-    "1h": 350,
-    "2h": 280,
-    "4h": 220,
+    "1h": _CAPEX_MID + 80,
+    "2h": _CAPEX_MID,
+    "4h": _CAPEX_MID - 50,
 }
 
 # Fixed O&M (£/MW/yr)
-FIXED_OPEX_GBP_MW_YR = 8_000
+FIXED_OPEX_GBP_MW_YR = bess_fixed_opex_gbp_mw_yr()
 
 # Degradation rate (%/yr capacity loss)
 DEGRADATION_PCT_YR = 2.5

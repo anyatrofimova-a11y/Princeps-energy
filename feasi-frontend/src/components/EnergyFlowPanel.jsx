@@ -120,8 +120,9 @@ export default function EnergyFlowPanel({ placedAssets = [], solarYield, gridCon
     const curtailed = hasBess ? annualMWh * 0.02 : annualMWh * 0.08;
     const exported = annualMWh - curtailed;
 
-    // Use PPA price from CB7 financial defaults
-    const ppaPrice = assumptions?.financial_defaults?.ppa_price_gbp_mwh || 55;
+    // Use PPA price from CB7 financial defaults;
+    // fallback = utils/solar_benchmarks.py merchant mid (£45/MWh 2026)
+    const ppaPrice = assumptions?.financial_defaults?.ppa_price_gbp_mwh || 45;
     const revenue = exported * ppaPrice;
 
     // LCOE from CB7

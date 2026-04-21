@@ -2,15 +2,20 @@ import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useSite } from "../SiteContext";
 import api from "../services/api";
 import LenderCovenantTable from "./LenderCovenantTable";
+import solarBenchmarks from "../data/solar-benchmarks.json";
 
 /* ── UK Benchmark Defaults by Technology ────────────────────────────────── */
+/* Solar sourced from src/data/solar-benchmarks.json (utils/solar_benchmarks.py):
+   Solar Media Q4 2025 + LCCC AR7 Pot 1 (Jan 2026) + Cornwall Insight Q1 2026. */
 const TECH_BENCHMARKS = {
   solar: {
     label: "Solar PV",
     modules_per_kw: 450, bos_per_kw: 120, epc_per_kw: 80,
     dev_costs: 250000, land_per_acre_yr: 1000,
-    om_per_kw_yr: 12, insurance_pct: 0.5, land_lease_yr: 25000, grid_charges_mwh: 6,
-    ppa_price_mwh: 55, capacity_factor: 0.11,
+    om_per_kw_yr: solarBenchmarks.opex_gbp_per_kw_yr.mid,   // £10/kW/yr
+    insurance_pct: 0.5, land_lease_yr: 25000, grid_charges_mwh: 6,
+    ppa_price_mwh: solarBenchmarks.ppa_merchant_gbp_mwh.mid, // £45/MWh
+    capacity_factor: solarBenchmarks.capacity_factor.mid,    // 0.11
   },
   wind: {
     label: "Wind",

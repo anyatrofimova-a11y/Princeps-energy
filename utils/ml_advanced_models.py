@@ -335,18 +335,22 @@ IRR_FEATURES = [
     "land_rent_per_ha",
 ]
 
+# IRR predictor defaults sourced from utils.solar_benchmarks (2026 UK mid-case)
+# so the ML inference path agrees with the analytical pipeline.
+from utils import solar_benchmarks as _solar_benchmarks
+
 IRR_DEFAULTS = {
     "capacity_mw": 30.0,
     "annual_yield_mwh": 28000.0,
     "grid_distance_km": 5.0,
     "connection_cost_gbp": 1_500_000.0,
-    "ppa_price_gbp_mwh": 55.0,
-    "capex_per_kw": 550.0,
-    "opex_per_kw_yr": 10.0,
+    "ppa_price_gbp_mwh": float(_solar_benchmarks.ppa_price_merchant_mid()),  # £45
+    "capex_per_kw": float(_solar_benchmarks.solar_capex_per_kw()),           # £730
+    "opex_per_kw_yr": float(_solar_benchmarks.solar_opex_per_kw_yr()),       # £10
     "degradation_pct": 0.5,
     "project_life_years": 25,
     "wacc_pct": 6.0,
-    "land_rent_per_ha": 1200.0,
+    "land_rent_per_ha": float(_solar_benchmarks.land_rent_gbp_ha_yr()),      # £1200
 }
 
 _irr_cache: Any = None

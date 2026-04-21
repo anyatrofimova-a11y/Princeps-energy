@@ -436,6 +436,36 @@ INTENT_PROMPTS: dict[str, str] = {
         "capacity_mw ratio when sizing the connection — flag if >0.8 utilisation. End with a "
         "GO/CAUTION/NO-GO verdict on the layout as proposed."
     ),
+    "dno_engagement": (
+        "You are a senior UK DNO connections engagement advisor. You have access to the "
+        "``get_dno_engagement_status`` tool — call it first to understand where the project "
+        "is in the DNO engagement lifecycle (pack version, status, latest response sentiment, "
+        "outstanding deadlines, delta vs prior response). Then advise the user on the next "
+        "best move across FIVE themes:\n\n"
+        "1. PACK READINESS — Is the latest pack still current, or has the scope changed "
+        "enough (capacity_mw_delta, POC changed, firm/non-firm split shift) that a revised "
+        "pack should be drafted? If no pack has ever been sent (status='none'), recommend "
+        "the minimum structured content for a first engagement.\n\n"
+        "2. RESPONSE ANALYSIS — If the DNO has responded, dissect the response_summary: "
+        "sentiment (positive/conditional/negative/holding/silent), requested_info "
+        "completeness, proposed_poc vs original ask, and any timeline_revision. Call out "
+        "red flags (e.g. firm-to-non-firm split unfavourable, capacity curtailed, new "
+        "reinforcement caveat).\n\n"
+        "3. DEADLINES — Summarise current_deadlines. For each, state the risk if missed "
+        "and the recommended owner + lead time.\n\n"
+        "4. DELTA INTELLIGENCE — Interpret delta_vs_previous. A negative firm_split_delta_mw "
+        "or positive timeline_days_delta is material — explain consequences in plain English "
+        "(revenue impact, project IRR drag, counterfactual if accepted vs challenged).\n\n"
+        "5. RECOMMENDED NEXT ACTION — A single concrete next step: "
+        "(a) draft revised pack, (b) accept and proceed to formal application, "
+        "(c) reject and request clarification, (d) escalate to Ofgem / use "
+        "EC&R dispute route, or (e) wait (specify trigger). "
+        "Be specific about what goes in the follow-up if drafting.\n\n"
+        "Reference UK norms: G99 application flow, NESO Connections Reform Gate 2 milestone "
+        "discipline, CUSC/DCUSA dispute routes, 90-day DNO response SLA under Standard "
+        "Licence Condition 15. Provide a GO / CAUTION / NO-GO verdict on the current "
+        "engagement state with confidence score."
+    ),
 }
 
 OUTPUT_SCHEMA = """\
@@ -1503,6 +1533,37 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
                 "label": "Verify Grid Headroom",
                 "endpoint": f"/api/grid/nearest-substation?lat={lat}&lon={lon}",
                 "method": "GET",
+                "payload": {},
+            },
+        ]
+
+    if intent == "dno_engagement":
+        # Actions drive the DNO engagement workflow UI panels. Note: no
+        # outbound email relay — `open_send_modal` triggers a client-side
+        # mailto: handoff per council decision.
+        actions = [
+            {
+                "label": "View Engagement History",
+                "endpoint": f"/api/dno-engagement/project/{pid}/history",
+                "method": "GET",
+                "payload": {},
+            },
+            {
+                "label": "Send Pack to DNO (Draft Email)",
+                "action": "open_panel",
+                "panel": "send_engagement_modal",
+                "payload": {"project_id": pid},
+            },
+            {
+                "label": "Ingest DNO Response",
+                "action": "open_panel",
+                "panel": "ingest_response_modal",
+                "payload": {"project_id": pid},
+            },
+            {
+                "label": "Open Intelligence — Engagements",
+                "action": "open_panel",
+                "panel": "intelligence_engagements",
                 "payload": {},
             },
         ]

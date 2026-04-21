@@ -21,21 +21,26 @@ const SECTIONS = [
   { id: "profile", label: "Profile & Notifications" },
 ];
 
+// Soft validation — only flag fields that are present BUT invalid.
+// Blank fields are not errors, so a first-run user never sees a locked
+// Save button. The (optional) asterisk next to required fields is a hint,
+// not a hard block — saved form can be partially filled and is merged
+// with whatever is already in localStorage.
 function validate(form) {
   const errors = {};
-  if (!form.mapboxToken || !form.mapboxToken.trim()) {
-    errors.mapboxToken = "Mapbox token is required";
+  if (form.mapboxToken && form.mapboxToken.trim() && !/^(pk|sk)\./.test(form.mapboxToken.trim())) {
+    errors.mapboxToken = "Mapbox tokens start with 'pk.' or 'sk.'";
   }
   if (form.backendUrl && form.backendUrl.trim()) {
     try { new URL(form.backendUrl); } catch {
       errors.backendUrl = "Must be a valid URL";
     }
   }
-  if (!form.displayName || form.displayName.trim().length < 2) {
+  if (form.displayName && form.displayName.trim() && form.displayName.trim().length < 2) {
     errors.displayName = "Min 2 characters";
   }
-  if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-    errors.email = "Valid email required";
+  if (form.email && form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    errors.email = "Must be a valid email";
   }
   return errors;
 }
@@ -55,7 +60,11 @@ export default function SettingsPage({ onExit }) {
   }), [errors]);
 
   const handleSave = useCallback(() => {
-    if (hasErrors) return;
+    if (hasErrors) {
+      setToast("Fix highlighted fields before saving");
+      setTimeout(() => setToast(null), 2500);
+      return;
+    }
     saveSettings(settingsForm);
     setToast("Settings saved");
     setTimeout(() => setToast(null), 2000);
@@ -86,7 +95,11 @@ export default function SettingsPage({ onExit }) {
         <span className="settings-title">Settings</span>
         <div className="settings-actions">
           <button className="settings-reset-btn" onClick={handleReset}>Reset</button>
-          <button className="settings-save-btn" onClick={handleSave} disabled={hasErrors}>Save</button>
+          <button
+            className="settings-save-btn"
+            onClick={handleSave}
+            title={hasErrors ? "Fix validation errors above" : "Save settings"}
+          >Save</button>
         </div>
       </div>
 
@@ -159,7 +172,8 @@ export default function SettingsPage({ onExit }) {
                 <span className="settings-label">Theme</span>
                 <select className="settings-select" value={settingsForm.theme} onChange={e => updateSettingsForm({ theme: e.target.value })}>
                   <option value="dark">Dark</option>
-                  <option value="light" disabled>Light (Coming Soon)</option>
+                  <option value="light">Light</option>
+                  <option value="system">Match system</option>
                 </select>
               </label>
             </>

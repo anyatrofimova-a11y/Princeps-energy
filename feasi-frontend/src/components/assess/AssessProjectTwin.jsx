@@ -8,6 +8,19 @@ import AssessTwinLegend from "./AssessTwinLegend";
 import AssessTwinInspector from "./AssessTwinInspector";
 import useProjectTwinLayers from "../../hooks/useProjectTwinLayers";
 import { fetchProjectTwinContext, isMockMode } from "../../api/projectTwin";
+import TwinLazy from "../twin3d/TwinLazy";
+
+// localStorage key persisting the user's 2D↔3D preference per session.
+const VIEW_MODE_STORAGE_KEY = "princeps_assess_twin_view_mode";
+function readStoredViewMode() {
+  try {
+    const v = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+    return v === "3d" ? "3d" : "2d";
+  } catch { return "2d"; }
+}
+function writeStoredViewMode(v) {
+  try { localStorage.setItem(VIEW_MODE_STORAGE_KEY, v); } catch { /* ignore */ }
+}
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
@@ -129,6 +142,12 @@ export default function AssessProjectTwin({
   const [loading, setLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [error, setError] = useState(null);
+  // 2D · 3D toggle — additive over the existing deck.gl map.
+  const [viewMode, setViewMode] = useState(() => readStoredViewMode());
+  const handleSetViewMode = useCallback((v) => {
+    setViewMode(v);
+    writeStoredViewMode(v);
+  }, []);
   // Inspector — which element is click-selected. null = no panel.
   //   'polygon'     — project site outline
   //   'buildable'   — buildable mask
@@ -459,9 +478,12 @@ export default function AssessProjectTwin({
 
   /* ── Render ──────────────────────────────────────────────────────────── */
   const empty = !hasToken || (!loading && !ctx);
+  const is3D = viewMode === "3d";
 
-  return (
-    <div className="apt-root">
+  // Build the existing 2D map markup as a standalone node so it can also
+  // serve as the graceful-fallback if the 3D twin fails to mount.
+  const render2D = (
+    <>
       <div ref={containerRef} className="apt-map" />
 
       {mapReady && !empty && (
@@ -509,6 +531,58 @@ export default function AssessProjectTwin({
       )}
 
       {loading && <LoadingSkeleton />}
+    </>
+  );
+
+  // Derive polygon WKT from the twin-context if the caller didn't pass one.
+  // TwinRoot accepts either — when missing it falls back to a dev stub.
+  const derivedWkt = polygon_wkt || ctx?.polygon_wkt || null;
+  const derivedTech = tech || ctx?.tech || null;
+  const derivedCapacity = capacity_mw || ctx?.capacity_mw || null;
+
+  return (
+    <div className="apt-root">
+      {/* 2D map stays mounted in the DOM so switching back is instant + no
+          Mapbox re-init. Just hide it with display:none when 3D is active. */}
+      <div className="apt-mode-2d" style={{ display: is3D ? "none" : "block" }}>
+        {render2D}
+      </div>
+
+      {/* 3D twin — lazy + error-bounded. Falls back to the 2D node on failure. */}
+      {is3D && (
+        <div className="apt-mode-3d">
+          <TwinLazy
+            projectId={projectId}
+            polygon_wkt={derivedWkt}
+            tech={derivedTech}
+            capacity_mw={derivedCapacity}
+            mode="oblique"
+            fallback2D={render2D}
+            onError={(err) => { /* eslint-disable-next-line no-console */
+              console.warn("[AssessProjectTwin] 3D twin mount failed:", err?.message);
+            }}
+          />
+        </div>
+      )}
+
+      {/* 2D · 3D mode toggle — sits above both layers. */}
+      <div className="apt-viewmode" role="tablist" aria-label="View mode">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={!is3D}
+          className={"apt-vm-pill" + (!is3D ? " apt-vm-pill-active" : "")}
+          onClick={() => handleSetViewMode("2d")}
+        >2D</button>
+        <span className="apt-vm-sep">·</span>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={is3D}
+          className={"apt-vm-pill" + (is3D ? " apt-vm-pill-active" : "")}
+          onClick={() => handleSetViewMode("3d")}
+        >3D</button>
+      </div>
 
       <style>{`
         .apt-root {
@@ -522,10 +596,50 @@ export default function AssessProjectTwin({
           box-shadow: 0 4px 14px rgba(20, 18, 10, 0.12);
           font-family: "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
         }
+        .apt-mode-2d, .apt-mode-3d { position: absolute; inset: 0; }
         .apt-map {
           position: absolute;
           inset: 0;
         }
+
+        /* ── 2D · 3D view-mode toggle pill ──────────────────────────── */
+        .apt-viewmode {
+          position: absolute;
+          top: 12px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 20;
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          background: rgba(15, 19, 24, 0.82);
+          border: 1px solid rgba(245, 183, 49, 0.45);
+          padding: 3px 5px;
+          border-radius: 999px;
+          backdrop-filter: blur(10px);
+          box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+          font-family: "DM Sans", -apple-system, sans-serif;
+        }
+        .apt-vm-pill {
+          border: none;
+          background: transparent;
+          color: rgba(251, 248, 242, 0.62);
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          padding: 5px 14px;
+          border-radius: 999px;
+          cursor: pointer;
+          transition: all 140ms;
+        }
+        .apt-vm-pill:hover { color: #FBF8F2; }
+        .apt-vm-pill-active {
+          background: #F5B731;
+          color: #0F1318;
+          box-shadow: 0 0 10px rgba(245, 183, 49, 0.45);
+        }
+        .apt-vm-sep { color: rgba(251, 248, 242, 0.3); font-size: 11px; padding: 0 2px; }
         .apt-empty {
           position: absolute;
           inset: 0;

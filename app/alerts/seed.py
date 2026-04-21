@@ -1,5 +1,5 @@
 """
-app/alerts/seed.py — Princeps Alerts council catalogue (82 UK SKUs).
+app/alerts/seed.py — Princeps Alerts council catalogue (84 UK SKUs).
 
 Shape of each row is the ``alert_definitions`` table declared in
 ``app/migrations/0001_intelligence_schema.sql``:
@@ -14,9 +14,13 @@ Shape of each row is the ``alert_definitions`` table declared in
     est_docs_per_digest  INT
     icp_tags             TEXT[]
 
-Cluster breakdown follows the council catalogue cited in the Task #6 spec:
+Cluster breakdown follows the council catalogue cited in the Task #6 spec,
+plus the 2 DNO-engagement SKUs added in Task #20 (scoped to the Grid
+connection & queue cluster, but project-driven via the
+``project_dno_engagements`` / ``dno_engagement_responses`` tables rather
+than the generic ``documents`` feed):
 
-  Grid connection & queue .................. 8
+  Grid connection & queue .................. 8  (+2 DNO engagement = 10)
   Price controls & codes ................... 6
   Planning & consents ...................... 7
   Data centres & large loads ............... 7
@@ -31,11 +35,7 @@ Cluster breakdown follows the council catalogue cited in the Task #6 spec:
   Company intelligence ..................... 7
   Innovation & NIA/SIF ..................... 5
   ------------------------------------------------
-  TOTAL .................................... 82
-
-(The spec also says "84"; the detailed per-cluster breakdown sums to 82, which
-we take as authoritative. Two more SKUs can be slotted in any cluster later
-without schema change.)
+  TOTAL .................................... 84
 
 Seed runs on startup behind ``PRINCEPS_SEED_ALERTS`` (default on in dev).
 Idempotent via ``INSERT … ON CONFLICT (slug) DO NOTHING``.
@@ -992,10 +992,47 @@ _CATALOGUE: list[dict[str, Any]] = [
         "est_docs_per_digest": 5,
         "icp_tags": ["grid_consultant"],
     },
+
+    # ── DNO engagement workflow (Task #20) ─────────────────────────────────
+    # These SKUs are project-scoped, not library-scoped — the digest_worker
+    # joins against `project_dno_engagements` / `dno_engagement_responses`
+    # rather than the generic `documents` table. `source_filter.internal`
+    # flags them so the worker routes them to the right dispatcher.
+    {
+        "slug": "dno-engagement-response-received",
+        "title": "DNO engagement response received",
+        "description": "The DNO has responded to a project's engagement pack — in-app + email push within minutes of ingestion so the project team can react before the window closes.",
+        "cluster": "Grid connection & queue",
+        "source_filter": {
+            "internal": "dno_engagement_response",
+            "severity": "high",
+            "channels": ["in_app", "email"],
+        },
+        "llm_prompt": "Summarise the DNO's response: sentiment, proposed POC vs original ask, firm/non-firm split delta (MW), timeline shift (days), and the single most material item requiring a decision in the next 14 days.",
+        "cadence": "realtime",
+        "est_docs_per_digest": 1,
+        "icp_tags": ["solar_dev", "bess_dev", "dc_dev", "grid_consultant"],
+    },
+    {
+        "slug": "dno-engagement-deadline-approaching",
+        "title": "DNO engagement deadline approaching",
+        "description": "Outstanding response deadlines on active DNO engagements — weekly Monday 08:00 digest so the team can plan the week's regulatory workload.",
+        "cluster": "Grid connection & queue",
+        "source_filter": {
+            "internal": "dno_engagement_deadline",
+            "severity": "med",
+            "channels": ["in_app"],
+            "lookahead_days": 14,
+        },
+        "llm_prompt": "List engagement deadlines falling inside the next 14 days. For each, state project, DNO, deadline item, days remaining, owner, and the consequence if missed.",
+        "cadence": "weekly_mon",
+        "est_docs_per_digest": 8,
+        "icp_tags": ["solar_dev", "bess_dev", "dc_dev", "grid_consultant"],
+    },
 ]
 
 
-_EXPECTED_COUNT = 82
+_EXPECTED_COUNT = 84
 
 
 # ---------------------------------------------------------------------------
@@ -1006,6 +1043,9 @@ async def seed_alert_definitions(pool: asyncpg.Pool) -> int:
     """Idempotently seed the 84 UK alert SKUs.
 
     Returns the number of rows inserted this run (existing rows are skipped).
+    Count includes the 2 DNO-engagement SKUs added in Task #20 —
+    `dno-engagement-response-received` and
+    `dno-engagement-deadline-approaching`.
     """
     assert len(_CATALOGUE) == _EXPECTED_COUNT, (
         f"_CATALOGUE has {len(_CATALOGUE)} rows, expected {_EXPECTED_COUNT}"

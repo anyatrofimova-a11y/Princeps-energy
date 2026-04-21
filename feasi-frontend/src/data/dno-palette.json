@@ -1,0 +1,44 @@
+{
+  "ukpn": {
+    "accent": "#2E8B8B",
+    "fill": "#2E8B8B0F",
+    "hatch": "horizontal-3",
+    "label": "UK Power Networks"
+  },
+  "ssen": {
+    "accent": "#D97706",
+    "fill": "#D977060F",
+    "hatch": "diagonal-45",
+    "label": "Scottish & Southern"
+  },
+  "spen": {
+    "accent": "#2F6B3A",
+    "fill": "#2F6B3A0F",
+    "hatch": "cross",
+    "label": "SP Energy Networks"
+  },
+  "nged": {
+    "accent": "#6B3FA0",
+    "fill": "#6B3FA00F",
+    "hatch": "dots",
+    "label": "National Grid ED"
+  },
+  "npg": {
+    "accent": "#A0703B",
+    "fill": "#A0703B0F",
+    "hatch": "diagonal-135",
+    "label": "Northern Powergrid"
+  },
+  "enwl": {
+    "accent": "#B23A2E",
+    "fill": "#B23A2E0F",
+    "hatch": "vertical-3",
+    "label": "Electricity North West"
+  },
+  "nie": {
+    "accent": "#5B6670",
+    "fill": "#5B66700F",
+    "hatch": "dense",
+    "label": "NIE Networks"
+  }
+}

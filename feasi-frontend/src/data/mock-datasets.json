@@ -1,6 +1,30 @@
 {
   "datasets": [
     {
+      "slug": "uk-n1-contingency-map",
+      "title": "UK N-1 Contingency Map",
+      "publisher": "Princeps",
+      "category": "GRID",
+      "badge": "MANUFACTURED",
+      "cadence": "Quarterly",
+      "tier": "Enterprise",
+      "price_gbp_per_month": 15000,
+      "description": "Pre-computed N-1 outage impact for every primary substation in GB. For each primary we enumerate every credible upstream line / transformer outage, flag downstream feeders that would exceed 100% thermal rating, estimate BSC P2/7 restoration time (15 min urban / 60 min rural), and return a 0-100 reliability score.",
+      "returns": "Substation, reliability score (0-100), worst-case overload %, affected MW, per-outage events, restoration path",
+      "rows": 7120,
+      "delta_7d": { "added": 0, "removed": 0 },
+      "refreshed": "2026-04-19T04:00:00Z",
+      "primary_source_url": "https://www.ofgem.gov.uk/publications/engineering-recommendation-p2-security-supply",
+      "show_on_map": true,
+      "map_layer_slug": "n1_reliability_heat",
+      "change_log_available": true,
+      "endpoints": {
+        "record": "/api/n1/substation/{id}",
+        "map": "/api/n1/map",
+        "worst_cases": "/api/n1/worst-cases"
+      }
+    },
+    {
       "slug": "neso-tec-register",
       "title": "NESO TEC Register",
       "publisher": "NESO",

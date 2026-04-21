@@ -25,16 +25,28 @@ Returns a dict shaped for the GET /api/consultees endpoint:
     "draft_email_slugs":  [ "lpa_ne_sssi", "lpa_ea_flood", ... ]
   }
 
-TODO layers that may not yet be present in PostGIS — this resolver
-gracefully skips them and logs a one-line warning:
-  - ``magic_constraints`` (SSSI, AONB, flood, habitat)
-  - ``mod_safeguarding``
-  - ``caa_airspace``
-  - ``listed_buildings``
-  - ``marine_plan_areas``
-  - ``lpa_boundaries``
-  - ``parish_councils``
-  - ``dno_licence_areas``  (we have ``grid_dno_boundaries`` which we use)
+Layer tables (as of migration 0015):
+  - ``magic_designations``          (0014) — SSSI, AONB, SAC, SPA, Ramsar,
+                                             Ancient Woodland (all 6 classes
+                                             in one table with ``layer`` col).
+  - ``ea_flood_zone_2`` / ``_3``    (0012) — EA Flood Map.
+  - ``mod_safeguarding_zones``      (0013) — MoD DIO zones. Exposed as view
+                                             ``mod_safeguarding`` by 0015.
+  - ``caa_aerodrome_safeguarding``  (0013) — raw CAA zones.
+  - ``caa_airspace_buffers``        (0015) — 6/15 km safeguarding rings.
+                                             Exposed as view ``caa_airspace``.
+  - ``nhle_heritage_entries``       (0014) — full NHLE universe.
+  - ``listed_buildings_he``         (0015) — narrow listed-building subset.
+                                             Exposed as view ``listed_buildings``.
+  - ``crown_estate_land``           (0015) — Crown Estate E+W holdings.
+  - ``ofcom_telecom_links``         (0015) — fixed telecom LineStrings.
+  - ``marine_plan_areas``           (0015) — MMO adopted plans.
+
+Still TODO (these still fail open with a one-line warning):
+  - ``lpa_boundaries``    (host LPA via authorities.geometry works today;
+                           formal boundary layer pending OS BoundaryLine load).
+  - ``parish_councils``   (OS BoundaryLine — not yet ingested).
+  - ``dno_licence_areas`` — we use ``grid_dno_boundaries`` as a proxy.
 """
 
 from __future__ import annotations
@@ -248,22 +260,30 @@ async def _match_rules(
 
 # ── Layer predicate evaluation ─────────────────────────────────────────
 
-_LAYER_TABLE_MAP: dict[str, tuple[str, str]] = {
-    # layer name → (table, geometry column)
-    "SSSI":                ("magic_constraints", "geom"),
-    "AONB":                ("magic_constraints", "geom"),
-    "flood2":              ("magic_constraints", "geom"),
-    "flood3":              ("magic_constraints", "geom"),
-    "habitat":             ("magic_constraints", "geom"),
-    "SPA_SAC":             ("magic_constraints", "geom"),
-    "ancient_woodland":    ("magic_constraints", "geom"),
-    "listed_building":     ("listed_buildings",  "geom"),
-    "mod_safeguard":       ("mod_safeguarding",  "geom"),
-    "airspace_buffer":     ("caa_airspace",      "geom"),
-    "marine_plan_area":    ("marine_plan_areas", "geom"),
-    "crown_land":          ("crown_estate_land", "geom"),
-    "crown_land_scotland": ("crown_estate_scotland_land", "geom"),
-    "telecom_link":        ("ofcom_telecom_links", "geom"),
+# Layer name → (table, geometry column, optional extra WHERE filter).
+# The extra WHERE filter is appended with AND and may reference the table's
+# columns directly. Used to multiplex one shared table (magic_designations)
+# across several logical layers without duplicating storage.
+_LAYER_TABLE_MAP: dict[str, tuple[str, str, str | None]] = {
+    # Natural England MAGIC — all six classes share magic_designations.
+    "SSSI":                ("magic_designations", "geom", "layer = 'sssi'"),
+    "AONB":                ("magic_designations", "geom", "layer = 'aonb'"),
+    "SPA_SAC":             ("magic_designations", "geom", "layer IN ('spa','sac','ramsar')"),
+    "habitat":             ("magic_designations", "geom", "layer IN ('sssi','sac','spa','ramsar','ancient_woodland')"),
+    "ancient_woodland":    ("magic_designations", "geom", "layer = 'ancient_woodland'"),
+
+    # EA flood zones — 0012_ea_data_layers ships ea_flood_zone_2 / _3.
+    "flood2":              ("ea_flood_zone_2",   "geom", None),
+    "flood3":              ("ea_flood_zone_3",   "geom", None),
+
+    # 0015 constraint layers + views.
+    "listed_building":     ("listed_buildings_he",  "geom", None),
+    "mod_safeguard":       ("mod_safeguarding_zones", "geom", None),
+    "airspace_buffer":     ("caa_airspace_buffers", "geom", None),
+    "marine_plan_area":    ("marine_plan_areas",   "geom", None),
+    "crown_land":          ("crown_estate_land",   "geom", None),
+    "crown_land_scotland": ("crown_estate_scotland_land", "geom", None),
+    "telecom_link":        ("ofcom_telecom_links", "geom", None),
 }
 
 
@@ -284,18 +304,19 @@ async def _geometry_predicate(
         log.debug("consultee_resolver: unknown layer '%s' — keeping rule", layer)
         return True
 
-    table, geom_col = tbl_info
+    table, geom_col, extra_where = tbl_info
     if not await _table_exists(conn, table):
         log.info("consultee_resolver: layer table '%s' missing — rule fails open", table)
         return True
 
     geog_expr = _wkt_to_geog_expr(wkt)
+    where_extra = f" AND ({extra_where})" if extra_where else ""
 
     # Build the spatial test.
     if pred == "intersects":
         sql = (
             f"SELECT EXISTS (SELECT 1 FROM {table} "
-            f"WHERE ST_Intersects({geom_col}::geography, {geog_expr}))"
+            f"WHERE ST_Intersects({geom_col}::geography, {geog_expr}){where_extra})"
         )
         return bool(await conn.fetchval(sql, wkt))
 
@@ -307,7 +328,7 @@ async def _geometry_predicate(
         )
         sql = (
             f"SELECT EXISTS (SELECT 1 FROM {table} "
-            f"WHERE ST_DWithin({geom_col}::geography, {geog_expr}, {buf_m}))"
+            f"WHERE ST_DWithin({geom_col}::geography, {geog_expr}, {buf_m}){where_extra})"
         )
         return bool(await conn.fetchval(sql, wkt))
 
@@ -315,7 +336,7 @@ async def _geometry_predicate(
         # Touches or within 10m — the "adjacent" test used for Crown land.
         sql = (
             f"SELECT EXISTS (SELECT 1 FROM {table} "
-            f"WHERE ST_DWithin({geom_col}::geography, {geog_expr}, 10))"
+            f"WHERE ST_DWithin({geom_col}::geography, {geog_expr}, 10){where_extra})"
         )
         return bool(await conn.fetchval(sql, wkt))
 

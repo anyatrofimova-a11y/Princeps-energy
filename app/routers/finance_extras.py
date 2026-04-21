@@ -31,7 +31,61 @@ from utils.market_feeds import (
 from utils.monte_carlo_finance import run_mc, default_evaluator
 from utils.dc_finance import dc_financial_model, TIER_CONTRACTS
 from utils.dcf_evaluator import evaluate_from_dict as dcf_evaluate_from_dict
+from utils.finance_benchmarks import (
+    cpi_long_run,
+    debt_to_equity,
+    ppa_price_merchant,
+    senior_debt_all_in_rate,
+    wacc,
+)
 from utils.lender_pack import render_lender_pack_html
+
+# ── Soft-imported sibling benchmark modules ───────────────────────────────
+# These provide per-tech CapEx estimates used when the caller has not
+# supplied a concrete capex_gbp_m value. Imports are soft so finance_extras
+# still loads if a sibling module is temporarily unavailable.
+try:
+    from utils.bess_benchmarks import bess_capex_per_kwh as _bess_capex_per_kwh  # type: ignore
+except Exception:  # pragma: no cover
+    _bess_capex_per_kwh = None  # type: ignore
+
+try:
+    from utils.dc_benchmarks import dc_capex_per_mw as _dc_capex_per_mw  # type: ignore
+except Exception:  # pragma: no cover
+    _dc_capex_per_mw = None  # type: ignore
+
+try:
+    from utils.solar_benchmarks import solar_capex_per_mw as _solar_capex_per_mw  # type: ignore
+except Exception:  # pragma: no cover
+    _solar_capex_per_mw = None  # type: ignore
+
+
+def _estimate_capex_gbp_m(workload: str, capacity_mw: float,
+                          duration_h: float = 2.0) -> float:
+    """Tech-aware CapEx estimate in £m — soft-imports sibling benchmarks.
+
+    BESS CapEx is energy-scaled (£/kWh × MW × h), DC CapEx is power-scaled
+    (£/MW all-in, typically £5-8m/MW for a shell+MEP hyperscale unit), and
+    solar uses Solar Media's 2026 £/MW. Falls back to conservative UK 2026
+    midpoints if a sibling import failed so the lender-pack path never 500s.
+    """
+    wl = (workload or "").lower()
+    cap = max(0.0, float(capacity_mw or 0.0))
+    if wl == "bess":
+        if _bess_capex_per_kwh is not None:
+            # £/kWh × MW × h → £m
+            return _bess_capex_per_kwh("mid") * cap * max(0.5, duration_h) / 1_000
+        return cap * 0.62  # fallback £620k/MW for 2h
+    if wl == "dc":
+        if _dc_capex_per_mw is not None:
+            return _dc_capex_per_mw(tier="hyperscale") * cap / 1_000_000
+        return cap * 6.5   # fallback £6.5m/MW hyperscale shell+MEP
+    if wl == "solar":
+        if _solar_capex_per_mw is not None:
+            return _solar_capex_per_mw("mid") * cap / 1_000_000
+        return cap * 0.73   # fallback £730k/MW Solar Media Q4 2025
+    # Generic renewables fallback
+    return cap * 0.8
 
 log = logging.getLogger("princeps.finance_extras")
 
@@ -181,10 +235,11 @@ class DCFinanceRequest(BaseModel):
     tier: str = Field("hyperscale", description="hyperscale | enterprise | colocation")
     contract_years: int | None = None
     grid_connection_km: float = 3.0
-    discount_rate_pct: float = 8.5
-    ppa_gbp_mwh: float = 75.0
-    equity_pct: float = 0.40
-    debt_rate_pct: float = 6.5
+    # Defaults resolve via utils.finance_benchmarks for DC-tier 2026.
+    discount_rate_pct: float = Field(default_factory=lambda: round(wacc("dc", "stabilised") * 100, 2))
+    ppa_gbp_mwh: float = Field(default_factory=lambda: ppa_price_merchant("dc"))
+    equity_pct: float = Field(default_factory=lambda: debt_to_equity("dc")[1])
+    debt_rate_pct: float = Field(default_factory=lambda: round(senior_debt_all_in_rate("dc") * 100, 2))
 
 
 @router.post("/api/finance/dc")
@@ -225,30 +280,42 @@ async def lender_pack(body: LenderPackRequest, pool: asyncpg.Pool = Depends(get_
     cap = float(prj["capacity_mw"] or 0)
 
     # Build base-case inputs
+    duration_h = float(meta.get("duration_h", 2.0))
+    tech_wacc_pct = round(wacc(workload, "stabilised") * 100, 2)
+
     if workload == "dc":
         finance = dc_financial_model(
             it_load_mw=cap, pue_target=meta.get("pue_target", 1.2),
             tier=meta.get("dc_tier", "hyperscale"),
         )
+        fallback_capex_m = _estimate_capex_gbp_m("dc", cap)
     else:
-        stack = co_optimise_bess(cap, meta.get("duration_h", 2.0))
+        stack = co_optimise_bess(cap, duration_h)
         annual_rev_m = stack.annual_revenue_gbp / 1_000_000
+        # CapEx resolves via sibling-tech benchmark modules (bess/solar/dc);
+        # no more `0.66 if bess else 0.9` stub.
+        capex_gbp_m = _estimate_capex_gbp_m(workload, cap, duration_h)
+        fallback_capex_m = capex_gbp_m
         finance = default_evaluator({
-            "capex_gbp_m": cap * (0.66 if workload == "bess" else 0.9),
+            "capex_gbp_m": capex_gbp_m,
             "opex_gbp_m_yr": annual_rev_m * 0.10,
             "revenue_gbp_m_yr": annual_rev_m,
             "curtail_pct": meta.get("curtail_pct", 2.0),
             "timeline_months": 24,
-            "discount_rate_pct": 8.0,
+            "discount_rate_pct": tech_wacc_pct,
             "life_years": 15,
+            "technology": workload,
         })
     mc = run_mc(
         {
-            "capex_gbp_m": finance.get("capex_gbp_m", cap * 0.66),
-            "opex_gbp_m_yr": (finance.get("opex_gbp_m_yr") or finance.get("capex_gbp_m", 30) * 0.04),
+            "capex_gbp_m": finance.get("capex_gbp_m", fallback_capex_m),
+            "opex_gbp_m_yr": (finance.get("opex_gbp_m_yr") or finance.get("capex_gbp_m", fallback_capex_m) * 0.04),
             "revenue_gbp_m_yr": finance.get("annual_revenue_steady_state_gbp_m", finance.get("revenue_gbp_m_yr", cap * 1.2)),
             "curtail_pct": meta.get("curtail_pct", 2.0),
-            "timeline_months": 24, "discount_rate_pct": 8.0, "life_years": 15,
+            "timeline_months": 24,
+            "discount_rate_pct": tech_wacc_pct,
+            "life_years": 15,
+            "technology": workload,
         },
         default_evaluator, n_samples=800,
     )
@@ -293,7 +360,10 @@ async def lender_pack(body: LenderPackRequest, pool: asyncpg.Pool = Depends(get_
         "ppa": {
             "strategy": "Base-case 10y fixed PPA + 5y merchant tail",
             "counterparty": "Investment-grade offtaker under negotiation",
-            "price_summary": f"£{meta.get('ppa_gbp_mwh', 55)}/MWh, CPI-linked, annual escalator 2.5%",
+            "price_summary": (
+                f"£{meta.get('ppa_gbp_mwh', round(ppa_price_merchant(workload), 1))}/MWh, "
+                f"CPI-linked, annual escalator {round(cpi_long_run() * 100, 1)}%"
+            ),
         },
         "environmental_summary": "EIA screening: below threshold. Ecology survey commissioned for May 2026.",
         "executive_summary": f"{cap:.1f} MW {workload.upper()} project at {prj['lat']}°,{prj['lon']}° — IRR P50 {finance.get('irr_pct','—')}%, DSCR P50 {mc.dscr.get('p50','—')}×. All grid + planning covenants modelled under live-market conditions.",
@@ -333,6 +403,10 @@ class NegotiateRequest(BaseModel):
     capex_gbp_m: float
     opex_gbp_m_yr: float
     base_revenue_gbp_m_yr: float
+    # Pivot price used to scale revenue with the PPA floor sweep — tracks
+    # the current UK 2026 merchant midpoint so the grid auto-centres.
+    base_ppa_pivot_gbp_mwh: float = Field(default_factory=lambda: ppa_price_merchant("solar"))
+    technology: str = "solar"
     ppa_floor_range: list[float] = [40, 50, 55, 60, 65, 70, 75, 80]
     tenor_range_years: list[int] = [5, 7, 10, 12, 15]
     escalation_pct_range: list[float] = [0, 1.5, 2.5, 3.5]
@@ -341,25 +415,29 @@ class NegotiateRequest(BaseModel):
 @router.post("/api/finance/negotiate")
 async def finance_negotiate(body: NegotiateRequest):
     results = []
+    pivot = max(1.0, float(body.base_ppa_pivot_gbp_mwh))
+    tech_wacc_pct = round(wacc(body.technology, "stabilised") * 100, 2)
     for floor in body.ppa_floor_range:
         for tenor in body.tenor_range_years:
             for esc in body.escalation_pct_range:
                 # Simple modelled revenue: floor for full tenor, escalated
                 yrs = tenor
-                rev = body.base_revenue_gbp_m_yr * (floor / 55)  # pivoted on £55
+                rev = body.base_revenue_gbp_m_yr * (floor / pivot)
                 sc = {
                     "capex_gbp_m": body.capex_gbp_m,
                     "opex_gbp_m_yr": body.opex_gbp_m_yr,
                     "revenue_gbp_m_yr": rev * (1 + esc / 100) ** (yrs / 2),
                     "curtail_pct": 2.0, "timeline_months": 24,
-                    "discount_rate_pct": 8.0, "life_years": max(yrs, 15),
+                    "discount_rate_pct": tech_wacc_pct,
+                    "life_years": max(yrs, 15),
+                    "technology": body.technology,
                 }
                 out = default_evaluator(sc)
                 results.append({
                     "ppa_floor_gbp_mwh": floor, "tenor_years": tenor,
                     "escalation_pct": esc, **out,
                 })
-    return {"surface": results}
+    return {"surface": results, "pivot_gbp_mwh": pivot}
 
 
 # ═══════════════════════════════════════════════════════════════════════════

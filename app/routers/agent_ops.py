@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from app.deps import get_claude, get_pool
 from app.helpers import CLAUDE_MODEL
+from utils.finance_benchmarks import ppa_price_merchant as _bench_ppa
 
 log = logging.getLogger("princeps.agent_ops")
 
@@ -215,7 +216,7 @@ async def _fetch_full_doc(pool: asyncpg.Pool, project_id: str) -> dict | None:
             solar_mw=float(design.get("solar_mw", 0)),
             bess_mw=float(design.get("bess_mw", 0)),
             bess_hours=float(design.get("bess_hours", 2.0)),
-            ppa_price_gbp_mwh=float(design.get("ppa_price_gbp_mwh", 68.0)),
+            ppa_price_gbp_mwh=float(design.get("ppa_price_gbp_mwh", _bench_ppa("solar"))),
             ppa_share_pct=float(design.get("ppa_share_pct", 50.0)),
             workload_mw=float(design.get("workload_mw", 0)),
             site_area_ha=float(design.get("site_area_ha", 120.0)),

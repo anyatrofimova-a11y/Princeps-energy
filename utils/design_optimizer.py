@@ -18,17 +18,32 @@ import logging
 import math
 from typing import Any
 
+from utils.bess_benchmarks import (
+    bess_capex_per_kwh,
+    bess_revenue_mid,
+)
+from utils.finance_benchmarks import (
+    ppa_price_merchant,
+    wacc,
+)
+
 log = logging.getLogger("princeps.design.capacity_mix")
 
 # UK 2026 benchmarks
 SOLAR_CAPEX_GBP_PER_MW = 700_000
-BESS_CAPEX_GBP_PER_MWH = 330_000
+# BESS CapEx £/MWh installed — derived from bess_benchmarks (£/kWh × 1000)
+BESS_CAPEX_GBP_PER_MWH = bess_capex_per_kwh("mid") * 1_000
 SOLAR_OPEX_PCT_CAPEX = 0.015
 BESS_OPEX_PCT_CAPEX = 0.020
 SOLAR_CF_PCT = 11.0           # UK central-England capacity factor
-MERCHANT_PRICE_GBP_MWH = 72   # expected wholesale average
-BESS_ARBITRAGE_GBP_MW_YR = 75_000
-DISCOUNT_RATE = 0.085
+# Expected wholesale merchant proxy — solar "high" band from finance_benchmarks
+# (Cornwall Insight Q1 2026, £55/MWh solar high), used when no PPA share.
+MERCHANT_PRICE_GBP_MWH = ppa_price_merchant("solar", "high")
+# Blended BESS revenue £/MW/yr — 2h default, overridden per-solve via bess_hours
+BESS_ARBITRAGE_GBP_MW_YR = bess_revenue_mid(2)
+# Discount rate — solar stabilised WACC (8.5%). Tech-specific override flows
+# in through future per-project context if caller rewires.
+DISCOUNT_RATE = wacc("solar", "stabilised")
 LIFE_YEARS = 25
 LAND_HA_PER_SOLAR_MW = 1.8    # ground-mount UK typical
 LAND_HA_PER_BESS_MW = 0.15    # pad + fire breaks
@@ -55,7 +70,8 @@ def _kpis(solar_mw: float, bess_mw: float, bess_hours: float,
     solar_generation_mwh = solar_mw * 8760 * (SOLAR_CF_PCT / 100.0)
     blended_price = ppa_share * ppa_price + (1 - ppa_share) * MERCHANT_PRICE_GBP_MWH
     solar_revenue = solar_generation_mwh * blended_price
-    bess_revenue = bess_mw * BESS_ARBITRAGE_GBP_MW_YR
+    # Duration-aware blended BESS revenue (Modo Energy GB BESS index, Mar 2026)
+    bess_revenue = bess_mw * bess_revenue_mid(bess_hours)
 
     solar_opex = solar_capex * SOLAR_OPEX_PCT_CAPEX
     bess_opex = bess_capex * BESS_OPEX_PCT_CAPEX
@@ -141,7 +157,7 @@ def _analytic_best(bounds: dict[str, tuple[float, float]], ppa_price: float,
 def optimise_capacity_mix(
     objective: str = "max_npv",
     bounds: dict[str, tuple[float, float]] | None = None,
-    ppa_price_gbp_mwh: float = 68.0,
+    ppa_price_gbp_mwh: float | None = None,
     site_area_ha: float = 120.0,
     grid_headroom_mw: float = 50.0,
     initial: dict[str, float] | None = None,
@@ -151,7 +167,12 @@ def optimise_capacity_mix(
     objective ∈ {max_npv, min_lcoe, max_utilisation}.
     Constraints: land area (ha), grid headroom (MW).
     Returns best_params + kpis + provenance ∈ {scipy_slsqp, analytic_fallback}.
+
+    ``ppa_price_gbp_mwh`` defaults to the solar-mid merchant PPA from
+    :mod:`utils.finance_benchmarks` (£48/MWh) when None is passed.
     """
+    if ppa_price_gbp_mwh is None:
+        ppa_price_gbp_mwh = ppa_price_merchant("solar")
     bounds = bounds or {
         "solar_mw": (5.0, 80.0),
         "bess_mw": (0.0, 40.0),
@@ -240,14 +261,20 @@ def compute_design_kpis(
     solar_mw: float,
     bess_mw: float,
     bess_hours: float = 2.0,
-    ppa_price_gbp_mwh: float = 68.0,
+    ppa_price_gbp_mwh: float | None = None,
     ppa_share_pct: float = 50.0,
     workload_mw: float = 0.0,
     site_area_ha: float = 120.0,
     grid_headroom_mw: float = 50.0,
 ) -> dict[str, Any]:
     """Derived KPIs for a capacity-mix state. Used by mutate_design to show
-    the user what their edit did. workload_mw is DC IT-load when present."""
+    the user what their edit did. workload_mw is DC IT-load when present.
+
+    ``ppa_price_gbp_mwh`` defaults to ``ppa_price_merchant('solar')`` from
+    :mod:`utils.finance_benchmarks` when None is supplied.
+    """
+    if ppa_price_gbp_mwh is None:
+        ppa_price_gbp_mwh = ppa_price_merchant("solar")
     k = _kpis(solar_mw, bess_mw, bess_hours, ppa_share_pct / 100.0,
               ppa_price_gbp_mwh, site_area_ha, grid_headroom_mw)
     k["workload_mw"] = round(workload_mw, 2) if workload_mw else 0.0

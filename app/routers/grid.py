@@ -44,6 +44,7 @@ from utils.grid_stability_predictor import predict_grid_stability
 from utils.energy_demand_predictor import get_demand_forecast, simulate_storage, optimize_storage
 from utils.agile_pricing import get_pricing_overview, fetch_all_regions_current, regional_prices_to_geojson
 from utils.weave_demand import demand_geojson
+from utils.bess_benchmarks import bess_blended_price_gbp_mwh
 from utils.osm_power_infra import (
     power_lines_geojson, power_substations_geojson, power_towers_geojson,
     power_generators_geojson, power_plants_geojson, power_infra_summary,
@@ -1858,10 +1859,11 @@ def _generate_bess_facility_state():
         "frequency_hz": round(50 + _rng.gauss(0, 0.02), 3),
     }
 
-    # Revenue estimate for today
+    # Revenue estimate for today — blended £/MWh from Modo Energy
+    # GB BESS index, Mar 2026 (single source of truth).
     hours_elapsed = hour
     avg_power_mw = abs(total_power_kw) / 1000
-    revenue_today = round(avg_power_mw * hours_elapsed * 45, 0)  # ~£45/MWh blended
+    revenue_today = round(avg_power_mw * hours_elapsed * bess_blended_price_gbp_mwh(), 0)
 
     dispatch_schedule = []
     for h in range(6):
@@ -2590,15 +2592,58 @@ async def agent_analyze(
             pool=pool,
         )
     except Exception as e:
+        # Produce a credible heuristic verdict so the user never sees a raw
+        # class name like "BadRequestError" in the Agent Verdict rail. The
+        # underlying error is still logged server-side for diagnosis.
+        log.exception("agent_analyze intent=%s heuristic fallback", body.intent)
+        cap = float(ctx.get("capacity_mw") or 0)
+        headroom = ctx.get("headroom_mw")
+        tech = ctx.get("technology") or "project"
+
+        # Intent-specific one-liner so Grid / Planning / Enviro / Feas are
+        # distinguishable even in heuristic mode.
+        if body.intent == "grid_connection":
+            if isinstance(headroom, (int, float)):
+                summary = (
+                    f"Headroom {headroom:.1f} MW vs {cap:.1f} MW ask "
+                    f"— {'within envelope' if headroom >= cap else 'exceeds local capacity, split recommended'}."
+                )
+                verdict = "GO" if headroom >= cap * 1.15 else ("CAUTION" if headroom >= cap else "NO_GO")
+            else:
+                summary = "Headroom unverified — confirm with DNO pre-application enquiry before FID."
+                verdict = "CAUTION"
+        elif body.intent == "planning":
+            summary = (
+                f"{tech.title()} at this scale is typically {'NSIP DCO (≥50 MW)' if cap >= 50 else 'LPA-determined (T&CP)'} "
+                "under the 2024 NSPS and Dec 2024 NPPF."
+            )
+            verdict = "CAUTION"
+        elif body.intent == "environmental":
+            summary = (
+                "Screen against MAGIC (AONB/SSSI), EA Flood Zones 2/3, ALC 1-3a, "
+                "and ancient woodland. BNG 10% net-gain mandatory under Environment Act 2021."
+            )
+            verdict = "CAUTION"
+        elif body.intent == "feasibility":
+            summary = (
+                f"{tech.title()} feasibility depends on grid ({'OK' if isinstance(headroom, (int, float)) and headroom >= cap else 'unverified'}), "
+                "planning pathway, and financial envelope. Run full agent for bankable-grade verdict."
+            )
+            verdict = "CAUTION"
+        else:
+            summary = "Heuristic verdict — full agent unavailable."
+            verdict = "CAUTION"
+
         return {
-            "verdict": "CAUTION",
-            "confidence": 0.3,
-            "summary": f"Agent error ({e.__class__.__name__}) — heuristic fallback.",
-            "risks": ["Agent error"],
+            "verdict": verdict,
+            "confidence": 0.4,
+            "summary": summary,
+            "risks": ["Live agent unavailable — this is a deterministic fallback, not Claude-reasoned."],
             "opportunities": [],
-            "next_steps": [],
+            "next_steps": _default_actions(body.intent, ctx) or [],
             "actions": _default_actions(body.intent, ctx),
             "intent": body.intent,
+            "fallback": True,
         }
 
 

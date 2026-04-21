@@ -1,7 +1,9 @@
 import React, { useMemo, useState, useEffect, lazy, Suspense } from "react";
+import { useNavigate } from "react-router-dom";
 import COAMatrix from "../COAMatrix";
 import { WhenWorkload } from "../../lib/workload";
 import { listLayouts } from "../../services/design";
+import TwinLazy from "../twin3d/TwinLazy";
 
 const FinancialModelPanel = lazy(() => import("../FinancialModelPanel"));
 const DesignCompare = lazy(() => import("./DesignCompare"));
@@ -20,6 +22,11 @@ export default function DecideTab({ project }) {
   const baseCapacity = Number(project?.capacity_mw) || 50;
   const workload = (project?.workload_type || "solar").toString().toUpperCase();
   const projectName = project?.name || "Project";
+
+  // React Router hook — might throw outside a Router. Guard defensively
+  // so DecideTab still renders in isolated tests / storybook.
+  let navigate = null;
+  try { navigate = useNavigate(); } catch { /* no router */ } // eslint-disable-line
 
   // Stub scenarios from the hardcoded builder — still useful as placeholders
   // when no real design_layouts exist yet.
@@ -80,6 +87,42 @@ export default function DecideTab({ project }) {
           Click a scenario to drill into its breakdown.
         </p>
       </header>
+
+      {/* ── Design snapshot ─────────────────────────────────────────────── */}
+      {/* Plan-view of the 3D site twin so reviewers get a single-glance idea
+          of the design being compared. Click anywhere on the snapshot to
+          route to the full /design/:projectId page. */}
+      <section className="dc-section dc-snapshot-section">
+        <div className="dc-subhead">
+          <div className="dc-eyebrow">Design snapshot</div>
+          <h3 className="dc-subtitle">Plan view · 3D site twin</h3>
+        </div>
+        <div
+          className="dc-snapshot-frame"
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            if (!navigate || !project?.project_id) return;
+            navigate(`/design/${encodeURIComponent(project.project_id)}`);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && navigate && project?.project_id) {
+              navigate(`/design/${encodeURIComponent(project.project_id)}`);
+            }
+          }}
+          title="Open full 3D site twin"
+        >
+          <TwinLazy
+            key={`snapshot-${project?.project_id || "new"}`}
+            projectId={project?.project_id || "snapshot"}
+            polygon_wkt={project?.polygon_wkt || project?.site_polygon_wkt || null}
+            tech={project?.technology || project?.workload_type || "bess"}
+            capacity_mw={Number(project?.capacity_mw) || 50}
+            mode="plan"
+          />
+          <div className="dc-snapshot-cta">Open full view →</div>
+        </div>
+      </section>
 
       <section className="dc-section">
         {savedLayouts.length > 0 && (
@@ -236,6 +279,39 @@ export default function DecideTab({ project }) {
 
       <style>{`
         .dc-tab { padding: 32px 40px; max-width: 1200px; }
+
+        /* ── Design snapshot ─────────────────────────────────────────── */
+        .dc-snapshot-section { margin-top: 20px; }
+        .dc-snapshot-frame {
+          position: relative;
+          width: 100%;
+          height: 320px;
+          border-radius: 12px;
+          overflow: hidden;
+          background: #0F1318;
+          border: 1px solid rgba(245, 183, 49, 0.25);
+          box-shadow: 0 4px 14px rgba(20, 18, 10, 0.12);
+          cursor: pointer;
+          transition: border-color 160ms, transform 160ms;
+        }
+        .dc-snapshot-frame:hover { border-color: #F5B731; transform: translateY(-1px); }
+        .dc-snapshot-frame:focus { outline: 2px solid #F5B731; outline-offset: 2px; }
+        .dc-snapshot-cta {
+          position: absolute;
+          bottom: 12px; right: 12px;
+          background: rgba(15, 19, 24, 0.85);
+          border: 1px solid rgba(245, 183, 49, 0.55);
+          color: #F5B731;
+          font-family: "DM Sans", sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          padding: 5px 11px;
+          border-radius: 6px;
+          backdrop-filter: blur(6px);
+          z-index: 5;
+          pointer-events: none;
+        }
         .dc-head { margin-bottom: 28px; }
         .dc-layouts-hdr { display: flex; justify-content: space-between; align-items: center;
           margin-bottom: 10px; padding: 8px 12px; background: rgba(245,183,49,0.08);

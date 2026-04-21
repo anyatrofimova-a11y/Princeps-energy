@@ -14,6 +14,9 @@ import "./styles.css";
 // Unified Canvas (L1) — additive, additive. Lives under /canvas/:projectId.
 const CanvasShell = lazy(() => import("./canvas/ShellLayout.jsx"));
 
+// 3D Site Twin — full-screen route at /design/:projectId. Wraps TwinLazy.
+const DesignPage = lazy(() => import("./pages/Design/DesignPage.jsx"));
+
 // Customer-visible pages (BOT-K).
 const BuildableAreaPlayground = lazy(() => import("./components/BuildableAreaPlayground.jsx"));
 const ConnectorHealthDashboard = lazy(() => import("./components/ConnectorHealthDashboard.jsx"));
@@ -29,6 +32,7 @@ const DocketsIndex = lazy(() => import("./pages/Intelligence/Dockets/DocketsInde
 // Tracker admin (SME review + publish) at /tracker-admin.
 const TrackerDashboard = lazy(() => import("./pages/Tracker/TrackerDashboard.jsx"));
 const DatasetsIndex = lazy(() => import("./pages/Intelligence/Datasets/DatasetsIndex.jsx"));
+const EngagementsIndex = lazy(() => import("./pages/Intelligence/Engagements/EngagementsIndex.jsx"));
 
 // Global parcel drawer — listens on window event from any map.
 const ParcelDrawer = lazy(() => import("./components/parcel/ParcelDrawer.jsx"));
@@ -128,6 +132,30 @@ createRoot(document.getElementById("root")).render(
             <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading canvas…</div>}>
               <CanvasShell />
             </Suspense>
+          }
+        />
+        <Route
+          path="/design/:projectId"
+          element={
+            <SiteProvider>
+              <WorkspaceProvider>
+                <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading 3D site twin…</div>}>
+                  <DesignPage />
+                </Suspense>
+              </WorkspaceProvider>
+            </SiteProvider>
+          }
+        />
+        <Route
+          path="/design"
+          element={
+            <SiteProvider>
+              <WorkspaceProvider>
+                <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading 3D site twin…</div>}>
+                  <DesignPage />
+                </Suspense>
+              </WorkspaceProvider>
+            </SiteProvider>
           }
         />
         <Route
@@ -232,6 +260,14 @@ createRoot(document.getElementById("root")).render(
             element={
               <Suspense fallback={null}>
                 <DatasetsIndex />
+              </Suspense>
+            }
+          />
+          <Route
+            path="engagements"
+            element={
+              <Suspense fallback={null}>
+                <EngagementsIndex />
               </Suspense>
             }
           />

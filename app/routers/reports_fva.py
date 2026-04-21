@@ -33,6 +33,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from app.deps import get_pool
 from utils.rics_fvp import FVAInputs, compute_fva, result_as_context
 from utils.report_grid_connection import html_to_pdf
+from utils.finance_benchmarks import ppa_price_merchant as _bench_ppa
 
 log = logging.getLogger("princeps.reports_fva")
 router = APIRouter(tags=["reports", "fva"])
@@ -178,7 +179,7 @@ async def nppf_fva_report(
         pattern="^(low|central|high)$",
         description="Developer profit band within basis",
     ),
-    ppa_price: float = Query(55.0, ge=1.0, le=500.0, description="PPA £/MWh"),
+    ppa_price: float = Query(_bench_ppa("solar"), ge=1.0, le=500.0, description="PPA £/MWh (default: finance_benchmarks solar merchant midpoint)"),
     ppa_term_yr: int = Query(15, ge=5, le=25, description="PPA term (years)"),
     exit_yield: float = Query(0.075, ge=0.04, le=0.12, description="Capitalisation yield"),
     capex_m_override: float | None = Query(

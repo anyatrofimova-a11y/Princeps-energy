@@ -10,7 +10,10 @@ import api from "../services/api";
 import electricityZonesGeoJSON from "../data/electricity-zones.json";
 import TimeScrubber from "./map/TimeScrubber";
 import FesPathwaySwitcher from "./map/FesPathwaySwitcher";
+import FESLegend from "./map/FESLegend";
 import { useMapTime } from "../hooks/useMapTime";
+import { MapboxOverlay } from "@deck.gl/mapbox";
+import { buildDynamicLayers } from "./map/dynamicLayers";
 
 const PROXY = "pmtiles://http://localhost:3000/pmtiles-proxy";
 
@@ -113,10 +116,11 @@ const EMPTY_FC = { type: "FeatureCollection", features: [] };
 export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = false, onPick, pickedLocation, onZoneClick, epcFields = {},
   drawState, onDrawClick, onDrawDoubleClick, onDrawMouseMove, onDrawSelectFeature, onDrawDragVertex, chatLayers = [], onMapReady }) {
   const { stabilityData, gridHighlightSub } = useSite();
-  const { asOf: mapTimeAsOf } = useMapTime();
+  const { asOf: mapTimeAsOf, fesPathway: mapTimeFesPathway } = useMapTime();
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
+  const deckOverlayRef = useRef(null);
   const [mapReady, setMapReady] = React.useState(false);
 
   useEffect(() => {
@@ -4070,12 +4074,69 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     });
   }, [drawState]);
 
+  // ── BOT-FS: deck.gl dynamic FES overlay ────────────────────────────────
+  // Pushes the 7 time-aware layers from dynamicLayers.js onto the Mapbox map
+  // whenever (asOf, fesPathway) changes. Without this, the FES pill and
+  // time scrubber are cosmetic — nothing on the map responds.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    // Attach the MapboxOverlay once per map instance.
+    if (!deckOverlayRef.current) {
+      try {
+        const overlay = new MapboxOverlay({ interleaved: true, layers: [] });
+        map.addControl(overlay);
+        deckOverlayRef.current = overlay;
+      } catch (err) {
+        console.warn("[MapView] Failed to attach deck.gl FES overlay:", err);
+        return;
+      }
+    }
+
+    try {
+      const layers = buildDynamicLayers({
+        asOf: mapTimeAsOf,
+        fesPathway: mapTimeFesPathway,
+        // Keep it focused: only the FES column layer by default; other
+        // layers (TEC, ECR, REPD, LPA, carbon, PPA) are available but off
+        // by default so we don't clobber the existing Mapbox layers the
+        // user already has toggled on. Individual toggles can enable them.
+        visible: {
+          fes:    true,
+          carbon: false,
+          ppa:    false,
+          tec:    false,
+          ecr:    false,
+          repd:   false,
+          lpa:    false,
+        },
+      });
+      deckOverlayRef.current.setProps({ layers });
+    } catch (err) {
+      console.warn("[MapView] FES layer rebuild failed:", err);
+    }
+  }, [mapTimeAsOf, mapTimeFesPathway, mapReady]);
+
+  // Clean up overlay on unmount
+  useEffect(() => {
+    return () => {
+      const map = mapRef.current;
+      if (map && deckOverlayRef.current) {
+        try { map.removeControl(deckOverlayRef.current); } catch { /* ignore */ }
+        deckOverlayRef.current = null;
+      }
+    };
+  }, []);
+
   return (
     <>
       <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />
       {/* BOT-EE: time scrubber + FES switcher mounted at map footer */}
       <FesPathwaySwitcher />
       <TimeScrubber />
+      {/* BOT-FS: legend explaining what (year × pathway) is simulating */}
+      <FESLegend />
       {/* mapTimeAsOf is available as a prop for any layer factory that wants it */}
       {mapTimeAsOf ? null : null}
     </>

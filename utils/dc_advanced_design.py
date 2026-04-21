@@ -16,6 +16,7 @@ import random
 from typing import Optional
 
 from app.regulatory.versions import nppf_para as _nppf_para
+from utils import dc_benchmarks as _bench
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  1. HEAT REUSE & DISTRICT HEATING REVENUE
@@ -27,6 +28,29 @@ HEAT_PUMP_COP = 3.5       # Upgrade from 30-40°C DC reject heat to 70-80°C
 HEAT_PUMP_CAPEX_PER_MW = 350_000  # £/MW thermal capacity
 PIPE_COST_PER_KM = 800_000  # £/km for pre-insulated district heating pipe (DN200)
 CARBON_FACTOR_GAS_KG_MWH = 183  # kg CO2/MWh displaced gas heating
+
+
+# ---------------------------------------------------------------------------
+# Facility-level CapEx helper — always goes through dc_benchmarks so any
+# caller of dc_advanced_design that wants a *site* CapEx gets the H1 2025
+# Cushman midpoint, not a locally-guessed number. Historical callers were
+# multiplying it_load_mw by £9.5 M/MW (OverviewTab.jsx default) which was
+# ~2× market. Route everything through this helper instead.
+# ---------------------------------------------------------------------------
+
+def facility_capex_gbp(
+    it_load_mw: float,
+    tier: int = 3,
+    redundancy: str = "N+1",
+    workload_type: str = "colo",
+) -> float:
+    """Return benchmark all-in facility CapEx in £.
+
+    Thin wrapper over ``dc_benchmarks.capex_total_gbp`` so modules that
+    import dc_advanced_design can pull a consistent facility CapEx without
+    adding a second import line. Prior hard-coded £9.5 M/MW default is
+    retired."""
+    return _bench.capex_total_gbp(it_load_mw, tier, redundancy, workload_type)
 
 
 def heat_reuse_assessment(

@@ -1,0 +1,21 @@
+{
+  "_source": "Modo Energy GB BESS index, Mar 2026",
+  "_mirror_of": "utils/bess_benchmarks.py",
+  "_updated": "2026-04-19",
+  "revenue_gbp_mw_yr": {
+    "1": { "low":  50000, "mid":  65000, "high":  80000 },
+    "2": { "low":  85000, "mid": 110000, "high": 135000 },
+    "4": { "low": 115000, "mid": 150000, "high": 185000 },
+    "8": { "low": 140000, "mid": 175000, "high": 215000 }
+  },
+  "capex_gbp_per_kwh": {
+    "low":  280,
+    "mid":  310,
+    "high": 370
+  },
+  "ffr_dynamic_gbp_mw_yr": 45000,
+  "capacity_market_gbp_mw_yr": 28000,
+  "arbitrage_only_gbp_mw_yr": 38000,
+  "fixed_opex_gbp_mw_yr": 8000,
+  "blended_price_gbp_mwh": 55.0
+}

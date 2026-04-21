@@ -1,0 +1,37 @@
+{
+  "_source": "Solar Media Q4 2025 + LCCC AR7 Pot 1 (Jan 2026) + Cornwall Insight Q1 2026",
+  "_mirror_of": "utils/solar_benchmarks.py",
+  "_updated": "2026-04-19",
+  "capacity_factor": {
+    "low":  0.100,
+    "mid":  0.110,
+    "high": 0.120
+  },
+  "capex_gbp_per_kw": {
+    "low":  680,
+    "mid":  730,
+    "high": 780
+  },
+  "opex_gbp_per_kw_yr": {
+    "low":   8,
+    "mid":  10,
+    "high": 12
+  },
+  "ppa_merchant_gbp_mwh": {
+    "low":  38.0,
+    "mid":  45.0,
+    "high": 52.0
+  },
+  "ppa_corporate_gbp_mwh": {
+    "low":  55.0,
+    "mid":  62.0,
+    "high": 68.0
+  },
+  "cfd_ar7_strike_gbp_mwh_2012": 50.07,
+  "cfd_ar7_strike_gbp_mwh_2026": 67.0,
+  "default_revenue_gbp_mwh": 45.0,
+  "module_cost_usd_per_w":   0.10,
+  "tracker_cost_usd_per_w":  0.06,
+  "inverter_cost_usd_per_w": 0.05,
+  "land_rent_gbp_ha_yr": 1200
+}

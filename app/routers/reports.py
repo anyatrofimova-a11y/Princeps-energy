@@ -23,6 +23,11 @@ from utils.sld_generator import generate_sld
 from utils.loss_budget import calculate_loss_budget, calculate_lifetime_profile
 from utils.multi_tech_optimizer import optimize_site
 from utils.one_click_report import generate_one_click_report
+from utils import solar_benchmarks
+from utils.finance_benchmarks import (
+    ppa_price_merchant,
+    wacc as finance_wacc,
+)
 
 log = logging.getLogger("princeps.reports")
 router = APIRouter(tags=["reports"])
@@ -226,7 +231,10 @@ async def financial_report(
     site_name: str = Query("Site", description="Site name for report title"),
     capacity_mw: float = Query(50.0, ge=0.1, le=5000, description="Proposed capacity in MW"),
     technology: str = Query("solar", description="Technology: solar, wind, offshore_wind, bess"),
-    ppa_price: float = Query(55.0, ge=1, le=500, description="PPA price in £/MWh"),
+    ppa_price: float = Query(
+        ppa_price_merchant("solar"), ge=1, le=500,
+        description="PPA price in £/MWh (default: finance_benchmarks merchant midpoint)",
+    ),
 ):
     """Generate a comprehensive Financial Viability Assessment PDF.
 
@@ -477,13 +485,15 @@ async def ml_financial_irr(
     annual_yield_mwh: float = Query(5475),
     grid_distance_km: float = Query(2),
     connection_cost_gbp: float = Query(300000),
-    ppa_price_gbp_mwh: float = Query(55),
-    capex_per_kw: float = Query(650),
-    opex_per_kw_yr: float = Query(10),
+    # Defaults sourced from utils.solar_benchmarks (Solar Media Q4 2025 +
+    # LCCC AR7 Pot 1 Jan 2026 + Cornwall Insight Q1 2026).
+    ppa_price_gbp_mwh: float = Query(solar_benchmarks.ppa_price_merchant_mid()),
+    capex_per_kw: float = Query(solar_benchmarks.solar_capex_per_kw()),
+    opex_per_kw_yr: float = Query(solar_benchmarks.solar_opex_per_kw_yr()),
     degradation_pct: float = Query(0.5),
     project_life_years: int = Query(25),
     wacc_pct: float = Query(6.0),
-    land_rent_per_ha: float = Query(1200),
+    land_rent_per_ha: float = Query(solar_benchmarks.land_rent_gbp_ha_yr()),
 ):
     """Predict project IRR (%) using XGBoost regressor.
     Returns predicted IRR, viability band (STRONG/VIABLE/MARGINAL/UNVIABLE), + SHAP factors."""
@@ -722,7 +732,12 @@ async def api_loss_budget(req: LossBudgetRequest):
 
 
 class OptimizeSiteRequest(BaseModel):
-    """Input parameters for multi-technology site optimization."""
+    """Input parameters for multi-technology site optimization.
+
+    Defaults resolve through :mod:`utils.finance_benchmarks`; override per
+    deal. ``ppa_price`` is the solar merchant midpoint, ``discount_rate``
+    is solar stabilised WACC, ``cpi`` is BoE long-run.
+    """
     lat: float = 52.0
     lon: float = -1.0
     area_ha: float = 40.0
@@ -731,12 +746,12 @@ class OptimizeSiteRequest(BaseModel):
     wind_speed: float = 5.5
     grid_distance_km: float = 3.0
     objective: str = "maximize_irr"
-    ppa_price: float = 55.0
+    ppa_price: float = ppa_price_merchant("solar")
     bess_revenue_per_mw: float = 90000.0
-    discount_rate: float = 0.07
+    discount_rate: float = finance_wacc("solar", "stabilised")
     project_life: int = 30
     degradation: float = 0.005
-    cpi: float = 0.025
+    cpi: float = 0.024
 
 
 @router.post("/api/design/optimize-site")

@@ -17,9 +17,10 @@ const C = {
 };
 
 const TABS = [
-  { id: "alerts",   label: "Alerts",   to: "/intelligence/alerts" },
-  { id: "dockets",  label: "Dockets",  to: "/intelligence/dockets" },
-  { id: "datasets", label: "Datasets", to: "/intelligence/datasets" },
+  { id: "alerts",       label: "Alerts",       to: "/intelligence/alerts" },
+  { id: "dockets",      label: "Dockets",      to: "/intelligence/dockets" },
+  { id: "engagements",  label: "Engagements",  to: "/intelligence/engagements" },
+  { id: "datasets",     label: "Datasets",     to: "/intelligence/datasets" },
 ];
 
 function SegmentedControl() {

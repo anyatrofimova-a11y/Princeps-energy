@@ -30,6 +30,8 @@ from pydantic import BaseModel
 from app.deps import get_pool
 from app.helpers import _run_generic_subprocess
 from utils.report_grid_connection import html_to_pdf
+from utils import solar_benchmarks
+from utils.finance_benchmarks import ppa_price_merchant, wacc as _finance_wacc
 
 log = logging.getLogger("princeps.project_actions")
 router = APIRouter(tags=["project-actions"])
@@ -124,13 +126,15 @@ async def _real_financials(proj: dict, capacity_mw: float) -> dict:
     """
     technology = _WORKLOAD_TO_TECH.get((proj.get("workload_type") or "bess").lower(), "solar")
     region = _region_from_latlon(proj.get("lat"), proj.get("lon"))
+    # Tech-keyed merchant PPA + WACC from utils.finance_benchmarks; the
+    # subprocess re-resolves to the exact tech defaults when omitted.
     payload = {
         "command": "project_finance",
         "capacity_mw": capacity_mw,
         "technology": technology,
         "region": region,
-        "ppa_price": 55.0,
-        "discount_rate": 0.08,
+        "ppa_price": ppa_price_merchant(technology),
+        "discount_rate": _finance_wacc(technology, "stabilised"),
     }
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -614,7 +618,8 @@ class _LenderPackRequest(BaseModel):
     bank_name: str = "Prospective Lender"
     sponsor: str = "Sponsor TBC"
     mla_names: list[str] | None = None
-    ppa_price_gbp_mwh: float = 55.0
+    # 2026 UK merchant-PPA midpoint (utils.solar_benchmarks) — override per deal
+    ppa_price_gbp_mwh: float = solar_benchmarks.ppa_price_merchant_mid()
     gearing_pct: float = 0.70
     interest_rate_pct: float = 6.0
     debt_term_years: int = 18

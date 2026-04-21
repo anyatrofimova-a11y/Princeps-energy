@@ -137,10 +137,15 @@ function GridConnectionCard({ project, isBess, isDC, onViewTab }) {
   const curtailPct = m.curtail_pct ?? (cap > 40 ? 4.6 : 2.1);
   const reinforcement = m.reinforcement_gbp_m ?? (cap > (m.headroom_mw ?? 50) ? 1.8 : 0);
   const firmness = m.firmness || (reinforcement > 0 ? "Non-firm" : "Firm");
-  const lcoe = m.lcoe_gbp_per_mwh ?? (isBess ? 82 : isDC ? 72 : 55);
+  // Solar fallbacks: utils/solar_benchmarks.py 2026 mid-case values
+  //   LCOE ≈ £48/MWh, CapEx £730k/MW, Revenue ≈ cap × 8760h × 0.11 × £45/MWh
+  const lcoe = m.lcoe_gbp_per_mwh ?? (isBess ? 82 : isDC ? 72 : 48);
   const irr = m.irr_pct ?? (isBess ? 11.8 : isDC ? 14.2 : 8.4);
-  const capexPerMw = m.capex_gbp_per_mw ?? (isBess ? 660_000 : isDC ? 9_500_000 : 900_000);
-  const annualRev = m.annual_revenue_gbp_m ?? (isBess ? cap * 0.075 : isDC ? cap * 3.8 : cap * 11 * 87.6 * 55 / 1e6);
+  // DC default £4.2M/MW is the 2026 Cushman/CBRE Tier 3 midpoint
+  // (utils/dc_benchmarks.py). Previous £9.5M/MW was ~2× market and produced
+  // £475M for a 50MW site.
+  const capexPerMw = m.capex_gbp_per_mw ?? (isBess ? 660_000 : isDC ? 4_200_000 : 730_000);
+  const annualRev = m.annual_revenue_gbp_m ?? (isBess ? cap * 0.075 : isDC ? cap * 3.8 : cap * 8760 * 0.11 * 45 / 1e6);
   const lifeRev = annualRev * (isDC ? 12 : 15);
 
   const risk = reinforcement > 2 ? "High" : queueAhead > 5 ? "Medium" : "Low";

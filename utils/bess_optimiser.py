@@ -13,25 +13,34 @@ import math
 import random
 from typing import Any
 
+from utils.bess_benchmarks import (
+    bess_capex_per_kwh,
+    capacity_market_gbp_mw_yr,
+    ffr_dynamic_gbp_mw_yr,
+)
+
 
 # ---------------------------------------------------------------------------
-# UK BESS market benchmarks (2024-25)
+# UK BESS market benchmarks — 2026 (Modo Energy GB BESS index, Mar 2026)
 # ---------------------------------------------------------------------------
 
-# CAPEX per MWh by duration (GBP)
+# CAPEX per MWh by duration (GBP) — all-in installed cost.
+# 1h is CapEx-heavy because power electronics dominate; 4h amortises BoS.
+_CAPEX_MID_PER_KWH = bess_capex_per_kwh("mid")  # £310/kWh 2026
 BESS_CAPEX_GBP_PER_MWH = {
-    1: 550_000,
-    2: 450_000,
-    4: 380_000,
+    1: (_CAPEX_MID_PER_KWH + 80) * 1_000,   # thicker power electronics
+    2: (_CAPEX_MID_PER_KWH + 20) * 1_000,   # slight PCS premium
+    4: (_CAPEX_MID_PER_KWH - 30) * 1_000,   # BoS amortised over more kWh
 }
 
-# Revenue streams (GBP/MW/yr unless noted)
+# Revenue streams (GBP/MW/yr unless noted) — Mar 2026 clearing levels
 UK_REVENUE_STREAMS = {
-    "ffr_dynamic": {"label": "FFR Dynamic", "gbp_mw_yr": 75_000},
-    "ffr_primary": {"label": "FFR Primary", "gbp_mw_yr": 55_000},
-    "dc": {"label": "Dynamic Containment", "gbp_mw_yr": 48_000},
-    "dm": {"label": "Dynamic Moderation", "gbp_mw_yr": 35_000},
-    "capacity_market": {"label": "Capacity Market", "gbp_kw_yr": 12.50},
+    "ffr_dynamic": {"label": "FFR Dynamic", "gbp_mw_yr": ffr_dynamic_gbp_mw_yr()},
+    "ffr_primary": {"label": "FFR Primary", "gbp_mw_yr": 32_000},
+    "dc": {"label": "Dynamic Containment", "gbp_mw_yr": 28_000},
+    "dm": {"label": "Dynamic Moderation", "gbp_mw_yr": 22_000},
+    "capacity_market": {"label": "Capacity Market",
+                        "gbp_kw_yr": capacity_market_gbp_mw_yr() / 1_000},
     "agile_arbitrage": {"label": "Agile Arbitrage", "spread_gbp_mwh": 18},
     "wholesale_arbitrage": {"label": "Wholesale Arbitrage", "spread_gbp_mwh": 25},
     "dno_peak_shaving": {"label": "DNO Peak Shaving", "gbp_mw_yr": 22_000},

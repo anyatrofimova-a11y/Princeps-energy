@@ -62,14 +62,17 @@ TRANSMISSION_LOSSES = 0.113               # Total T&D losses (CB7 ratio)
 
 RENEWABLES = {
     "solar": {
-        "lcoe_gbp_mwh": 30.0,            # CB7 Table 7.5.1: 27 £/MWh
-        "capacity_factor": 0.108,          # UK average (Renewables.ninja / ERA5)
-        "capex_gbp_kw": 450,              # Utility-scale ground-mount
-        "opex_frac": 0.015,               # 1.5% of CAPEX/yr
+        # Solar values refreshed to 2026 UK ground-mount benchmark.
+        # Single source of truth: utils.solar_benchmarks (Solar Media Q4 2025
+        # + LCCC AR7 Pot 1 Jan 2026 + Cornwall Insight Q1 2026).
+        "lcoe_gbp_mwh": 48.0,             # 2026 all-in LCOE (25-yr DCF)
+        "capacity_factor": 0.110,         # UK central ground-mount
+        "capex_gbp_kw": 730,              # all-in (dev+EPC+grid-side)
+        "opex_frac": 0.014,               # ~£10/kW/yr ÷ £730/kW ≈ 1.4%
         "lifetime_years": 30,
-        "degradation_pct_yr": 0.5,        # Annual degradation
-        "cb7_mix_ratio": 0.40,            # CB7 portfolio share
-        "land_ha_per_mw": 2.0,            # UK typical
+        "degradation_pct_yr": 0.5,
+        "cb7_mix_ratio": 0.40,
+        "land_ha_per_mw": 2.0,
     },
     "offshore_wind": {
         "lcoe_gbp_mwh": 41.0,            # CB7 Table 7.5.1: 31 £/MWh
@@ -246,9 +249,12 @@ FINANCIAL_DEFAULTS = {
     "wacc": 0.70 * 0.045 + 0.30 * 0.10,  # ≈ 6.15%
     "tax_rate": 0.25,                    # UK corporation tax
     "depreciation_years": 25,
-    "ppa_price_gbp_mwh": 55,            # Current UK PPA range: £45-65/MWh
-    "merchant_price_gbp_mwh": 60,        # Day-ahead baseload
-    "cfd_strike_gbp_mwh": 47,           # AR6 solar strike price
+    # PPA/CfD defaults aligned to utils.solar_benchmarks (Cornwall Insight
+    # Q1 2026 + LCCC AR7 Pot 1 Jan 2026). Merchant PPA midpoint = £45/MWh;
+    # corporate PPA midpoint = £62/MWh; AR7 strike = £67/MWh in 2026 prices.
+    "ppa_price_gbp_mwh": 45,            # Merchant PPA midpoint (2026)
+    "merchant_price_gbp_mwh": 55,       # Day-ahead baseload 2026 avg
+    "cfd_strike_gbp_mwh": 67,           # AR7 Pot 1 solar (2026 prices)
     "tnuos_gbp_kw_yr": 50,              # Transmission use of system
     "bsuos_gbp_mwh": 5,                 # Balancing services
 }

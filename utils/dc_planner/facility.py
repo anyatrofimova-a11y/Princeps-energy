@@ -25,6 +25,7 @@ from utils.dc_engineering_sizing import (
     check_pue_consistency,
     redundancy_capacity_factor,
 )
+from utils import dc_benchmarks as _bench
 
 log = logging.getLogger("princeps.dc_planner")
 
@@ -119,7 +120,9 @@ def plan_facility(
     )
     sg = size_switchgear(
         transformer_count=tx["count"],
+        genset_count=gen["count"],
         redundancy=redundancy,
+        halls=halls,
     )
 
     pdu_count = rack_count * (2 if redundancy in ("2N", "2N+1") else 1)
@@ -150,8 +153,8 @@ def plan_facility(
         "voltage_primary_kv": tx["voltage_primary_kv"],
         "voltage_secondary_kv": tx["voltage_secondary_kv"],
         "voltage_kv": tx["voltage_primary_kv"],  # legacy field
-        # Switchgear — from size_switchgear
-        "switchgear_panels": sg.get("panel_count") or sg.get("count") or math.ceil(tx["count"] * 1.5),
+        # Switchgear — from size_switchgear (returns ``main_panels``)
+        "switchgear_panels": sg.get("main_panels") or sg.get("panel_count") or sg.get("count") or math.ceil(tx["count"] * 1.5),
         # Distribution
         "pdu_count": pdu_count,
         # Provenance
@@ -379,18 +382,50 @@ def _calculate_costs(
     cabling = rack_count * cb["cabling_per_rack"]["unit_cost"]
     civil = total_m2 * cb["civil_per_m2"]["unit_cost"]
 
-    total_capex = racks + pdus + ups + generators + transformers + switchgear + cooling_cost + crac + raised_floor + fire + bms + cabling + civil
+    # The component build-up above covers the MEP + civil shell — it
+    # typically lands ~65-70% of the all-in DC market CapEx. The remaining
+    # 30-35% is soft costs (design, project mgmt, legal, commissioning),
+    # IT network / security, site infrastructure (fencing, roads, drainage,
+    # substation grid connection), and contingency. We add a soft-cost
+    # envelope so the total hits the Cushman 2026 £4.2 M/MW Tier 3 midpoint.
+    mep_and_shell = racks + pdus + ups + generators + transformers + switchgear + cooling_cost + crac + raised_floor + fire + bms + cabling + civil
+    soft_costs = mep_and_shell * 0.22       # design + PM + legal + commissioning
+    it_network = mep_and_shell * 0.08       # core + DCI + security + DCIM
+    site_infra = mep_and_shell * 0.07       # fencing / roads / drainage / grid connection
+    contingency = mep_and_shell * 0.10      # RIBA Stage 3 typical
+    total_capex = mep_and_shell + soft_costs + it_network + site_infra + contingency
 
-    # Tier premium
-    tier_multiplier = {1: 1.0, 2: 1.1, 3: 1.25, 4: 1.6}.get(tier, 1.0)
+    # Tier premium — captures the 2N vs N+1 distribution + mechanical uplift.
+    # Prior {1:1, 2:1.1, 3:1.25, 4:1.6} overstated Tier 4 by ~30% vs
+    # dc_benchmarks.REDUNDANCY_CAPEX_MULT. Use the bench numbers for
+    # cross-module consistency (Cushman H1 2025 + CBRE 2025).
+    tier_multiplier = {1: 0.85, 2: 0.92, 3: 1.00, 4: 1.25}.get(tier, 1.0)
     total_capex *= tier_multiplier
 
-    # OpEx (annual)
-    annual_electricity = power["total_facility_kw"] * 8760 * UK_ELEC_PENCE_KWH / 100
-    annual_maintenance = total_capex * 0.03  # 3% of CapEx
-    annual_staffing = max(200000, rack_count * 1500)  # min 2 staff
-    annual_insurance = total_capex * 0.005
-    total_opex = annual_electricity + annual_maintenance + annual_staffing + annual_insurance
+    # ── OpEx (annual) — sourced from utils.dc_benchmarks ────────────────
+    # Previously: maintenance = 3% of CapEx, staffing = max(£200k, racks×£1.5k),
+    # insurance = 0.5% of CapEx. That produced £250–350k/MW/yr ex-power,
+    # which was close to the 2026 CBRE benchmark *by accident*, but the
+    # breakdown was wrong (staffing underweighted, property/rates missing).
+    # Switch to the benchmark module so the numbers match reports + feasibility
+    # pack.
+    it_load_mw = power["it_load_kw"] / 1000
+    _opex = _bench.opex_total_gbp_yr(
+        it_load_mw=it_load_mw,
+        pue=power["total_facility_kw"] / max(power["it_load_kw"], 1),
+        tier=tier,
+        workload_type="colo",
+        power_price_gbp_mwh=UK_ELEC_PENCE_KWH * 10,  # p/kWh → £/MWh
+    )
+    annual_electricity = _opex["power_gbp"]
+    annual_staffing = _opex["staff_gbp"]
+    annual_maintenance = _opex["maintenance_gbp"]
+    annual_property = _opex["property_gbp"]
+    annual_other = _opex["other_gbp"]
+    total_opex = _opex["total_gbp"]
+
+    # Sanity-check CapEx against the Cushman 2026 band (Tier 3 £3.5–5.0 M/MW).
+    sanity = _bench.sanity_check_capex(it_load_mw, total_capex, tier=tier)
 
     return {
         "capex": {
@@ -406,18 +441,30 @@ def _calculate_costs(
             "bms_dcim": round(bms, 0),
             "cabling": round(cabling, 0),
             "civil_works": round(civil, 0),
+            "soft_costs": round(soft_costs * tier_multiplier, 0),
+            "it_network_security": round(it_network * tier_multiplier, 0),
+            "site_infrastructure": round(site_infra * tier_multiplier, 0),
+            "contingency": round(contingency * tier_multiplier, 0),
             "tier_premium_pct": round((tier_multiplier - 1) * 100, 0),
             "total_gbp": round(total_capex, 0),
             "per_kw_gbp": round(total_capex / (power["it_load_kw"] or 1), 0),
+            "per_mw_gbp_m": round(total_capex / max(it_load_mw, 0.001) / 1e6, 2),
             "per_rack_gbp": round(total_capex / (rack_count or 1), 0),
+            "benchmark_check": sanity,
+            "benchmark_source": _bench.cite(),
         },
         "opex": {
             "electricity_gbp": round(annual_electricity, 0),
             "maintenance_gbp": round(annual_maintenance, 0),
             "staffing_gbp": round(annual_staffing, 0),
-            "insurance_gbp": round(annual_insurance, 0),
+            "property_rates_gbp": round(annual_property, 0),
+            "other_gbp": round(annual_other, 0),
+            # kept for backward compat — now derived from insurance-adjacent 'other' bucket
+            "insurance_gbp": round(annual_other, 0),
             "total_gbp": round(total_opex, 0),
             "per_kw_gbp": round(total_opex / (power["it_load_kw"] or 1), 0),
+            "per_mw_gbp_yr": round(total_opex / max(it_load_mw, 0.001), 0),
+            "benchmark_source": _bench.cite(),
         },
     }
 

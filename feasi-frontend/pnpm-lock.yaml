@@ -146,6 +146,9 @@ importers:
       resium:
         specifier: ^1.20.0
         version: 1.20.1(cesium@1.140.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      suncalc:
+        specifier: ^1.9.0
+        version: 1.9.0
       three:
         specifier: ^0.165.0
         version: 0.165.0
@@ -158,6 +161,9 @@ importers:
       web-ifc:
         specifier: ^0.0.57
         version: 0.0.57
+      zustand:
+        specifier: ^4.5.7
+        version: 4.5.7(@types/react@19.2.14)(react@18.3.1)
     devDependencies:
       '@testing-library/jest-dom':
         specifier: ^6.4.0
@@ -3669,6 +3675,9 @@ packages:
 
   strnum@2.2.3:
     resolution: {integrity: sha512-oKx6RUCuHfT3oyVjtnrmn19H1SiCqgJSg+54XqURKp5aCMbrXrhLjRN9TjuwMjiYstZ0MzDrHqkGZ5dFTKd+zg==}
+
+  suncalc@1.9.0:
+    resolution: {integrity: sha512-vMJ8Byp1uIPoj+wb9c1AdK4jpkSKVAywgHX0lqY7zt6+EWRRC3Z+0Ucfjy/0yxTVO1hwwchZe4uoFNqrIC24+A==}
 
   supercluster@8.0.1:
     resolution: {integrity: sha512-IiOea5kJ9iqzD2t7QJq/cREyLHTtSmUT6gQsweojg9WH2sYJqZK9SswTu6jrscO6D1G5v5vYZ9ru/eq85lXeZQ==}
@@ -8707,6 +8716,8 @@ snapshots:
       js-tokens: 9.0.1
 
   strnum@2.2.3: {}
+
+  suncalc@1.9.0: {}
 
   supercluster@8.0.1:
     dependencies:

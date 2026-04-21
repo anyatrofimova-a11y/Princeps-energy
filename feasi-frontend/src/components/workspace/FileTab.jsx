@@ -2,6 +2,150 @@ import React, { useState } from "react";
 import { WhenWorkload } from "../../lib/workload";
 import FilingsTimeline from "../FilingsTimeline";
 
+/* ── 3D Twin export buttons ──────────────────────────────────────────────── */
+const TWIN_EXPORTS = [
+  {
+    key: "snapshot-png",
+    label: "Snapshot PNG",
+    description: "High-res render of the current 3D view — drop into slides / memos.",
+    endpoint: (pid) => `/api/twin/snapshot/${encodeURIComponent(pid)}`,
+    filename: (p) => `${p?.name || "project"}-twin-snapshot.png`,
+    mime: "image/png",
+  },
+  {
+    key: "ga-drawing",
+    label: "A1 PDF GA drawing",
+    description: "A1 General Arrangement drawing (plan view with dimensions and key).",
+    endpoint: (pid) => `/api/twin/ga-drawing/${encodeURIComponent(pid)}`,
+    filename: (p) => `${p?.name || "project"}-GA-A1.pdf`,
+    mime: "application/pdf",
+  },
+  {
+    key: "ifc-export",
+    label: "IFC model",
+    description: "IFC 4.0 BIM export for civil/MEP teams (buildings, substations, cable runs).",
+    endpoint: (pid) => `/api/twin/ifc-export/${encodeURIComponent(pid)}`,
+    filename: (p) => `${p?.name || "project"}-twin.ifc`,
+    mime: "application/octet-stream",
+  },
+];
+
+function TwinExportRow({ project }) {
+  const [state, setState] = useState({});  // { key: { loading, error, result } }
+  const update = (k, patch) => setState((s) => ({ ...s, [k]: { ...(s[k] || {}), ...patch } }));
+
+  const onExport = async (ex) => {
+    const pid = project?.project_id;
+    if (!pid) {
+      update(ex.key, { error: "No project selected." });
+      return;
+    }
+    update(ex.key, { loading: true, error: null, result: null });
+    try {
+      const res = await fetch(ex.endpoint(pid), { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      update(ex.key, { loading: false, result: { url, filename: ex.filename(project) } });
+    } catch (err) {
+      update(ex.key, { loading: false, error: err.message || "Export failed" });
+    }
+  };
+
+  return (
+    <section className="file-twin-export">
+      <div className="file-twin-head">
+        <div className="file-eyebrow">Export from 3D Twin</div>
+        <span className="file-twin-sub">
+          Server-rendered from the current site design — snapshots, drawings, and BIM.
+        </span>
+      </div>
+      <div className="file-twin-row">
+        {TWIN_EXPORTS.map((ex) => {
+          const s = state[ex.key] || {};
+          const disabled = s.loading || !project?.project_id;
+          return (
+            <div key={ex.key} className="file-twin-card">
+              <div className="file-twin-card-label">{ex.label}</div>
+              <div className="file-twin-card-desc">{ex.description}</div>
+              <div className="file-twin-card-acts">
+                {s.result ? (
+                  <a className="file-link" href={s.result.url} download={s.result.filename}>
+                    Download {s.result.filename}
+                  </a>
+                ) : (
+                  <button
+                    className="file-twin-cta"
+                    onClick={() => onExport(ex)}
+                    disabled={disabled}
+                  >
+                    {s.loading ? (
+                      <span className="file-twin-spin">
+                        <span className="file-twin-spin-ring" />
+                        Rendering…
+                      </span>
+                    ) : "Export"}
+                  </button>
+                )}
+              </div>
+              {s.error && <div className="file-card-err">{s.error}</div>}
+            </div>
+          );
+        })}
+      </div>
+      <style>{`
+        .file-twin-export {
+          margin-bottom: 28px;
+          padding: 20px 22px;
+          background: linear-gradient(135deg, rgba(245, 183, 49, 0.06) 0%, var(--cds-layer-01) 60%);
+          border: 1px solid rgba(245, 183, 49, 0.25);
+          border-radius: 10px;
+        }
+        .file-twin-head { margin-bottom: 14px; }
+        .file-twin-sub { font-size: 12px; color: var(--cds-text-secondary); margin-top: 4px; display: block; }
+        .file-twin-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+        @media (max-width: 960px) { .file-twin-row { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 640px) { .file-twin-row { grid-template-columns: 1fr; } }
+        .file-twin-card {
+          background: #fff;
+          border: 1px solid var(--cds-border-subtle);
+          border-radius: 8px;
+          padding: 14px;
+          display: flex; flex-direction: column; gap: 8px;
+        }
+        .file-twin-card-label { font-size: 13px; font-weight: 700; color: var(--ink); }
+        .file-twin-card-desc { font-size: 11.5px; color: var(--cds-text-secondary); line-height: 1.45; flex: 1; }
+        .file-twin-card-acts { margin-top: 4px; }
+        .file-twin-cta {
+          background: var(--gold);
+          color: #fff;
+          border: none;
+          border-radius: 6px;
+          padding: 7px 14px;
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          cursor: pointer;
+          transition: background 120ms;
+        }
+        .file-twin-cta:hover:not(:disabled) { background: var(--gold-dark); }
+        .file-twin-cta:disabled { opacity: 0.45; cursor: not-allowed; }
+        .file-twin-spin { display: inline-flex; align-items: center; gap: 6px; }
+        .file-twin-spin-ring {
+          width: 10px; height: 10px;
+          border: 1.5px solid rgba(255,255,255,0.45);
+          border-top-color: #fff;
+          border-radius: 50%;
+          animation: file-twin-spin 0.9s linear infinite;
+          display: inline-block;
+        }
+        @keyframes file-twin-spin { to { transform: rotate(360deg); } }
+      `}</style>
+    </section>
+  );
+}
+
 /**
  * FileTab — output queue. Surfaces every artefact the project can emit
  * (IC Memo, DD Pack, Grid Connection Report, Financial Viability Report,
@@ -218,6 +362,9 @@ export default function FileTab({ project }) {
           <FilingsTimeline project={project} projectId={project.project_id} />
         </section>
       )}
+
+      {/* Export from 3D Twin — server-rendered snapshot / GA drawing / IFC. */}
+      <TwinExportRow project={project} />
 
       <section className="file-grid">
         {ARTEFACTS.map((art) => {

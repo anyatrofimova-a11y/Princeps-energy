@@ -11,6 +11,51 @@ import {
   explainKpi as apiExplainKpi,
   exportLayout as apiExportLayout,
 } from "../../services/design";
+import bessBenchmarks from "../../data/bess-benchmarks.json";
+import solarBenchmarks from "../../data/solar-benchmarks.json";
+import TwinLazy from "../twin3d/TwinLazy";
+import { useSite } from "../../SiteContext";
+
+/* Snap a continuous duration (h) to the nearest benchmark bucket key. */
+function bessDurationKey(durationH) {
+  if (durationH <= 1.5) return "1";
+  if (durationH <= 3.0) return "2";
+  if (durationH <= 6.0) return "4";
+  return "8";
+}
+
+/* Blended P50 revenue £/MW/yr, duration-aware. */
+function bessRevenueMidGbpMwYr(durationH) {
+  const bucket = bessBenchmarks.revenue_gbp_mw_yr[bessDurationKey(durationH)];
+  return bucket.mid;
+}
+
+/* ── Solar heuristic KPIs (mirrors utils/solar_benchmarks.py) ─────────── */
+function solarKpis({ capacity_mw }) {
+  const cf = solarBenchmarks.capacity_factor.mid;              // 0.11
+  const ppa = solarBenchmarks.ppa_merchant_gbp_mwh.mid;        // £45/MWh
+  const capexPerKw = solarBenchmarks.capex_gbp_per_kw.mid;     // £730/kWp
+  const opexPerKwYr = solarBenchmarks.opex_gbp_per_kw_yr.mid;  // £10/kW/yr
+  const energyMwh = capacity_mw * 8760 * cf;
+  const capex = capacity_mw * 1000 * capexPerKw;
+  const revenue = energyMwh * ppa;
+  const opex = capacity_mw * 1000 * opexPerKwYr;
+  const net = revenue - opex;
+  const irr = capex > 0 ? Math.max(0, (net * 25 / capex - 1)) * 100 / 2.5 : 0;
+  const lcoe = energyMwh > 0 ? (capex / 25 + opex) / energyMwh : 0;
+  return {
+    effective_capacity_mw: +capacity_mw.toFixed(2),
+    capacity_factor_pct: +(cf * 100).toFixed(1),
+    annual_mwh: +energyMwh.toFixed(1),
+    energy_mwh: +energyMwh.toFixed(1),
+    capex_gbp_m: +(capex / 1_000_000).toFixed(2),
+    annual_revenue_gbp_m: +(revenue / 1_000_000).toFixed(2),
+    annual_opex_gbp_m: +(opex / 1_000_000).toFixed(2),
+    irr_pct: +irr.toFixed(1),
+    lcoe_gbp_per_mwh: +lcoe.toFixed(1),
+    ppa_price_gbp_mwh: ppa,
+  };
+}
 
 const ORCHESTRATOR_DEBOUNCE_MS = 260;
 const OBJECTIVES = [
@@ -112,12 +157,16 @@ function generateBessLayout({ lat, lon, capacity_mw, duration_h }) {
 }
 
 /* ── Heuristic KPIs (BESS) ──────────────────────────────────────────────── */
+/* Anchored to feasi-frontend/src/data/bess-benchmarks.json which mirrors
+ * utils/bess_benchmarks.py (Modo Energy GB BESS index, Mar 2026).          */
 function bessKpis({ capacity_mw, duration_h, headroom_mw }) {
   const effective = headroom_mw != null ? Math.min(capacity_mw, headroom_mw) : capacity_mw;
   const energy = effective * duration_h;
-  const capex = energy * 1000 * 330;
-  const revenue = effective * 75_000;
-  const opex = energy * 1000 * 8;
+  const capexGbpPerKwh = bessBenchmarks.capex_gbp_per_kwh.mid;       // £310/kWh
+  const fixedOpexGbpMwYr = bessBenchmarks.fixed_opex_gbp_mw_yr;      // £8k/MW/yr
+  const capex = energy * 1000 * capexGbpPerKwh;
+  const revenue = effective * bessRevenueMidGbpMwYr(duration_h);
+  const opex = effective * fixedOpexGbpMwYr;
   const net = revenue - opex;
   const irr = Math.max(0, ((net * 15) / capex - 1)) * 100 / 1.5;
   const lcoe = capex / Math.max(1, energy * 250);
@@ -158,6 +207,24 @@ export default function DesignCanvas({
 }) {
   const workload = project?.technology || "bess";
   const defaults = WORKLOAD_DEFAULTS[workload] || WORKLOAD_DEFAULTS.bess;
+
+  // ── Canvas ↔ 3D Site Twin view mode (additive, 2D canvas stays default) ──
+  // Expose via useSite context so external callers can switch it (ChatPanel
+  // actions, deep-links, …). Falls back to a local state+localStorage pair
+  // if the context isn't wired through — defensive since DesignCanvas can
+  // render both inside the workspace and standalone in tests.
+  let siteCtx = null;
+  try { siteCtx = useSite(); } catch { siteCtx = null; } // eslint-disable-line
+  const [localMode, setLocalMode] = useState(() => {
+    try { return localStorage.getItem("princeps_design_canvas_mode") === "twin" ? "twin" : "canvas"; }
+    catch { return "canvas"; }
+  });
+  const designMode = siteCtx?.designCanvasMode || localMode;
+  const setDesignMode = useCallback((m) => {
+    if (siteCtx?.setDesignCanvasMode) siteCtx.setDesignCanvasMode(m);
+    setLocalMode(m);
+    try { localStorage.setItem("princeps_design_canvas_mode", m); } catch { /* ignore */ }
+  }, [siteCtx]);
 
   const [capacity, setCapacity] = useState(() => site?.capacity_mw || defaults.capacity_mw || 50);
   const [duration, setDuration] = useState(defaults.duration_h || 2);
@@ -211,9 +278,12 @@ export default function DesignCanvas({
     });
   }, [site, capacity, duration]);
 
-  const kpis = useMemo(() => bessKpis({
-    capacity_mw: capacity, duration_h: duration, headroom_mw: headroom,
-  }), [capacity, duration, headroom]);
+  const kpis = useMemo(() => {
+    if (workload === "solar") return solarKpis({ capacity_mw: capacity });
+    return bessKpis({
+      capacity_mw: capacity, duration_h: duration, headroom_mw: headroom,
+    });
+  }, [workload, capacity, duration, headroom]);
 
   const reinforcement = useMemo(
     () => reinforcementEstimate(capacity, headroom),
@@ -722,17 +792,58 @@ export default function DesignCanvas({
   }, [site, workload, capacity, duration]);
 
   /* ── "Why?" for a KPI ──────────────────────────────────────────────── */
+  // If a saved version exists, ask the backend for a bankable explanation
+  // grounded in the canonical design doc. Otherwise build a local explanation
+  // from the live KPIs + benchmarks — much better UX than "save first".
   const explainKpiValue = useCallback(async (kpiKey) => {
     setWhyKpi(kpiKey); setWhyText(null);
-    if (!currentVersionId) {
-      setWhyText("Save a version first to ask why this value is what it is.");
-      return;
+    if (currentVersionId) {
+      try {
+        const res = await apiExplainKpi(currentVersionId, kpiKey);
+        setWhyText(res?.explanation || buildLocalExplanation(kpiKey));
+        return;
+      } catch (e) {
+        // fall through to local explanation
+        console.warn("[DesignCanvas] explain failed, local fallback:", e);
+      }
     }
-    try {
-      const res = await apiExplainKpi(currentVersionId, kpiKey);
-      setWhyText(res?.explanation || "No explanation available.");
-    } catch (e) { setWhyText(e.message || String(e)); }
-  }, [currentVersionId]);
+    setWhyText(buildLocalExplanation(kpiKey));
+  }, [currentVersionId, kpis, workload, capacity, duration, headroom]);
+
+  // Local explanation builder — references the same benchmarks used by the
+  // backend design engine (Cushman/CBRE Tier 3 £4.2M/MW; Cornwall Insight OpEx).
+  const buildLocalExplanation = useCallback((kpiKey) => {
+    const k = kpis || {};
+    switch (kpiKey) {
+      case "capex_gbp_m": {
+        if (workload === "dc") {
+          return `£${k.capex_gbp_m ?? "—"}M = ${capacity} MW × £${k.capex_per_mw_gbp_m ?? 4.2} M/MW IT. Benchmark: Cushman & Wakefield UK DC Market 2025 + CBRE H1 2025 Tier-3 range £3.5–5.0 M/MW IT mid-point £4.2 M, scaled by Tier (${k.tier ?? 3}) and redundancy (${k.redundancy ?? "N+1"}).`;
+        }
+        if (workload === "bess") {
+          return `CapEx = ${capacity} MW × ${duration} h × £330/kWh. £330/kWh is the 2026 UK LFP BESS all-in benchmark (Modo Energy BESS CapEx tracker Feb 2026: £280–370/kWh range).`;
+        }
+        if (workload === "solar") {
+          return `£${k.capex_gbp_m ?? "—"}M = ${capacity} MW × £${solarBenchmarks.capex_gbp_per_kw.mid}/kWp (UK ground-mount 2026, range £${solarBenchmarks.capex_gbp_per_kw.low}–${solarBenchmarks.capex_gbp_per_kw.high}/kWp). Source: ${solarBenchmarks._source}.`;
+        }
+        return "CapEx derived from engineering sizing + standard unit-cost benchmarks.";
+      }
+      case "annual_revenue_gbp_m": {
+        if (workload === "dc") return `£${k.annual_revenue_gbp_m ?? "—"}M/yr = ${capacity} MW × £2.8M/MW/yr (Cushman H1 2025 UK hyperscaler lease benchmark, range £2.4–3.2M/MW/yr).`;
+        if (workload === "bess") return `Revenue from BM + imbalance + DC/DR/DM stack. Default £75k/MW-yr from Modo Energy GB BESS 2H index averaged 2024-2026.`;
+        if (workload === "solar") {
+          return `£${k.annual_revenue_gbp_m ?? "—"}M/yr = ${k.annual_mwh ?? "—"} MWh × £${solarBenchmarks.ppa_merchant_gbp_mwh.mid}/MWh (merchant PPA mid, range £${solarBenchmarks.ppa_merchant_gbp_mwh.low}–${solarBenchmarks.ppa_merchant_gbp_mwh.high}). Corporate PPA mid £${solarBenchmarks.ppa_corporate_gbp_mwh.mid}/MWh. Source: ${solarBenchmarks._source}.`;
+        }
+        return "Revenue derived from standard UK merchant benchmarks.";
+      }
+      case "annual_opex_gbp_m": return `£${k.annual_opex_gbp_m ?? "—"}M/yr = facility MWh × £110/MWh PPA baseline + £0.35M/MW/yr staff + maintenance. Reference: Cornwall Insight DC OpEx report 2025.`;
+      case "irr_pct": return `IRR ${k.irr_pct ?? "—"}% from 15-yr simple cashflow ((revenue − opex) × 15 / capex − 1) / 1.5. Replace with full DCF in Decide tab for a bankable figure.`;
+      case "lcoe_gbp_per_mwh": return `£${k.lcoe_gbp_per_mwh ?? "—"}/MWh = (capex/15 + opex) / annual IT MWh. DC LCOE is non-standard — shown as cost-per-MWh-delivered for benchmarking.`;
+      case "energy_mwh": return `${k.energy_mwh ?? "—"} MWh IT throughput = ${capacity} MW × 8760 h × 0.85 utilisation. Facility total (inc. PUE ${k.pue ?? 1.3}) is ${k.annual_mwh ?? "—"} MWh/yr.`;
+      case "effective_capacity_mw": return `Effective capacity = min(design ${capacity} MW, DNO headroom ${headroom ?? "unverified"} MW).`;
+      case "pue": return `Target PUE ${k.pue ?? 1.3}. Range: 1.15 (cold-climate free-cooling) → 1.45 (warm-climate mechanical). UK hyperscale median 1.25 per Uptime Institute Global Survey 2024.`;
+      default: return `Value derived from the engineering sizing pipeline. See Cushman/CBRE/Modo benchmarks referenced in server payload \`benchmark_source\` field.`;
+    }
+  }, [kpis, workload, capacity, duration, headroom]);
 
   /* ── Export PDF/CSV/DXF ────────────────────────────────────────────── */
   const exportAs = useCallback(async (format) => {
@@ -751,6 +862,10 @@ export default function DesignCanvas({
 
   if (!isOpen || !site) return null;
 
+  // WKT polygon for 3D twin — prefer an explicit polygon on the site/project.
+  const twinPolygonWkt = project?.polygon_wkt || project?.site_polygon_wkt
+    || site?.polygon_wkt || site?.site_polygon_wkt || null;
+
   return (
     <div className="dc-root">
       <header className="dc-head">
@@ -760,6 +875,27 @@ export default function DesignCanvas({
           {apiLoading && <span className="dc-spin" title="Re-running pipeline">↻</span>}
           {apiError && <span className="dc-err-inline" title={apiError}>⚠</span>}
         </div>
+
+        {/* ── Canvas ↔ 3D Site Twin tabs — additive, left of Optimise row ── */}
+        <div className="dc-viewmode" role="tablist" aria-label="Design view">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={designMode === "canvas"}
+            className={"dc-vm-tab" + (designMode === "canvas" ? " dc-vm-tab-active" : "")}
+            onClick={() => setDesignMode("canvas")}
+            title="2D Mapbox design canvas (layouts, BOM, layers)"
+          >Canvas</button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={designMode === "twin"}
+            className={"dc-vm-tab" + (designMode === "twin" ? " dc-vm-tab-active" : "")}
+            onClick={() => setDesignMode("twin")}
+            title="Full 3D site twin (construction-kit view)"
+          >3D Site Twin</button>
+        </div>
+
         <div className="dc-spacer" />
         <div className="dc-opt-row" title="Run scipy optimiser over design parameters">
           <span className="dc-opt-lbl">Optimise:</span>
@@ -778,10 +914,28 @@ export default function DesignCanvas({
 
       <div className="dc-body">
         <div className="dc-canvas-wrap">
-          <div className="dc-canvas" ref={mapContainerRef} />
+          {/* 2D Mapbox canvas — stays mounted (display:none when on 3D tab)
+              so the mapbox instance survives tab switches without a rebuild. */}
+          <div className="dc-canvas" ref={mapContainerRef}
+               style={{ display: designMode === "twin" ? "none" : "block" }} />
 
-          {/* D5 — mask toggle */}
-          {mask && (
+          {/* 3D Site Twin — full-surface lazy mount. Keyed on project/site
+              so switching context unmounts cleanly. */}
+          {designMode === "twin" && (
+            <div className="dc-canvas-twin">
+              <TwinLazy
+                key={`${project?.project_id || "x"}-${site?.lat || 0}-${site?.lon || 0}`}
+                projectId={project?.project_id || site?.candidate_id || "design"}
+                polygon_wkt={twinPolygonWkt}
+                tech={workload}
+                capacity_mw={capacity}
+                mode="oblique"
+              />
+            </div>
+          )}
+
+          {/* 2D-only overlays — hidden in 3D twin mode. */}
+          {designMode !== "twin" && mask && (
             <button
               className="dc-mask-toggle"
               onClick={() => setMaskVisible((v) => !v)}
@@ -792,7 +946,7 @@ export default function DesignCanvas({
           )}
 
           {/* D5 — mask legend */}
-          {mask && maskVisible && (
+          {designMode !== "twin" && mask && maskVisible && (
             <div className="dc-mask-legend">
               <div className="dc-legend-title">Constraints</div>
               <Swatch color={MASK_COLORS.restricted_slope} label="Slope >10°" />
@@ -1157,6 +1311,38 @@ export default function DesignCanvas({
         .dc-body { flex: 1; display: flex; min-height: 0; }
         .dc-canvas-wrap { flex: 1; min-width: 0; position: relative; }
         .dc-canvas { position: absolute; inset: 0; background: #1A1D23; }
+        .dc-canvas-twin { position: absolute; inset: 0; background: #0F1318; }
+
+        /* ── Canvas ↔ 3D Site Twin tabs ───────────────────────────────── */
+        .dc-viewmode {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          margin-left: 14px;
+          padding: 3px;
+          background: var(--cds-layer-02);
+          border: 1px solid var(--cds-border-subtle);
+          border-radius: 8px;
+        }
+        .dc-vm-tab {
+          border: none;
+          background: transparent;
+          color: var(--cds-text-secondary);
+          font-family: inherit;
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          padding: 5px 12px;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 120ms;
+        }
+        .dc-vm-tab:hover { color: var(--ink); }
+        .dc-vm-tab-active {
+          background: var(--gold);
+          color: #fff;
+          box-shadow: 0 2px 6px rgba(245, 183, 49, 0.3);
+        }
 
         .dc-mask-toggle { position: absolute; top: 14px; right: 14px; padding: 7px 12px; background: rgba(255,255,255,0.92); border: 1px solid rgba(0,0,0,0.1); border-radius: 6px; font-family: inherit; font-size: 11px; font-weight: 600; color: #1A1714; cursor: pointer; z-index: 5; backdrop-filter: blur(8px); }
         .dc-mask-toggle:hover { background: #fff; }

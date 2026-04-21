@@ -1081,13 +1081,38 @@ async def dc_feasibility_pack(body: _FeasReq, pool: asyncpg.Pool = Depends(get_p
     cfe = await dc_hourly_cfe_247(_CFEReq(lat=body.lat, lon=body.lon, it_load_mw=body.it_load_mw, pv_mw=body.pv_mw, bess_mwh=body.bess_mwh, demand_flex_pct=5.0))
     chain = await dc_power_chain_sized(_PowerChainReq(it_load_mw=body.it_load_mw, tier=body.tier, redundancy=body.redundancy))
 
-    capex_per_mw_k = {1: 7500, 2: 8500, 3: 10_000, 4: 13_500}[body.tier]
+    # --- 2026 UK DC engineering-math — sourced from utils.dc_benchmarks ---
+    # Prior hard-coded CapEx band was £7.5–13.5 M/MW — ~2× market. The
+    # benchmarks module uses Cushman H1 2025 midpoints (£4.2 M/MW Tier 3).
+    # Cooling premium stays ("dry" saves chiller cost, "immersion" adds
+    # circulation & CDU) but now scales on top of the correct base.
+    from utils import dc_benchmarks as _bench  # local import — keeps router startup light
+
     cooling_key = body.cooling_topology or cool["recommended_topology"]
-    cooling_premium = {"a2_dry": 0, "a3_evap": -400, "l2c": 900, "immersion_1p": 1500, "immersion_2p": 2400}.get(cooling_key, 0)
-    capex = body.it_load_mw * (capex_per_mw_k + cooling_premium) * 1000
-    colo_rate = 1_500_000
-    rev = body.it_load_mw * colo_rate * 0.85
-    opex = body.it_load_mw * 250_000 + capex * 0.02
+    # £/MW cooling premium over the all-in benchmark (CBRE L2C / immersion guide 2026):
+    cooling_premium_per_mw = {
+        "a2_dry":       -100_000,    # dry-cooler saves ~£100k/MW vs hybrid
+        "a3_evap":      -400_000,    # full evap saves mechanical chiller cost
+        "l2c":          +900_000,    # liquid-to-chip CDUs add CapEx
+        "immersion_1p": +1_500_000,  # single-phase tank + dielectric fluid
+        "immersion_2p": +2_400_000,  # two-phase — premium fluid + containment
+    }.get(cooling_key, 0)
+    capex_per_mw_gbp = _bench.capex_per_mw_m(tier=body.tier, redundancy=body.redundancy) * 1_000_000
+    capex = body.it_load_mw * (capex_per_mw_gbp + cooling_premium_per_mw)
+
+    # Wholesale hyperscaler lease — 2026 UK Cushman mid £2.8 M/MW/yr.
+    colo_rate = _bench.lease_revenue_gbp_mw_yr(workload_type="hyperscale", band="mid")
+    occupancy = 0.85
+    rev = body.it_load_mw * colo_rate * occupancy
+    # OpEx — power + staff + maintenance + property. Bench computes the
+    # full annual total for the chosen PUE / utilisation / tier.
+    _opex = _bench.opex_total_gbp_yr(
+        it_load_mw=body.it_load_mw,
+        tier=body.tier,
+        workload_type="colo",
+        utilisation=occupancy,
+    )
+    opex = _opex["total_gbp"]
 
     def dcf(c, r_, o, life=20, r=0.08):
         return -c + sum((r_ - o) / ((1 + r) ** t) for t in range(1, life + 1))
@@ -1126,13 +1151,15 @@ async def dc_feasibility_pack(body: _FeasReq, pool: asyncpg.Pool = Depends(get_p
                 "p90": round(irr(capex * 0.92, rev * 1.08, opex * 0.95), 4),
             },
             "assumption_ledger": [
-                {"k": "capex_per_mw_tier_base", "v": capex_per_mw_k, "unit": "£k/MW",
-                 "source": "Uptime Institute Global Cost Benchmark 2025"},
-                {"k": "cooling_capex_premium", "v": cooling_premium, "unit": "£k/MW",
-                 "source": "CBRE + JLL Data Centre Cost Guide 2026 (indicative)"},
+                {"k": "capex_per_mw_tier_base", "v": round(capex_per_mw_gbp / 1e6, 2),
+                 "unit": "£M/MW", "source": f"utils.dc_benchmarks — {_bench.cite()}"},
+                {"k": "cooling_capex_premium", "v": cooling_premium_per_mw, "unit": "£/MW",
+                 "source": "CBRE + JLL Data Centre Cost Guide 2026 (liquid cooling uplift)"},
                 {"k": "colo_rate_gbp_mw_yr", "v": colo_rate, "unit": "£/MW/yr",
-                 "source": "CBRE Global Data Centre Trends 2026 — London I/O"},
-                {"k": "occupancy", "v": 0.85, "unit": "fraction", "source": "Founder assumption"},
+                 "source": "Cushman & Wakefield UK DC Market H1 2025 — London I/O wholesale"},
+                {"k": "opex_per_mw_yr_ex_power", "v": _bench.opex_per_mw_yr(body.tier), "unit": "£/MW/yr",
+                 "source": "CBRE DC OpEx benchmark 2025, 2026-uplifted"},
+                {"k": "occupancy", "v": occupancy, "unit": "fraction", "source": "Cushman UK colo 2025"},
                 {"k": "discount_rate", "v": 0.08, "unit": "per yr", "source": "UK infra WACC 2026"},
                 {"k": "project_life", "v": 20, "unit": "yrs", "source": "Typical DC amortisation"},
             ],

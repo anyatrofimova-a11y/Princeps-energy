@@ -48,6 +48,13 @@ const I = {
       <path d="M8 8.5V15M8 8.5L2 5M8 8.5L14 5" />
     </svg>
   ),
+  siteCube: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" strokeLinecap="round">
+      <rect x="2.5" y="6.5" width="11" height="7" rx="0.5" />
+      <path d="M2.5 6.5L8 3l5.5 3.5" />
+      <path d="M5 9.5h1.5M8.75 9.5h2.25M5 11.5h1.5M8.75 11.5h2.25" />
+    </svg>
+  ),
   chat: (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
       <path d="M2.5 3h11A1.5 1.5 0 0115 4.5v6a1.5 1.5 0 01-1.5 1.5H6l-3 3v-3H2.5A1.5 1.5 0 011 10.5v-6A1.5 1.5 0 012.5 3z" />
@@ -96,6 +103,7 @@ const NAV_ITEMS = [
   // unread count badge injected at render time).
   { id: "intelligence", label: "Intelligence",    icon: I.bell,   collapsible: true, badge: true },
   { id: "gridtwin",     label: "Grid Twin",       icon: I.cube },
+  { id: "sitetwin",     label: "Site Twin",       icon: I.siteCube },
   { id: "chat",         label: "Chat",            icon: I.chat },
   { id: "settings",     label: "Settings",        icon: I.gear },
 ];
@@ -108,7 +116,7 @@ const INTEL_CHILDREN = [
 ];
 
 // ────────────────────────────────────────────────────────────────
-function NavRow({ item, active, expanded, onClick, onToggleExpand, badgeCount }) {
+function NavRow({ item, active, expanded, onClick, onToggleExpand, badgeCount, disabled, disabledTooltip }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -117,11 +125,14 @@ function NavRow({ item, active, expanded, onClick, onToggleExpand, badgeCount })
       style={{
         display: "flex", alignItems: "stretch",
         borderLeft: active ? `3px solid ${C.gold}` : "3px solid transparent",
-        background: active ? C.goldSurface : hovered ? "rgba(201,166,75,0.04)" : "transparent",
+        background: active ? C.goldSurface : (hovered && !disabled) ? "rgba(201,166,75,0.04)" : "transparent",
+        opacity: disabled ? 0.5 : 1,
       }}
+      title={disabled ? disabledTooltip : undefined}
     >
       <button
-        onClick={onClick}
+        onClick={disabled ? undefined : onClick}
+        disabled={disabled}
         style={{
           flex: 1,
           display: "flex",
@@ -134,7 +145,7 @@ function NavRow({ item, active, expanded, onClick, onToggleExpand, badgeCount })
           fontWeight: active ? 600 : 500,
           fontSize: 13,
           fontFamily: "'DM Sans', sans-serif",
-          cursor: "pointer",
+          cursor: disabled ? "not-allowed" : "pointer",
           textAlign: "left",
         }}
       >
@@ -206,6 +217,24 @@ export default function Sidebar({ onGridTwin, onPipeline, onDcTwin, onBessFacili
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [intelligenceOpen, setIntelligenceOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Active project for Site Twin deep-link — prefer URL param, fall back to
+  // whichever project the sidebar tree has selected locally.
+  const [activeProjectId, setActiveProjectId] = useState(null);
+  useEffect(() => {
+    try {
+      const url = new URL(window.location.href);
+      setActiveProjectId(url.searchParams.get("project") || null);
+    } catch { /* ignore */ }
+    const onChange = () => {
+      try {
+        const url = new URL(window.location.href);
+        setActiveProjectId(url.searchParams.get("project") || null);
+      } catch { /* ignore */ }
+    };
+    window.addEventListener("popstate", onChange);
+    return () => window.removeEventListener("popstate", onChange);
+  }, [location.pathname, location.search]);
 
   // Keep the Intelligence group highlighted when on one of its routes.
   useEffect(() => {
@@ -323,10 +352,19 @@ export default function Sidebar({ onGridTwin, onPipeline, onDcTwin, onBessFacili
       case "gridtwin":
         onGridTwin?.();
         break;
+      case "sitetwin":
+        // Route to the full-screen 3D Site Twin for the active project.
+        // When no project is pinned, the nav row is disabled — this branch
+        // shouldn't fire, but keep a safe no-op.
+        if (activeProjectId) navigate(`/design/${encodeURIComponent(activeProjectId)}`);
+        break;
       case "chat":
         openChat();
         break;
       case "settings":
+        // Route to /settings (full-screen page) for reliability; the legacy
+        // modal panel is kept as a fallback via setSettingsOpen below.
+        navigate("/settings");
         setSettingsOpen(true);
         break;
       default:
@@ -371,11 +409,13 @@ export default function Sidebar({ onGridTwin, onPipeline, onDcTwin, onBessFacili
 
       {/* Primary nav — exactly 6 items */}
       <div style={{ padding: "8px 0 4px", flexShrink: 0 }}>
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.map((item) => {
+          const disabled = item.id === "sitetwin" && !activeProjectId;
+          return (
           <React.Fragment key={item.id}>
             <NavRow
               item={item}
-              active={active === item.id}
+              active={active === item.id || (item.id === "sitetwin" && location.pathname.startsWith("/design"))}
               expanded={
                 item.id === "projects" ? projectsOpen :
                 item.id === "intelligence" ? intelligenceOpen : false
@@ -389,6 +429,8 @@ export default function Sidebar({ onGridTwin, onPipeline, onDcTwin, onBessFacili
                     : undefined
               }
               badgeCount={item.id === "intelligence" ? unreadCount : 0}
+              disabled={disabled}
+              disabledTooltip={disabled ? "Pin a project first" : undefined}
             />
             {item.id === "intelligence" && intelligenceOpen && (
               <div
@@ -500,7 +542,8 @@ export default function Sidebar({ onGridTwin, onPipeline, onDcTwin, onBessFacili
               </div>
             )}
           </React.Fragment>
-        ))}
+          );
+        })}
       </div>
 
       <div style={{ flex: 1 }} />

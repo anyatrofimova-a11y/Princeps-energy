@@ -1,10 +1,20 @@
 import React, { useState, useEffect, useRef } from "react";
 import api from "../../services/api";
+import { useMapTime } from "../../hooks/useMapTime";
+import {
+  projectedSystemSnapshot,
+  isProjectedMode,
+  labelYear,
+  PATHWAY_SHORT,
+} from "../../lib/fesProjections";
 
 export default function LiveDataStrip() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
   const intervalRef = useRef(null);
+  const { asOf, fesPathway } = useMapTime();
+  const projected = isProjectedMode(asOf);
+  const year = labelYear(asOf);
 
   useEffect(() => {
     const fetchLive = async () => {
@@ -17,6 +27,35 @@ export default function LiveDataStrip() {
     intervalRef.current = setInterval(fetchLive, 30000);
     return () => clearInterval(intervalRef.current);
   }, []);
+
+  // ── Projection mode: user has scrubbed off today ─────────────────────
+  // We show deterministic FES 2024 interpolated numbers instead of live
+  // BMRS values, so the strip visibly responds to the scrubber + pathway.
+  if (projected) {
+    const snap = projectedSystemSnapshot(year, fesPathway);
+    const carbonColor = snap.carbon_gco2_kwh < 50 ? "#16a34a"
+                      : snap.carbon_gco2_kwh < 100 ? "#4ade80"
+                      : snap.carbon_gco2_kwh < 200 ? "#D4A018"
+                      : "#ef4444";
+    return (
+      <div className="live-strip-v2" data-mode="projected">
+        <span className="live-dot" style={{ background: "#F5B731" }} />
+        <span className="live-label" style={{ color: "#F5B731" }}>
+          PROJ {year} · {PATHWAY_SHORT[fesPathway] || fesPathway}
+        </span>
+        <MetricPill label="Demand" value={`${snap.demand_gw.toFixed(1)} GW`} />
+        <MetricPill label="Wind"   value={`${snap.wind_gw.toFixed(1)} GW`}  color="#3b82f6" />
+        <MetricPill label="Solar"  value={`${snap.solar_gw.toFixed(1)} GW`} color="#f59e0b" />
+        <MetricPill label="Carbon" value={`${snap.carbon_gco2_kwh} gCO\u2082`}
+          badge={snap.carbon_gco2_kwh < 50 ? "clean" : snap.carbon_gco2_kwh < 150 ? "moderate" : "dirty"}
+          badgeColor={carbonColor} />
+        <MetricPill label="Price"  value={`\u00a3${snap.price_gbp_mwh}/MWh`} color="#22c55e" />
+        <span className="live-timestamp" title="Heuristic interpolation from 2024 baseline to FES 2024 pathway-end (2050)">
+          FES 2024 · interp
+        </span>
+      </div>
+    );
+  }
 
   if (!data) return (
     <div className="live-strip-v2">

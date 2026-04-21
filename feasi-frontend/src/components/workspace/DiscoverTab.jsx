@@ -1,6 +1,41 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
 import { WhenWorkload } from "../../lib/workload";
 import DesignCanvas from "./DesignCanvas";
+import TwinLazy from "../twin3d/TwinLazy";
+
+/* ── Tiny fallback mini-map (lifted from OverviewTab.SiteMapPin pattern) ──
+ * Used when the project doesn't have enough context for a full 3D twin
+ * mount (no polygon / no tech / no capacity). Just drops a gold pin.    */
+function SiteMapPin({ lat, lon, name }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  useEffect(() => {
+    if (!containerRef.current || lat == null || lon == null) return;
+    const map = new mapboxgl.Map({
+      container: containerRef.current,
+      style: "mapbox://styles/mapbox/satellite-streets-v12",
+      center: [lon, lat], zoom: 13.5, attributionControl: false, interactive: true,
+    });
+    mapRef.current = map;
+    const el = document.createElement("div");
+    el.style.cssText = `
+      width: 28px; height: 28px; border-radius: 50% 50% 50% 0;
+      background: var(--gold, #F5B731); border: 3px solid #fff;
+      transform: rotate(-45deg); box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    `;
+    new mapboxgl.Marker({ element: el, anchor: "bottom" })
+      .setLngLat([lon, lat])
+      .setPopup(new mapboxgl.Popup({ offset: 18, closeButton: false })
+        .setHTML(`<div style="font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:#0F1318">${name || "Project site"}</div>`))
+      .addTo(map);
+    return () => { try { map.remove(); } catch {} mapRef.current = null; };
+  }, [lat, lon, name]);
+  if (lat == null || lon == null) {
+    return <div className="dsc-map-placeholder">No coordinates for this project.</div>;
+  }
+  return <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />;
+}
 
 /**
  * DiscoverTab — map-first canvas for finding and screening candidate sites
@@ -167,9 +202,47 @@ export default function DiscoverTab({ project, sites = null, mapSlot = null }) {
         <div className="dsc-right">
           {mapSlot ? (
             <div className="dsc-map-live">{mapSlot}</div>
-          ) : (
-            <div className="dsc-map-placeholder">Map view — wired in next sprint</div>
-          )}
+          ) : (() => {
+            // If the project has enough context (polygon + tech + capacity),
+            // mount the 3D Twin in oblique mode. Otherwise fall back to a
+            // lat/lon pin map so the user always sees *something* live.
+            const poly = project?.polygon_wkt || project?.site_polygon_wkt || project?.polygon;
+            const tech = project?.technology || project?.workload_type;
+            const cap = project?.capacity_mw;
+            const pid = project?.project_id;
+            const canTwin = !!(pid && poly && tech && cap);
+            if (canTwin) {
+              // Need the wrapper to be positioned so absolute children (deck.gl
+              // canvas etc.) fill it.
+              return (
+                <div className="dsc-map-live" style={{ position: "absolute", inset: 0 }}>
+                  <TwinLazy
+                    projectId={pid}
+                    polygon_wkt={poly}
+                    tech={tech}
+                    capacity_mw={cap}
+                    mode="oblique"
+                    fallback2D={
+                      <SiteMapPin
+                        lat={project?.lat}
+                        lon={project?.lon}
+                        name={project?.name}
+                      />
+                    }
+                  />
+                </div>
+              );
+            }
+            return (
+              <div className="dsc-map-live" style={{ position: "absolute", inset: 0 }}>
+                <SiteMapPin
+                  lat={project?.lat}
+                  lon={project?.lon}
+                  name={project?.name}
+                />
+              </div>
+            );
+          })()}
         </div>
       </section>
 

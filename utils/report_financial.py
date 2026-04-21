@@ -505,7 +505,9 @@ def _build_full_cashflow(finance: dict) -> list[dict]:
 
     capacity_mw = finance.get("capacity_mw", 50)
     technology = finance.get("technology", "solar")
-    ppa_price = finance.get("ppa_price", 55)
+    # Solar default PPA from utils.solar_benchmarks (2026 merchant mid £45/MWh)
+    from utils import solar_benchmarks as _sb
+    ppa_price = finance.get("ppa_price", _sb.ppa_price_merchant_mid())
 
     capex_mw = CAPEX_PER_MW.get(technology, CAPEX_PER_MW.get("solar", 550_000))
     opex_mw = OPEX_PER_MW.get(technology, OPEX_PER_MW.get("solar", 12_000))
@@ -559,7 +561,9 @@ def _build_full_debt_schedule(debt: dict) -> list[dict]:
     annual_opex = opex_mw * capacity_mw
     annual_gen_mwh = capacity_mw * cf * 8760 if not is_bess else 0
     bess_revenue_base = REVENUE_PER_MW.get(technology, 0) * capacity_mw if is_bess else 0
-    ppa_price = 55.0  # default
+    # Solar default PPA from utils.solar_benchmarks (2026 merchant mid £45/MWh)
+    from utils import solar_benchmarks as _sb
+    ppa_price = _sb.ppa_price_merchant_mid()
 
     debt_amount = total_capex * gearing
     interest_rate = INTEREST_RATES["senior"]
@@ -1054,7 +1058,8 @@ async def generate_financial_report(
     site_name: str = "Site",
     capacity_mw: float = 50.0,
     technology: str = "solar",
-    ppa_price: float = 55.0,
+    # Solar default = merchant PPA mid (utils.solar_benchmarks, 2026)
+    ppa_price: float = 45.0,
 ) -> bytes:
     """Full pipeline: appraisal -> sensitivity -> charts -> HTML -> PDF.
 

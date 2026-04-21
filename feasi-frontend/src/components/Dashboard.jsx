@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { STAGES, STAGE_INDEX } from "../lib/stage_workflow";
+import GridCanvas from "./GridCanvas";
 
 /**
  * Dashboard — Mission Control 3-card hero + active project table.
@@ -375,6 +376,7 @@ export default function Dashboard({
 
   return (
     <div className="mc-root">
+      <GridCanvas className="mc-bg-canvas" />
       <header className="mc-top">
         <div className="mc-top-left">
           <img src="/logo-princeps.png" alt="" width="28" height="28" className="mc-logo" />
@@ -424,7 +426,25 @@ const dashboardCss = `
     background: var(--bg);
     color: var(--cds-text-primary);
     font-family: "DM Sans", -apple-system, sans-serif;
+    position: relative;
   }
+  /* Subtle animated grid-node network behind Mission Control content
+     (same GridCanvas component chat rail uses). GridCanvas internally
+     paints at rgba(90,100,120,0.5) node / 0.25 edge alpha, so we don't
+     additionally dim here — leaving the outer opacity at 1 keeps the
+     gold pulses readable against the #F7F8FA page background. */
+  .mc-bg-canvas {
+    position: absolute !important;
+    inset: 0 !important;
+    pointer-events: none !important;
+    z-index: 0 !important;
+  }
+  /* Ensure every direct child of .mc-root (header, card grid, active-
+     projects table, etc.) sits above the canvas + vignette. */
+  .mc-root > header,
+  .mc-root > section,
+  .mc-root > div,
+  .mc-root > article { position: relative; z-index: 2; }
   .mc-root-err { display: flex; align-items: center; justify-content: center; }
   .mc-err-card {
     background: rgba(220,38,38,0.08);

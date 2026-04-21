@@ -3,6 +3,9 @@
 Inputs: capex, opex/revenue schedules, tax, WACC, terminal growth, debt schedule.
 Outputs: NPV (Gordon terminal), IRR (numpy_financial or bisection), FCFF/FCFE,
 equity NPV, and full covenant timeline (DSCR, LLCR, PLCR, ICR, gearing).
+
+Defaults for WACC, tax, and EGL threshold resolve through
+:mod:`utils.finance_benchmarks` so the whole platform tracks one truth.
 """
 
 from __future__ import annotations
@@ -16,14 +19,22 @@ try:
 except ImportError:
     _HAS_NPF = False
 
+from utils.finance_benchmarks import (
+    corporation_tax_rate,
+    egl_applies_to,
+    egl_threshold_gbp_mwh,
+    wacc,
+)
 
-# Lender thresholds (UK infra defaults)
+
+# Lender thresholds (UK infra defaults) — tighter gearing matches
+# Greencoat/Octopus 2025 capital structure disclosure (65-70% max).
 COVENANT_THRESHOLDS = {
     "dscr_min":   1.20,
     "llcr_min":   1.30,
     "plcr_min":   1.40,
     "icr_min":    2.00,
-    "gearing_max": 0.75,
+    "gearing_max": 0.70,
 }
 
 
@@ -124,8 +135,8 @@ class DCFEvaluator:
         capex: float,
         revenue_schedule: list[float],
         opex_schedule: list[float],
-        tax_rate: float = 0.25,
-        wacc: float = 0.08,
+        tax_rate: float | None = None,
+        wacc: float | None = None,
         cost_of_equity: float | None = None,
         terminal_growth: float = 0.0,
         debt_schedule: list[DebtYear] | None = None,
@@ -133,16 +144,20 @@ class DCFEvaluator:
         depreciation_schedule: list[float] | None = None,
         working_capital_schedule: list[float] | None = None,
         thresholds: dict[str, float] | None = None,
+        technology: str | None = None,
     ) -> None:
+        from utils.finance_benchmarks import wacc as _bench_wacc  # local to avoid shadow
+
+        self.technology = (technology or "solar").lower()
         self.capex = float(capex)
         self.revenue = list(revenue_schedule)
         self.opex = list(opex_schedule)
         if len(self.opex) != len(self.revenue):
             raise ValueError("revenue_schedule and opex_schedule must be same length")
         self.life = len(self.revenue)
-        self.tax_rate = tax_rate
-        self.wacc = wacc
-        self.cost_of_equity = cost_of_equity if cost_of_equity is not None else max(wacc, 0.10)
+        self.tax_rate = corporation_tax_rate() if tax_rate is None else tax_rate
+        self.wacc = _bench_wacc(self.technology, "stabilised") if wacc is None else wacc
+        self.cost_of_equity = cost_of_equity if cost_of_equity is not None else max(self.wacc + 0.025, 0.10)
         self.terminal_growth = terminal_growth
         self.debt = debt_schedule or [DebtYear(y, 0, 0, 0, 0) for y in range(1, self.life + 1)]
         if len(self.debt) < self.life:
@@ -293,6 +308,10 @@ class DCFEvaluator:
             "capex": round(self.capex, 2),
             "equity": round(self.equity, 2),
             "life_years": self.life,
+            "technology": self.technology,
+            "tax_rate": self.tax_rate,
+            "egl_applies": egl_applies_to(self.technology),
+            "egl_threshold_gbp_mwh": egl_threshold_gbp_mwh(),
             "min_dscr": round(min(dscrs), 3) if dscrs else None,
             "min_llcr": round(min(llcrs), 3) if llcrs else None,
             "min_plcr": round(min(plcrs), 3) if plcrs else None,
@@ -338,8 +357,13 @@ def evaluate_from_dict(payload: dict[str, Any]) -> dict[str, Any]:
     capex = float(payload["capex"])
     revenue = [float(x) for x in payload["revenue_schedule"]]
     opex = [float(x) for x in payload["opex_schedule"]]
-    tax_rate = float(payload.get("tax_rate", 0.25))
-    wacc = float(payload.get("wacc", 0.08))
+    tax_rate = payload.get("tax_rate")
+    if tax_rate is not None:
+        tax_rate = float(tax_rate)
+    wacc = payload.get("wacc")
+    if wacc is not None:
+        wacc = float(wacc)
+    technology = payload.get("technology")
     cost_of_equity = payload.get("cost_of_equity")
     terminal_growth = float(payload.get("terminal_growth", 0.0))
     equity = payload.get("equity")
@@ -380,5 +404,6 @@ def evaluate_from_dict(payload: dict[str, Any]) -> dict[str, Any]:
         depreciation_schedule=depr,
         working_capital_schedule=wc,
         thresholds=thresholds,
+        technology=technology,
     )
     return ev.to_dict()

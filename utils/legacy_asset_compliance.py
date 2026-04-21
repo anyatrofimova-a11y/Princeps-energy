@@ -230,16 +230,24 @@ def _assess_repowering(
     new_capacity_kw = capacity_kw * (1 + capacity_gain_pct / 100)
 
     # Cost estimate (GBP/kW for repowering — typically 60-70% of greenfield)
+    # Solar repower rate = 65% of 2026 all-in (£730/kWp) ≈ £475/kWp.
+    from utils import solar_benchmarks as _sb
+    solar_repower_kw = int(_sb.solar_capex_per_kw() * 0.65)   # ≈ £475/kWp
     repower_cost_per_kw = {
-        "solar_farm": 450,
+        "solar_farm": solar_repower_kw,
         "wind_farm": 900,
         "battery_storage": 350,
         "substation": 150,
     }
     cost = repower_cost_per_kw.get(asset_type, 500) * new_capacity_kw / 1000
 
-    # ROI years based on UK energy prices (~5p/kWh export, ~15p/kWh PPA)
-    annual_revenue = new_capacity_kw * 0.11 * 8760 * 0.10 / 1000  # CF ~10%, avg 11p/kWh
+    # ROI — solar uses 2026 UK mid-case CF + merchant PPA (utils.solar_benchmarks)
+    if asset_type == "solar_farm":
+        cf = _sb.solar_capacity_factor_mid()                         # 0.11
+        ppa_gbp_kwh = _sb.ppa_price_merchant_mid() / 1000.0          # £0.045/kWh
+        annual_revenue = new_capacity_kw * cf * 8760 * ppa_gbp_kwh / 1000
+    else:
+        annual_revenue = new_capacity_kw * 0.11 * 8760 * 0.10 / 1000
     roi_years = round(cost / annual_revenue, 1) if annual_revenue > 0 else None
 
     recommended = (

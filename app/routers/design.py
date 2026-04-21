@@ -24,7 +24,14 @@ from pydantic import BaseModel, Field
 
 from app.deps import get_pool, get_claude, get_optional_user
 from app.helpers import CLAUDE_MODEL
+from utils.bess_benchmarks import (
+    bess_capex_per_kwh,
+    bess_fixed_opex_gbp_mw_yr,
+    bess_revenue_mid,
+)
 from utils.pv_layout_engine import generate_pv_layout, list_modules
+from utils import solar_benchmarks
+from utils.finance_benchmarks import ppa_price_merchant as _bench_ppa
 
 import anthropic  # type: ignore
 
@@ -187,9 +194,13 @@ def _bess_layout(lat, lon, capacity_mw, duration_h):
 def _bess_kpis(capacity_mw, duration_h, headroom_mw):
     effective = capacity_mw if headroom_mw is None else min(capacity_mw, headroom_mw)
     energy = effective * duration_h
-    capex = energy * 1000 * 330           # £/kWh all-in
-    revenue = effective * 75_000          # £/MW-yr
-    opex = energy * 1000 * 8              # £/kWh-yr
+    # CapEx £/kWh all-in (bess_benchmarks mid case, Mar 2026).
+    capex = energy * 1000 * bess_capex_per_kwh("mid")
+    # Blended revenue £/MW-yr, duration-aware (Modo Energy index, Mar 2026).
+    revenue = effective * bess_revenue_mid(duration_h)
+    # Fixed O&M — approximate £/kWh-yr from £/MW-yr divided by duration.
+    opex_per_kwh_yr = bess_fixed_opex_gbp_mw_yr() / (max(0.5, duration_h) * 1000)
+    opex = energy * 1000 * opex_per_kwh_yr
     net = revenue - opex
     capex_m = capex / 1_000_000
     irr = max(0, (net * 15 / capex - 1)) * 100 / 1.5 if capex else 0
@@ -293,13 +304,39 @@ async def generate(
             )
             layout = pv.get("geojson") or {"type": "FeatureCollection", "features": []}
             stats = pv.get("stats") or {}
+
+            # ── 2026 UK solar engineering-math (utils.solar_benchmarks) ──
+            cf = solar_benchmarks.solar_capacity_factor_mid()        # 0.11
+            ppa_price = solar_benchmarks.ppa_price_merchant_mid()    # £45/MWh
+            capex_per_mw = solar_benchmarks.solar_capex_per_mw()     # £730k/MW
+            opex_per_mw_yr = solar_benchmarks.solar_opex_per_mw_yr() # £10k/MW/yr
+
+            # Prefer engine outputs where available, else benchmark-derived
+            energy_mwh = stats.get("annual_energy_mwh") \
+                or solar_benchmarks.annual_energy_mwh(capacity, cf)
+            capex_gbp = stats.get("capex_gbp") or capacity * capex_per_mw
+            revenue_gbp_yr = energy_mwh * ppa_price
+            opex_gbp_yr = capacity * opex_per_mw_yr
+            net_gbp_yr = revenue_gbp_yr - opex_gbp_yr
+            # 25-yr simple IRR approximation (same form as BESS path, life=25)
+            irr_pct = max(0, (net_gbp_yr * 25 / capex_gbp - 1)) * 100 / 2.5 \
+                if capex_gbp > 0 else 0.0
+            lcoe_gbp_mwh = (capex_gbp / 25 + opex_gbp_yr) / max(1.0, energy_mwh)
+            npv_gbp_m = (net_gbp_yr * 25 - capex_gbp) / 1_000_000
+
             kpis = {
                 "effective_capacity_mw": stats.get("capacity_mw_dc", capacity),
-                "annual_mwh": stats.get("annual_energy_mwh", capacity * 11 * 87.6),
-                "capex_gbp_m": stats.get("capex_gbp", capacity * 900_000) / 1_000_000,
-                "irr_pct": 8.5, "lcoe_gbp_per_mwh": 55, "npv_gbp_m": 0,
-                "energy_mwh": 0,
-                "annual_revenue_gbp_m": (capacity * 11 * 87.6 * 55) / 1_000_000,
+                "capacity_factor_pct": round(cf * 100, 1),
+                "annual_mwh": round(energy_mwh, 1),
+                "energy_mwh": round(energy_mwh, 1),
+                "capex_gbp_m": round(capex_gbp / 1_000_000, 2),
+                "annual_revenue_gbp_m": round(revenue_gbp_yr / 1_000_000, 2),
+                "annual_opex_gbp_m": round(opex_gbp_yr / 1_000_000, 2),
+                "irr_pct": round(irr_pct, 1),
+                "lcoe_gbp_per_mwh": round(lcoe_gbp_mwh, 1),
+                "ppa_price_gbp_mwh": ppa_price,
+                "npv_gbp_m": round(npv_gbp_m, 2),
+                "benchmark_source": solar_benchmarks.cite(),
             }
         except Exception as e:
             log.exception("solar layout failed")
@@ -1212,7 +1249,7 @@ def _extract_design_state(proj: dict) -> dict:
     design.setdefault("bess_hours", design.get("bess_hours", 2.0))
     design.setdefault("bess_mw_mwh", design["bess_mw"] * design["bess_hours"])
     design.setdefault("workload_mw", cap if tech == "dc" else design.get("workload_mw", 0.0))
-    design.setdefault("ppa_price_gbp_mwh", design.get("ppa_price_gbp_mwh", 68.0))
+    design.setdefault("ppa_price_gbp_mwh", design.get("ppa_price_gbp_mwh", _bench_ppa("solar")))
     design.setdefault("ppa_share_pct", design.get("ppa_share_pct", 50.0))
     design.setdefault("site_area_ha", design.get("site_area_ha", 120.0))
     return design
@@ -1372,7 +1409,7 @@ async def full_project_doc(project_id: str, pool: asyncpg.Pool = Depends(get_poo
             solar_mw=float(design.get("solar_mw", 0)),
             bess_mw=float(design.get("bess_mw", 0)),
             bess_hours=float(design.get("bess_hours", 2.0)),
-            ppa_price_gbp_mwh=float(design.get("ppa_price_gbp_mwh", 68.0)),
+            ppa_price_gbp_mwh=float(design.get("ppa_price_gbp_mwh", _bench_ppa("solar"))),
             ppa_share_pct=float(design.get("ppa_share_pct", 50.0)),
             workload_mw=float(design.get("workload_mw", 0)),
             site_area_ha=float(design.get("site_area_ha", 120.0)),
@@ -1448,7 +1485,7 @@ async def apply_mutation(pool, project_id: str, field: str, value: float) -> dic
         solar_mw=float(design.get("solar_mw", 0)),
         bess_mw=float(design.get("bess_mw", 0)),
         bess_hours=float(design.get("bess_hours", 2.0)),
-        ppa_price_gbp_mwh=float(design.get("ppa_price_gbp_mwh", 68.0)),
+        ppa_price_gbp_mwh=float(design.get("ppa_price_gbp_mwh", _bench_ppa("solar"))),
         ppa_share_pct=float(design.get("ppa_share_pct", 50.0)),
         workload_mw=float(design.get("workload_mw", 0)),
         site_area_ha=float(design.get("site_area_ha", 120.0)),
@@ -1497,7 +1534,7 @@ async def optimize_design_endpoint(project_id: str, body: OptimizeRequest,
     return optimise_capacity_mix(
         objective=body.objective,
         bounds=bounds or None,
-        ppa_price_gbp_mwh=float(design.get("ppa_price_gbp_mwh", 68.0)),
+        ppa_price_gbp_mwh=float(design.get("ppa_price_gbp_mwh", _bench_ppa("solar"))),
         site_area_ha=float(design.get("site_area_ha", 120.0)),
         grid_headroom_mw=float((grid or {}).get("headroom_mw") or 50.0),
         initial={

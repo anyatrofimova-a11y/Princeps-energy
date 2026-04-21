@@ -15,9 +15,24 @@
  * • Right:  GridIntelPanel from pulse/ (already built)
  */
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { MapboxOverlay } from "@deck.gl/mapbox";
 import api from "../../services/api";
 import { useSite } from "../../SiteContext";
 import GridAssetDrawer from "./GridAssetDrawer";
+import {
+  VOLTAGE_BUCKETS,
+  snapVoltage,
+  DNO_COLORS,
+} from "./gridPalette";
+import { buildGridGraphLayers } from "./gridGraphLayers";
+/* ── BOT-GL: persistent legend + hover tooltip + label builders ───────
+   GridGraphLegend and GridGraphHoverTip are mounted below. GridGraphLabels
+   exposes deck.gl TextLayer builders that BOT-GO can wire into its overlay
+   layer list without touching this file. */
+import GridGraphLegend from "./GridGraphLegend";
+import GridGraphHoverTip from "./GridGraphHoverTip";
 
 /* ─────────── Theme — light-gold palette (2026-04 redesign) ─────────── */
 const C = {
@@ -52,8 +67,16 @@ const SUBVIEWS = [
   { id: "resources", label: "Resources", hint: "Data sources" },
 ];
 
-const VOLTAGE_BUCKETS = [400, 275, 132, 66, 33, 22, 11];
-const DNOS = ["UKPN", "NGED", "SSEN", "SPEN", "ENWL", "NPG"];
+/* VOLTAGE_BUCKETS + snapVoltage + DNO_COLORS are imported from gridPalette.js
+   — the single source of truth for grid-graph colours and classification.
+   The DNOS filter list is ORDER-preserving (derived from DNO_COLORS keys) so
+   pill rows render in a consistent order across views. */
+const DNOS = Object.keys(DNO_COLORS);
+
+/* Transmission voltages (400/275 kV) are owned by National Grid ET, not the
+   6 regional DNOs, so a DNO + 400/275 kV combo is inherently empty. The
+   explanatory copy below nudges the user toward the nearest fix. */
+const TRANSMISSION_VOLTAGES = new Set([400, 275]);
 
 /* ─────────── Styles ─────────── */
 const S = {
@@ -198,7 +221,7 @@ const S = {
     flexWrap: "wrap",
     gap: 4,
   },
-  pill: (active, colour = C.gold) => ({
+  pill: (active, colour = C.gold, disabled = false) => ({
     padding: "3px 9px",
     fontSize: 10,
     fontWeight: 700,
@@ -206,11 +229,21 @@ const S = {
     color: active ? "#fff" : C.textDim,
     border: `1px solid ${active ? colour : C.border}`,
     borderRadius: 10,
-    cursor: "pointer",
+    cursor: disabled ? "not-allowed" : "pointer",
     fontFamily: "inherit",
     letterSpacing: 0.3,
     transition: "all 0.12s",
+    opacity: disabled ? 0.4 : 1,
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
   }),
+  pillCount: {
+    fontSize: 9,
+    fontWeight: 500,
+    opacity: 0.75,
+    fontFamily: "'JetBrains Mono', monospace",
+  },
   resetBtn: {
     marginTop: 8,
     padding: "4px 10px",
@@ -262,6 +295,19 @@ export default function GridGraphContainer({ mapContent }) {
   const [dnoFilter, setDnoFilter] = useState(new Set());
   const [selection, setSelection] = useState(null);
   const [loading, setLoading] = useState(true);
+  /* ── BOT-GL: hover-info state for the overlay tooltip. ─────────────────
+     Published on a window global so BOT-GO's deck.gl onHover callback can
+     drive it without a React-context round-trip. Callback signature:
+       window.__gridGraphHover(info)   // info = deck.gl PickingInfo | null
+     The tooltip hides itself when info.object is null/absent. */
+  const [hoverInfo, setHoverInfo] = useState(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.__gridGraphHover = setHoverInfo;
+    return () => {
+      if (window.__gridGraphHover === setHoverInfo) delete window.__gridGraphHover;
+    };
+  }, []);
   const { pickedLocation, setPickedLocation } = useSite();
 
   /* Load substation index on mount (one-shot, ~14k rows) */
@@ -287,16 +333,41 @@ export default function GridGraphContainer({ mapContent }) {
     const q = search.toLowerCase().trim();
     return substations.filter(s => {
       if (voltageFilter.size > 0) {
-        const nearest = VOLTAGE_BUCKETS.reduce((p, c) =>
-          Math.abs(c - (s.voltage_kv || 0)) < Math.abs(p - (s.voltage_kv || 0)) ? c : p
-        );
-        if (!voltageFilter.has(nearest)) return false;
+        if (!voltageFilter.has(snapVoltage(s.voltage_kv))) return false;
       }
       if (dnoFilter.size > 0 && !dnoFilter.has(s.dno)) return false;
       if (q && !(s.name || "").toLowerCase().includes(q)) return false;
       return true;
     });
   }, [substations, search, voltageFilter, dnoFilter]);
+
+  /* ─── Facet counts ──────────────────────────────────────────────────
+     Each pill's count reflects how many substations would remain if the
+     user toggled THAT pill in addition to the filters currently applied
+     on the OTHER axes (standard cross-facet pattern — lets the user see
+     where moves actually yield results without having to guess).       */
+  const voltageCounts = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const counts = Object.fromEntries(VOLTAGE_BUCKETS.map(v => [v, 0]));
+    for (const s of substations) {
+      if (dnoFilter.size > 0 && !dnoFilter.has(s.dno)) continue;
+      if (q && !(s.name || "").toLowerCase().includes(q)) continue;
+      const snap = snapVoltage(s.voltage_kv);
+      if (snap in counts) counts[snap]++;
+    }
+    return counts;
+  }, [substations, dnoFilter, search]);
+
+  const dnoCounts = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    const counts = Object.fromEntries(DNOS.map(d => [d, 0]));
+    for (const s of substations) {
+      if (voltageFilter.size > 0 && !voltageFilter.has(snapVoltage(s.voltage_kv))) continue;
+      if (q && !(s.name || "").toLowerCase().includes(q)) continue;
+      if (s.dno in counts) counts[s.dno]++;
+    }
+    return counts;
+  }, [substations, voltageFilter, search]);
 
   const toggleVoltage = (v) => {
     setVoltageFilter(prev => {
@@ -328,6 +399,67 @@ export default function GridGraphContainer({ mapContent }) {
   const resetFilters = () => {
     setVoltageFilter(new Set()); setDnoFilter(new Set()); setSearch("");
   };
+
+  /* Build the smart empty-state copy based on *why* the combo is empty.
+     Priority order:
+       1. Transmission voltage (400/275 kV) + any DNO — hard mismatch.
+       2. Voltage + DNO selected but no overlap even without the search.
+       3. Search-only misses vs. a filter combo that would itself yield 0.
+       4. Generic "try removing the last thing you toggled".             */
+  const emptyStateMessage = useMemo(() => {
+    if (filtered.length !== 0 || substations.length === 0) return null;
+
+    const selVoltages = Array.from(voltageFilter);
+    const selDnos = Array.from(dnoFilter);
+    const transmissionSel = selVoltages.filter(v => TRANSMISSION_VOLTAGES.has(v));
+
+    if (transmissionSel.length > 0 && selDnos.length > 0) {
+      const vTxt = transmissionSel.map(v => `${v}kV`).join(" / ");
+      const dTxt = selDnos.join(" / ");
+      return {
+        title: `No ${vTxt} substations operated by ${dTxt}.`,
+        body: `${vTxt} is National Grid ET transmission, not DNO-owned. Clear the DNO filter to see NGET assets, or pick 132 kV / 33 kV / 11 kV to stay within ${dTxt}.`,
+        suggestion: `clear-dno`,
+      };
+    }
+
+    // Voltage + DNO selected, just no overlap in the data we have
+    if (selVoltages.length > 0 && selDnos.length > 0) {
+      return {
+        title: `No substations match ${selVoltages.map(v => v + "kV").join(" / ")} on ${selDnos.join(" / ")}.`,
+        body: `This DNO may not operate assets at that voltage, or the combo isn't in the open-data feed yet. Try clearing one of the two filters.`,
+        suggestion: `clear-dno`,
+      };
+    }
+
+    if (search && !selVoltages.length && !selDnos.length) {
+      return {
+        title: `No substations match "${search}".`,
+        body: `The 14k index is indexed by name — check spelling, or browse by DNO / voltage instead.`,
+        suggestion: `clear-search`,
+      };
+    }
+
+    if (selVoltages.length > 0) {
+      return {
+        title: `No substations at ${selVoltages.map(v => v + "kV").join(" / ")}.`,
+        body: `Try expanding the voltage selection or clearing all filters.`,
+        suggestion: `clear-all`,
+      };
+    }
+    if (selDnos.length > 0) {
+      return {
+        title: `No substations for ${selDnos.join(" / ")}.`,
+        body: `The ingest for this DNO may be mid-refresh — try another operator or clear filters.`,
+        suggestion: `clear-all`,
+      };
+    }
+    return {
+      title: `No substations loaded.`,
+      body: `The grid index is empty. Check the /api/nged/substations/index feed.`,
+      suggestion: `clear-all`,
+    };
+  }, [filtered.length, substations.length, voltageFilter, dnoFilter, search]);
 
   return (
     <div style={S.root}>
@@ -406,29 +538,59 @@ export default function GridGraphContainer({ mapContent }) {
             <div style={S.filterBlock}>
               <span style={S.filterLabel}>Voltage</span>
               <div style={S.pillRow}>
-                {VOLTAGE_BUCKETS.map(v => (
-                  <button
-                    key={v}
-                    style={S.pill(voltageFilter.has(v), C.gold)}
-                    onClick={() => toggleVoltage(v)}
-                  >
-                    {v}kV
-                  </button>
-                ))}
+                {VOLTAGE_BUCKETS.map(v => {
+                  const count = voltageCounts[v] || 0;
+                  const active = voltageFilter.has(v);
+                  const disabled = count === 0 && !active;
+                  return (
+                    <button
+                      key={v}
+                      style={S.pill(active, C.gold, disabled)}
+                      title={
+                        disabled
+                          ? `No ${v}kV substations under the current DNO filter — click to clear DNO`
+                          : `${v}kV — ${count.toLocaleString()} sites`
+                      }
+                      onClick={() => {
+                        // Zero-count pill: clear the OTHER axis so the user
+                        // actually escapes the dead-end combo.
+                        if (disabled) setDnoFilter(new Set());
+                        else toggleVoltage(v);
+                      }}
+                    >
+                      <span>{v}kV</span>
+                      <span style={S.pillCount}>{count.toLocaleString()}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div style={S.filterBlock}>
               <span style={S.filterLabel}>DNO</span>
               <div style={S.pillRow}>
-                {DNOS.map(d => (
-                  <button
-                    key={d}
-                    style={S.pill(dnoFilter.has(d), C.goldDark)}
-                    onClick={() => toggleDno(d)}
-                  >
-                    {d}
-                  </button>
-                ))}
+                {DNOS.map(d => {
+                  const count = dnoCounts[d] || 0;
+                  const active = dnoFilter.has(d);
+                  const disabled = count === 0 && !active;
+                  return (
+                    <button
+                      key={d}
+                      style={S.pill(active, C.goldDark, disabled)}
+                      title={
+                        disabled
+                          ? `${d} has no substations at the currently-selected voltage — click to clear voltage`
+                          : `${d} — ${count.toLocaleString()} sites`
+                      }
+                      onClick={() => {
+                        if (disabled) setVoltageFilter(new Set());
+                        else toggleDno(d);
+                      }}
+                    >
+                      <span>{d}</span>
+                      <span style={S.pillCount}>{count.toLocaleString()}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -438,6 +600,10 @@ export default function GridGraphContainer({ mapContent }) {
             selection={selection}
             onSelect={handleRowClick}
             loading={loading}
+            emptyState={emptyStateMessage}
+            onClearVoltage={() => setVoltageFilter(new Set())}
+            onClearDno={() => setDnoFilter(new Set())}
+            onClearAll={resetFilters}
           />
         </aside>
 
@@ -448,6 +614,12 @@ export default function GridGraphContainer({ mapContent }) {
           {activeTab === "graph"     && <GraphView substations={filtered} selection={selection} onSelect={handleRowClick} />}
           {activeTab === "table"     && <TableView substations={filtered} onSelect={handleRowClick} />}
           {activeTab === "resources" && <ResourcesView />}
+
+          {/* BOT-GL: persistent colour legend — only on the visual sub-views.
+              The Table / Resources / Browse tabs have no map canvas to key. */}
+          {(activeTab === "map" || activeTab === "graph") && (
+            <GridGraphLegend />
+          )}
         </div>
 
         {/* RIGHT — full-height drawer shell (clearly-marked slots for BOT-Z3) */}
@@ -458,6 +630,10 @@ export default function GridGraphContainer({ mapContent }) {
           />
         )}
       </div>
+
+      {/* BOT-GL: hover tooltip — position: fixed, renders above everything.
+          Driven by window.__gridGraphHover(info) from BOT-GO's onHover. */}
+      <GridGraphHoverTip info={hoverInfo} />
     </div>
   );
 }
@@ -466,7 +642,10 @@ export default function GridGraphContainer({ mapContent }) {
 /* ═══════════════════════════════════════════════════════════════════
  * Hand-rolled virtualized list (avoids adding react-window as a dep)
  * ═══════════════════════════════════════════════════════════════════ */
-function VirtualList({ items, selection, onSelect, loading }) {
+function VirtualList({
+  items, selection, onSelect, loading,
+  emptyState, onClearVoltage, onClearDno, onClearAll,
+}) {
   const ROW_H = 42;
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(600);
@@ -488,7 +667,85 @@ function VirtualList({ items, selection, onSelect, loading }) {
     return <div style={{ padding: 20, color: C.textMuted, fontSize: 12, textAlign: "center" }}>Loading 14k substations…</div>;
   }
   if (items.length === 0) {
-    return <div style={{ padding: 20, color: C.textMuted, fontSize: 12, textAlign: "center" }}>No matches</div>;
+    const msg = emptyState || {
+      title: "No matches",
+      body: "Adjust filters or clear them to see the full network.",
+      suggestion: "clear-all",
+    };
+    const primaryHandler =
+      msg.suggestion === "clear-dno"    ? onClearDno    :
+      msg.suggestion === "clear-search" ? onClearAll    :
+      msg.suggestion === "clear-all"    ? onClearAll    :
+                                          onClearAll;
+    const primaryLabel =
+      msg.suggestion === "clear-dno"    ? "Clear DNO filter" :
+      msg.suggestion === "clear-search" ? "Clear search"     :
+                                          "Clear all filters";
+    return (
+      <div style={{
+        padding: "22px 18px",
+        color: C.textDim,
+        fontSize: 12,
+        lineHeight: 1.5,
+      }}>
+        <div style={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: C.text,
+          marginBottom: 6,
+          letterSpacing: "-0.01em",
+        }}>
+          {msg.title}
+        </div>
+        <div style={{
+          fontSize: 11,
+          color: C.textDim,
+          marginBottom: 14,
+        }}>
+          {msg.body}
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button
+            style={{
+              padding: "5px 12px",
+              fontSize: 10,
+              fontWeight: 700,
+              background: C.gold,
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              letterSpacing: 0.3,
+              textTransform: "uppercase",
+            }}
+            onClick={primaryHandler}
+          >
+            {primaryLabel}
+          </button>
+          {msg.suggestion !== "clear-all" && (
+            <button
+              style={{
+                padding: "5px 12px",
+                fontSize: 10,
+                fontWeight: 600,
+                background: "transparent",
+                color: C.textDim,
+                border: `1px solid ${C.border}`,
+                borderRadius: 6,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                letterSpacing: 0.3,
+                textTransform: "uppercase",
+              }}
+              onClick={onClearAll}
+            >
+              Clear all
+            </button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   const startIdx = Math.max(0, Math.floor(scrollTop / ROW_H) - 10);
@@ -702,233 +959,323 @@ function TableView({ substations, onSelect }) {
 
 
 /* ═══════════════════════════════════════════════════════════════════
- * Graph tab — GEOGRAPHIC projection view.
- * Substations rendered at their real lat/lon (Mercator-ish).
- * The UK outline emerges from the substation density.
- * Coloured by DNO by default; fallback to headroom RAG.
+ * Graph tab — deck.gl + Mapbox GL geographic view.
+ *
+ * OWNED by BOT-GO for its layer-builder + toggle wiring. Siblings:
+ *   - BOT-GL owns GridGraphLegend + GridGraphHoverTip + GridGraphLabels
+ *   - BOT-GA owns the left asset browser
+ *   - BOT-GC owns gridPalette.js
+ *
+ * Seven toggles in a top-right overlay panel each mutate at least one
+ * deck.gl layer in the `deckLayers` memo:
+ *   substations  → grid-graph-substations  (Scatterplot, dot by DNO)
+ *   capacityRag  → grid-graph-capacity-rag (Scatterplot, RAG by headroom)
+ *   constraints  → grid-graph-constraints-*(GeoJson polygon + centroid)
+ *   queueDepth   → grid-graph-queue-depth  (Scatterplot, bubble ∝ depth)
+ *   lines        → grid-graph-lines        (GeoJson PathLayer, V-coloured)
+ *   tecQueue     → grid-graph-tec-queue    (IconLayer, triangle, fade yr)
+ *   repd         → grid-graph-repd         (IconLayer, square, by status)
+ *
+ * Toggle state is LOCAL to the Graph view so it doesn't collide with the
+ * MapView's own layer-rail toggles (those are driven by SiteContext and
+ * belong to the Mapbox sub-view, not this one).
  * ═══════════════════════════════════════════════════════════════════ */
-const DNO_COLOURS = {
-  UKPN:  "#3b82f6",
-  NGED:  "#10b981",
-  SSEN:  "#a855f7",
-  SPEN:  "#f59e0b",
-  ENWL:  "#06b6d4",
-  NPG:   "#ef4444",
+
+const GRAPH_TOGGLES = [
+  { id: "substations",  label: "Substations",   hint: "All substation dots, coloured by DNO",     swatch: "#C9A64B" },
+  { id: "capacityRag",  label: "Capacity (RAG)", hint: "Green >30% / amber 10-30% / red <10%",    swatch: "#46b482" },
+  { id: "constraints",  label: "Constraints",    hint: "Congestion boundary polygons",            swatch: "#e6732a" },
+  { id: "queueDepth",   label: "Queue Depth",    hint: "Bubble size ∝ queue depth (MW)",          swatch: "#7c3aed" },
+  { id: "lines",        label: "Lines",          hint: "Power lines (OSM/LTDS), coloured by kV",  swatch: "#f5b731" },
+  { id: "tecQueue",     label: "TEC Queue",      hint: "ECR/TEC-registered projects (triangles)", swatch: "#7c3aed" },
+  { id: "repd",         label: "REPD",           hint: "Renewable energy planning database",      swatch: "#16a34a" },
+];
+
+const DEFAULT_VIEW_STATE = {
+  longitude: -2.8,
+  latitude: 54.0,
+  zoom: 5.2,
+  pitch: 0,
+  bearing: 0,
 };
 
-function GraphView({ substations, selection, onSelect }) {
-  const canvasRef = useRef(null);
-  const containerRef = useRef(null);
-  const [size, setSize] = useState({ w: 800, h: 600 });
-  const [hover, setHover] = useState(null);
-  const [colourBy, setColourBy] = useState("dno"); // 'dno' | 'rag'
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
-  // Resize
-  useEffect(() => {
-    const update = () => {
-      const el = containerRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      setSize({ w: r.width, h: r.height });
-      const c = canvasRef.current;
-      if (c) {
-        const dpr = window.devicePixelRatio || 1;
-        c.width = r.width * dpr;
-        c.height = r.height * dpr;
-        c.style.width = r.width + "px";
-        c.style.height = r.height + "px";
-        c.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
-      }
-    };
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
+function GraphView({ substations, selection, onSelect }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const overlayRef = useRef(null);
+  const [mapError, setMapError] = useState(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  // ── 7 toggle states. Substations on by default so the view isn't empty. ──
+  const [toggles, setToggles] = useState({
+    substations:  true,
+    capacityRag:  false,
+    constraints:  false,
+    queueDepth:   false,
+    lines:        false,
+    tecQueue:     false,
+    repd:         false,
+  });
+
+  const toggle = useCallback((id) => {
+    setToggles((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
-  // Projection: scale UK bounding box (lat 49.8-59 / lon -8 to 2) to canvas
-  const projected = useMemo(() => {
-    if (!substations.length || !size.w) return [];
-    const withCoords = substations.filter(s => s.lat != null && s.lon != null);
-    // UK-focused bounds
-    const minLat = 49.8, maxLat = 59.0, minLon = -8.5, maxLon = 2.0;
-    const pad = 30;
-    const latRange = maxLat - minLat, lonRange = maxLon - minLon;
-    const aspect = (lonRange * Math.cos(54 * Math.PI / 180)) / latRange;
-    let usableW = size.w - pad * 2;
-    let usableH = size.h - pad * 2;
-    if (usableW / usableH > aspect) usableW = usableH * aspect;
-    else usableH = usableW / aspect;
-    const offsetX = (size.w - usableW) / 2;
-    const offsetY = (size.h - usableH) / 2;
-    return withCoords.map(s => {
-      const x = offsetX + ((s.lon - minLon) / lonRange) * usableW;
-      const y = offsetY + ((maxLat - s.lat) / latRange) * usableH;
-      return { ...s, _x: x, _y: y };
-    });
-  }, [substations, size]);
+  // ── Fetched-on-demand datasets per toggle ─────────────────────────────
+  const [constraintsFC, setConstraintsFC] = useState(null);
+  const [queueData,     setQueueData]     = useState(null);
+  const [linesFC,       setLinesFC]       = useState(null);
+  const [tecFC,         setTecFC]         = useState(null);
+  const [repdFC,        setRepdFC]        = useState(null);
 
-  // Draw
+  // Current map bbox (for viewport-limited endpoints). Updated on moveend.
+  const [bbox, setBbox] = useState(null);
+
+  /* Init Mapbox + MapboxOverlay once */
   useEffect(() => {
-    const c = canvasRef.current;
-    if (!c) return;
-    const ctx = c.getContext("2d");
-    ctx.clearRect(0, 0, size.w, size.h);
-
-    // Background
-    ctx.fillStyle = "#f1f5f9";
-    ctx.fillRect(0, 0, size.w, size.h);
-
-    // Faint grid lines
-    ctx.strokeStyle = "rgba(148,163,184,0.15)";
-    ctx.lineWidth = 1;
-    for (let x = 50; x < size.w; x += 80) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, size.h); ctx.stroke();
+    if (!containerRef.current || mapRef.current) return;
+    if (!MAPBOX_TOKEN) {
+      setMapError("Missing VITE_MAPBOX_TOKEN — map cannot initialise.");
+      return;
     }
-    for (let y = 50; y < size.h; y += 80) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(size.w, y); ctx.stroke();
+    mapboxgl.accessToken = MAPBOX_TOKEN;
+
+    const map = new mapboxgl.Map({
+      container: containerRef.current,
+      style: "mapbox://styles/mapbox/light-v11",
+      center: [DEFAULT_VIEW_STATE.longitude, DEFAULT_VIEW_STATE.latitude],
+      zoom: DEFAULT_VIEW_STATE.zoom,
+      pitch: DEFAULT_VIEW_STATE.pitch,
+      bearing: DEFAULT_VIEW_STATE.bearing,
+      attributionControl: false,
+    });
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new mapboxgl.AttributionControl({ compact: true }), "bottom-right");
+
+    const overlay = new MapboxOverlay({ interleaved: false, layers: [] });
+    map.once("load", () => {
+      map.addControl(overlay);
+      overlayRef.current = overlay;
+      setMapReady(true);
+      const b = map.getBounds();
+      setBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+    });
+
+    const onMoveEnd = () => {
+      const b = map.getBounds();
+      setBbox([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+    };
+    map.on("moveend", onMoveEnd);
+
+    mapRef.current = map;
+    return () => {
+      map.off("moveend", onMoveEnd);
+      try { overlay.finalize?.(); } catch {}
+      map.remove();
+      mapRef.current = null;
+      overlayRef.current = null;
+    };
+  }, []);
+
+  /* Fetch constraints once when toggled on */
+  useEffect(() => {
+    if (!toggles.constraints || constraintsFC) return;
+    let cancelled = false;
+    api.grid.constraints(48).then((d) => {
+      if (cancelled || !d) return;
+      setConstraintsFC({ type: "FeatureCollection", features: d.features || [] });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [toggles.constraints, constraintsFC]);
+
+  /* Fetch queue summary when toggled on (use current bbox; falls back to synthetic) */
+  useEffect(() => {
+    if (!toggles.queueDepth) return;
+    let cancelled = false;
+    api.grid.queueSummary(bbox).then((d) => {
+      if (cancelled) return;
+      setQueueData(d); // may be [] or null; builder handles fallback
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [toggles.queueDepth, bbox]);
+
+  /* Fetch power lines viewport-scoped on zoom ≥ 7 */
+  useEffect(() => {
+    if (!toggles.lines || !bbox) return;
+    let cancelled = false;
+    const z = mapRef.current?.getZoom() || 0;
+    // Keep the request bounded — at low zoom use min_voltage_kv=132 filter
+    const minKv = z < 7 ? 132 : z < 9 ? 33 : 0;
+    api.grid.osmLines(bbox, minKv).then((d) => {
+      if (cancelled || !d) return;
+      setLinesFC(d.features ? d : { type: "FeatureCollection", features: d || [] });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [toggles.lines, bbox]);
+
+  /* Fetch TEC queue viewport-scoped */
+  useEffect(() => {
+    if (!toggles.tecQueue || !bbox) return;
+    let cancelled = false;
+    api.eso.tecGeojson(bbox).then((d) => {
+      if (cancelled || !d) return;
+      setTecFC(d.features ? d : { type: "FeatureCollection", features: d || [] });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [toggles.tecQueue, bbox]);
+
+  /* Fetch REPD viewport-scoped (zoom-dependent min MW to avoid clutter) */
+  useEffect(() => {
+    if (!toggles.repd || !bbox) return;
+    let cancelled = false;
+    const z = mapRef.current?.getZoom() || 0;
+    const minMw = z < 7 ? 50 : z < 9 ? 10 : z < 11 ? 1 : 0;
+    api.repd.geojson(bbox, null, null, minMw).then((d) => {
+      if (cancelled || !d) return;
+      setRepdFC(d.features ? d : { type: "FeatureCollection", features: d || [] });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [toggles.repd, bbox]);
+
+  /* Build layers from current toggles + data */
+  const handleLayerClick = useCallback((sel) => {
+    if (sel && onSelect) {
+      // GridAssetDrawer expects an object shaped like the list row; adapt.
+      if (sel.kind === "substation" && sel.feature?.properties) {
+        onSelect(sel.feature.properties);
+      } else {
+        // Non-substation kinds — set selection directly via parent state
+        // bridge. The parent onSelect expects a substation-shape, so we
+        // pass a synthetic object with name + id so the drawer can fall
+        // back to its basic KV view for ECR/TEC/REPD/constraint kinds.
+        const p = sel.feature?.properties || {};
+        onSelect({
+          id:            p.ref_id || p.project_id || p.boundary_id || p.id || p.name,
+          name:          p.name || p.project_name || p.connection_site || "—",
+          dno:           p.dno,
+          voltage_kv:    p.voltage_kv,
+          headroom_mw:   p.capacity_mw,
+          lat:           sel.lngLat?.lat,
+          lon:           sel.lngLat?.lng,
+          _kind:         sel.kind,
+          _raw:          p,
+        });
+      }
     }
+  }, [onSelect]);
 
-    // Draw points
-    for (const s of projected) {
-      const r = Math.max(1.5, Math.min(5, 2 + (s.voltage_kv || 0) / 100));
-      const colour = colourBy === "dno"
-        ? (DNO_COLOURS[s.dno] || "#94a3b8")
-        : (s.colour || "#94a3b8");
-      ctx.beginPath();
-      ctx.arc(s._x, s._y, r, 0, Math.PI * 2);
-      ctx.fillStyle = colour;
-      ctx.globalAlpha = 0.75;
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+  const deckLayers = useMemo(() => {
+    if (!mapReady) return [];
+    return buildGridGraphLayers({
+      substations,
+      constraintsFC,
+      queueData,
+      linesFC,
+      tecFC,
+      repdFC,
+      toggles,
+      onClick: handleLayerClick,
+      // BOT-GL integration: every layer calls this on hover so
+      // GridGraphHoverTip can render the fixed popover. Null on
+      // mouse-leave hides it.
+      onHover: (info) => {
+        if (typeof window.__gridGraphHover === "function") {
+          window.__gridGraphHover(info?.object ? info : null);
+        }
+      },
+    });
+  }, [mapReady, substations, constraintsFC, queueData, linesFC, tecFC, repdFC, toggles, handleLayerClick]);
 
-    // Highlight hover
-    if (hover) {
-      ctx.beginPath();
-      ctx.arc(hover._x, hover._y, 8, 0, Math.PI * 2);
-      ctx.strokeStyle = "#0f172a";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-  }, [projected, size, hover, colourBy]);
+  /* Push layers to the overlay whenever they change */
+  useEffect(() => {
+    if (overlayRef.current) overlayRef.current.setProps({ layers: deckLayers });
+  }, [deckLayers]);
 
-  const handleMove = (e) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    let best = null;
-    let bestD = 8;
-    for (const s of projected) {
-      const d = Math.hypot(s._x - mx, s._y - my);
-      if (d < bestD) { best = s; bestD = d; }
-    }
-    setHover(best);
-  };
-
-  const handleClick = () => {
-    if (hover) onSelect(hover);
-  };
-
-  const dnoCounts = useMemo(() => {
-    const m = {};
-    for (const s of projected) m[s.dno || "OTHER"] = (m[s.dno || "OTHER"] || 0) + 1;
-    return m;
-  }, [projected]);
+  /* Active layer count for the panel header */
+  const activeCount = GRAPH_TOGGLES.filter(t => toggles[t.id]).length;
 
   return (
-    <div ref={containerRef} style={{ width: "100%", height: "100%", position: "relative", background: "#f1f5f9" }}>
-      <canvas
-        ref={canvasRef}
-        style={{ display: "block", cursor: hover ? "pointer" : "default" }}
-        onMouseMove={handleMove}
-        onMouseLeave={() => setHover(null)}
-        onClick={handleClick}
-      />
+    <div style={{ width: "100%", height: "100%", position: "relative", background: "#eef1f4" }}>
+      <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
 
-      {/* Info overlay (top-left) */}
+      {mapError && (
+        <div style={{
+          position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)",
+          background: "#FBD8D5", color: "#8E1E1E", border: "1px solid #E89A94",
+          padding: "8px 14px", borderRadius: 6, fontSize: 12, zIndex: 10,
+        }}>
+          {mapError}
+        </div>
+      )}
+
+      {/* ── Overlay toggle panel (top-right) ────────────────────────── */}
       <div style={{
-        position: "absolute", top: 14, left: 14,
-        background: "rgba(255,255,255,0.96)",
-        padding: "10px 14px", borderRadius: 8, fontSize: 11,
-        boxShadow: "0 1px 4px rgba(15,23,42,0.12)",
+        position: "absolute", top: 12, right: 12, zIndex: 5,
+        background: "rgba(255,255,255,0.98)",
         border: `1px solid ${C.border}`,
+        borderRadius: 10,
+        padding: "12px 14px",
+        boxShadow: "0 4px 14px rgba(15,23,42,0.10)",
+        fontFamily: "'DM Sans', system-ui, sans-serif",
+        minWidth: 220,
       }}>
-        <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4 }}>
-          UK Grid Topology
+        <div style={{
+          display: "flex", alignItems: "baseline", justifyContent: "space-between",
+          marginBottom: 8,
+        }}>
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: 0.6,
+            color: C.textMuted, textTransform: "uppercase",
+          }}>Grid Overlays</span>
+          <span style={{
+            fontSize: 10, fontFamily: "'JetBrains Mono', monospace",
+            color: C.textDim,
+          }}>{activeCount}/{GRAPH_TOGGLES.length}</span>
         </div>
-        <div style={{ color: C.textDim, fontSize: 10 }}>
-          {projected.length.toLocaleString()} substations · geographic projection
-        </div>
-        <div style={{ marginTop: 8, display: "flex", gap: 4 }}>
-          <button
+        {GRAPH_TOGGLES.map(t => (
+          <label
+            key={t.id}
+            title={t.hint}
             style={{
-              ...S.pill(colourBy === "dno", C.purple),
-              fontSize: 9,
+              display: "flex", alignItems: "center", gap: 8,
+              padding: "5px 4px", cursor: "pointer",
+              borderRadius: 6,
+              background: toggles[t.id] ? "rgba(201,166,75,0.08)" : "transparent",
+              fontSize: 11, color: C.text,
             }}
-            onClick={() => setColourBy("dno")}
-          >By DNO</button>
-          <button
-            style={{
-              ...S.pill(colourBy === "rag", C.blue),
-              fontSize: 9,
-            }}
-            onClick={() => setColourBy("rag")}
-          >By headroom</button>
-        </div>
+          >
+            <input
+              type="checkbox"
+              checked={!!toggles[t.id]}
+              onChange={() => toggle(t.id)}
+              style={{ accentColor: C.gold }}
+            />
+            <span style={{
+              width: 10, height: 10, borderRadius: 3,
+              background: t.swatch, flexShrink: 0, border: "1px solid rgba(0,0,0,0.12)",
+            }} />
+            <span style={{ fontWeight: toggles[t.id] ? 700 : 500 }}>
+              {t.label}
+            </span>
+          </label>
+        ))}
       </div>
 
-      {/* DNO legend (bottom-left) */}
-      {colourBy === "dno" && (
-        <div style={{
-          position: "absolute", bottom: 14, left: 14,
-          background: "rgba(255,255,255,0.96)",
-          padding: "10px 14px", borderRadius: 8, fontSize: 10,
-          boxShadow: "0 1px 4px rgba(15,23,42,0.12)",
-          border: `1px solid ${C.border}`,
-          display: "flex", gap: 14, flexWrap: "wrap", maxWidth: 560,
-        }}>
-          {Object.entries(DNO_COLOURS).map(([dno, colour]) => (
-            <div key={dno} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <div style={{ width: 10, height: 10, borderRadius: 5, background: colour }} />
-              <span style={{ fontWeight: 700 }}>{dno}</span>
-              <span style={{ color: C.textDim, fontFamily: "'JetBrains Mono', monospace" }}>
-                {(dnoCounts[dno] || 0).toLocaleString()}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Hover tooltip */}
-      {hover && (
-        <div style={{
-          position: "absolute",
-          top: hover._y - 50,
-          left: hover._x + 12,
-          background: "rgba(15,23,42,0.96)",
-          color: "#fff",
-          padding: "8px 12px",
-          borderRadius: 6,
-          fontSize: 11,
-          pointerEvents: "none",
-          maxWidth: 240,
-          boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-        }}>
-          <div style={{ fontWeight: 700, marginBottom: 3 }}>
-            {hover.name || hover.external_id || "Unnamed"}
-          </div>
-          <div style={{ fontSize: 10, color: "#94a3b8" }}>
-            {hover.dno} · {Math.round(hover.voltage_kv)} kV
-            {hover.site_type && ` · ${hover.site_type}`}
-          </div>
-          {hover.headroom_mw != null && (
-            <div style={{ fontSize: 10, color: "#10b981", marginTop: 3, fontFamily: "'JetBrains Mono', monospace" }}>
-              {Math.round(hover.headroom_mw)} MW headroom
-            </div>
-          )}
-        </div>
-      )}
+      {/* ── Small info strip (bottom-right) ──────────────────────────── */}
+      <div style={{
+        position: "absolute", bottom: 32, right: 12, zIndex: 4,
+        background: "rgba(255,255,255,0.94)",
+        border: `1px solid ${C.border}`,
+        borderRadius: 6,
+        padding: "5px 10px",
+        fontSize: 10,
+        color: C.textDim,
+        fontFamily: "'JetBrains Mono', monospace",
+      }}>
+        {substations.length.toLocaleString()} subs · {deckLayers.length} layers
+      </div>
     </div>
   );
 }

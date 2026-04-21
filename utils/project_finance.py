@@ -21,6 +21,19 @@ import sys
 from copy import deepcopy
 from typing import Any
 
+from utils.bess_benchmarks import bess_revenue_mid
+from utils.finance_benchmarks import (
+    corporation_tax_rate,
+    cpi_long_run,
+    debt_tenor_years,
+    debt_to_equity,
+    egl_applies_to,
+    egl_threshold_gbp_mwh,
+    ppa_price_merchant,
+    senior_debt_all_in_rate,
+    wacc,
+)
+
 # ═══════════════════════════════════════════════════════════════════════════
 # 1.  CAPEX BENCHMARKS  (£/kWp or £/kW unless noted)
 # ═══════════════════════════════════════════════════════════════════════════
@@ -127,36 +140,41 @@ LAND_DENSITY = {
 }
 
 # BESS blended revenue (£/MW/yr) — arbitrage + FFR + CM + triad
-BESS_REVENUE_PER_MW = 75_000
+# Sourced from Modo Energy GB BESS index, Mar 2026 (2h P50 benchmark).
+BESS_REVENUE_PER_MW = bess_revenue_mid(2)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 4.  FINANCIAL PARAMETERS
 # ═══════════════════════════════════════════════════════════════════════════
 
+# Defaults resolve through utils.finance_benchmarks so the whole stack
+# tracks one set of UK-2026 capital-structure + tax + PPA assumptions.
+# Callers (routers, subprocess bridges) override per deal; tech-specific
+# values override module defaults when `technology` is provided.
 DEFAULT_PARAMS = {
     "project_life_years":   25,
-    "construction_months":  18,      # solar; wind ~24; offshore ~36
-    "degradation_rate":     0.005,   # 0.5% p.a.
-    "cpi_escalation":       0.025,   # 2.5% CPI
-    "corporation_tax":      0.25,    # UK CT rate
-    "discount_rate":        0.08,    # nominal WACC
-    "gearing":              0.70,    # 70% debt
-    "senior_interest":      0.055,   # 5.5%
-    "debt_term_years":      18,
+    "construction_months":  18,                 # solar; wind ~24; offshore ~36
+    "degradation_rate":     0.005,              # 0.5% p.a.
+    "cpi_escalation":       cpi_long_run(),     # 2.4% BoE long-run
+    "corporation_tax":      corporation_tax_rate(),
+    "discount_rate":        wacc("solar", "stabilised"),  # 8.5% solar stabilised
+    "gearing":              debt_to_equity("solar")[0],   # 65% UK 2026 norm
+    "senior_interest":      senior_debt_all_in_rate("solar"),  # SONIA+250bp
+    "debt_term_years":      debt_tenor_years("solar"),    # 18y
     "target_dscr":          1.30,
     "lock_up_dscr":         1.15,
     "default_dscr":         1.05,
     "cash_reserve_months":  6,
-    "ppa_price_mwh":       55.0,     # £/MWh
-    "ppa_term_years":      15,
-    "merchant_price_mwh":  45.0,     # post-PPA merchant tail
+    "ppa_price_mwh":        ppa_price_merchant("solar"),  # £48/MWh merchant
+    "ppa_term_years":       15,
+    "merchant_price_mwh":   ppa_price_merchant("solar", "low"),  # post-PPA tail
     "merchant_escalation":  0.02,
-    "subsidy_type":        "none",   # none / roc / cfd
-    "subsidy_value":        0.0,     # £/MWh (ROC buyout) or CfD strike
-    "capacity_market_rev":  0.0,     # £/MW/yr (BESS)
-    "ancillary_rev":        0.0,     # £/MW/yr (BESS FFR etc.)
-    "tax_depreciation_rate": 0.18,   # 18% reducing balance (main pool)
-    "tax_depreciation_type": "reducing_balance",  # or straight_line
+    "subsidy_type":         "none",              # none / roc / cfd
+    "subsidy_value":        0.0,                 # £/MWh (ROC buyout) or CfD strike
+    "capacity_market_rev":  0.0,                 # £/MW/yr (BESS)
+    "ancillary_rev":        0.0,                 # £/MW/yr (BESS FFR etc.)
+    "tax_depreciation_rate": 0.18,               # 18% reducing balance (main pool)
+    "tax_depreciation_type": "reducing_balance", # or straight_line
 }
 
 CONSTRUCTION_MONTHS = {
@@ -173,18 +191,32 @@ CONSTRUCTION_MONTHS = {
 
 def _irr_newton(cashflows: list[float], guess: float = 0.10,
                 tol: float = 1e-9, max_iter: int = 300) -> float | None:
-    """Solve IRR via Newton-Raphson on NPV = 0."""
+    """Solve IRR via Newton-Raphson on NPV = 0.
+
+    Clamps r into (-0.95, 5.0) each iteration so a bad starting point
+    cannot overflow `(1+r)**t` when t → 25+.
+    """
     r = guess
     for _ in range(max_iter):
-        npv = sum(cf / (1 + r) ** t for t, cf in enumerate(cashflows))
-        dnpv = sum(-t * cf / (1 + r) ** (t + 1) for t, cf in enumerate(cashflows))
+        # Clamp r to safe range before evaluating NPV to avoid OverflowError.
+        r = max(-0.95, min(5.0, r))
+        try:
+            npv = sum(cf / (1 + r) ** t for t, cf in enumerate(cashflows))
+            dnpv = sum(-t * cf / (1 + r) ** (t + 1) for t, cf in enumerate(cashflows))
+        except (OverflowError, ZeroDivisionError):
+            return None
         if abs(dnpv) < 1e-14:
             return None
         r_new = r - npv / dnpv
         if abs(r_new - r) < tol:
             return round(r_new, 6)
         r = r_new
-    return round(r, 6) if abs(sum(cf / (1 + r) ** t for t, cf in enumerate(cashflows))) < 1.0 else None
+    r = max(-0.95, min(5.0, r))
+    try:
+        resid = abs(sum(cf / (1 + r) ** t for t, cf in enumerate(cashflows)))
+    except (OverflowError, ZeroDivisionError):
+        return None
+    return round(r, 6) if resid < 1.0 else None
 
 
 def _npv(rate: float, cashflows: list[float]) -> float:
@@ -435,6 +467,23 @@ def calculate_project_finance(user_params: dict) -> dict:
     technology = user_params.get("technology", "solar")
     params = _merge_params(user_params)
 
+    # Apply tech-specific UK-2026 finance benchmarks when the caller did not
+    # explicitly override. (The DEFAULT_PARAMS dict is solar-biased; wind/
+    # BESS/offshore/DC have their own capital-stack realities.)
+    tech_lower = (technology or "solar").lower()
+    if "gearing" not in user_params or user_params.get("gearing") is None:
+        params["gearing"] = debt_to_equity(tech_lower)[0]
+    if "senior_interest" not in user_params or user_params.get("senior_interest") is None:
+        params["senior_interest"] = senior_debt_all_in_rate(tech_lower)
+    if "debt_term_years" not in user_params or user_params.get("debt_term_years") is None:
+        params["debt_term_years"] = debt_tenor_years(tech_lower)
+    if "discount_rate" not in user_params or user_params.get("discount_rate") is None:
+        params["discount_rate"] = wacc(tech_lower, "stabilised")
+    if "ppa_price_mwh" not in user_params or user_params.get("ppa_price_mwh") is None:
+        params["ppa_price_mwh"] = ppa_price_merchant(tech_lower)
+    if "merchant_price_mwh" not in user_params or user_params.get("merchant_price_mwh") is None:
+        params["merchant_price_mwh"] = ppa_price_merchant(tech_lower, "low")
+
     capacity_mw = capacity_kwp / 1000
     cf = CAPACITY_FACTORS.get(technology, 0.11)
     is_bess = technology == "bess"
@@ -633,6 +682,8 @@ def calculate_project_finance(user_params: dict) -> dict:
         "total_generation_mwh":   round(total_generation_mwh),
         "total_revenue_lifetime": round(total_revenue_lifetime),
         "total_opex_lifetime":    round(total_opex_lifetime),
+        "egl_applies":            egl_applies_to(tech_lower),
+        "egl_threshold_gbp_mwh":  egl_threshold_gbp_mwh(),
     }
 
     # ── Summary ───────────────────────────────────────────────────────────

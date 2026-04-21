@@ -211,6 +211,12 @@ export function SiteProvider({ children }) {
   const [solarCatalogue, setSolarCatalogue] = useState(null);
   const bomAbortRef = useRef(null);
 
+  // ── DesignCanvas view mode — "canvas" (2D Mapbox) | "twin" (3D Site Twin) ──
+  const [designCanvasMode, setDesignCanvasMode] = useState(() => {
+    try { return localStorage.getItem("princeps_design_canvas_mode") === "twin" ? "twin" : "canvas"; }
+    catch { return "canvas"; }
+  });
+
   // ── Placed assets (map drag-drop) with persistence + validation ──
   const [placedAssets, setPlacedAssets] = useState([]);
   const [energyFlowOpen, setEnergyFlowOpen] = useState(false);
@@ -775,6 +781,8 @@ export function SiteProvider({ children }) {
     customBom, setCustomBom,
     solarCatalogue, setSolarCatalogue,
     bomAbortRef,
+    // DesignCanvas view mode
+    designCanvasMode, setDesignCanvasMode,
     // Placed assets (map drag-drop)
     placedAssets, setPlacedAssets, addPlacedAsset, removePlacedAsset, clearPlacedAssets,
     assetValidations, designProjectId, setDesignProjectId, designDirty, saveDesign, loadDesign,

@@ -32,9 +32,12 @@ const PLAN_TINT = (pct) => {
   return "var(--cds-support-error)";
 };
 
+// Solar defaults sourced from src/data/solar-benchmarks.json
+// (Solar Media Q4 2025 + LCCC AR7 Pot 1 + Cornwall Insight Q1 2026).
+// LCOE midpoint reflects 2026 UK utility-scale ground-mount.
 const WORKLOAD_DEFAULTS = {
   bess:   { lcoe: 82, irr: 11.8, capex_mw: 0.66 },
-  solar:  { lcoe: 55, irr: 9.2,  capex_mw: 0.90 },
+  solar:  { lcoe: 48, irr: 8.5,  capex_mw: 0.73 },   // utils/solar_benchmarks.py
   dc:     { lcoe: 72, irr: 14.2, capex_mw: 9.5  },
   wind:   { lcoe: 48, irr: 8.6,  capex_mw: 1.40 },
   hybrid: { lcoe: 60, irr: 11.2, capex_mw: 1.10 },

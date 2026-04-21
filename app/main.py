@@ -265,16 +265,21 @@ _ROUTER_MODULES = [
     "exports",
     "twin_assets",
     "twin_dynamic",
+    "twin",
     "parcel",
     "agent_ops",
     "substation_tracker",
+    "n1_contingency",
     "billing",
     "enterprise_admin",
     "substrate",
     "ea_layers",
     "lccc",
+    "constraints",
     "project_memo",
     "utilities",
+    "dno_engagement_workflow",
+    "dno_engagement",
 ]
 
 app.include_router(graph_router)

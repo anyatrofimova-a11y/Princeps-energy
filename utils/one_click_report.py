@@ -65,12 +65,18 @@ _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 # Technology parameters for multi-tech comparison
+# Solar parameters now sourced from utils.solar_benchmarks (2026 UK).
+from utils import solar_benchmarks as _solar_benchmarks
+
 TECH_PARAMS = {
     "solar": {
         "label": "Solar PV (ground-mount)",
-        "capex_per_mw": 550_000,
-        "opex_per_mw_yr": 10_000,
-        "capacity_factor_range": (0.09, 0.13),
+        "capex_per_mw": _solar_benchmarks.solar_capex_per_mw(),        # £730k
+        "opex_per_mw_yr": _solar_benchmarks.solar_opex_per_mw_yr(),    # £10k
+        "capacity_factor_range": (
+            _solar_benchmarks.SOLAR_CAPACITY_FACTOR["low"],
+            _solar_benchmarks.SOLAR_CAPACITY_FACTOR["high"],
+        ),
         "land_ha_per_mw": 2.0,
         "degradation_pct": 0.5,
     },
@@ -291,13 +297,18 @@ def _financial_model(capacity_mw: float, sam_result: dict, grid_result: dict,
     capex = capacity_mw * tech["capex_per_mw"] + conn_cost
     capex_m = capex / 1e6
 
-    # Revenue & OPEX
-    ppa_price = 55.0  # GBP/MWh
+    # Revenue & OPEX — solar uses 2026 merchant PPA mid (utils.solar_benchmarks)
+    if technology == "solar":
+        ppa_price = float(_solar_benchmarks.ppa_price_merchant_mid())   # £45/MWh
+        land_rent_per_ha = float(_solar_benchmarks.land_rent_gbp_ha_yr())
+    else:
+        ppa_price = 55.0  # GBP/MWh — non-solar fallback
+        land_rent_per_ha = 1200
     degradation = tech["degradation_pct"] / 100
     discount_rate = 0.06
     project_life = 25
     opex_yr = capacity_mw * tech["opex_per_mw_yr"]
-    land_rent_yr = capacity_mw * tech["land_ha_per_mw"] * 1200
+    land_rent_yr = capacity_mw * tech["land_ha_per_mw"] * land_rent_per_ha
 
     # Annual cashflow table
     cashflows = [-capex]
@@ -849,7 +860,7 @@ def _build_sections(site_data: dict, sam_result: dict, grid_result: dict,
             <div class="rpt-kv"><span class="rpt-kv-label">NPV (25yr)</span><span class="rpt-kv-value">&pound;{financials.get('npv_m', 0):.2f}M</span></div>
             <div class="rpt-kv"><span class="rpt-kv-label">LCOE</span><span class="rpt-kv-value">&pound;{financials.get('lcoe_gbp_mwh', 0):.1f}/MWh</span></div>
             <div class="rpt-kv"><span class="rpt-kv-label">Payback Period</span><span class="rpt-kv-value">{financials.get('payback_years', '—')} years</span></div>
-            <div class="rpt-kv"><span class="rpt-kv-label">PPA Price</span><span class="rpt-kv-value">&pound;{financials.get('ppa_price_gbp_mwh', 55)}/MWh</span></div>
+            <div class="rpt-kv"><span class="rpt-kv-label">PPA Price</span><span class="rpt-kv-value">&pound;{financials.get('ppa_price_gbp_mwh', _solar_benchmarks.ppa_price_merchant_mid())}/MWh</span></div>
           </div>
           <div class="rpt-col">
             <h4 class="rpt-minor">Debt Structure</h4>
