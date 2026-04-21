@@ -314,6 +314,60 @@ async def api_grid_substation_detail(
     return result
 
 
+@router.get("/api/grid/substation/{substation_id}/neighbourhood")
+async def api_grid_substation_neighbourhood(
+    substation_id: int,
+    depth: int = Query(3, ge=1, le=5, description="Hop depth on grid_lines"),
+    radius_km: float = Query(20.0, ge=0.5, le=200.0,
+                             description="Geo-adjacent fallback radius (km)"),
+    node_cap: int = Query(150, ge=10, le=1000,
+                          description="Max nodes in response"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """
+    N-hop substation neighbourhood on PostGIS `grid_lines`.
+
+    Returns the root substation, electrically-connected nodes up to `depth`
+    hops away, edges between them, and a geographic fallback set of the
+    nearest substations within `radius_km` that are NOT electrically
+    connected. Designed to feed the map-highlight overlay in the Grid
+    Graph view (see docs/audits/connection_nodes_spec.md §6 BOT-CN-D).
+
+    Payload shape:
+      {
+        "root":  {id, name, voltage_kv, lat, lon, ...},
+        "nodes": [ {id, hop, electrical: true|false, ...}, ... ],
+        "edges": [ {id, from_id, to_id, voltage_kv, length_km,
+                    is_path_to_root: true}, ... ],
+        "queue_at_root": {accepted, applied, accepted_mw, applied_mw},
+        "depth_resolved": int,
+        "radius_km": float,
+        "_truncated": bool,
+        "_explanation": str | null,
+        "provenance": {...},
+        "source": "postgres_grid_lines",
+      }
+
+    When `grid_lines.from_sub_id` / `to_sub_id` is unpopulated (current
+    DNO-ingest-pending state) the electrical set is empty and
+    `_explanation` points to the ingest gap.
+    """
+    from utils.grid_neighbourhood import neighbourhood
+    try:
+        result = await neighbourhood(
+            pool, substation_id,
+            depth=depth, radius_km=radius_km, node_cap=node_cap,
+        )
+    except Exception as e:  # noqa: BLE001 — never 500 on this route
+        return {
+            "error": f"neighbourhood raised {type(e).__name__}: {e}",
+            "substation_id": substation_id,
+        }
+    if result is None:
+        raise HTTPException(status_code=404, detail="Substation not found")
+    return result
+
+
 @router.get("/api/grid/capacity-map")
 async def api_grid_capacity_map(
     dno: str = Query(None),

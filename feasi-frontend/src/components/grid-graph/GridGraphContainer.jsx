@@ -33,6 +33,12 @@ import { buildGridGraphLayers } from "./gridGraphLayers";
    layer list without touching this file. */
 import GridGraphLegend from "./GridGraphLegend";
 import GridGraphHoverTip from "./GridGraphHoverTip";
+/* ── BOT-CN-M: neighbourhood rail + data hook for connection-node hybrid
+   highlight (docs/audits/connection_nodes_spec.md §6). Root id is kept
+   in container-level state so clicks from the map AND the asset list
+   both feed it; the hook handles fetch + sessionStorage cache. */
+import NeighbourhoodRail from "./NeighbourhoodRail";
+import useGridNeighbourhood from "../../hooks/useGridNeighbourhood";
 
 /* ─────────── Theme — light-gold palette (2026-04 redesign) ─────────── */
 const C = {
@@ -310,6 +316,36 @@ export default function GridGraphContainer({ mapContent }) {
   }, []);
   const { pickedLocation, setPickedLocation } = useSite();
 
+  /* ── BOT-CN-M: neighbourhood root + depth ───────────────────────────
+     `neighbourhoodRootId` drives the hook + sidecar rail + layer
+     highlight. Clicking a substation (map OR list) sets it; clicking the
+     same id again OR pressing Esc clears it. `nbhDepth` is the 1/2/3
+     toggle in the rail header — default 2 per spec (§4).               */
+  const [neighbourhoodRootId, setNeighbourhoodRootId] = useState(null);
+  const [nbhDepth, setNbhDepth] = useState(2);
+  const { data: neighbourhoodData, loading: neighbourhoodLoading, error: neighbourhoodError } =
+    useGridNeighbourhood(neighbourhoodRootId, { depth: nbhDepth, radiusKm: 20 });
+
+  const clearNeighbourhood = useCallback(() => {
+    setNeighbourhoodRootId(null);
+  }, []);
+
+  const rootNeighbourhood = useCallback((id) => {
+    if (!id) return;
+    setNeighbourhoodRootId((prev) => (prev === id ? null : id));
+  }, []);
+
+  // Esc clears both selection and the neighbourhood highlight.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setNeighbourhoodRootId(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   /* Load substation index on mount (one-shot, ~14k rows) */
   useEffect(() => {
     let cancelled = false;
@@ -393,6 +429,10 @@ export default function GridGraphContainer({ mapContent }) {
     if (s.lat != null && s.lon != null) {
       setPickedLocation({ lat: s.lat, lon: s.lon });
     }
+    // BOT-CN-M: a substation click also roots the neighbourhood. If the
+    // user clicks the *same* substation twice the toggle in
+    // rootNeighbourhood() clears the highlight (second-click-to-unpin).
+    if (s?.id) rootNeighbourhood(s.id);
   };
 
   const hasFilters = voltageFilter.size > 0 || dnoFilter.size > 0 || search;
@@ -611,7 +651,16 @@ export default function GridGraphContainer({ mapContent }) {
         <div style={S.center}>
           {activeTab === "browse"    && <BrowseView substations={substations} filtered={filtered} onSelect={handleRowClick} />}
           {activeTab === "map"       && mapContent}
-          {activeTab === "graph"     && <GraphView substations={filtered} selection={selection} onSelect={handleRowClick} />}
+          {activeTab === "graph"     && (
+            <GraphView
+              substations={filtered}
+              selection={selection}
+              onSelect={handleRowClick}
+              neighbourhood={neighbourhoodData}
+              onRootNode={rootNeighbourhood}
+              onClearRoot={clearNeighbourhood}
+            />
+          )}
           {activeTab === "table"     && <TableView substations={filtered} onSelect={handleRowClick} />}
           {activeTab === "resources" && <ResourcesView />}
 
@@ -621,6 +670,29 @@ export default function GridGraphContainer({ mapContent }) {
             <GridGraphLegend />
           )}
         </div>
+
+        {/* ── BOT-CN-M: Neighbourhood rail — sidecar between center and drawer.
+            Mounts only when a substation is rooted (click on map / list).
+            40 px wide per spec §3 wireframe. ─────────────────────────── */}
+        {neighbourhoodRootId && (activeTab === "map" || activeTab === "graph") && (
+          <NeighbourhoodRail
+            data={neighbourhoodData}
+            loading={neighbourhoodLoading}
+            error={neighbourhoodError}
+            depth={nbhDepth}
+            onDepthChange={setNbhDepth}
+            onReroot={(id) => {
+              if (!id) return;
+              // Clicking the root again = clear; otherwise chain.
+              if (id === neighbourhoodRootId) {
+                setNeighbourhoodRootId(null);
+              } else {
+                setNeighbourhoodRootId(id);
+              }
+            }}
+            onReset={clearNeighbourhood}
+          />
+        )}
 
         {/* RIGHT — full-height drawer shell (clearly-marked slots for BOT-Z3) */}
         {selection && (
@@ -1001,7 +1073,7 @@ const DEFAULT_VIEW_STATE = {
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN || "";
 
-function GraphView({ substations, selection, onSelect }) {
+function GraphView({ substations, selection, onSelect, neighbourhood, onRootNode, onClearRoot }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
@@ -1069,15 +1141,40 @@ function GraphView({ substations, selection, onSelect }) {
     };
     map.on("moveend", onMoveEnd);
 
+    /* BOT-CN-M: click on empty map (no deck.gl object under cursor) clears
+       the neighbourhood root. MapboxOverlay in non-interleaved mode
+       consumes clicks on its own objects before dispatching to the map,
+       so by the time mapbox's click handler runs we can safely assume
+       nothing under the cursor was a grid asset. Confirm with pickObject
+       as a double-check — if deck picks something there the click would
+       have been intercepted first anyway. */
+    const onMapClick = (e) => {
+      const overlayNow = overlayRef.current;
+      if (!overlayNow) return;
+      let picked = null;
+      try {
+        picked = overlayNow.pickObject({ x: e.point.x, y: e.point.y, radius: 4 });
+      } catch {}
+      if (!picked) onClearRootRef.current?.();
+    };
+    map.on("click", onMapClick);
+
     mapRef.current = map;
     return () => {
       map.off("moveend", onMoveEnd);
+      map.off("click", onMapClick);
       try { overlay.finalize?.(); } catch {}
       map.remove();
       mapRef.current = null;
       overlayRef.current = null;
     };
   }, []);
+
+  /* Pin onClearRoot into a ref so the click handler above (which closes
+     over the first render's prop) can always reach the latest callback
+     without forcing the whole map-init effect to re-run. */
+  const onClearRootRef = useRef(onClearRoot);
+  useEffect(() => { onClearRootRef.current = onClearRoot; }, [onClearRoot]);
 
   /* Fetch constraints once when toggled on */
   useEffect(() => {
@@ -1177,6 +1274,10 @@ function GraphView({ substations, selection, onSelect }) {
       repdFC,
       toggles,
       onClick: handleLayerClick,
+      // BOT-CN-M: when a root is set, the assembler dims non-related
+      // base substations and stacks the three neighbourhood layers
+      // (edges / nodes-glow / geo-adjacent) above everything else.
+      neighbourhood,
       // BOT-GL integration: every layer calls this on hover so
       // GridGraphHoverTip can render the fixed popover. Null on
       // mouse-leave hides it.
@@ -1186,7 +1287,7 @@ function GraphView({ substations, selection, onSelect }) {
         }
       },
     });
-  }, [mapReady, substations, constraintsFC, queueData, linesFC, tecFC, repdFC, toggles, handleLayerClick]);
+  }, [mapReady, substations, constraintsFC, queueData, linesFC, tecFC, repdFC, toggles, handleLayerClick, neighbourhood]);
 
   /* Push layers to the overlay whenever they change */
   useEffect(() => {

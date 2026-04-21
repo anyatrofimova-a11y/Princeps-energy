@@ -407,21 +407,34 @@ async def _section_connections(conn, substation_id: int, row: dict) -> dict[str,
     try:
         line_rows = await conn.fetch(
             """SELECT l.id, l.voltage_kv, l.length_km, l.operator, l.circuits,
-                      s_to.name AS to_name, s_to.id AS to_id
+                      l.from_sub_id, l.to_sub_id,
+                      s_from.name AS from_name, s_to.name AS to_name
                FROM grid_lines l
-               LEFT JOIN grid_substations s_to ON s_to.id = l.to_sub_id
+               LEFT JOIN grid_substations s_from ON s_from.id = l.from_sub_id
+               LEFT JOIN grid_substations s_to   ON s_to.id   = l.to_sub_id
                WHERE l.from_sub_id = $1 OR l.to_sub_id = $1
                ORDER BY l.voltage_kv DESC NULLS LAST, l.length_km ASC
                LIMIT 30""",
             substation_id,
         )
         for r in line_rows:
+            # Resolve the "other end" relative to this substation so frontend
+            # can use `to_id` to draw the edge regardless of traversal order.
+            if r["from_sub_id"] == substation_id:
+                other_id = r["to_sub_id"]
+                other_name = r["to_name"]
+            else:
+                other_id = r["from_sub_id"]
+                other_name = r["from_name"]
             circuits.append({
+                "id": r["id"],
                 "name": f"{r['voltage_kv']}kV circuit {r['id']}" if r["voltage_kv"] else f"circuit {r['id']}",
                 "voltage_kv": _num(r["voltage_kv"]),
                 "length_km": _num(r["length_km"]),
                 "type": "OHL",  # default; OSM rarely distinguishes
-                "to_substation": r["to_name"],
+                "to_substation": other_name,
+                "from_id": r["from_sub_id"],
+                "to_id": other_id,  # "other end" relative to root; see comment above
             })
     except Exception as e:  # noqa: BLE001
         log.info("grid_lines lookup failed: %s", e)

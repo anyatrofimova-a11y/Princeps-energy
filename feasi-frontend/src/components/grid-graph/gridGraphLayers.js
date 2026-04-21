@@ -24,7 +24,9 @@ import {
   ScatterplotLayer,
   GeoJsonLayer,
   IconLayer,
+  PathLayer,
 } from "@deck.gl/layers";
+import { PathStyleExtension } from "@deck.gl/extensions";
 import {
   ragColor,
   getDnoColor,
@@ -79,9 +81,20 @@ function syntheticQueueForSub(s) {
 /* ═══════════════════════════════════════════════════════════════════
  * Substations layer — toggle: "substations"
  * Dot size by voltage class, dot colour by DNO.
+ *
+ * Neighbourhood-highlight extension (BOT-CN-M): if `relatedIds` is a
+ * non-empty Set, every substation whose id is NOT in the set fades to
+ * opacity 0.18 (≈46/255 alpha). In-set substations render full alpha.
+ * When `relatedIds` is null/empty the layer behaves exactly as before —
+ * no perf cost for callers that don't use the feature.
  * ═══════════════════════════════════════════════════════════════════ */
-export function buildSubstationsLayer({ substations, visible, onClick, onHover }) {
+export function buildSubstationsLayer({ substations, visible, onClick, onHover, relatedIds }) {
   if (!visible || !substations?.length) return EMPTY;
+
+  const hasDimSet = relatedIds instanceof Set && relatedIds.size > 0;
+  const DIM_ALPHA = 46;   // ≈ 0.18 opacity, clearly visible but clearly not-it
+  const FULL_ALPHA = 230; // slight bump vs the old 200 so related pop
+  const BASE_ALPHA = 200;
 
   return [
     new ScatterplotLayer({
@@ -92,6 +105,13 @@ export function buildSubstationsLayer({ substations, visible, onClick, onHover }
       filled: true,
       radiusUnits: "pixels",
       lineWidthUnits: "pixels",
+      // updateTriggers ensure getFillColor / getLineColor re-evaluate
+      // when the dim-set changes (ScatterplotLayer caches accessors
+      // between renders unless the trigger key differs).
+      updateTriggers: {
+        getFillColor: hasDimSet ? Array.from(relatedIds).join(",") : "no-dim",
+        getLineColor: hasDimSet ? Array.from(relatedIds).join(",") : "no-dim",
+      },
       getPosition: (s) => substationPos(s) || [0, 0],
       getRadius: (s) => {
         const v = Number(s.voltage_kv || 0);
@@ -101,8 +121,15 @@ export function buildSubstationsLayer({ substations, visible, onClick, onHover }
         if (v >= 66)  return 4;
         return 3;
       },
-      getFillColor: (s) => [...hexToRgb(getDnoColor(s.dno)), 200],
-      getLineColor: [15, 23, 42, 120],
+      getFillColor: (s) => {
+        const rgb = hexToRgb(getDnoColor(s.dno));
+        if (!hasDimSet) return [...rgb, BASE_ALPHA];
+        return [...rgb, relatedIds.has(s.id) ? FULL_ALPHA : DIM_ALPHA];
+      },
+      getLineColor: (s) => {
+        if (!hasDimSet) return [15, 23, 42, 120];
+        return [15, 23, 42, relatedIds.has(s.id) ? 180 : 30];
+      },
       getLineWidth: 0.8,
       onClick: ({ object }) => object && onClick?.({ kind: "substation", feature: { properties: object }, lngLat: { lat: object.lat, lng: object.lon } }),
       onHover,
@@ -486,8 +513,202 @@ export function buildRepdLayer({ repdFC, visible, onClick, onHover }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+ * Neighbourhood layers — BOT-CN-M
+ *
+ * Activated when a substation is selected as a "root" and the
+ * useGridNeighbourhood hook returns a payload. Three layers stack on
+ * top of the base substations/lines to surface the electrical +
+ * geographic neighbourhood WITHOUT redrawing the whole map.
+ *
+ *   grid-neighbourhood-edges          PathLayer — voltage-coloured,
+ *                                      thicker than base lines; edges
+ *                                      on the path-to-root get a gold
+ *                                      outer glow.
+ *   grid-neighbourhood-nodes-glow     ScatterplotLayer — 2× base radius,
+ *                                      gold halo at 0.4 alpha for
+ *                                      electrical: true, muted silver
+ *                                      for electrical: false.
+ *   grid-neighbourhood-geo-adjacent   ScatterplotLayer with dashed
+ *                                      outline (PathStyleExtension)
+ *                                      showing geo-adjacent subs that
+ *                                      are NOT electrically connected.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/**
+ * Build edges layer for the neighbourhood. Each edge is a short 2-point
+ * path between the `from_id` and `to_id` nodes. We compute the polyline
+ * client-side by joining against the nodes list — no geometry comes
+ * from the backend beyond the substation coords.
+ */
+export function buildNeighbourhoodEdgesLayer({ edges, nodes, visible = true, onClick, onHover }) {
+  if (!visible || !edges?.length || !nodes?.length) return EMPTY;
+
+  // id → [lon,lat] lookup for edge endpoints
+  const posById = new Map();
+  for (const n of nodes) {
+    if (n.lon != null && n.lat != null) posById.set(n.id, [n.lon, n.lat]);
+  }
+
+  const paths = [];
+  for (const e of edges) {
+    const a = posById.get(e.from_id);
+    const b = posById.get(e.to_id);
+    if (!a || !b) continue;
+    paths.push({
+      id: e.id,
+      path: [a, b],
+      voltage_kv: e.voltage_kv,
+      length_km: e.length_km,
+      is_path_to_root: e.is_path_to_root,
+      _edge: e,
+    });
+  }
+  if (!paths.length) return EMPTY;
+
+  const layers = [];
+
+  // Gold glow for path-to-root edges, rendered BENEATH the voltage path
+  // so the voltage colour stays the primary read.
+  const glowPaths = paths.filter((p) => p.is_path_to_root);
+  if (glowPaths.length) {
+    layers.push(
+      new PathLayer({
+        id: "grid-neighbourhood-edges-glow",
+        data: glowPaths,
+        pickable: false,
+        widthUnits: "pixels",
+        getPath: (d) => d.path,
+        getWidth: 7,
+        getColor: [201, 166, 75, 110], // --gold with soft alpha
+        capRounded: true,
+        jointRounded: true,
+      })
+    );
+  }
+
+  // Main voltage-coloured edges; thicker stroke than the base lines
+  // layer (which uses 1–2 px) so the highlighted subset reads.
+  layers.push(
+    new PathLayer({
+      id: "grid-neighbourhood-edges",
+      data: paths,
+      pickable: true,
+      widthUnits: "pixels",
+      getPath: (d) => d.path,
+      getWidth: (d) => (d.is_path_to_root ? 4 : 3),
+      getColor: (d) => [...getVoltageColor(d.voltage_kv), 240],
+      capRounded: true,
+      jointRounded: true,
+      onClick: ({ object }) =>
+        object &&
+        onClick?.({
+          kind: "neighbourhood_edge",
+          feature: { properties: object._edge },
+          lngLat: null,
+        }),
+      onHover,
+    })
+  );
+
+  return layers;
+}
+
+/**
+ * Glow layer for electrically-connected neighbourhood nodes. Rendered
+ * ABOVE the dimmed base substations layer. Gold halo for electrical
+ * nodes, muted silver for non-electrical. Root gets a larger filled dot.
+ */
+export function buildNeighbourhoodNodesGlowLayer({ nodes, rootId, visible = true }) {
+  if (!visible || !nodes?.length) return EMPTY;
+
+  const data = nodes.filter((n) => n.lon != null && n.lat != null);
+  if (!data.length) return EMPTY;
+
+  return [
+    new ScatterplotLayer({
+      id: "grid-neighbourhood-nodes-glow",
+      data,
+      pickable: false,
+      stroked: false,
+      filled: true,
+      radiusUnits: "pixels",
+      updateTriggers: { getRadius: rootId, getFillColor: rootId },
+      getPosition: (n) => [n.lon, n.lat],
+      getRadius: (n) => {
+        // Root gets the biggest halo; 1-hop slightly smaller; 2-hop smaller still.
+        if (n.id === rootId) return 18;
+        const hop = Math.max(1, n.hop || 1);
+        if (hop === 1) return 14;
+        if (hop === 2) return 11;
+        return 9;
+      },
+      getFillColor: (n) => {
+        if (n.id === rootId) return [201, 166, 75, 140]; // gold, stronger
+        if (n.electrical) return [201, 166, 75, 95];     // gold, soft
+        return [180, 180, 180, 70];                      // muted silver
+      },
+    }),
+  ];
+}
+
+/**
+ * Dashed-outline layer for geo-adjacent (electrical: false) subs so the
+ * user can distinguish "within 20 km" from "actually wired". PathLayer
+ * with PathStyleExtension is the deck.gl-idiomatic path; ScatterplotLayer
+ * has no native dash support.
+ *
+ * Implementation: for each non-electrical node, synthesise a small
+ * 12-point polygon ring around its lat/lon and render it as a dashed
+ * path. Cheap, and the ring is in pixel-space for visual stability.
+ */
+export function buildGeoAdjacentLayer({ nodes, visible = true }) {
+  if (!visible || !nodes?.length) return EMPTY;
+
+  const geoAdjacent = nodes.filter(
+    (n) => n.electrical === false && n.lon != null && n.lat != null
+  );
+  if (!geoAdjacent.length) return EMPTY;
+
+  // Build a circle-ring polyline per node. Radius in degrees (lon-space);
+  // at UK latitudes ~0.01° ≈ 1 km — we use 0.005° (~500 m) which reads as
+  // a modest halo at typical zoom levels. Pixel-mode paths would be
+  // tighter but PathLayer's pixel units don't auto-scale with zoom the
+  // way we want here, so degree-space is the simpler pick.
+  const RADIUS_DEG = 0.006;
+  const SEGMENTS = 24;
+  const rings = geoAdjacent.map((n) => {
+    const pts = [];
+    for (let i = 0; i <= SEGMENTS; i++) {
+      const a = (i / SEGMENTS) * 2 * Math.PI;
+      pts.push([n.lon + Math.cos(a) * RADIUS_DEG, n.lat + Math.sin(a) * RADIUS_DEG]);
+    }
+    return { id: n.id, path: pts };
+  });
+
+  return [
+    new PathLayer({
+      id: "grid-neighbourhood-geo-adjacent",
+      data: rings,
+      pickable: false,
+      widthUnits: "pixels",
+      getPath: (d) => d.path,
+      getWidth: 1.5,
+      getColor: [148, 163, 184, 200], // slate — deliberately non-gold
+      getDashArray: [4, 3],
+      dashJustified: true,
+      extensions: [new PathStyleExtension({ dash: true })],
+    }),
+  ];
+}
+
+/* ═══════════════════════════════════════════════════════════════════
  * Top-level assembler — called by GraphView's memo.
  * Returns a flat array of deck.gl layers in paint order (bottom→top).
+ *
+ * Optional `neighbourhood` prop (object from useGridNeighbourhood):
+ *   when present, the base substations layer dims non-related nodes
+ *   via `relatedIds`, and three new layers (edges / nodes-glow /
+ *   geo-adjacent) stack on top. When absent, zero-cost no-op.
  * ═══════════════════════════════════════════════════════════════════ */
 export function buildGridGraphLayers({
   substations,
@@ -499,16 +720,44 @@ export function buildGridGraphLayers({
   toggles,
   onClick,
   onHover,
+  neighbourhood,
 }) {
   const t = toggles || {};
-  return [
+
+  // Derive the dim-set once — every related node id plus the root id.
+  let relatedIds = null;
+  if (neighbourhood?.nodes?.length) {
+    relatedIds = new Set(neighbourhood.nodes.map((n) => n.id));
+    if (neighbourhood.root?.id) relatedIds.add(neighbourhood.root.id);
+  }
+
+  const base = [
     // paint order: constraint areas behind everything
     ...buildConstraintsLayers({ constraintsFC, visible: !!t.constraints, onClick, onHover }),
     ...buildLinesLayer({ linesFC, visible: !!t.lines, onClick, onHover }),
-    ...buildSubstationsLayer({ substations, visible: !!t.substations, onClick, onHover }),
+    ...buildSubstationsLayer({ substations, visible: !!t.substations, onClick, onHover, relatedIds }),
     ...buildCapacityRagLayer({ substations, visible: !!t.capacityRag, onClick, onHover }),
     ...buildQueueDepthLayer({ substations, queueData, visible: !!t.queueDepth, onClick, onHover }),
     ...buildRepdLayer({ repdFC, visible: !!t.repd, onClick, onHover }),
     ...buildTecQueueLayer({ tecFC, visible: !!t.tecQueue, onClick, onHover }),
+  ];
+
+  if (!neighbourhood) return base;
+
+  const rootId = neighbourhood.root?.id;
+  return [
+    ...base,
+    // Neighbourhood stack sits above everything so the highlight reads.
+    ...buildGeoAdjacentLayer({ nodes: neighbourhood.nodes }),
+    ...buildNeighbourhoodEdgesLayer({
+      edges: neighbourhood.edges,
+      nodes: [neighbourhood.root, ...(neighbourhood.nodes || [])].filter(Boolean),
+      onClick,
+      onHover,
+    }),
+    ...buildNeighbourhoodNodesGlowLayer({
+      nodes: [neighbourhood.root, ...(neighbourhood.nodes || [])].filter(Boolean),
+      rootId,
+    }),
   ];
 }
