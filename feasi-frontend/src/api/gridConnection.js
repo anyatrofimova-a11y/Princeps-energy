@@ -34,9 +34,10 @@ export async function getGridConnection(projectId, opts = {}) {
   }
 
   const params = new URLSearchParams({
-    // Slough Trading Estate (Bath Rd / Buckingham Ave) — default demo pin.
-    lat: lat ?? 51.5260,
-    lon: lon ?? -0.6155,
+    // Slough Heat & Power Station (REPD 4699, 49.9 MW under construction) — real
+    // grid-connected anchor on Slough Trading Estate, 2.2 km south of Iver 132kV.
+    lat: lat ?? 51.5239,
+    lon: lon ?? -0.6269,
     capacity_mw: capacity_mw ?? 65,
     technology,
   });
@@ -61,9 +62,10 @@ export async function runTier2PowerFlow(projectId, opts = {}) {
   }
 
   const params = new URLSearchParams({
-    // Slough Trading Estate (Bath Rd / Buckingham Ave) — default demo pin.
-    lat: lat ?? 51.5260,
-    lon: lon ?? -0.6155,
+    // Slough Heat & Power Station (REPD 4699, 49.9 MW under construction) — real
+    // grid-connected anchor on Slough Trading Estate, 2.2 km south of Iver 132kV.
+    lat: lat ?? 51.5239,
+    lon: lon ?? -0.6269,
     capacity_mw: capacity_mw ?? 65,
     technology,
     contingency: "true",

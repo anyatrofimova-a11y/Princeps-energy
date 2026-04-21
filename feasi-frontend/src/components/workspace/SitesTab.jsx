@@ -15,17 +15,19 @@ const VERDICT_STYLE = {
   "NO-GO": { bg: "rgba(220,38,38,0.12)", fg: "var(--cds-support-error)" },
 };
 
-// Coordinates anchored to real UK industrial / brownfield plots; see app/db_setup.py
-// seed block for provenance. Verified via postcodes.io 2026-04-19.
+// Coordinates anchored to REAL grid-connected assets in grid_substations +
+// repd_projects (not plausible industrial estates). See migration
+// migrations/2026_04_21_project_real_anchors.sql for per-site provenance.
 const DEFAULT_SITES = [
-  // Rainham Marshes / Ferry Lane, ~400m from UKPN Rainham 132/33kV GSP (RM13 9UG).
-  { candidate_id: "s1", name: "Rainham substation adjacent", lat: 51.5170, lon: 0.1950, capacity_mw: 50,
+  // Rainham Substation 33kV — OSM osm-844794264. Real substation (Havering RM13).
+  { candidate_id: "s1", name: "Rainham substation adjacent", lat: 51.5207, lon: 0.2042, capacity_mw: 50,
     scores: { resource: 82, grid: 88, planning: 71, land_use: 78, terrain: 65 }, lcoe: 42.5, verdict: "GO", is_preferred: true },
-  // Dagenham Dock / former Ford Stamping site, LBBD-allocated industrial (RM9 6FD).
-  { candidate_id: "s2", name: "Dagenham industrial estate", lat: 51.5335, lon: 0.1340, capacity_mw: 50,
-    scores: { resource: 78, grid: 74, planning: 68, land_use: 62, terrain: 72 }, lcoe: 45.1, verdict: "GO", is_preferred: false },
-  // Tilbury Riverside / Port of Tilbury brownfield, former Tilbury A land (RM18 7BE).
-  { candidate_id: "s3", name: "Tilbury port brownfield", lat: 51.4630, lon: 0.3560, capacity_mw: 50,
+  // Barking Riverside 132kV substation — OSM osm-1021376264. Real UKPN GSP feeding Dagenham.
+  { candidate_id: "s2", name: "Dagenham / Barking Riverside 132kV", lat: 51.5192, lon: 0.1143, capacity_mw: 50,
+    scores: { resource: 78, grid: 86, planning: 68, land_use: 62, terrain: 72 }, lcoe: 45.1, verdict: "GO", is_preferred: false },
+  // DOCK ROAD TILBURY 33kV — UKPN EPN ukpn-EPN-S0000000G7223. Real Tilbury substation
+  // on former Tilbury A / Tilbury B brownfield land (Port of Tilbury, RM18).
+  { candidate_id: "s3", name: "Tilbury port brownfield", lat: 51.4677, lon: 0.3566, capacity_mw: 50,
     scores: { resource: 74, grid: 82, planning: 45, land_use: 58, terrain: 80 }, lcoe: 48.3, verdict: "CAUTION", is_preferred: false },
 ];
 

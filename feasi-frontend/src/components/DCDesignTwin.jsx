@@ -199,11 +199,13 @@ function fmtArea(m2) {
 }
 
 export default function DCDesignTwin({
-  // Default pin: Slough Trading Estate (Bath Rd / Buckingham Ave, SL2 1BT) —
-  // Equinix LD5 / Virtus LONDON2 neighbourhood. Was previously 51.4974,-0.5683
-  // which placed on Langley town centre (not developable).
-  lat: initialLat = 51.5260,
-  lon: initialLon = -0.6155,
+  // Default pin: Slough Heat & Power Station (REPD 4699, 49.9 MW under construction).
+  // Real grid-connected energy asset on Slough Trading Estate — existing 33/132kV
+  // connection, Iver 132kV GSP 2.2 km north. Anchored via grid_substations +
+  // repd_projects (not "plausible industrial plot"). See migration
+  // 2026_04_21_project_real_anchors.sql.
+  lat: initialLat = 51.5239,
+  lon: initialLon = -0.6269,
   itLoadMw = 50,
   parcelHa = null,
   parcelId = null,           // optional HMLR INSPIRE id — plumbed for BOT-G

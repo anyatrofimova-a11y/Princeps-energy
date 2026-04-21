@@ -844,8 +844,9 @@ function AutoDesignModal({ onDesign, onClose, lat, lon }) {
     const get = (url) => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
 
     const redundancy = tier >= 4 ? "2N" : tier >= 3 ? "N+1" : "N";
-    const useLat = lat || 51.5;
-    const useLon = lon || -0.1;
+    // Fallback: Slough Heat & Power Station (REPD 4699) — real grid-connected anchor.
+    const useLat = lat || 51.5239;
+    const useLon = lon || -0.6269;
 
     const [design, chain, timeline, financial, cfe, ashrae, tierCheck] = await Promise.all([
       post("/api/dc/power-density-design", { it_load_mw: itLoadMw, kw_per_rack: kwRack, tier, redundancy, cooling_type: cooling }),
@@ -1456,8 +1457,9 @@ export default function DataCentreTwin({ onClose }) {
   // Fetch feasibility score
   const fetchFeasibility = useCallback(async () => {
     try {
-      const lat = explain?.lat ?? pickedLocation?.lat ?? 51.5;
-      const lon = explain?.lon ?? pickedLocation?.lon ?? -0.1;
+      // Fallback anchor: REPD 4699 Slough Heat & Power Station.
+      const lat = explain?.lat ?? pickedLocation?.lat ?? 51.5239;
+      const lon = explain?.lon ?? pickedLocation?.lon ?? -0.6269;
       const params = new URLSearchParams({ lat, lon, capacity_mw: itLoadKw / 1000, profile: "colocation" });
       const res = await fetch(`/api/dc/score?${params}`, { method: "POST" });
       if (res.ok) setFeasibility(await res.json());
@@ -1467,8 +1469,9 @@ export default function DataCentreTwin({ onClose }) {
   // Run full advanced design analysis
   const runAdvancedDesign = useCallback(async () => {
     setDesignLoading(true);
-    const lat = explain?.lat ?? pickedLocation?.lat ?? 51.5;
-    const lon = explain?.lon ?? pickedLocation?.lon ?? -0.1;
+    // Fallback anchor: REPD 4699 Slough Heat & Power Station.
+    const lat = explain?.lat ?? pickedLocation?.lat ?? 51.5239;
+    const lon = explain?.lon ?? pickedLocation?.lon ?? -0.6269;
     const loadMw = itLoadKw / 1000;
     const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.ok ? r.json() : null).catch(() => null);
     const get = (url) => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
@@ -1683,8 +1686,9 @@ export default function DataCentreTwin({ onClose }) {
 
         {/* Download Spec */}
         <button onClick={async () => {
-          const lat = explain?.lat ?? pickedLocation?.lat ?? 51.5;
-          const lon = explain?.lon ?? pickedLocation?.lon ?? -0.1;
+          // Fallback anchor: REPD 4699 Slough Heat & Power Station.
+          const lat = explain?.lat ?? pickedLocation?.lat ?? 51.5239;
+          const lon = explain?.lon ?? pickedLocation?.lon ?? -0.6269;
           try {
             const blob = await fetch(`/api/dc/report?lat=${lat}&lon=${lon}&site_name=DC%20Facility&capacity_mw=${itLoadKw / 1000}&profile=google_hyperscale`, { method: "POST" })
               .then(r => r.blob());
@@ -1798,16 +1802,18 @@ export default function DataCentreTwin({ onClose }) {
         <div style={{ flex: 1, position: "relative" }}>
           {viewMode === "plan" ? (
             <DCDesignTwin
-              lat={pickedLocation?.lat ?? explain?.lat ?? 51.5260}
-              lon={pickedLocation?.lon ?? explain?.lon ?? -0.6155}
+              // Real-asset anchor: REPD 4699 Slough Heat & Power Station.
+              lat={pickedLocation?.lat ?? explain?.lat ?? 51.5239}
+              lon={pickedLocation?.lon ?? explain?.lon ?? -0.6269}
               itLoadMw={(itLoadKw || 0) / 1000}
               tier={tier}
               redundancy={redundancy}
             />
           ) : viewMode === "design" ? (
             <InsiderDCDesign
-              lat={pickedLocation?.lat ?? 51.5260}
-              lon={pickedLocation?.lon ?? -0.6155}
+              // Real-asset anchor: REPD 4699 Slough Heat & Power Station.
+              lat={pickedLocation?.lat ?? 51.5239}
+              lon={pickedLocation?.lon ?? -0.6269}
               itLoadMw={(itLoadKw || 0) / 1000}
               tier={tier}
               redundancy={redundancy}

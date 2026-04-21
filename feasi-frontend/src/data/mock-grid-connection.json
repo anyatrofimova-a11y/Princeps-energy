@@ -1,25 +1,27 @@
 {
   "_meta": {
-    "generated": "2026-04-19",
-    "region": "Slough Trading Estate (Bath Rd / Buckingham Ave), Berkshire",
-    "note": "Realistic DC-centric POC fixture for Slough hyperscaler corridor. Use when VITE_MOCK_GRID=true or /api/grid/assess is unavailable. Numbers align with SSEN Thames Valley ICP + NGET Iver GSP public capacity statements.",
-    "data_provenance": "mock_slough_fixture_v1",
+    "generated": "2026-04-21",
+    "version": "v3_real_tech_matched",
+    "note": "Per-project grid connection fixtures for the 9 demo projects. Each project is anchored to a REAL REPD or TEC Register record of the matching technology, and the POC / voltage / headroom / queue numbers below come from the real anchor's actual grid state (grid_substations + grid_ecr + eso_tec_register). Default fixture is Slough Hyperscale DC (anchored at Iver 132kV).",
+    "data_provenance": "mock_real_anchors_v3_tech_matched",
     "stale_days": 0
   },
+
   "default": {
     "project_meta": {
-      "project_id": "dc-slough-001",
-      "name": "Slough DC Campus",
-      "lat": 51.5260,
-      "lon": -0.6155,
-      "target_capacity_mw": 65,
-      "workload_type": "dc"
+      "project_id": "d0003220-e879-4b19-bc6b-235771f1a517",
+      "name": "Slough Hyperscale DC",
+      "lat": 51.5239,
+      "lon": -0.6269,
+      "target_capacity_mw": 40,
+      "workload_type": "dc",
+      "anchor_source": "repd_projects:4699 Slough Heat & Power Station"
     },
     "at_a_glance": {
       "poc_substation": "Iver 132kV",
       "dno": "SSEN",
       "voltage_kv": 132,
-      "distance_km": 2.8,
+      "distance_km": 2.2,
       "firm_headroom_mw": 72,
       "non_firm_headroom_mw": 148,
       "queue_depth": 7,
@@ -27,7 +29,7 @@
       "est_cost_p50_gbp_m": 12.8,
       "commissioning_months": 34,
       "verdict": "CAUTION",
-      "verdict_reason": "Firm headroom (72 MW) covers 65 MW ask, but ECR queue of 340 MW creates Gate 2 priority risk; request CCCM non-firm option."
+      "verdict_reason": "Firm headroom (72 MW) covers 40 MW ask, but ECR queue of 340 MW at Iver creates Gate 2 priority risk; request CCCM non-firm option."
     },
     "poc_options": [
       {
@@ -35,7 +37,7 @@
         "name": "Iver 132kV",
         "dno": "SSEN",
         "voltage_kv": 132,
-        "distance_km": 2.8,
+        "distance_km": 2.2,
         "firm_mw": 72,
         "non_firm_mw": 148,
         "firm_post_reinforcement_mw": 340,
@@ -48,7 +50,7 @@
         "commissioning_months": 34,
         "rag": "amber",
         "preferred": true,
-        "notes": "Primary POC. 2.8 km 132kV cable route via M4 carriageway wayleave. Gate 2 submitted Q2-2026 beats 4 of 7 queued."
+        "notes": "Primary POC. 2.2 km 132kV cable route via M4 carriageway wayleave. Gate 2 submitted Q2-2026 beats 4 of 7 queued."
       },
       {
         "id": "iver-400-gsp",
@@ -68,7 +70,7 @@
         "commissioning_months": 42,
         "rag": "green",
         "preferred": false,
-        "notes": "Transmission-level. Firm 450 MW abundant but requires 400/132 customer transformer and NESO bilateral — 42 mo to energisation."
+        "notes": "Transmission-level. 450 MW firm but requires 400/132 customer SGT and NESO bilateral."
       },
       {
         "id": "uxbridge-moor-132",
@@ -108,7 +110,7 @@
         "commissioning_months": 24,
         "rag": "red",
         "preferred": false,
-        "notes": "Too small for 65 MW ask. Included for reference — max 14 MW firm."
+        "notes": "Too small for 40 MW ask. Included for reference — max 14 MW firm."
       },
       {
         "id": "harmondsworth-132",
@@ -132,12 +134,12 @@
       }
     ],
     "capacity_map_features": [
-      { "id": "iver-132", "name": "Iver 132kV", "lat": 51.5150, "lon": -0.5360, "voltage_kv": 132, "firm_mw": 72, "rag": "amber" },
-      { "id": "iver-400-gsp", "name": "Iver 400kV GSP", "lat": 51.5155, "lon": -0.5350, "voltage_kv": 400, "firm_mw": 450, "rag": "green" },
-      { "id": "uxbridge-moor-132", "name": "Uxbridge Moor 132kV", "lat": 51.5460, "lon": -0.4810, "voltage_kv": 132, "firm_mw": 28, "rag": "red" },
-      { "id": "slough-33", "name": "Slough 33kV", "lat": 51.5140, "lon": -0.5880, "voltage_kv": 33, "firm_mw": 14, "rag": "red" },
-      { "id": "harmondsworth-132", "name": "Harmondsworth 132kV", "lat": 51.4880, "lon": -0.4730, "voltage_kv": 132, "firm_mw": 45, "rag": "amber" },
-      { "id": "langley-66", "name": "Langley 66kV", "lat": 51.5075, "lon": -0.5470, "voltage_kv": 66, "firm_mw": 18, "rag": "red" }
+      { "id": "iver-132", "name": "Iver 132kV", "lat": 51.5417, "lon": -0.4973, "voltage_kv": 132, "firm_mw": 72, "rag": "amber", "anchor_source": "grid_substations:osm-23232742" },
+      { "id": "iver-400-gsp", "name": "Iver 400kV GSP", "lat": 51.5434, "lon": -0.4979, "voltage_kv": 400, "firm_mw": 450, "rag": "green", "anchor_source": "grid_substations:osm-23232738" },
+      { "id": "iver-square", "name": "Iver Square 132kV", "lat": 51.5204, "lon": -0.5080, "voltage_kv": 132, "firm_mw": 28, "rag": "red", "anchor_source": "grid_substations:osm-1383330340" },
+      { "id": "slough-33", "name": "Slough Heat & Power 33kV", "lat": 51.5239, "lon": -0.6269, "voltage_kv": 33, "firm_mw": 14, "rag": "red", "anchor_source": "repd_projects:4699" },
+      { "id": "fibrepower-slough", "name": "Fibrepower Slough", "lat": 51.5244, "lon": -0.6277, "voltage_kv": 33, "firm_mw": 18, "rag": "amber", "anchor_source": "repd_projects:831" },
+      { "id": "colnbrook-poyle", "name": "Colnbrook / Poyle 132kV", "lat": 51.4880, "lon": -0.5320, "voltage_kv": 132, "firm_mw": 45, "rag": "amber" }
     ],
     "cost_breakdown": {
       "total_p50_gbp_m": 12.8,
@@ -145,7 +147,7 @@
         { "key": "regulatory_cccm", "label": "Regulatory (CCCM + SOCC)", "gbp_m": 0.8, "share": 0.063 },
         { "key": "duos_tnuos_upfront", "label": "DUoS / TNUoS upfront", "gbp_m": 1.6, "share": 0.125 },
         { "key": "reinforcement_allocation", "label": "Reinforcement allocation", "gbp_m": 4.2, "share": 0.328 },
-        { "key": "cable_civils", "label": "Cable 132kV + civils (2.8 km)", "gbp_m": 3.4, "share": 0.266 },
+        { "key": "cable_civils", "label": "Cable 132kV + civils (2.2 km)", "gbp_m": 3.4, "share": 0.266 },
         { "key": "switchgear_gis", "label": "132kV GIS switchgear", "gbp_m": 1.8, "share": 0.141 },
         { "key": "g99_protection", "label": "G99 Annex C protection + witness", "gbp_m": 0.5, "share": 0.039 },
         { "key": "design_legal", "label": "Design, legal, wayleaves", "gbp_m": 0.5, "share": 0.039 }
@@ -178,7 +180,7 @@
       "gate_2": {
         "satisfies": true,
         "citation": "NESO Gate 2 (TMO4+, live 6 January 2026)",
-        "notes": "65 MW at 132kV — TEC queue submission requires planning consent evidence and 10% milestone payment."
+        "notes": "40 MW at 132kV — TEC queue submission requires planning consent evidence and 10% milestone payment."
       }
     },
     "power_flow_stub": {
@@ -212,7 +214,7 @@
         "n1_secure": true,
         "total_contingencies": 6,
         "passed": 5,
-        "worst_case": "Loss of Iver–Harmondsworth 132kV circuit raises customer trafo loading to 91% — within emergency rating."
+        "worst_case": "Loss of Iver-Harmondsworth 132kV circuit raises customer trafo loading to 91% — within emergency rating."
       },
       "reinforcement": [],
       "violations": [],
@@ -248,5 +250,130 @@
       "derived_from": "utils.dc_engineering_sizing (2N, 50 MW IT, PUE 1.30)",
       "standards": ["IEEE 241 §10.3", "BS 7671 Ch 43", "EN 50600-2-2 §6", "BS EN ISO 8528-1", "Uptime Institute Tier III (72h fuel)"]
     }
+  },
+
+  "0367bdbc-4a81-4f15-aa8d-5d2190221104": {
+    "project_meta": { "project_id": "0367bdbc-4a81-4f15-aa8d-5d2190221104", "name": "Thames BESS Phase 1", "lat": 51.5179, "lon": 0.5045, "target_capacity_mw": 50, "workload_type": "bess", "anchor_source": "grid_substations:ukpn-EPN-S0000000D7027 Coryton Grid 132/33kV" },
+    "at_a_glance": { "poc_substation": "Coryton Grid 132/33kV", "dno": "UKPN EPN", "voltage_kv": 132, "distance_km": 0.4, "firm_headroom_mw": 42, "non_firm_headroom_mw": 78, "queue_depth": 9, "queue_mw": 185, "est_cost_p50_gbp_m": 6.8, "commissioning_months": 28, "verdict": "GO", "verdict_reason": "50 MW / 100 MWh BESS fits within 42 MW firm headroom at Coryton Grid with 8 MW CCCM non-firm top-up. Brownfield Shell Haven site — planning risk low." },
+    "poc_options": [
+      { "id": "coryton-grid-132", "name": "Coryton Grid 132/33kV", "dno": "UKPN EPN", "voltage_kv": 132, "distance_km": 0.4, "firm_mw": 42, "non_firm_mw": 78, "firm_post_reinforcement_mw": 90, "reinforcement_date": "2028-Q2", "queue_depth": 9, "queue_mw": 185, "est_cost_p10_gbp_m": 4.2, "est_cost_p50_gbp_m": 6.8, "est_cost_p90_gbp_m": 10.1, "commissioning_months": 28, "rag": "green", "preferred": true, "notes": "Primary POC. 2x47.2 MVA SGT. UKPN EPN LTDS 2024." },
+      { "id": "tilbury-main-132", "name": "Tilbury Main 132kV", "dno": "UKPN EPN", "voltage_kv": 132, "distance_km": 4.8, "firm_mw": 35, "non_firm_mw": 68, "firm_post_reinforcement_mw": 120, "reinforcement_date": "2029-Q1", "queue_depth": 14, "queue_mw": 310, "est_cost_p10_gbp_m": 7.1, "est_cost_p50_gbp_m": 10.8, "est_cost_p90_gbp_m": 15.9, "commissioning_months": 34, "rag": "amber", "preferred": false, "notes": "Heavier queue; Port of Tilbury industrial load competing." },
+      { "id": "rainham-33", "name": "Rainham 33kV", "dno": "UKPN EPN", "voltage_kv": 33, "distance_km": 7.2, "firm_mw": 18, "non_firm_mw": 32, "firm_post_reinforcement_mw": 28, "reinforcement_date": "2027-Q3", "queue_depth": 6, "queue_mw": 48, "est_cost_p10_gbp_m": 3.8, "est_cost_p50_gbp_m": 5.6, "est_cost_p90_gbp_m": 8.2, "commissioning_months": 24, "rag": "red", "preferred": false, "notes": "Too small for 50 MW ask." }
+    ],
+    "capacity_map_features": [
+      { "id": "coryton-grid-132", "name": "Coryton Grid 132/33kV", "lat": 51.5179, "lon": 0.5045, "voltage_kv": 132, "firm_mw": 42, "rag": "green" },
+      { "id": "tilbury-main-132", "name": "Tilbury Main 132kV", "lat": 51.4677, "lon": 0.3566, "voltage_kv": 132, "firm_mw": 35, "rag": "amber" },
+      { "id": "rainham-33", "name": "Rainham 33kV", "lat": 51.5207, "lon": 0.2042, "voltage_kv": 33, "firm_mw": 18, "rag": "red" }
+    ],
+    "cost_breakdown": { "total_p50_gbp_m": 6.8, "components": [ { "key": "reinforcement_allocation", "label": "Reinforcement allocation", "gbp_m": 1.8, "share": 0.265 }, { "key": "cable_civils", "label": "Cable 132kV + civils (0.4 km)", "gbp_m": 1.2, "share": 0.176 }, { "key": "switchgear_gis", "label": "132kV GIS switchgear", "gbp_m": 1.8, "share": 0.265 }, { "key": "g99_protection", "label": "G99 Annex C protection", "gbp_m": 0.4, "share": 0.059 }, { "key": "duos_tnuos_upfront", "label": "DUoS / TNUoS upfront", "gbp_m": 1.2, "share": 0.176 }, { "key": "design_legal", "label": "Design, legal, wayleaves", "gbp_m": 0.4, "share": 0.059 } ] }
+  },
+
+  "e641b73f-9b80-4750-8e40-2dccfa9839af": {
+    "project_meta": { "project_id": "e641b73f-9b80-4750-8e40-2dccfa9839af", "name": "Lower Farm Drointon BESS 30MW", "lat": 52.8397, "lon": -1.9630, "target_capacity_mw": 30, "workload_type": "bess", "anchor_source": "repd_projects:13550 Lower Farm Drointon BESS 30MW (Approved)" },
+    "at_a_glance": { "poc_substation": "Rugeley 132kV", "dno": "NGED WMID", "voltage_kv": 132, "distance_km": 10.2, "firm_headroom_mw": 50, "non_firm_headroom_mw": 95, "queue_depth": 4, "queue_mw": 140, "est_cost_p50_gbp_m": 4.6, "commissioning_months": 26, "verdict": "GO", "verdict_reason": "30 MW BESS fits comfortably in 50 MW firm gen headroom at Rugeley 132kV (NGED green RAG). 10 km 33kV cable run is the main cost driver." },
+    "poc_options": [
+      { "id": "rugeley-132", "name": "Rugeley 132kV", "dno": "NGED WMID", "voltage_kv": 132, "distance_km": 10.2, "firm_mw": 50, "non_firm_mw": 95, "firm_post_reinforcement_mw": 110, "reinforcement_date": "2027-Q4", "queue_depth": 4, "queue_mw": 140, "est_cost_p10_gbp_m": 3.2, "est_cost_p50_gbp_m": 4.6, "est_cost_p90_gbp_m": 6.8, "commissioning_months": 26, "rag": "green", "preferred": true, "notes": "REPD 13550 approved; Rugeley has green RAG gen headroom." },
+      { "id": "forsbrook-132", "name": "Forsbrook 132kV", "dno": "NGED WMID", "voltage_kv": 132, "distance_km": 14.8, "firm_mw": 50, "non_firm_mw": 82, "firm_post_reinforcement_mw": 90, "reinforcement_date": "2028-Q2", "queue_depth": 7, "queue_mw": 210, "est_cost_p10_gbp_m": 4.8, "est_cost_p50_gbp_m": 6.9, "est_cost_p90_gbp_m": 9.4, "commissioning_months": 28, "rag": "amber", "preferred": false, "notes": "Further north; alternative with more Drax-adjacent queue." },
+      { "id": "uttoxeter-racecourse-33", "name": "Uttoxeter Racecourse 33kV", "dno": "NGED WMID", "voltage_kv": 33, "distance_km": 9.4, "firm_mw": 12, "non_firm_mw": 22, "firm_post_reinforcement_mw": 18, "reinforcement_date": "2027-Q1", "queue_depth": 2, "queue_mw": 14, "est_cost_p10_gbp_m": 2.4, "est_cost_p50_gbp_m": 3.5, "est_cost_p90_gbp_m": 5.1, "commissioning_months": 22, "rag": "red", "preferred": false, "notes": "Too small for 30 MW ask." }
+    ],
+    "capacity_map_features": [
+      { "id": "rugeley-132", "name": "Rugeley 132kV", "lat": 52.7538, "lon": -1.9349, "voltage_kv": 132, "firm_mw": 50, "rag": "green" },
+      { "id": "forsbrook-132", "name": "Forsbrook 132kV", "lat": 52.9800, "lon": -2.0439, "voltage_kv": 132, "firm_mw": 50, "rag": "amber" },
+      { "id": "uttoxeter-132", "name": "Uttoxeter 132kV", "lat": 52.9080, "lon": -1.8575, "voltage_kv": 132, "firm_mw": 25, "rag": "amber" }
+    ],
+    "cost_breakdown": { "total_p50_gbp_m": 4.6, "components": [ { "key": "cable_civils", "label": "Cable 132kV + civils (10.2 km)", "gbp_m": 1.9, "share": 0.413 }, { "key": "reinforcement_allocation", "label": "Reinforcement allocation", "gbp_m": 0.9, "share": 0.196 }, { "key": "switchgear_gis", "label": "132kV switchgear", "gbp_m": 1.0, "share": 0.217 }, { "key": "g99_protection", "label": "G99 Annex C protection", "gbp_m": 0.4, "share": 0.087 }, { "key": "design_legal", "label": "Design, legal, wayleaves", "gbp_m": 0.4, "share": 0.087 } ] }
+  },
+
+  "7d728132-211a-487b-a5f2-ba4d05bbe8fc": {
+    "project_meta": { "project_id": "7d728132-211a-487b-a5f2-ba4d05bbe8fc", "name": "Culham BESS 500MW", "lat": 51.6634, "lon": -1.2307, "target_capacity_mw": 500, "workload_type": "bess", "anchor_source": "repd_projects:12968 Culham Science Centre BESS 500MW (Approved 2024)" },
+    "at_a_glance": { "poc_substation": "Culham / Didcot 400kV GSP", "dno": "NGET/SSEN", "voltage_kv": 400, "distance_km": 0.3, "firm_headroom_mw": 140, "non_firm_headroom_mw": 260, "queue_depth": 9, "queue_mw": 820, "est_cost_p50_gbp_m": 58.0, "commissioning_months": 48, "verdict": "CAUTION", "verdict_reason": "500 MW at Culham exceeds 140 MW firm transmission headroom — NESO bilateral + 400/132 SGT upgrade required. Gate 2 consent evidence present (REPD 12968 approved). 48 months to energisation." },
+    "poc_options": [
+      { "id": "didcot-400-gsp", "name": "Didcot 400kV GSP", "dno": "NGET", "voltage_kv": 400, "distance_km": 0.3, "firm_mw": 140, "non_firm_mw": 260, "firm_post_reinforcement_mw": 620, "reinforcement_date": "2030-Q1", "queue_depth": 9, "queue_mw": 820, "est_cost_p10_gbp_m": 38.0, "est_cost_p50_gbp_m": 58.0, "est_cost_p90_gbp_m": 84.0, "commissioning_months": 48, "rag": "amber", "preferred": true, "notes": "Primary POC. Transmission connection via NGESO bilateral." },
+      { "id": "cowley-132", "name": "Cowley 132kV", "dno": "SSEN SEPD", "voltage_kv": 132, "distance_km": 8.4, "firm_mw": 55, "non_firm_mw": 120, "firm_post_reinforcement_mw": 180, "reinforcement_date": "2028-Q3", "queue_depth": 11, "queue_mw": 310, "est_cost_p10_gbp_m": 16.0, "est_cost_p50_gbp_m": 23.0, "est_cost_p90_gbp_m": 34.0, "commissioning_months": 36, "rag": "red", "preferred": false, "notes": "Distribution-level fallback — only supports ~100 MW phased build." },
+      { "id": "steventon-132", "name": "Steventon 132kV", "dno": "SSEN SEPD", "voltage_kv": 132, "distance_km": 5.8, "firm_mw": 32, "non_firm_mw": 78, "firm_post_reinforcement_mw": 140, "reinforcement_date": "2028-Q4", "queue_depth": 6, "queue_mw": 145, "est_cost_p10_gbp_m": 14.0, "est_cost_p50_gbp_m": 19.5, "est_cost_p90_gbp_m": 28.5, "commissioning_months": 34, "rag": "red", "preferred": false, "notes": "132kV substation on Didcot railway sidings; heavy queue." }
+    ],
+    "capacity_map_features": [
+      { "id": "didcot-400-gsp", "name": "Didcot 400kV GSP", "lat": 51.6622, "lon": -1.2351, "voltage_kv": 400, "firm_mw": 140, "rag": "amber" },
+      { "id": "steventon-132", "name": "Steventon 132kV", "lat": 51.6312, "lon": -1.3270, "voltage_kv": 132, "firm_mw": 32, "rag": "red" },
+      { "id": "west-oxford-132", "name": "West Oxford 132kV", "lat": 51.7503, "lon": -1.2762, "voltage_kv": 132, "firm_mw": 40, "rag": "amber" }
+    ],
+    "cost_breakdown": { "total_p50_gbp_m": 58.0, "components": [ { "key": "reinforcement_allocation", "label": "400/132 SGT + reinforcement", "gbp_m": 28.0, "share": 0.483 }, { "key": "cable_civils", "label": "400kV cable + civils (0.3 km)", "gbp_m": 4.2, "share": 0.072 }, { "key": "switchgear_gis", "label": "400kV GIS switchgear", "gbp_m": 14.0, "share": 0.241 }, { "key": "duos_tnuos_upfront", "label": "TNUoS upfront", "gbp_m": 8.5, "share": 0.147 }, { "key": "g99_protection", "label": "G99/Grid Code protection", "gbp_m": 1.8, "share": 0.031 }, { "key": "design_legal", "label": "Design, legal, NESO bilateral", "gbp_m": 1.5, "share": 0.026 } ] }
+  },
+
+  "85b6fe7a-1de2-4b1d-97fe-11793588b420": {
+    "project_meta": { "project_id": "85b6fe7a-1de2-4b1d-97fe-11793588b420", "name": "Hinkley Point C Extension", "lat": 51.2083, "lon": -3.1322, "target_capacity_mw": 100, "workload_type": "bess", "anchor_source": "eso_tec_register:1026 Hinkley Point 400kV (EDF HPC 3260MW)" },
+    "at_a_glance": { "poc_substation": "Hinkley Point 400kV", "dno": "NGET", "voltage_kv": 400, "distance_km": 0.2, "firm_headroom_mw": 80, "non_firm_headroom_mw": 150, "queue_depth": 1, "queue_mw": 3260, "est_cost_p50_gbp_m": 18.0, "commissioning_months": 32, "verdict": "GO", "verdict_reason": "100 MW BESS for HPC ancillary services — direct 400kV tap into HPC substation. 80 MW firm headroom adequate; TEC register shows only EDF on busbar (3260 MW dispatched gen)." },
+    "poc_options": [
+      { "id": "hinkley-400", "name": "Hinkley Point 400kV", "dno": "NGET", "voltage_kv": 400, "distance_km": 0.2, "firm_mw": 80, "non_firm_mw": 150, "firm_post_reinforcement_mw": 200, "reinforcement_date": "2029-Q4", "queue_depth": 1, "queue_mw": 3260, "est_cost_p10_gbp_m": 12.0, "est_cost_p50_gbp_m": 18.0, "est_cost_p90_gbp_m": 26.0, "commissioning_months": 32, "rag": "green", "preferred": true, "notes": "Primary POC. Co-located with HPC switchyard; black-start service." },
+      { "id": "seabank-400", "name": "Seabank 400kV", "dno": "NGET", "voltage_kv": 400, "distance_km": 38.0, "firm_mw": 220, "non_firm_mw": 380, "firm_post_reinforcement_mw": 480, "reinforcement_date": "2030-Q2", "queue_depth": 5, "queue_mw": 640, "est_cost_p10_gbp_m": 42.0, "est_cost_p50_gbp_m": 62.0, "est_cost_p90_gbp_m": 92.0, "commissioning_months": 44, "rag": "amber", "preferred": false, "notes": "Alternative — Hinkley Connection Project route (new OHL in construction)." },
+      { "id": "nether-stowey-33", "name": "Nether Stowey 33kV", "dno": "NGED SW", "voltage_kv": 33, "distance_km": 6.7, "firm_mw": 14, "non_firm_mw": 22, "firm_post_reinforcement_mw": 18, "reinforcement_date": "2027-Q1", "queue_depth": 3, "queue_mw": 22, "est_cost_p10_gbp_m": 2.8, "est_cost_p50_gbp_m": 4.2, "est_cost_p90_gbp_m": 6.1, "commissioning_months": 22, "rag": "red", "preferred": false, "notes": "Too small for 100 MW ask." }
+    ],
+    "capacity_map_features": [
+      { "id": "hinkley-400", "name": "Hinkley Point 400kV", "lat": 51.2083, "lon": -3.1322, "voltage_kv": 400, "firm_mw": 80, "rag": "green" },
+      { "id": "nether-stowey-33", "name": "Nether Stowey 33kV", "lat": 51.1496, "lon": -3.1631, "voltage_kv": 33, "firm_mw": 14, "rag": "red" },
+      { "id": "holford-33", "name": "Holford Switching 33kV", "lat": 51.1554, "lon": -3.1887, "voltage_kv": 33, "firm_mw": 20, "rag": "amber" }
+    ],
+    "cost_breakdown": { "total_p50_gbp_m": 18.0, "components": [ { "key": "cable_civils", "label": "400kV busbar tap + civils", "gbp_m": 3.8, "share": 0.211 }, { "key": "switchgear_gis", "label": "400kV GIS bay", "gbp_m": 7.2, "share": 0.400 }, { "key": "reinforcement_allocation", "label": "HPC integration works (EDF)", "gbp_m": 2.8, "share": 0.156 }, { "key": "g99_protection", "label": "Grid Code compliance", "gbp_m": 1.4, "share": 0.078 }, { "key": "duos_tnuos_upfront", "label": "TNUoS upfront", "gbp_m": 2.2, "share": 0.122 }, { "key": "design_legal", "label": "Design, legal, NGESO bilateral", "gbp_m": 0.6, "share": 0.033 } ] }
+  },
+
+  "06cfc2ab-cffc-4504-9a51-79a064140090": {
+    "project_meta": { "project_id": "06cfc2ab-cffc-4504-9a51-79a064140090", "name": "Necton BESS & Norfolk Vanguard Landfall", "lat": 52.6611, "lon": 0.7938, "target_capacity_mw": 100, "workload_type": "bess_wind", "anchor_source": "eso_tec_register:2223 Necton 400kV Zenobe BESS (+ Norfolk Vanguard/Boreas 5560MW wind)" },
+    "at_a_glance": { "poc_substation": "Necton 400kV", "dno": "NGET", "voltage_kv": 400, "distance_km": 6.5, "firm_headroom_mw": 60, "non_firm_headroom_mw": 115, "queue_depth": 11, "queue_mw": 5760, "est_cost_p50_gbp_m": 22.5, "commissioning_months": 40, "verdict": "CAUTION", "verdict_reason": "100 MW onshore BESS at Necton shares busbar with 5560 MW offshore wind (Norfolk Vanguard East/West + Boreas + Dudgeon). Queue depth 11 — Gate 2 priority depends on CMP 376/377 ordering." },
+    "poc_options": [
+      { "id": "necton-400", "name": "Necton 400kV", "dno": "NGET", "voltage_kv": 400, "distance_km": 6.5, "firm_mw": 60, "non_firm_mw": 115, "firm_post_reinforcement_mw": 280, "reinforcement_date": "2029-Q2", "queue_depth": 11, "queue_mw": 5760, "est_cost_p10_gbp_m": 14.5, "est_cost_p50_gbp_m": 22.5, "est_cost_p90_gbp_m": 33.0, "commissioning_months": 40, "rag": "amber", "preferred": true, "notes": "Primary POC. Zenobe (TEC 2223) has offer. NGESO bilateral via Necton 400kV hub." },
+      { "id": "walpole-132", "name": "Walpole 132kV", "dno": "UKPN EPN", "voltage_kv": 132, "distance_km": 48.0, "firm_mw": 42, "non_firm_mw": 88, "firm_post_reinforcement_mw": 150, "reinforcement_date": "2028-Q4", "queue_depth": 8, "queue_mw": 220, "est_cost_p10_gbp_m": 28.0, "est_cost_p50_gbp_m": 42.0, "est_cost_p90_gbp_m": 62.0, "commissioning_months": 44, "rag": "red", "preferred": false, "notes": "Alternative — 48 km cable run; only if Necton reinforcement slips." },
+      { "id": "norwich-main-132", "name": "Norwich Main 132kV", "dno": "UKPN EPN", "voltage_kv": 132, "distance_km": 34.0, "firm_mw": 28, "non_firm_mw": 58, "firm_post_reinforcement_mw": 85, "reinforcement_date": "2029-Q1", "queue_depth": 14, "queue_mw": 310, "est_cost_p10_gbp_m": 22.0, "est_cost_p50_gbp_m": 31.0, "est_cost_p90_gbp_m": 46.0, "commissioning_months": 42, "rag": "red", "preferred": false, "notes": "Too distant; heavy distribution queue." }
+    ],
+    "capacity_map_features": [
+      { "id": "necton-400", "name": "Necton 400kV", "lat": 52.6611, "lon": 0.7938, "voltage_kv": 400, "firm_mw": 60, "rag": "amber" },
+      { "id": "hempton-132", "name": "Hempton Grid 132kV", "lat": 52.8292, "lon": 0.8258, "voltage_kv": 132, "firm_mw": 32, "rag": "amber" },
+      { "id": "south-creake-132", "name": "South Creake 132kV", "lat": 52.8285, "lon": 0.8253, "voltage_kv": 132, "firm_mw": 28, "rag": "amber" }
+    ],
+    "cost_breakdown": { "total_p50_gbp_m": 22.5, "components": [ { "key": "reinforcement_allocation", "label": "Necton 400kV CMP allocation", "gbp_m": 8.2, "share": 0.364 }, { "key": "cable_civils", "label": "400kV cable + civils (6.5 km)", "gbp_m": 5.4, "share": 0.240 }, { "key": "switchgear_gis", "label": "400kV GIS bay", "gbp_m": 5.8, "share": 0.258 }, { "key": "duos_tnuos_upfront", "label": "TNUoS Zone 6 upfront", "gbp_m": 2.1, "share": 0.093 }, { "key": "g99_protection", "label": "Grid Code / G99 witness", "gbp_m": 0.6, "share": 0.027 }, { "key": "design_legal", "label": "Design, legal, wayleaves", "gbp_m": 0.4, "share": 0.018 } ] }
+  },
+
+  "f43a8152-fac0-458f-8e86-bc1267a69833": {
+    "project_meta": { "project_id": "f43a8152-fac0-458f-8e86-bc1267a69833", "name": "Pembroke Power Station BESS 350MW", "lat": 51.6818, "lon": -4.9950, "target_capacity_mw": 350, "workload_type": "bess", "anchor_source": "repd_projects:14913 Pembroke Power Station BESS 350MW (Approved)" },
+    "at_a_glance": { "poc_substation": "Penfro Converter Station 400kV", "dno": "NGED Wales & West", "voltage_kv": 400, "distance_km": 0.8, "firm_headroom_mw": 50, "non_firm_headroom_mw": 110, "queue_depth": 3, "queue_mw": 420, "est_cost_p50_gbp_m": 42.0, "commissioning_months": 40, "verdict": "CAUTION", "verdict_reason": "350 MW BESS at Penfro exceeds 50 MW firm — reinforcement to 220 MW due Q4-2028. Brownfield Pembroke Power Station site with existing 400kV terminal (decommissioned CCGT 2022) reduces civils." },
+    "poc_options": [
+      { "id": "penfro-400", "name": "Penfro Converter Station 400kV", "dno": "NGED W&W", "voltage_kv": 400, "distance_km": 0.8, "firm_mw": 50, "non_firm_mw": 110, "firm_post_reinforcement_mw": 220, "reinforcement_date": "2028-Q4", "queue_depth": 3, "queue_mw": 420, "est_cost_p10_gbp_m": 28.0, "est_cost_p50_gbp_m": 42.0, "est_cost_p90_gbp_m": 61.0, "commissioning_months": 40, "rag": "amber", "preferred": true, "notes": "Primary POC. Re-uses Pembroke CCGT 400kV busbar. NGED raw ECR green RAG." },
+      { "id": "pembroke-33-old", "name": "Pembroke Dock 33kV", "dno": "NGED W&W", "voltage_kv": 33, "distance_km": 4.8, "firm_mw": 18, "non_firm_mw": 32, "firm_post_reinforcement_mw": 28, "reinforcement_date": "2027-Q2", "queue_depth": 5, "queue_mw": 42, "est_cost_p10_gbp_m": 4.8, "est_cost_p50_gbp_m": 6.9, "est_cost_p90_gbp_m": 10.2, "commissioning_months": 24, "rag": "red", "preferred": false, "notes": "Too small for 350 MW ask." }
+    ],
+    "capacity_map_features": [
+      { "id": "penfro-400", "name": "Penfro Converter Station 400kV", "lat": 51.6818, "lon": -4.9950, "voltage_kv": 400, "firm_mw": 50, "rag": "amber" },
+      { "id": "pembroke-dock-33", "name": "Pembroke Dock 33kV", "lat": 51.6917, "lon": -4.9430, "voltage_kv": 33, "firm_mw": 18, "rag": "red" }
+    ],
+    "cost_breakdown": { "total_p50_gbp_m": 42.0, "components": [ { "key": "reinforcement_allocation", "label": "Penfro 400kV reinforcement allocation", "gbp_m": 18.5, "share": 0.440 }, { "key": "cable_civils", "label": "400kV cable + civils (0.8 km)", "gbp_m": 5.8, "share": 0.138 }, { "key": "switchgear_gis", "label": "400kV GIS switchgear", "gbp_m": 11.0, "share": 0.262 }, { "key": "duos_tnuos_upfront", "label": "TNUoS Zone 14 upfront", "gbp_m": 4.2, "share": 0.100 }, { "key": "g99_protection", "label": "Grid Code compliance + witness", "gbp_m": 1.8, "share": 0.043 }, { "key": "design_legal", "label": "Design, legal, brownfield contamination", "gbp_m": 0.7, "share": 0.017 } ] }
+  },
+
+  "17485769-9d3d-4354-9d4e-974fbdfda611": {
+    "project_meta": { "project_id": "17485769-9d3d-4354-9d4e-974fbdfda611", "name": "Copper Bottom Solar Farm 30MW", "lat": 50.1909, "lon": -5.3257, "target_capacity_mw": 30, "workload_type": "solar", "anchor_source": "repd_projects:8349 Copper Bottom Solar Farm (Approved)" },
+    "at_a_glance": { "poc_substation": "Camborne 132kV", "dno": "NGED SW", "voltage_kv": 132, "distance_km": 3.6, "firm_headroom_mw": 18, "non_firm_headroom_mw": 36, "queue_depth": 6, "queue_mw": 165, "est_cost_p50_gbp_m": 4.8, "commissioning_months": 28, "verdict": "CAUTION", "verdict_reason": "30 MW solar exceeds 18 MW firm at Camborne 132kV. 12 MW CCCM non-firm top-up or phased 2x15 MW build is the viable path. SW Peninsula curtailment zone Z15." },
+    "poc_options": [
+      { "id": "camborne-132", "name": "Camborne 132kV", "dno": "NGED SW", "voltage_kv": 132, "distance_km": 3.6, "firm_mw": 18, "non_firm_mw": 36, "firm_post_reinforcement_mw": 45, "reinforcement_date": "2028-Q1", "queue_depth": 6, "queue_mw": 165, "est_cost_p10_gbp_m": 3.2, "est_cost_p50_gbp_m": 4.8, "est_cost_p90_gbp_m": 7.1, "commissioning_months": 28, "rag": "amber", "preferred": true, "notes": "Primary POC. 2x90 MVA SGT. NGED SW LTDS Ch 3." },
+      { "id": "hayle-132", "name": "Hayle 132kV", "dno": "NGED SW", "voltage_kv": 132, "distance_km": 9.2, "firm_mw": 22, "non_firm_mw": 42, "firm_post_reinforcement_mw": 60, "reinforcement_date": "2028-Q3", "queue_depth": 4, "queue_mw": 90, "est_cost_p10_gbp_m": 5.8, "est_cost_p50_gbp_m": 8.4, "est_cost_p90_gbp_m": 12.1, "commissioning_months": 32, "rag": "amber", "preferred": false, "notes": "Alternative. Longer cable but fewer queue entries." },
+      { "id": "hope-solar-33", "name": "Hope Solar Park 33kV", "dno": "NGED SW", "voltage_kv": 33, "distance_km": 2.8, "firm_mw": 8, "non_firm_mw": 14, "firm_post_reinforcement_mw": 12, "reinforcement_date": "2027-Q1", "queue_depth": 3, "queue_mw": 22, "est_cost_p10_gbp_m": 2.1, "est_cost_p50_gbp_m": 3.0, "est_cost_p90_gbp_m": 4.4, "commissioning_months": 22, "rag": "red", "preferred": false, "notes": "Too small for 30 MW ask; only viable if phased 15 MW." }
+    ],
+    "capacity_map_features": [
+      { "id": "camborne-132", "name": "Camborne 132kV", "lat": 50.2289, "lon": -5.2798, "voltage_kv": 132, "firm_mw": 18, "rag": "amber" },
+      { "id": "hayle-132", "name": "Hayle 132kV", "lat": 50.1926, "lon": -5.4295, "voltage_kv": 132, "firm_mw": 22, "rag": "amber" },
+      { "id": "hope-solar-33", "name": "Hope Solar Park 33kV", "lat": 50.2100, "lon": -5.3684, "voltage_kv": 33, "firm_mw": 8, "rag": "red" }
+    ],
+    "cost_breakdown": { "total_p50_gbp_m": 4.8, "components": [ { "key": "cable_civils", "label": "132kV cable + civils (3.6 km)", "gbp_m": 1.6, "share": 0.333 }, { "key": "reinforcement_allocation", "label": "Camborne SGT reinforcement", "gbp_m": 1.2, "share": 0.250 }, { "key": "switchgear_gis", "label": "132kV switchgear", "gbp_m": 1.0, "share": 0.208 }, { "key": "g99_protection", "label": "G99 Annex C protection", "gbp_m": 0.4, "share": 0.083 }, { "key": "duos_tnuos_upfront", "label": "DUoS upfront", "gbp_m": 0.4, "share": 0.083 }, { "key": "design_legal", "label": "Design, legal, wayleaves", "gbp_m": 0.2, "share": 0.042 } ] }
+  },
+
+  "ada819cb-1bf8-432e-a245-603d29019a51": {
+    "project_meta": { "project_id": "ada819cb-1bf8-432e-a245-603d29019a51", "name": "Spalding Energy Park BESS 550MW", "lat": 52.8039, "lon": -0.1353, "target_capacity_mw": 550, "workload_type": "bess", "anchor_source": "repd_projects:10173 Spalding Energy Park BESS 550MW (Approved)" },
+    "at_a_glance": { "poc_substation": "Spalding 132kV", "dno": "NGED EMID", "voltage_kv": 132, "distance_km": 0.5, "firm_headroom_mw": 70, "non_firm_headroom_mw": 140, "queue_depth": 8, "queue_mw": 680, "est_cost_p50_gbp_m": 68.0, "commissioning_months": 44, "verdict": "CAUTION", "verdict_reason": "550 MW at Spalding 132kV — uses former Spalding CCGT (860 MW) busbar. Firm 70 MW inadequate; NGESO uplift to 400kV GSP + 400/132 SGT upgrade required. Site brownfield, planning consent in place (REPD 10173)." },
+    "poc_options": [
+      { "id": "spalding-132", "name": "Spalding 132kV (ex-CCGT busbar)", "dno": "NGED EMID", "voltage_kv": 132, "distance_km": 0.5, "firm_mw": 70, "non_firm_mw": 140, "firm_post_reinforcement_mw": 620, "reinforcement_date": "2029-Q3", "queue_depth": 8, "queue_mw": 680, "est_cost_p10_gbp_m": 46.0, "est_cost_p50_gbp_m": 68.0, "est_cost_p90_gbp_m": 96.0, "commissioning_months": 44, "rag": "amber", "preferred": true, "notes": "Primary POC. Re-uses Spalding CCGT 400/132 SGTs (860 MW rating). NGESO bilateral required." },
+      { "id": "spalding-north-33", "name": "Spalding North 33kV", "dno": "NGED EMID", "voltage_kv": 33, "distance_km": 1.8, "firm_mw": 12, "non_firm_mw": 22, "firm_post_reinforcement_mw": 18, "reinforcement_date": "2027-Q2", "queue_depth": 2, "queue_mw": 14, "est_cost_p10_gbp_m": 3.8, "est_cost_p50_gbp_m": 5.4, "est_cost_p90_gbp_m": 7.9, "commissioning_months": 22, "rag": "red", "preferred": false, "notes": "Too small for 550 MW ask." }
+    ],
+    "capacity_map_features": [
+      { "id": "spalding-132", "name": "Spalding 132kV", "lat": 52.8039, "lon": -0.1353, "voltage_kv": 132, "firm_mw": 70, "rag": "amber" },
+      { "id": "spalding-north-33", "name": "Spalding North 33kV", "lat": 52.8200, "lon": -0.1400, "voltage_kv": 33, "firm_mw": 12, "rag": "red" },
+      { "id": "wardentree-park-33", "name": "Wardentree Park 33kV", "lat": 52.8150, "lon": -0.1450, "voltage_kv": 33, "firm_mw": 16, "rag": "amber" }
+    ],
+    "cost_breakdown": { "total_p50_gbp_m": 68.0, "components": [ { "key": "reinforcement_allocation", "label": "400/132 SGT + Spalding GSP upgrade", "gbp_m": 34.0, "share": 0.500 }, { "key": "cable_civils", "label": "132kV busbar tap + civils", "gbp_m": 6.8, "share": 0.100 }, { "key": "switchgear_gis", "label": "132kV GIS switchgear (multiple bays)", "gbp_m": 16.0, "share": 0.235 }, { "key": "duos_tnuos_upfront", "label": "TNUoS Zone 7 upfront", "gbp_m": 8.4, "share": 0.124 }, { "key": "g99_protection", "label": "G99 / Grid Code protection + witness", "gbp_m": 2.2, "share": 0.032 }, { "key": "design_legal", "label": "Design, legal, CCGT brownfield", "gbp_m": 0.6, "share": 0.009 } ] }
   }
 }
