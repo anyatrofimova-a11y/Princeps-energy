@@ -1,0 +1,705 @@
+{#
+  templates/report/tdd_pack.html — Princeps Lender Technical Due Diligence Pack.
+
+  Ships the three RESEARCH-3 v1 sections:
+    1. Warranty matrix + PCG register + O&M contract review.
+    2. Insurance programme + CEng sign-off + reliance package.
+    3. BESS augmentation plan + UL 9540A + PAS 63100 cross-walk.
+
+  Context keys (see app.routers.reports::api_tdd_pack and
+  utils/tdd/report_pack.py orchestration):
+    project: {name, technology, capacity_mw, lat, lon, osgb, project_id}
+    warranty_matrix: utils.tdd.warranty.WarrantyMatrix.to_dict()
+    pcg_register: utils.tdd.warranty.PCGRegister.to_dict()
+    om_review: utils.tdd.warranty.OMContractReview.to_dict()
+    insurance: utils.tdd.insurance_sign_off.InsuranceProgramme.to_dict()
+    ceng_signoff: utils.tdd.insurance_sign_off.CEngSignOffBlock.to_dict()
+    reliance: utils.tdd.insurance_sign_off.ReliancePackage.to_dict()
+    augmentation: utils.tdd.bess_commercial.AugmentationPlan.to_dict() | None
+    ul_9540a: utils.tdd.bess_commercial.UL9540AAudit.to_dict() | None
+    pas_63100: utils.tdd.bess_commercial.PAS63100CrossWalk.to_dict() | None
+    generated_at, revision, doc_ref, doc_hash
+#}
+{% macro gbp(v) -%}
+  {%- if v is none -%}—
+  {%- elif v|abs >= 1e9 -%}£{{ '%.2f' % (v/1e9) }}bn
+  {%- elif v|abs >= 1e6 -%}£{{ '%.2f' % (v/1e6) }}m
+  {%- elif v|abs >= 1e3 -%}£{{ '%.0f' % (v/1e3) }}k
+  {%- else -%}£{{ '%.0f' % v }}
+  {%- endif -%}
+{%- endmacro %}
+{% macro pct(v, d=1) -%}
+  {%- if v is none -%}—{% else %}{{ ('%%.%df' % d) % v }}%{% endif -%}
+{%- endmacro %}
+{% macro rag(label) -%}
+  {%- set L = (label or '')|upper -%}
+  {%- if L in ['PASS'] -%}<span class="rag pass">PASS</span>
+  {%- elif L in ['CONCERN', 'PARTIAL', 'REVIEW_PENDING'] -%}<span class="rag concern">{{ L }}</span>
+  {%- elif L in ['BLOCKER', 'FAIL'] -%}<span class="rag blocker">{{ L }}</span>
+  {%- else -%}<span class="rag unknown">{{ L or 'UNKNOWN' }}</span>
+  {%- endif -%}
+{%- endmacro %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Technical Due Diligence — {{ project.name }} — {{ revision }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 15mm 22mm 15mm;
+    @bottom-left  { content: "{{ project.name }} · Technical Due Diligence · {{ revision }}"; font: 8px 'Inter','DM Sans',sans-serif; color:#6b7280; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font: 8px 'Inter','DM Sans',sans-serif; color:#6b7280; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Inter', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #1a1a2e; font-size: 10.5px; line-height: 1.55; margin: 0;
+  }
+  h1,h2,h3,h4 { margin: 0; color:#1a1a2e; font-weight:700; }
+  h1 { font-size: 28px; letter-spacing:-0.01em; }
+  h2 { font-size: 16px; margin: 22px 0 6px; padding: 6px 0 4px; border-bottom: 2px solid #D4A018; }
+  h3 { font-size: 12px; margin: 14px 0 4px; text-transform: uppercase; letter-spacing:0.05em; color:#16213e; }
+  h4 { font-size: 11px; margin: 10px 0 3px; color:#16213e; }
+  p { margin: 6px 0; }
+  .kicker { text-transform: uppercase; font-size: 9px; letter-spacing: 0.2em; color:#6b7280; }
+  .lead { font-size: 11.5px; color: #2d2d2d; }
+  .muted { color: #6b7280; font-size: 9.5px; }
+  .panel { background: #fcfaf3; border-left: 4px solid #D4A018; padding: 10px 14px; margin: 10px 0; border-radius: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5px; margin: 6px 0 12px; }
+  th, td { padding: 5px 7px; border-bottom: 1px solid #e6d9b8; vertical-align: top; text-align: left; }
+  th { background: #D4A018; color: #fff; font-weight: 600; }
+  tr:nth-child(even) td { background: #fefcf5; }
+  .cover { page-break-after: always; padding: 20mm 4mm; min-height: 250mm;
+           display: flex; flex-direction: column; justify-content: space-between; }
+  .brandband { display:inline-block; background:#D4A018; color:#fff; padding: 8px 18px;
+               font-weight: 800; letter-spacing:2px; font-size: 10px; }
+  .doc-ref { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 9px; color:#4a4a4a; }
+  .rag { display:inline-block; padding: 2px 8px; border-radius: 3px; font-weight:700;
+         font-size:9px; letter-spacing:0.05em; }
+  .rag.pass { background:#e2f0e0; color:#228B22; }
+  .rag.concern { background:#fbeecb; color:#a88732; }
+  .rag.blocker { background:#f9d9d5; color:#C0392B; }
+  .rag.unknown { background:#ececec; color:#6b7280; }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .metric { background:#f8f6ed; padding: 10px 12px; border-radius: 3px; }
+  .metric .label { font-size: 8.5px; text-transform:uppercase; letter-spacing: 0.12em; color:#6b7280; }
+  .metric .value { font-size: 14px; font-weight: 800; color:#1a1a2e; }
+  .metric .sub { font-size: 9px; color:#6b7280; margin-top: 1px; }
+  .section-break { page-break-before: always; }
+  .fn { font-size: 7px; vertical-align: super; color:#6b7280; }
+  ul.clean { margin: 4px 0 4px 18px; padding: 0; }
+  ul.clean li { margin: 2px 0; }
+  .sparkbar { display:flex; gap: 0; align-items: flex-end; height: 36px; margin: 4px 0; }
+  .sparkbar .bar { flex: 1; background: #D4A018; margin-right: 1px; }
+  .sparkbar .bar.aug { background: #C0392B; }
+</style>
+</head>
+<body>
+
+{# =========== Cover =========== #}
+<section class="cover">
+  <div>
+    <div class="brandband">PRINCEPS</div>
+    <h1 style="margin-top: 14px;">{{ project.name }}</h1>
+    <div style="font-size: 13.5px; color:#4a4a4a; font-weight:500; margin-top: 4px;">
+      Lender Technical Due Diligence Pack — v1
+    </div>
+    <div style="font-size: 11.5px; color:#6b7280; margin-top:2px;">
+      {{ (project.technology or 'energy')|title }} · {{ '%.0f'|format(project.capacity_mw or 0) }} MW
+      {% if project.osgb %}· {{ project.osgb }}{% endif %}
+    </div>
+    <hr style="border: none; border-top: 2px solid #D4A018; margin: 14px 0;">
+    <div class="doc-ref">
+      Document reference: {{ doc_ref or '—' }}<br>
+      Revision: {{ revision }} — {{ generated_at }}<br>
+      Hash: {{ doc_hash or '—' }}<br>
+      Prepared by: Princeps Energy
+    </div>
+  </div>
+  <div class="doc-ref">
+    Commercial in confidence. Prepared for named addressee(s) only. See Reliance Statement.
+  </div>
+</section>
+
+{# =========== 1. Executive summary =========== #}
+<section>
+  <div class="kicker">Section 1</div>
+  <h2>Executive summary</h2>
+  <p class="lead">
+    This pack discharges three of the five highest-impact gaps identified in
+    the Princeps lender-TDD gap analysis (<em>tdd_standard_2026.md</em>):
+    (a) warranty matrix and parent-company guarantee register with O&amp;M
+    contract review; (b) insurance programme adequacy, chartered-engineer
+    sign-off and reliance package; and (c) BESS augmentation plan, UL 9540A
+    conformance audit and PAS 63100:2024 cross-walk. Each section concludes
+    with a traffic-light TA verdict that the lender's IE can rely upon,
+    subject to the reliance cap set out in Section&nbsp;5.
+  </p>
+
+  <div class="grid3" style="margin-top: 8px;">
+    <div class="metric">
+      <div class="label">Warranty &amp; PCG</div>
+      <div class="value">{{ rag(warranty_matrix.summary_view) }}</div>
+      <div class="sub">{{ (warranty_matrix.lines|length) }} equipment lines</div>
+    </div>
+    <div class="metric">
+      <div class="label">Insurance adequacy</div>
+      <div class="value">{{ rag(insurance.adequacy) }}</div>
+      <div class="sub">{{ insurance.cover_lines|length }} covers · {{ gbp(insurance.total_premium_gbp) }}/yr premium</div>
+    </div>
+    <div class="metric">
+      <div class="label">BESS commercial-compliance</div>
+      <div class="value">
+        {% if augmentation %}{{ rag(augmentation.lender_view) }}{% else %}<span class="rag unknown">n/a</span>{% endif %}
+      </div>
+      <div class="sub">
+        {% if augmentation %}
+          Residual SoH {{ pct(augmentation.residual_soh_pct, 1) }} · {{ augmentation.events|length }} augment events
+        {% else %}
+          Not applicable (non-BESS)
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{# =========== 2. Warranty matrix + PCG =========== #}
+<section class="section-break">
+  <div class="kicker">Section 2</div>
+  <h2>Warranty matrix &amp; PCG register</h2>
+  <p class="lead">
+    Equipment-by-equipment warranty scope and parent-company-guarantee
+    status against lender minima (ENA / RenewableUK / IPA bankability norms).
+    Any line flagged <strong>BLOCKER</strong> must be resolved before
+    financial close; <strong>CONCERN</strong> lines carry a residual risk
+    that must be priced into CPs or mitigated via insurance wrap.
+  </p>
+
+  <h3>Warranty matrix — {{ project.name }}</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Equipment</th>
+        <th>Manufacturer</th>
+        <th>Model</th>
+        <th>Product (yr)</th>
+        <th>Performance (yr)</th>
+        <th>PCG status</th>
+        <th>PCG cap</th>
+        <th>TA view</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in warranty_matrix.lines %}
+      <tr>
+        <td>{{ l.equipment }}</td>
+        <td>{{ l.manufacturer }}</td>
+        <td>{{ l.model }}</td>
+        <td>{{ l.warranty_years }}</td>
+        <td>{{ l.performance_years or '—' }}</td>
+        <td>{{ l.pcg_status|title }}</td>
+        <td>{{ gbp(l.pcg_amount_gbp) }}</td>
+        <td>{{ rag(l.ta_view) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if warranty_matrix.red_flags %}
+  <h3>Red flags &amp; follow-up actions</h3>
+  <ul class="clean">
+    {% for f in warranty_matrix.red_flags %}
+      <li>{{ f }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <h3>Parent-company-guarantee register (manufacturers represented)</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Manufacturer</th>
+        <th>Parent</th>
+        <th>Credit rating</th>
+        <th>PCG status</th>
+        <th>Typical PCG cap</th>
+        <th>Known issues</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set shown = [] %}
+      {% for l in warranty_matrix.lines %}
+        {% if l.manufacturer not in shown %}
+          {% set _ = shown.append(l.manufacturer) %}
+          {% set rec = pcg_register.entries.get(l.manufacturer, {}) %}
+          <tr>
+            <td><strong>{{ l.manufacturer }}</strong></td>
+            <td>{{ rec.parent or '—' }}</td>
+            <td>{{ rec.credit_rating or '—' }}</td>
+            <td>{{ (rec.pcg_status or 'unknown')|title }}</td>
+            <td>{{ gbp(rec.pcg_amount_gbp) }}</td>
+            <td>
+              {% if rec.known_issues %}
+                <ul class="clean">
+                  {% for i in rec.known_issues %}<li>{{ i }}</li>{% endfor %}
+                </ul>
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted">Source: {{ pcg_register.source }}</p>
+</section>
+
+{# =========== 3. O&M / LTSA contract review =========== #}
+<section class="section-break">
+  <div class="kicker">Section 3</div>
+  <h2>O&amp;M / LTSA contract review</h2>
+  <p class="lead">
+    Ten-point lender-TA checklist covering performance guarantee,
+    availability threshold, SCADA cover, PCG, CPI escalation, termination
+    rights, spares strategy, response SLAs, exclusions / force majeure, and
+    back-to-back warranty flow-down.
+  </p>
+
+  <div class="grid3">
+    <div class="metric">
+      <div class="label">Contractor</div>
+      <div class="value" style="font-size: 11.5px;">{{ om_review.contractor }}</div>
+    </div>
+    <div class="metric">
+      <div class="label">Annual fee</div>
+      <div class="value">{{ gbp(om_review.annual_fee_gbp_per_mw_yr) }} / MW / yr</div>
+      <div class="sub">{{ om_review.term_years }}-year term</div>
+    </div>
+    <div class="metric">
+      <div class="label">Overall TA view</div>
+      <div class="value">{{ rag(om_review.overall) }}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 4%;">#</th>
+        <th style="width: 20%;">Topic</th>
+        <th style="width: 38%;">Question</th>
+        <th style="width: 28%;">Expected form</th>
+        <th style="width: 10%;">Flag</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in om_review.review %}
+      <tr>
+        <td>{{ r.id }}</td>
+        <td><strong>{{ r.topic }}</strong></td>
+        <td>{{ r.question }}</td>
+        <td>{{ r.expected_form }}</td>
+        <td>{{ rag(r.flag) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{# =========== 4. Insurance programme =========== #}
+<section class="section-break">
+  <div class="kicker">Section 4</div>
+  <h2>Insurance programme adequacy</h2>
+  <p class="lead">
+    Construction-All-Risks, Delay Start-Up, operational property damage,
+    business interruption, third-party liability, cyber, and D&amp;O
+    covers sized against UK 2026 market benchmarks. Premiums are
+    indicative gross rates — firm quotations require broker placement.
+  </p>
+
+  <div class="grid3">
+    <div class="metric">
+      <div class="label">Construction CAPEX</div>
+      <div class="value">{{ gbp(insurance.construction_capex_gbp) }}</div>
+    </div>
+    <div class="metric">
+      <div class="label">ALoP / DSU period</div>
+      <div class="value">{{ insurance.advance_loss_of_profits_months }} months</div>
+    </div>
+    <div class="metric">
+      <div class="label">Lender minimum met</div>
+      <div class="value">{{ rag('PASS' if insurance.lender_minimum_met else 'BLOCKER') }}</div>
+      <div class="sub">{{ rag(insurance.adequacy) }} overall</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 24%;">Cover</th>
+        <th style="width: 17%;">Sum insured</th>
+        <th style="width: 13%;">Premium p.a.</th>
+        <th style="width: 12%;">Deductible</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in insurance.cover_lines %}
+      <tr>
+        <td><strong>{{ c.cover }}</strong></td>
+        <td>{{ gbp(c.sum_insured_gbp) }}</td>
+        <td>{{ gbp(c.premium_gbp) }}</td>
+        <td>{{ gbp(c.deductible_gbp) }}</td>
+        <td>{{ c.notes }}</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <td colspan="2"><strong>Total programme premium</strong></td>
+        <td colspan="3"><strong>{{ gbp(insurance.total_premium_gbp) }} per annum</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  {% if insurance.notes %}
+  <div class="panel">
+    <strong>Adequacy commentary</strong>
+    <ul class="clean">
+      {% for n in insurance.notes %}<li>{{ n }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</section>
+
+{# =========== 5. Reliance + CEng sign-off =========== #}
+<section class="section-break">
+  <div class="kicker">Section 5</div>
+  <h2>Reliance package &amp; chartered-engineer sign-off</h2>
+
+  <h3>Addressees entitled to rely</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Organisation</th>
+        <th>Role</th>
+        <th>Reliance basis</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in reliance.addressees %}
+      <tr>
+        <td><strong>{{ a.name }}</strong></td>
+        <td>{{ a.role }}</td>
+        <td>{{ a.basis }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Reliance terms</h3>
+  <table>
+    <tbody>
+      <tr><th style="width: 25%;">Client of record</th><td>{{ reliance.client }}</td></tr>
+      <tr><th>Project</th><td>{{ reliance.project_name }}</td></tr>
+      <tr><th>Purpose</th><td>{{ reliance.purpose }}</td></tr>
+      <tr><th>Reliance variant</th><td>{{ reliance.reliance_type|title }}</td></tr>
+      <tr><th>Liability cap</th>
+          <td>
+            {% if reliance.liability_cap_gbp %}
+              {{ gbp(reliance.liability_cap_gbp) }} aggregate
+            {% else %}
+              {{ reliance.liability_cap_multiplier }}× fees paid under the engagement letter
+            {% endif %}
+          </td></tr>
+      <tr><th>Reliance letter required?</th>
+          <td>{{ 'Yes (LMA form, on signature)' if reliance.reliance_letter_required else 'No' }}</td></tr>
+      <tr><th>Assignable to third party?</th>
+          <td>{{ 'Yes — once, with written consent' if reliance.third_party_assignable else 'No' }}</td></tr>
+      <tr><th>Governing law</th><td>{{ reliance.governing_law }}</td></tr>
+      <tr><th>Report issue date</th><td>{{ reliance.report_issue_date }}</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Chartered-engineer sign-off</h3>
+  <div class="panel">
+    <p><strong>Scope statement.</strong> {{ ceng_signoff.scope_statement }}</p>
+    <p><strong>Reliance cap.</strong> {{ ceng_signoff.reliance_cap_statement }}</p>
+  </div>
+  <table>
+    <tbody>
+      <tr><th style="width: 25%;">Signing engineer</th><td>{{ ceng_signoff.engineer_name }}</td></tr>
+      <tr><th>Title</th><td>{{ ceng_signoff.engineer_title }}</td></tr>
+      <tr><th>CEng registration</th><td>{{ ceng_signoff.ceng_number }}</td></tr>
+      <tr><th>Institution</th><td>{{ ceng_signoff.institution }} — {{ ceng_signoff.institution_number }}</td></tr>
+      <tr><th>Signing date</th><td>{{ ceng_signoff.signing_date }}</td></tr>
+      <tr><th>Draft status</th>
+          <td>{{ 'Draft — awaiting signature' if ceng_signoff.is_draft else 'Signed' }}</td></tr>
+    </tbody>
+  </table>
+  {% if ceng_signoff.notes %}
+    <ul class="clean">
+      {% for n in ceng_signoff.notes %}<li class="muted">{{ n }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+
+  <div style="margin-top: 20px;">
+    <table>
+      <tbody>
+        <tr>
+          <td style="width: 50%; height: 60px; vertical-align: bottom;">
+            Signature:
+            <div style="border-bottom: 1px solid #1a1a1a; margin-top: 36px;"></div>
+          </td>
+          <td style="width: 50%; vertical-align: bottom;">
+            Date:
+            <div style="border-bottom: 1px solid #1a1a1a; margin-top: 36px;"></div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# =========== 6. BESS augmentation plan =========== #}
+{% if augmentation %}
+<section class="section-break">
+  <div class="kicker">Section 6</div>
+  <h2>BESS augmentation plan &amp; capacity retention curve</h2>
+
+  <p class="lead">
+    15-year capacity-retention projection for a {{ '%.0f'|format(augmentation.nameplate_mwh) }} MWh
+    {{ augmentation.chemistry }} BESS running {{ augmentation.cycles_per_year }} equivalent full
+    cycles per year at {{ pct(augmentation.dod_pct, 0) }} depth-of-discharge, Arrhenius-scaled
+    to site ambient. Augmentation events are triggered when state-of-health
+    falls below the retention floor; each event refills back to 100% of
+    original nameplate using fresh cells.
+  </p>
+
+  <div class="grid3">
+    <div class="metric">
+      <div class="label">Residual SoH at yr {{ augmentation.hold_years }}</div>
+      <div class="value">{{ pct(augmentation.residual_soh_pct, 1) }}</div>
+    </div>
+    <div class="metric">
+      <div class="label">Augmentation events</div>
+      <div class="value">{{ augmentation.events|length }}</div>
+      <div class="sub">Total add: {{ '%.1f'|format(augmentation.total_augmentation_mwh) }} MWh</div>
+    </div>
+    <div class="metric">
+      <div class="label">Total augment CAPEX</div>
+      <div class="value">{{ gbp(augmentation.total_augmentation_capex_gbp) }}</div>
+      <div class="sub">Lender view: {{ rag(augmentation.lender_view) }}</div>
+    </div>
+  </div>
+
+  <h3>Year-on-year capacity retention</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>State of Health</th>
+        <th>Usable capacity (MWh)</th>
+        <th>Augmented?</th>
+        <th>MWh added</th>
+        <th>CAPEX</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in augmentation.retention_curve %}
+      <tr>
+        <td>{{ p.year }}</td>
+        <td>{{ pct(p.soh_pct, 1) }}</td>
+        <td>{{ '%.1f'|format(p.usable_mwh) }}</td>
+        <td>{{ 'Yes' if p.augmented_this_year else '—' }}</td>
+        <td>{% if p.augment_mwh_added %}{{ '%.1f'|format(p.augment_mwh_added) }}{% else %}—{% endif %}</td>
+        <td>{% if p.augment_capex_gbp %}{{ gbp(p.augment_capex_gbp) }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if augmentation.events %}
+  <h3>Augmentation events — cost build-up</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Year</th>
+        <th>Top-up MWh</th>
+        <th>Unit cost (£/kWh)</th>
+        <th>Event CAPEX</th>
+        <th>Reason</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in augmentation.events %}
+      <tr>
+        <td>{{ e.year }}</td>
+        <td>{{ '%.1f'|format(e.top_up_mwh) }}</td>
+        <td>£{{ '%.0f'|format(e.unit_cost_gbp_per_kwh) }}</td>
+        <td>{{ gbp(e.capex_gbp) }}</td>
+        <td>{{ e.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <div class="panel">
+    <strong>Method notes</strong>
+    <ul class="clean">
+      {% for n in augmentation.notes %}<li>{{ n }}</li>{% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+
+{# =========== 7. UL 9540A audit =========== #}
+{% if ul_9540a %}
+<section class="section-break">
+  <div class="kicker">Section 7</div>
+  <h2>UL 9540A conformance audit — {{ ul_9540a.bess_system }}</h2>
+  <p class="lead">
+    Six-point UL 9540A audit covering cell-, module-, unit- and
+    installation-level thermal-runaway evidence, fire-safety reporting
+    accreditation and CFD-extrapolation to as-installed geometry. Lenders
+    now routinely reject single-level (cell-only) evidence — all three
+    physical levels plus reporting + CFD are expected for UK deployments.
+  </p>
+
+  <div class="grid3">
+    <div class="metric">
+      <div class="label">BESS system</div>
+      <div class="value" style="font-size: 11.5px;">{{ ul_9540a.bess_system }}</div>
+      <div class="sub">{{ ul_9540a.cell_chemistry }} chemistry</div>
+    </div>
+    <div class="metric">
+      <div class="label">Overall conformance</div>
+      <div class="value">{{ rag(ul_9540a.overall) }}</div>
+    </div>
+    <div class="metric">
+      <div class="label">Evidence gaps</div>
+      <div class="value">{{ ul_9540a.evidence_gap_count }}</div>
+      <div class="sub">Actions below</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 10%;">Level</th>
+        <th style="width: 34%;">Test / evidence</th>
+        <th style="width: 12%;">Status</th>
+        <th style="width: 18%;">Evidence ref</th>
+        <th>Commentary</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in ul_9540a.findings %}
+      <tr>
+        <td>{{ f.level|title }}</td>
+        <td>{{ f.test_name }}</td>
+        <td>{{ rag(f.conformance) }}</td>
+        <td class="doc-ref">{{ f.evidence_ref or '—' }}</td>
+        <td>
+          {{ f.commentary }}
+          {% if f.evidence_required %}
+            <ul class="clean">
+              {% for e in f.evidence_required %}<li class="muted">Required: {{ e }}</li>{% endfor %}
+            </ul>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="panel">
+    <strong>Audit notes</strong>
+    <ul class="clean">
+      {% for n in ul_9540a.notes %}<li>{{ n }}</li>{% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+
+{# =========== 8. PAS 63100 cross-walk =========== #}
+{% if pas_63100 %}
+<section class="section-break">
+  <div class="kicker">Section 8</div>
+  <h2>PAS 63100:2024 cross-walk</h2>
+  <p class="lead">
+    PAS 63100:2024 is BSI's Publicly Available Specification on BESS fire
+    safety; it is cross-referenced by the forthcoming BS 7671:2018
+    Amendment&nbsp;4 (2026) Chapter&nbsp;57 for any stationary secondary
+    battery on UK premises. Each clause below is mapped to the
+    corresponding UL 9540A finding with a UK-specific requirement and a
+    recommended action for any gap.
+  </p>
+
+  <div class="grid2">
+    <div class="metric">
+      <div class="label">BESS system</div>
+      <div class="value" style="font-size: 11.5px;">{{ pas_63100.bess_system }}</div>
+    </div>
+    <div class="metric">
+      <div class="label">Overall conformance</div>
+      <div class="value">{{ rag(pas_63100.overall) }}</div>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 10%;">Clause</th>
+        <th style="width: 22%;">Title</th>
+        <th style="width: 12%;">UL level</th>
+        <th style="width: 12%;">Status</th>
+        <th style="width: 22%;">UK-specific requirement</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for m in pas_63100.mappings %}
+      <tr>
+        <td><strong>{{ m.pas_clause }}</strong></td>
+        <td>{{ m.pas_title }}</td>
+        <td>{{ m.ul_finding_level|title }}</td>
+        <td>{{ rag(m.conformance) }}</td>
+        <td>{{ m.uk_specific_requirement }}</td>
+        <td>{{ m.action }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="panel">
+    <strong>Regulatory notes</strong>
+    <ul class="clean">
+      {% for n in pas_63100.notes %}<li>{{ n }}</li>{% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}
+
+{# =========== 9. References =========== #}
+<section class="section-break">
+  <div class="kicker">Section 9</div>
+  <h2>References &amp; provenance</h2>
+  <ul class="clean">
+    <li>ENA EREC G99 Issue 2 (10 March 2025) — DNO connection requirements.</li>
+    <li>CCCM v19 (Ofgem-approved 2024) — Connection charging methodology.</li>
+    <li>UL 9540A:2019 — Test method for thermal-runaway fire propagation in BESS.</li>
+    <li>PAS 63100:2024 — BSI specification on BESS fire safety.</li>
+    <li>BS 7671:2018 Amendment&nbsp;4 (publication 15 April 2026) Chapter&nbsp;57 — Stationary secondary batteries.</li>
+    <li>NFPA 855 (2023) — Installation of stationary energy storage systems.</li>
+    <li>IEC 62933-2-1 / TS 62933-2-2 / 62933-5-2 — BESS performance &amp; safety.</li>
+    <li>EN-1, EN-3, EN-5 (2025) — National Policy Statements on energy infrastructure (in force 6 Jan 2026).</li>
+    <li>Bloomberg NEF Tier-1 Module Listing Q1 2026; RETC Module Reliability Scorecard 2025.</li>
+    <li>DNV Energy Storage Scorecard 2024-H2; Kiwa BESS bankability register.</li>
+    <li>AON / Marsh / WTW Renewable Energy Insurance Market Updates (UK, 2025-26).</li>
+    <li>IET / ICE Chartered Engineer practice notes on reliance letters and liability caps.</li>
+  </ul>
+  <p class="muted">Document hash: {{ doc_hash or '—' }} — Issued {{ generated_at }}.</p>
+</section>
+
+</body>
+</html>

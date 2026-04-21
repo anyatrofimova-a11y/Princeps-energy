@@ -1,0 +1,407 @@
+{# =========================================================================
+   grid_connection/main.html.j2 — DNO Connection Engineer audience.
+
+   Consumes the renderer context produced by utils/report_grid_connection.py
+   (aggregate_grid_connection_data + CCCM v19 + headroom + N/N-1 + SLD +
+   G99 Table 10.1 + commissioning + references).
+
+   Primary context keys:
+     r          — aggregated report_data dict (lat, lon, osgb, capacity_mw,
+                  verdict, dno_area, ltds, best_candidate, cccm, headroom,
+                  power_flow, sld, table_101, commissioning, risks)
+     fault       — dict {three_phase_ka, single_phase_earth_ka,
+                         switchgear_rating_ka, clearance_ms, source}
+     charts     — base64 matplotlib chart strings (legacy; optional)
+     fmt_gbp_m  — callable £m formatter
+   ========================================================================= #}
+{% extends "_shared/_base.html.j2" %}
+{% import "_shared/_macros.html.j2" as m %}
+
+{% block content %}
+
+{# ========== 2. Executive summary ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 1</div>
+  <h2>Executive summary</h2>
+
+  <p class="pp-lead">
+    This report assesses the feasibility of connecting a
+    <strong>{{ "%.1f"|format(r.capacity_mw) }} MW {{ r.technology | upper }}</strong>
+    project to the distribution network in the vicinity of
+    <strong>{{ r.site_name }}</strong>, and establishes the recommended point
+    of connection, an indicative cost envelope, and the residual engineering
+    risks to be resolved before detailed design.
+  </p>
+
+  {{ m.metric_row([
+    {"label": "Connection verdict", "value": r.verdict | replace("-", " ") | title, "sub": "ENA EREC G99 + CCCM v19", "feature": true},
+    {"label": "Recommended POC", "value": (r.best_candidate.name if r.best_candidate else "—"), "sub": ((r.best_candidate.voltage_kv | string + " kV") if r.best_candidate and r.best_candidate.voltage_kv else "—")},
+    {"label": "Capacity", "value": ("%.1f MW"|format(r.capacity_mw))},
+    {"label": "Route distance", "value": (("%.2f km"|format(r.best_candidate.distance_km)) if r.best_candidate and r.best_candidate.distance_km else "—")}
+  ]) }}
+
+  {% if r.cccm and r.cccm.totals and r.cccm.totals.grand_total %}
+  {{ m.metric_row([
+    {"label": "P10 cost", "value": "£" ~ ("%.2f"|format(r.cccm.totals.grand_total.p10 / 1e6)) ~ "m"},
+    {"label": "P50 cost (base)", "value": "£" ~ ("%.2f"|format(r.cccm.totals.grand_total.p50 / 1e6)) ~ "m", "feature": true},
+    {"label": "P90 cost", "value": "£" ~ ("%.2f"|format(r.cccm.totals.grand_total.p90 / 1e6)) ~ "m"},
+    {"label": "Timeline to energisation", "value": "30 — 42 months", "sub": "indicative — DNO-dependent"}
+  ]) }}
+  {% endif %}
+
+  <div class="pp-callout">
+    <h4>Verdict rationale</h4>
+    <p>
+      {{ r.summary or "Assessment based on DNO LTDS headroom, accepted queue position, and CCCM v19 cost build." }}
+    </p>
+  </div>
+
+  {{ m.cite("DNO LTDS (retrieved " ~ (r.generated_at or "run date") ~ "), NESO ECR and TEC registers, pandapower Newton-Raphson N/N-1 sweep.") }}
+</section>
+
+{# ========== 3. Site & POC ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 2</div>
+  <h2>Site and Point of Connection</h2>
+
+  <table class="pp-table">
+    <thead>
+      <tr><th>Attribute</th><th>Value</th><th>Note / reference</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="pp-lbl">Site name</td><td>{{ r.site_name }}</td><td>Project reference</td></tr>
+      <tr><td class="pp-lbl">WGS84 coordinates</td><td class="pp-mono">{{ "%.6f"|format(r.lat) }}, {{ "%.6f"|format(r.lon) }}</td><td>EPSG:4326</td></tr>
+      <tr><td class="pp-lbl">OSGB36 grid reference</td><td class="pp-mono">{{ r.osgb.grid_ref if r.osgb else "—" }}</td><td>EPSG:27700 (pyproj)</td></tr>
+      <tr><td class="pp-lbl">DNO licence area</td><td>{{ (r.dno_area.name if r.dno_area else "—") }}</td><td>{{ (r.dno_area.code if r.dno_area else "") }}</td></tr>
+      {% if r.ownership %}
+      <tr><td class="pp-lbl">Network ownership</td><td>{{ r.ownership.route }}</td><td>{{ r.ownership.note }}</td></tr>
+      {% endif %}
+      {% if r.best_candidate %}
+      <tr><td class="pp-lbl">Recommended POC</td><td>{{ r.best_candidate.name }}</td><td>ID {{ r.best_candidate.external_id or r.best_candidate.substation_id or "—" }}</td></tr>
+      <tr><td class="pp-lbl">Voltage tier</td><td>{{ r.best_candidate.voltage_kv }} kV</td><td>Primary / Bulk supply point</td></tr>
+      <tr><td class="pp-lbl">Great-circle distance</td><td class="pp-num">{{ "%.2f"|format(r.best_candidate.distance_km or 0) }} km</td><td>Uncorrected haversine</td></tr>
+      <tr><td class="pp-lbl">Corrected route (land-use penalty)</td><td class="pp-num">{{ "%.2f"|format((r.best_candidate.distance_km or 0) * 1.25) }} km</td><td>+25% urban / crossing factor</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  {% if r.candidates and r.candidates | length > 1 %}
+  <h3>Alternative substations considered</h3>
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th>Substation</th><th>Voltage</th>
+        <th class="pp-right">Distance</th>
+        <th class="pp-right">Headroom</th>
+        <th class="pp-right">Score</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in r.candidates[:6] %}
+      <tr>
+        <td>{{ c.name or "Unnamed" }}</td>
+        <td>{{ c.voltage_kv or "—" }} kV</td>
+        <td class="pp-right pp-num">{{ "%.2f"|format(c.distance_km or 0) }} km</td>
+        <td class="pp-right pp-num">{{ (("%.1f MW"|format(c.gen_headroom_mw)) if c.gen_headroom_mw is not none else "—") }}</td>
+        <td class="pp-right pp-num">{{ c.suitability_score or "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {{ m.cite("OSGB36 conversion via pyproj 3.x (EPSG:4326 → EPSG:27700). Substation registry from the DNO's published ECR/LTDS dataset.") }}
+</section>
+
+{# ========== 4. Headroom analysis ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 3</div>
+  <h2>Headroom analysis</h2>
+
+  {% set h = r.headroom or {} %}
+  <table class="pp-table">
+    <thead>
+      <tr><th>Headroom component</th><th class="pp-right">Value (MW)</th><th>Source / citation</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="pp-lbl">Firm capacity (N-1 rating)</td>
+        <td class="pp-right pp-num">{{ (("%.1f"|format(h.firm_capacity_mw)) if h.firm_capacity_mw is not none else m.na()) | safe }}</td>
+        <td>{{ (r.ltds.publication if r.ltds else "DNO LTDS (Licence Condition 25)") }}</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">Non-firm capacity</td>
+        <td class="pp-right pp-num">{{ (("%.1f"|format(h.non_firm_capacity_mw)) if h.non_firm_capacity_mw is not none else m.na()) | safe }}</td>
+        <td>Flexible connection (ANM / curtailment) envelope</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">Accepted queue ahead of application</td>
+        <td class="pp-right pp-num">{{ (("%.1f"|format(h.accepted_queue_mw)) if h.accepted_queue_mw is not none else m.na()) | safe }}</td>
+        <td>NESO ECR / DNO Connection Register</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">In-progress queue (TEC register)</td>
+        <td class="pp-right pp-num">{{ (("%.1f"|format(h.in_progress_queue_mw)) if h.in_progress_queue_mw is not none else m.na()) | safe }}</td>
+        <td>NESO TEC register (post Gate 2 sift)</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">Forecast organic demand growth</td>
+        <td class="pp-right pp-num">{{ (("%.1f"|format(h.forecast_demand_growth_mw)) if h.forecast_demand_growth_mw is not none else m.na()) | safe }}</td>
+        <td>NESO FES 2024 — Leading the Way pathway</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">P50 residual headroom</td>
+        <td class="pp-right pp-num pp-bold">{{ (("%.1f"|format(h.p50_mw)) if h.p50_mw is not none else m.na()) | safe }}</td>
+        <td>Probabilistic; confidence {{ "%.0f"|format((h.confidence or 0) * 100) }}%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  {% if r.ltds %}
+  <div class="pp-callout">
+    <h4>LTDS citation — {{ r.ltds.long_name }}</h4>
+    <p><strong>{{ r.ltds.publication }}</strong> ({{ r.ltds.publication_date }})</p>
+    <p>{{ r.ltds.primary_table }} &mdash; {{ r.ltds.page_ref }}</p>
+    <p class="pp-xs"><a href="{{ r.ltds.url }}" style="color: #8A6313;">{{ r.ltds.url }}</a></p>
+  </div>
+  {% endif %}
+
+  {{ m.cite("Ofgem Distribution Licence Condition 25; NESO FES 2024; DNO ECR & TEC registers.") }}
+</section>
+
+{# ========== 5. CCCM v19 cost build ========== #}
+{% if r.cccm %}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 4</div>
+  <h2>CCCM v19 connection cost build</h2>
+
+  <p>
+    Costs are built per the Ofgem-approved Common Connection Charging
+    Methodology v19 (effective January 2026). Each line carries its
+    methodology reference and an ex-ante indicative range. P10/P50/P90
+    bands reflect CCCM tolerance (±25%) prior to detailed design.
+  </p>
+
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th>CCCM ref.</th>
+        <th>Line item</th>
+        <th class="pp-right">P10 (£k)</th>
+        <th class="pp-right">P50 (£k)</th>
+        <th class="pp-right">P90 (£k)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in r.cccm.lines %}
+      <tr>
+        <td class="pp-mono pp-xs">{{ line.cccm_ref }}</td>
+        <td>{{ line.item }}</td>
+        <td class="pp-right pp-num">{{ "%.0f"|format(line.range.p10 / 1000) }}</td>
+        <td class="pp-right pp-num pp-bold">{{ "%.0f"|format(line.range.p50 / 1000) }}</td>
+        <td class="pp-right pp-num">{{ "%.0f"|format(line.range.p90 / 1000) }}</td>
+      </tr>
+      {% endfor %}
+      <tr>
+        <td colspan="2" class="pp-bold">CCCM grand total</td>
+        <td class="pp-right pp-num pp-bold">{{ "%.0f"|format(r.cccm.totals.grand_total.p10 / 1000) }}</td>
+        <td class="pp-right pp-num pp-bold">{{ "%.0f"|format(r.cccm.totals.grand_total.p50 / 1000) }}</td>
+        <td class="pp-right pp-num pp-bold">{{ "%.0f"|format(r.cccm.totals.grand_total.p90 / 1000) }}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="pp-callout">
+    <h4>Commit-and-pay vs aggregated</h4>
+    <p>{{ r.cccm.commit_vs_aggregated }}</p>
+  </div>
+
+  {% if charts and charts.cccm_waterfall %}
+  <img class="pp-chart" src="data:image/png;base64,{{ charts.cccm_waterfall }}" alt="CCCM v19 waterfall"/>
+  <div class="pp-chart-caption">CCCM v19 cost waterfall — Sole Use → Shared → Reinforcement → Security</div>
+  {% endif %}
+
+  {{ m.cite("Ofgem DCUSA Schedule 19 — Common Connection Charging Methodology v19 (effective Jan 2026).") }}
+</section>
+{% endif %}
+
+{# ========== 6. N-1 contingency table ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 5</div>
+  <h2>N-1 contingency analysis</h2>
+
+  {% if r.power_flow and r.power_flow.success %}
+  <p>
+    A full N-1 sweep was executed via a pandapower (Newton-Raphson) subprocess.
+    Thermal loading and bus voltage deviations are assessed against ENA
+    Engineering Recommendation P28 (voltage limits) and ENA ER-P2/7 (security
+    of supply).
+  </p>
+
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th>Outage element</th>
+        <th>Worst-affected bus</th>
+        <th class="pp-right">V post (kV)</th>
+        <th class="pp-right">V dev (%)</th>
+        <th class="pp-right">Worst loading (%)</th>
+        <th>Compliance</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set contingencies = r.power_flow.contingencies or [] %}
+      {% if contingencies %}
+        {% for c in contingencies[:12] %}
+          {% set vdev = (c.voltage_deviation_pct if c.voltage_deviation_pct is not none else 0) %}
+          {% set load = (c.worst_loading_pct if c.worst_loading_pct is not none else 0) %}
+          {% if load >= 100 or (vdev | abs) > 6 %}
+            {% set rag = "red" %}{% set cmp = "Non-compliant" %}
+          {% elif load >= 80 or (vdev | abs) > 5 %}
+            {% set rag = "amber" %}{% set cmp = "Marginal — review" %}
+          {% else %}
+            {% set rag = "green" %}{% set cmp = "P28 / ER-P2/7 compliant" %}
+          {% endif %}
+          {{ m.n1_row(
+              c.outage_name or ("Outage " ~ loop.index),
+              c.worst_bus or "—",
+              ("%.2f"|format(c.worst_bus_v_kv or 0)),
+              ("%+.2f"|format(vdev)),
+              ("%.0f"|format(load)),
+              cmp, rag) }}
+        {% endfor %}
+      {% else %}
+        {# fall back to bus + line rows #}
+        {% for l in (r.power_flow.line_results or [])[:8] %}
+          {% set load = l.loading_pct or 0 %}
+          {% if load >= 100 %}{% set rag = "red" %}{% set cmp = "Thermal overload" %}
+          {% elif load >= 80 %}{% set rag = "amber" %}{% set cmp = "Watch" %}
+          {% else %}{% set rag = "green" %}{% set cmp = "Compliant" %}{% endif %}
+          {{ m.n1_row(l.name or ("Line " ~ loop.index), "—", "—", "—", ("%.0f"|format(load)), cmp, rag) }}
+        {% endfor %}
+      {% endif %}
+    </tbody>
+  </table>
+
+  {% set hm_rows = [] %}
+  {% if r.power_flow.bus_results %}
+    {% set bus_vals = [] %}
+    {% for b in r.power_flow.bus_results[:8] %}
+      {% set _ = bus_vals.append(((b.vm_pu or 1) * 100) - 100 + 100) %}
+    {% endfor %}
+    {% set _ = hm_rows.append({"label": "N bus voltage (% of nominal)", "cells": bus_vals}) %}
+  {% endif %}
+  {% if r.power_flow.line_results %}
+    {% set line_vals = [] %}
+    {% for l in r.power_flow.line_results[:8] %}
+      {% set _ = line_vals.append(l.loading_pct or 0) %}
+    {% endfor %}
+    {% set _ = hm_rows.append({"label": "Line loading (%)", "cells": line_vals}) %}
+  {% endif %}
+  {% if hm_rows %}
+    {{ m.n1_heatmap(hm_rows) }}
+    <div class="pp-chart-caption">N / N-1 heatmap — voltage percentage (top) and branch loading (bottom)</div>
+  {% endif %}
+
+  {% if charts and charts.power_flow %}
+    <img class="pp-chart" src="data:image/png;base64,{{ charts.power_flow }}" alt="N/N-1 power-flow summary"/>
+  {% endif %}
+
+  {{ m.cite("pandapower 3.4 (Newton-Raphson, lightsim2grid backend). Voltage limits: ENA EREC P28 Issue 2. Security: ENA ER-P2/7.") }}
+  {% else %}
+  {{ m.callout("Power flow analysis deferred",
+    "A Tier 2 pandapower N-1 study was not executed in this run — " ~ (r.power_flow.error if r.power_flow else "no power-flow result") ~ ". For DNO submission, commission a full network-code compliant study once the POC is confirmed.",
+    "amber") }}
+  {% endif %}
+</section>
+
+{# ========== 7. Short-circuit analysis ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 6</div>
+  <h2>Short-circuit (fault level) analysis</h2>
+
+  {% set fault = fault or {} %}
+  <table class="pp-table">
+    <thead>
+      <tr><th>Fault study input</th><th class="pp-right">Value</th><th>Basis / source</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="pp-lbl">Three-phase fault level at POC</td>
+        <td class="pp-right pp-num">{{ (("%.2f kA"|format(fault.three_phase_ka)) if fault.three_phase_ka else m.na()) | safe }}</td>
+        <td>IEC 60909 initial symmetrical rms</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">Single-phase-earth fault level</td>
+        <td class="pp-right pp-num">{{ (("%.2f kA"|format(fault.single_phase_earth_ka)) if fault.single_phase_earth_ka else m.na()) | safe }}</td>
+        <td>IEC 60909 — earthed system</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">Switchgear withstand rating</td>
+        <td class="pp-right pp-num">{{ (("%.2f kA"|format(fault.switchgear_rating_ka)) if fault.switchgear_rating_ka else m.na()) | safe }}</td>
+        <td>DNO standard rating</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">Nominal clearance time</td>
+        <td class="pp-right pp-num">{{ (("%.0f ms"|format(fault.clearance_ms)) if fault.clearance_ms else m.na()) | safe }}</td>
+        <td>Main protection (ANSI 50/51)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  {{ m.cite("ENA EREC P28 Issue 2; IEC 60909; DNO standard " ~ (r.dno_area.name if r.dno_area else "XX") ~ " switchgear specification.") }}
+</section>
+
+{# ========== 8. Commissioning plan ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 7</div>
+  <h2>Commissioning plan and G99 Issue 2 protection settings</h2>
+
+  {% if r.table_101 %}
+  <h3>G99 Table 10.1 — Interface protection settings</h3>
+  <table class="pp-table">
+    <thead>
+      <tr><th>Function</th><th>Setting</th><th>Trip time</th><th>Reference</th></tr>
+    </thead>
+    <tbody>
+      {% for row in (r.table_101.rows or r.table_101) %}
+      <tr>
+        <td>{{ row.function or row.name or "—" }}</td>
+        <td class="pp-num">{{ row.setting or row.value or "—" }}</td>
+        <td class="pp-num">{{ row.trip_time or row.time or "—" }}</td>
+        <td class="pp-xs pp-mono">{{ row.reference or row.clause or "G99 §10.1" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h3>Energisation sequence and witness points</h3>
+  <table class="pp-table">
+    <thead><tr><th>Stage</th><th>Scope / witness</th></tr></thead>
+    <tbody>
+      {% for stage in r.commissioning %}
+      <tr><td class="pp-lbl">{{ stage.stage }}</td><td>{{ stage.scope }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {{ m.cite("ENA EREC G99 Issue 2 (10 March 2025), §9 Commissioning and §10 Protection; Distribution Code v43.") }}
+</section>
+
+{# ========== 9. Embedded SLD ========== #}
+{% if r.sld and r.sld.png_base64 %}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 8</div>
+  <h2>Single-line diagram</h2>
+  <img class="pp-chart" src="data:image/png;base64,{{ r.sld.png_base64 }}" alt="Single-line diagram"/>
+  <div class="pp-chart-caption">
+    Indicative single-line diagram. Fault level at POC
+    {{ (("%.2f kA"|format(r.sld.meta.fault_level_ka)) if r.sld.meta and r.sld.meta.fault_level_ka else "(to be confirmed)") }} ·
+    {{ r.sld.feeders | length }} feeder(s).
+  </div>
+  {{ m.cite("Princeps SLD generator (utils/sld_generator.py). To be replaced by CAD-issued GA drawing at detail-design stage.") }}
+</section>
+{% endif %}
+
+{% endblock %}

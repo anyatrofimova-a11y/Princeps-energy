@@ -6,7 +6,7 @@
 
 @page {
   size: A4 portrait;
-  margin: 22mm 15mm 22mm 15mm;
+  margin: 25mm 18mm 25mm 18mm;
   @top-left   { content: "Princeps FVR — {{ project.ref }}"; font-family: Georgia, serif;
                 font-size: 9pt; color: #697077; }
   @top-right  { content: "Rev {{ project.revision }} · {{ project.date }}"; font-family: Georgia, serif;
@@ -24,11 +24,11 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { font-size: 10.5pt; }
+html { font-size: 11pt; }
 body {
   font-family: Georgia, "Times New Roman", serif;
   color: #1a1a1a;
-  line-height: 1.45;
+  line-height: 1.55;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }
@@ -38,7 +38,9 @@ h1, h2, h3, h4, .label, .kpi-label {
 }
 
 .page-break { page-break-after: always; break-after: page; }
+.page-break-before { page-break-before: always; break-before: page; }
 .avoid-break { page-break-inside: avoid; }
+.section-major { page-break-before: always; break-before: page; padding-top: 3mm; }
 
 /* -------- Cover -------- */
 .cover {

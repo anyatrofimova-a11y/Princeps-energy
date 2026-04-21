@@ -314,6 +314,18 @@ async def financial_report(
             raise HTTPException(status_code=400, detail=f"Invalid project_id: {project_id!r}")
         async with pool.acquire() as conn:
             proj = await _load_project_summary(conn, pid)
+            # Fallback to projects.lat/lon when no parcel is linked — FVR
+            # only needs a representative site coordinate, not a full parcel.
+            if proj.get("lat") is None or proj.get("lon") is None:
+                row = await conn.fetchrow(
+                    "SELECT lat, lon, technology, capacity_mw FROM projects WHERE project_id = $1",
+                    pid,
+                )
+                if row and row["lat"] is not None and row["lon"] is not None:
+                    proj["lat"] = float(row["lat"])
+                    proj["lon"] = float(row["lon"])
+                    proj.setdefault("workload_type", row["technology"])
+                    proj.setdefault("capacity_mw", row["capacity_mw"])
         if proj.get("lat") is None or proj.get("lon") is None:
             raise HTTPException(status_code=400, detail="Project has no geolocated parcel — add a site first.")
         lat = proj["lat"]
@@ -1079,3 +1091,389 @@ async def api_auto_layout(req: AutoLayoutRequest):
         )
 
     return result
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Equity IC Memo Pack — 6-section sections-based package
+# (distinct from the single-file memo at /api/reports/ic-memo in
+# project_actions.py; this endpoint uses utils.ic_memo sections)
+# ─────────────────────────────────────────────────────────────────────────
+
+@router.post("/api/reports/ic-memo-pack")
+async def api_ic_memo_pack(
+    project_id: str | None = Query(
+        None, description="Project UUID (optional — if omitted a demo "
+                           "synthetic context is used)."),
+    ticket_gbp_m: float = Query(12.0, description="Sponsor equity ticket in £m"),
+    hold_years: int = Query(7, description="Hold period in years"),
+    demo_name: str = Query(
+        "Slough Hyperscale DC",
+        description="Demo project name when project_id omitted"),
+    demo_capacity_mw: float = Query(
+        50.0, description="Demo project capacity (MW) when project_id omitted"),
+    demo_workload: str = Query(
+        "dc", description="Demo workload type: solar | bess | dc | wind"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Generate a 6-section Equity IC Memo Pack PDF.
+
+    Package: utils.ic_memo. Template: templates/ic_memo/pack.html.j2.
+
+    When `project_id` is provided the pipeline loads real financials / grid /
+    planning via the helpers already in project_actions. When omitted it
+    builds a coherent demo context for the requested demo project (defaults
+    to Slough Hyperscale DC).
+    """
+    import io
+    from uuid import UUID
+    from fastapi.responses import StreamingResponse
+    from utils.ic_memo import generate_ic_memo_pack_pdf
+
+    proj: dict
+    fin: dict
+    grid_ctx: dict
+    plan: dict
+
+    if project_id:
+        from app.routers.project_actions import (
+            _load_project_summary,
+            _real_financials,
+            _real_grid,
+            _real_planning,
+        )
+        try:
+            pid = UUID(project_id)
+        except ValueError:
+            raise HTTPException(422, "project_id must be a UUID")
+
+        async with pool.acquire() as conn:
+            proj_sum = await _load_project_summary(conn, pid)
+        capacity_mw = float(demo_capacity_mw)  # TODO: plumb through real capacity
+        fin = await _real_financials(proj_sum, capacity_mw)
+        grid_ctx = await _real_grid(proj_sum, capacity_mw, pool)
+        plan = await _real_planning(proj_sum, capacity_mw)
+
+        proj = {
+            "project_id": proj_sum["project_id"],
+            "name": proj_sum["name"],
+            "workload": proj_sum.get("workload_type") or demo_workload,
+            "capacity_mw": capacity_mw,
+            "region": "Midlands",
+            "lat": proj_sum.get("lat"),
+            "lon": proj_sum.get("lon"),
+            "area_ha": (proj_sum.get("area_m2") or 0) / 10_000 or None,
+        }
+    else:
+        proj = {
+            "project_id": "DEMO-SLGH-001",
+            "name": demo_name,
+            "workload": demo_workload,
+            "capacity_mw": demo_capacity_mw,
+            "region": "South" if demo_name.lower().startswith("slough") else "Midlands",
+            "lat": 51.5105 if demo_name.lower().startswith("slough") else None,
+            "lon": -0.5950 if demo_name.lower().startswith("slough") else None,
+            "area_ha": demo_capacity_mw * 2.5,
+        }
+        fin = {
+            "p50_irr": 12.4,
+            "equity_irr_pct": 12.4,
+            "moic": 1.82,
+            "npv_gbp_m": round(demo_capacity_mw * 1.1, 1),
+            "capex_m": round(demo_capacity_mw * 1.15, 1),
+            "ppa_price": 85,
+            "cap_factor_pct": 92,
+            "availability_pct": 99.9,
+            "wacc_pct": 7.8,
+            "min_dscr": 1.42,
+        }
+        grid_ctx = {
+            "conn_cost_k": int(demo_capacity_mw * 18_000),
+            "headroom_mw": round(demo_capacity_mw * 1.2, 1),
+            "queue_years": 3.2,
+            "poc_substation": "Iver 400 kV",
+            "poc_voltage_kv": 400,
+            "gate_status": "Gate 2 — Accepted queue",
+            "tmo4_status": "CP2030 aligned (TMO4+ cleared)",
+        }
+        plan = {
+            "planning_p": 68,
+            "lpa": "Slough Borough Council",
+        }
+
+    try:
+        pdf = await generate_ic_memo_pack_pdf(
+            proj=proj,
+            fin=fin,
+            grid=grid_ctx,
+            plan=plan,
+            ticket_gbp_m=ticket_gbp_m,
+            hold_years=hold_years,
+        )
+    except RuntimeError as exc:
+        log.exception("IC memo pack PDF failed")
+        raise HTTPException(500, str(exc))
+    except Exception as exc:
+        log.exception("IC memo pack generation failed")
+        raise HTTPException(500, f"IC memo pack generation failed: {exc}")
+
+    filename = _safe_filename(proj["name"]) + "-ic-memo-pack.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Lender TDD pack (BOT-TD) — warranty + insurance + BESS commercial/compliance
+# ---------------------------------------------------------------------------
+class TDDPackRequest(BaseModel):
+    """Input payload for the lender TDD pack.
+
+    At minimum the caller sends ``project_name`` / ``technology`` /
+    ``capacity_mw``; everything else is defaulted to a credible 2026 UK
+    market pack.  Specific equipment items can be injected through
+    ``equipment_list`` (see ``utils.tdd.warranty.build_warranty_matrix``).
+    """
+    project_name: str = "Project"
+    technology: str = "bess"
+    capacity_mw: float = 100.0
+    nameplate_mwh: float | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    osgb: str | None = None
+
+    equipment_list: list[dict] | None = None
+    bess_system: str | None = None     # e.g. "Tesla Megapack 2 XL" / "Fluence Gridstack Pro"
+    cell_chemistry: str = "LFP"
+    cycles_per_year: int = 350
+    dod_pct: float = 90.0
+    hold_years: int = 15
+
+    om_contractor: str = "TBD (preferred bidder)"
+    om_fee_gbp_per_mw_yr: float | None = None
+    om_term_years: int | None = None
+    parent_is_equity_holder: bool = False
+
+    insurance_capex_gbp: float | None = None
+    insurance_revenue_gbp: float | None = None
+    dsu_months: int = 12
+    terrorism_add_on: bool = True
+    third_party_liability_tower_gbp: float | None = None
+
+    client: str = "Sponsor SPV"
+    lender_name: str = "Syndicate lead bank (TO COMPLETE)"
+    sponsor_name: str | None = None
+    insurer_name: str | None = None
+    agency_name: str | None = None
+    liability_cap_gbp: float | None = None
+
+    engineer_name: str | None = None
+    engineer_title: str | None = None
+    ceng_number: str | None = None
+    institution: str = "IET"
+    institution_number: str | None = None
+
+
+def _assemble_tdd_context(req: TDDPackRequest) -> dict:
+    """Build the Jinja context for ``templates/report/tdd_pack.html``."""
+    from uuid import uuid4
+    from datetime import datetime, timezone
+    from hashlib import sha1
+    from utils.tdd import (
+        build_warranty_matrix,
+        manufacturer_pcg_lookup,
+        om_contract_checklist,
+        build_insurance_programme,
+        default_ceng_sign_off,
+        default_reliance_package,
+        build_augmentation_plan,
+        run_ul_9540a_audit,
+        build_pas_63100_crosswalk,
+    )
+
+    technology = (req.technology or "bess").lower()
+
+    # 1. Warranty matrix + PCG register (always generated).
+    matrix = build_warranty_matrix(
+        project_tech=technology,  # type: ignore[arg-type]
+        equipment_list=req.equipment_list,
+        project_name=req.project_name,
+        capacity_mw=req.capacity_mw,
+    )
+    pcg_register = manufacturer_pcg_lookup()  # full register
+
+    # 2. O&M / LTSA review.
+    om_review = om_contract_checklist(
+        project_name=req.project_name,
+        contractor=req.om_contractor,
+        technology=technology,  # type: ignore[arg-type]
+        capacity_mw=req.capacity_mw,
+        annual_fee_gbp_per_mw_yr=req.om_fee_gbp_per_mw_yr,
+        term_years=req.om_term_years,
+        parent_is_equity_holder=req.parent_is_equity_holder,
+    )
+
+    # 3. Insurance programme.
+    insurance = build_insurance_programme(
+        project_name=req.project_name,
+        technology=technology,  # type: ignore[arg-type]
+        capacity_mw=req.capacity_mw,
+        construction_capex_gbp=req.insurance_capex_gbp,
+        annual_revenue_gbp=req.insurance_revenue_gbp,
+        dsu_months=req.dsu_months,
+        terrorism_add_on=req.terrorism_add_on,
+        third_party_liability_tower_gbp=req.third_party_liability_tower_gbp,
+    )
+
+    # 4. Reliance + CEng.
+    reliance = default_reliance_package(
+        client=req.client,
+        project_name=req.project_name,
+        lender_name=req.lender_name,
+        sponsor_name=req.sponsor_name,
+        insurer_name=req.insurer_name,
+        agency_name=req.agency_name,
+        liability_cap_gbp=req.liability_cap_gbp,
+    )
+    ceng = default_ceng_sign_off(
+        engineer_name=req.engineer_name,
+        engineer_title=req.engineer_title,
+        ceng_number=req.ceng_number,
+        institution=req.institution,
+        institution_number=req.institution_number,
+    )
+
+    # 5. BESS commercial-compliance (only when technology == bess).
+    augmentation = ul_audit = pas_xw = None
+    if technology == "bess":
+        # Default nameplate: BESS capacity_mw × 2hr duration if not set.
+        nameplate_mwh = req.nameplate_mwh or (req.capacity_mw * 2.0)
+        augmentation = build_augmentation_plan(
+            project_name=req.project_name,
+            nameplate_mwh=nameplate_mwh,
+            chemistry=req.cell_chemistry,  # type: ignore[arg-type]
+            cycles_per_year=req.cycles_per_year,
+            dod_pct=req.dod_pct,
+            hold_years=req.hold_years,
+        )
+        # Resolve BESS system from equipment list if possible.
+        bess_sys = req.bess_system
+        if not bess_sys and req.equipment_list:
+            for item in req.equipment_list:
+                if "BESS" in item.get("equipment", "").upper():
+                    bess_sys = item.get("manufacturer") or item.get("model")
+                    break
+        if not bess_sys:
+            # Pick the first BESS manufacturer in the warranty matrix
+            for ln in matrix.lines:
+                if "BESS" in ln.equipment.upper():
+                    bess_sys = ln.manufacturer
+                    break
+        bess_sys = bess_sys or "Tesla Megapack 2 XL"
+        ul_audit = run_ul_9540a_audit(
+            project_name=req.project_name,
+            bess_system=bess_sys,
+            cell_chemistry=req.cell_chemistry,  # type: ignore[arg-type]
+        )
+        pas_xw = build_pas_63100_crosswalk(ul_audit)
+
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    doc_ref = f"PPS-{uuid4().hex[:6].upper()}-TDD"
+    doc_hash = sha1(
+        f"{req.project_name}-{generated_at}".encode("utf-8"),
+    ).hexdigest()[:10].upper()
+
+    return {
+        "project": {
+            "name": req.project_name,
+            "technology": technology,
+            "capacity_mw": req.capacity_mw,
+            "lat": req.latitude,
+            "lon": req.longitude,
+            "osgb": req.osgb,
+        },
+        "warranty_matrix": matrix.to_dict(),
+        "pcg_register": pcg_register.to_dict(),
+        "om_review": om_review.to_dict(),
+        "insurance": insurance.to_dict(),
+        "reliance": reliance.to_dict(),
+        "ceng_signoff": ceng.to_dict(),
+        "augmentation": augmentation.to_dict() if augmentation else None,
+        "ul_9540a": ul_audit.to_dict() if ul_audit else None,
+        "pas_63100": pas_xw.to_dict() if pas_xw else None,
+        "generated_at": generated_at,
+        "revision": "P01",
+        "doc_ref": doc_ref,
+        "doc_hash": doc_hash,
+    }
+
+
+@router.post("/api/reports/tdd")
+async def api_tdd_pack(
+    req: TDDPackRequest,
+    as_html: bool = Query(False, description="Return HTML rather than PDF"),
+):
+    """Generate the Lender Technical Due Diligence pack (BOT-TD).
+
+    Ships the three RESEARCH-3 v1 sections:
+      1. Warranty matrix + PCG register + O&M contract review.
+      2. Insurance programme + CEng sign-off + reliance package.
+      3. BESS augmentation plan + UL 9540A + PAS 63100 cross-walk
+         (omitted when technology != "bess").
+    """
+    from pathlib import Path
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+    try:
+        ctx = _assemble_tdd_context(req)
+    except Exception as e:
+        log.exception("TDD context build failed")
+        raise HTTPException(status_code=500, detail=f"TDD context build failed: {e}")
+
+    tpl_root = Path(__file__).resolve().parent.parent.parent / "templates" / "report"
+    env = Environment(
+        loader=FileSystemLoader(str(tpl_root)),
+        autoescape=select_autoescape(["html"]),
+    )
+    try:
+        html = env.get_template("tdd_pack.html").render(**ctx)
+    except Exception as e:
+        log.exception("TDD template render failed")
+        raise HTTPException(status_code=500, detail=f"TDD template render failed: {e}")
+
+    filename = f"princeps-tdd-{_safe_filename(req.project_name)}.pdf"
+    if as_html:
+        return StreamingResponse(
+            iter([html.encode("utf-8")]),
+            media_type="text/html",
+            headers={"Content-Disposition": f'attachment; filename="{filename.replace(".pdf", ".html")}"'},
+        )
+
+    # Playwright render → PDF (fallback to HTML if Chromium absent).
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch()
+            page = await browser.new_page()
+            await page.set_content(html, wait_until="networkidle")
+            pdf_bytes = await page.pdf(
+                format="A4",
+                print_background=True,
+                margin={"top": "18mm", "bottom": "22mm", "left": "15mm", "right": "15mm"},
+            )
+            await browser.close()
+        return StreamingResponse(
+            iter([pdf_bytes]),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except ImportError:
+        return StreamingResponse(
+            iter([html.encode("utf-8")]),
+            media_type="text/html",
+            headers={"Content-Disposition": f'attachment; filename="{filename.replace(".pdf", ".html")}"'},
+        )
+    except Exception as e:
+        log.exception("TDD PDF render failed")
+        raise HTTPException(status_code=500, detail=f"TDD PDF render failed: {e}")

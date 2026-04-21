@@ -8,8 +8,9 @@ import math
 import random
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 import asyncpg
+import uuid
 
 from app.deps import get_pool
 
@@ -403,6 +404,99 @@ async def api_grid_lines(
         bbox = (west, south, east, north)
     async with pool.acquire() as conn:
         return await gc_lines_geojson(conn, min_voltage_kv=min_voltage_kv, bbox=bbox)
+
+
+# In-memory job registry for the endpoint linker. Single-process, best-effort —
+# mirrors the pattern used elsewhere in this router (see grid power-flow jobs).
+_LINK_JOBS: dict[str, dict] = {}
+
+
+async def _run_link_job(
+    job_id: str,
+    pool: asyncpg.Pool,
+    *,
+    max_distance_m: float,
+    batch_size: int,
+    max_rows: int | None,
+) -> None:
+    """Background runner — captures result / failure into _LINK_JOBS."""
+    from utils.grid_line_linker import link_grid_lines
+    try:
+        _LINK_JOBS[job_id]["status"] = "running"
+        async with pool.acquire() as conn:
+            summary = await link_grid_lines(
+                conn,
+                max_distance_m=max_distance_m,
+                batch_size=batch_size,
+                max_rows=max_rows,
+                dry_run=False,
+            )
+        _LINK_JOBS[job_id]["status"] = "complete"
+        _LINK_JOBS[job_id]["result"] = summary
+    except Exception as e:
+        _LINK_JOBS[job_id]["status"] = "failed"
+        _LINK_JOBS[job_id]["error"] = str(e)
+
+
+@router.post("/api/grid/lines/link")
+async def api_link_grid_lines(
+    background: BackgroundTasks,
+    max_distance_m: float = Query(100.0, ge=1, le=2000,
+                                  description="Snap threshold (m) — endpoints beyond this stay NULL."),
+    batch_size: int = Query(5000, ge=100, le=50000),
+    max_rows: int | None = Query(None, ge=1,
+                                 description="Cap on rows processed this run. Omit for all candidates."),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Kick off a background pass that snaps each grid_lines endpoint to the
+    nearest grid_substation within *max_distance_m* metres (SRID 27700).
+
+    Returns a ``job_id`` plus an immediate dry-run probe of the first batch
+    so the caller has an ETA / hit-rate estimate before the job completes.
+    Job state is kept in-process (``/api/grid/lines/link/{job_id}``).
+    """
+    from utils.grid_line_linker import link_grid_lines
+
+    # Fast probe so the caller sees an instant hit-rate estimate.
+    async with pool.acquire() as conn:
+        probe = await link_grid_lines(
+            conn,
+            max_distance_m=max_distance_m,
+            dry_run=True,
+            batch_size=min(batch_size, 5000),
+        )
+
+    job_id = uuid.uuid4().hex
+    _LINK_JOBS[job_id] = {
+        "status": "pending",
+        "max_distance_m": max_distance_m,
+        "batch_size": batch_size,
+        "max_rows": max_rows,
+        "probe": probe,
+        "result": None,
+        "error": None,
+    }
+    background.add_task(
+        _run_link_job, job_id, pool,
+        max_distance_m=max_distance_m,
+        batch_size=batch_size,
+        max_rows=max_rows,
+    )
+    return {
+        "job_id": job_id,
+        "status": "pending",
+        "probe": probe,
+        "poll_url": f"/api/grid/lines/link/{job_id}",
+    }
+
+
+@router.get("/api/grid/lines/link/{job_id}")
+async def api_link_grid_lines_status(job_id: str):
+    """Poll an endpoint-linker job launched via POST /api/grid/lines/link."""
+    job = _LINK_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(404, "Unknown link job (may have been evicted).")
+    return {"job_id": job_id, **job}
 
 
 @router.get("/api/grid/ecr")

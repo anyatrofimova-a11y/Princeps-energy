@@ -15,7 +15,7 @@
 {# ========================================================================= #}
 {# 2. Executive summary                                                      #}
 {# ========================================================================= #}
-<section class="section avoid-break">
+<section class="section section-major avoid-break">
   <h2 class="section-title">1. Executive Summary</h2>
 
   <div class="verdict-bar">
@@ -55,12 +55,10 @@
   </p>
 </section>
 
-<div class="page-break"></div>
-
 {# ========================================================================= #}
 {# 3. Project description                                                    #}
 {# ========================================================================= #}
-<section class="section avoid-break">
+<section class="section section-major avoid-break">
   <h2 class="section-title">2. Project Description</h2>
   <table class="data">
     <tr><td style="width: 45mm;"><b>Site name</b></td><td>{{ project.site_name }}</td></tr>
@@ -80,7 +78,7 @@
 {# ========================================================================= #}
 {# 4. Revenue stack                                                          #}
 {# ========================================================================= #}
-<section class="section">
+<section class="section section-major">
   <h2 class="section-title">3. Revenue Stack</h2>
   <p class="section-intro">
     Blended £/MWh revenue across the 25-year life, shown at nominal prices (CPI indexed
@@ -124,12 +122,10 @@
   </div>
 </section>
 
-<div class="page-break"></div>
-
 {# ========================================================================= #}
 {# 5. CapEx breakdown                                                        #}
 {# ========================================================================= #}
-<section class="section">
+<section class="section section-major">
   <h2 class="section-title">4. CapEx Breakdown</h2>
   <table class="data">
     <thead>
@@ -158,7 +154,7 @@
 {# ========================================================================= #}
 {# 6. OpEx & asset management                                                #}
 {# ========================================================================= #}
-<section class="section">
+<section class="section section-major">
   <h2 class="section-title">5. OpEx &amp; Asset Management</h2>
   <table class="data">
     <thead>
@@ -184,12 +180,10 @@
   DESNZ OpEx benchmark (RIIO-ED2 comparator); utils.finance_benchmarks.</div>
 </section>
 
-<div class="page-break"></div>
-
 {# ========================================================================= #}
 {# 7. 25-yr DCF schedule                                                     #}
 {# ========================================================================= #}
-<section class="section">
+<section class="section section-major">
   <h2 class="section-title">6. 25-Year DCF Schedule</h2>
   <p class="section-intro">
     Nominal cashflow schedule. Rows shown: construction years 0-1, operating years 1-5,
@@ -237,7 +231,7 @@
 {# ========================================================================= #}
 {# 8. Debt structure                                                         #}
 {# ========================================================================= #}
-<section class="section avoid-break">
+<section class="section section-major">
   <h2 class="section-title">7. Debt Structure &amp; Lender Covenants</h2>
 
   <div class="kpi-strip">
@@ -299,12 +293,10 @@
   </div>
 </section>
 
-<div class="page-break"></div>
-
 {# ========================================================================= #}
 {# 9. Equity returns                                                         #}
 {# ========================================================================= #}
-<section class="section avoid-break">
+<section class="section section-major avoid-break">
   <h2 class="section-title">8. Equity Returns</h2>
   <div class="kpi-strip">
     <div class="kpi-cell"><div class="v">{{ '%.1f'|format(equity.unlevered_irr_pct) }}%</div>
@@ -332,7 +324,7 @@
 {# ========================================================================= #}
 {# 10. Sensitivity tornado                                                   #}
 {# ========================================================================= #}
-<section class="section">
+<section class="section section-major">
   <h2 class="section-title">9. Sensitivity Analysis</h2>
   <p class="section-intro">
     Tornado chart of equity-IRR sensitivity to 8 key drivers. Each bar shows the swing
@@ -373,12 +365,10 @@
   </table>
 </section>
 
-<div class="page-break"></div>
-
 {# ========================================================================= #}
 {# 11. Stress cases                                                          #}
 {# ========================================================================= #}
-<section class="section avoid-break">
+<section class="section section-major">
   <h2 class="section-title">10. Stress Cases</h2>
 
   <div class="callout callout-red">
@@ -412,7 +402,7 @@
 {# ========================================================================= #}
 {# 12. Risk register                                                         #}
 {# ========================================================================= #}
-<section class="section">
+<section class="section section-major">
   <h2 class="section-title">11. Risk Register</h2>
   <table class="data risk">
     <thead>
@@ -440,12 +430,10 @@
   </table>
 </section>
 
-<div class="page-break"></div>
-
 {# ========================================================================= #}
 {# 13. Assumptions appendix                                                  #}
 {# ========================================================================= #}
-<section class="section">
+<section class="section section-major">
   <h2 class="section-title">12. Assumptions Appendix</h2>
   <dl class="assumptions">
     {% for a in assumptions %}

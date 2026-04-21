@@ -7,6 +7,12 @@ References:
   - IEC 62933-5-2 — Safety requirements for electrochemical-based ESS
   - Arrhenius degradation model (k = A · exp(-Ea/RT))
   - Wang et al. (2014), J. Power Sources — cycle/calendar life LFP/NMC
+
+See also: :mod:`utils.tdd.bess_commercial` for the commercial / compliance
+layer (augmentation plan, UL 9540A audit, PAS 63100 cross-walk).  That
+module is exposed at the bottom of this file for convenience so existing
+callers that import ``from utils.bess_thermal import augmentation_plan``
+can upgrade to the richer commercial plan without touching layout code.
 """
 
 from __future__ import annotations
@@ -347,3 +353,66 @@ def nfpa_855_safety_zones(
         provenance="NFPA 855 (2023), IEC 62933-5-2",
         warnings=warnings,
     )
+
+
+# ---------------------------------------------------------------------------
+# Commercial-compliance re-exports (additive — see utils.tdd.bess_commercial)
+# ---------------------------------------------------------------------------
+# These are imported lazily to avoid introducing import cycles when
+# utils.tdd.bess_commercial pulls ``CHEMISTRY`` and ``cycle_life`` from
+# above.  They let downstream callers write::
+#
+#     from utils.bess_thermal import (
+#         augmentation_plan,            # legacy thermodynamic schedule
+#         build_augmentation_plan,      # richer commercial plan (£ + SoH)
+#         run_ul_9540a_audit,           # UL 9540A conformance check
+#         build_pas_63100_crosswalk,    # PAS 63100:2024 cross-walk
+#     )
+#
+# while keeping the heavyweight commercial module out of the module-level
+# import path for the thermodynamic API consumers.
+def _commercial_exports() -> dict:
+    from utils.tdd.bess_commercial import (  # noqa: WPS433 — local import
+        AugmentationPlan,
+        AugmentationEvent,
+        CapacityRetentionPoint,
+        UL9540AAudit,
+        UL9540AFinding,
+        PAS63100CrossWalk,
+        PAS63100Mapping,
+        build_augmentation_plan,
+        run_ul_9540a_audit,
+        build_pas_63100_crosswalk,
+    )
+    return {
+        "AugmentationPlan": AugmentationPlan,
+        "AugmentationEvent": AugmentationEvent,
+        "CapacityRetentionPoint": CapacityRetentionPoint,
+        "UL9540AAudit": UL9540AAudit,
+        "UL9540AFinding": UL9540AFinding,
+        "PAS63100CrossWalk": PAS63100CrossWalk,
+        "PAS63100Mapping": PAS63100Mapping,
+        "build_augmentation_plan": build_augmentation_plan,
+        "run_ul_9540a_audit": run_ul_9540a_audit,
+        "build_pas_63100_crosswalk": build_pas_63100_crosswalk,
+    }
+
+
+_COMMERCIAL_NAMES = frozenset({
+    "AugmentationPlan", "AugmentationEvent", "CapacityRetentionPoint",
+    "UL9540AAudit", "UL9540AFinding", "PAS63100CrossWalk", "PAS63100Mapping",
+    "build_augmentation_plan", "run_ul_9540a_audit", "build_pas_63100_crosswalk",
+})
+
+
+def __getattr__(name):  # pragma: no cover - trivial lazy re-export
+    # Only dispatch into utils.tdd.bess_commercial for *known* commercial
+    # export names.  Unknown names raise AttributeError immediately so
+    # Python's normal module-loader / dunder probes (__path__, __spec__,
+    # __all__, …) never trigger the downstream import, avoiding a circular
+    # import during utils.tdd package initialisation.
+    if name in _COMMERCIAL_NAMES:
+        exports = _commercial_exports()
+        if name in exports:
+            return exports[name]
+    raise AttributeError(f"module 'utils.bess_thermal' has no attribute {name!r}")

@@ -1,0 +1,48 @@
+{# =========================================================================
+   _shared/_base.html.j2 — institutional-PDF base.
+
+   Every report extends this and implements the `content` block.
+
+   Context contract (from renderer):
+     report_type    str        e.g. "Grid Connection Report"
+     project_title  str        project name
+     tagline        str        one-liner
+     revision       str        "P02"
+     revision_date  str        "2026-04-21"
+     recipient      str        addressee line
+     reliance_type  str        "dno" | "investor" | "client" | "planning" | "lender"
+     client_ref     str | None
+     doc_ref        str | None
+     doc_hash       str        short hash for footer
+     project_ref    str | None
+     references     list[dict] for the References section
+   ========================================================================= #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ report_type }} — {{ project_title }}</title>
+<style>
+{% include "_shared/_styles.css.j2" %}
+</style>
+</head>
+<body>
+  {# ---- Cover (takes full first page) ---- #}
+  {% include "_shared/_cover.html.j2" %}
+
+  {# ---- Running header / footer printed on every subsequent page ---- #}
+  {% include "_shared/_header.html.j2" %}
+
+  {# ---- Main content block ---- #}
+  <main class="pp-main">
+    {% block content %}{% endblock %}
+
+    {# ---- References (shared) ---- #}
+    {% include "_shared/_references.html.j2" %}
+  </main>
+
+  {# ---- Footer (bottom strip) ---- #}
+  {% include "_shared/_footer.html.j2" %}
+</body>
+</html>

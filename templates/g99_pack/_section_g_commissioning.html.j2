@@ -1,0 +1,58 @@
+{#-
+  Section G — Commissioning Plan and Witness Points.
+  Heading verbatim from ENA EREC G99 Issue 2 application form.
+  Context:
+    section_g : dict with 'sequence', 'tests', 'witness_points', 'schedule'.
+-#}
+<section class="g99-section section-g">
+  <h2>Section G &mdash; Commissioning Plan and Witness Points</h2>
+  <p class="section-lead">
+    Energisation sequence, protection proving tests, loss-of-mains verification,
+    and DNO witness points. <em>Clause 14, G99 Issue 2 (Commissioning) and
+    Annex B (type-testing).</em>
+  </p>
+
+  <h3>G1. Energisation sequence</h3>
+  <ol class="sequence">
+    {% for step in section_g.sequence %}
+    <li>
+      <strong>Step {{ loop.index }} — {{ step.name }}.</strong> {{ step.description }}
+      {% if step.duration %}
+        <span class="note">Duration: {{ step.duration }}.</span>
+      {% endif %}
+      {% if step.witness %}
+        <span class="witness-tag">DNO witness</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+
+  <h3>G2. Protection and control proving tests</h3>
+  <table class="set">
+    <tr>
+      <th>Test</th><th>Method</th><th>Pass criterion</th>
+      <th>Witness</th><th>Reference</th>
+    </tr>
+    {% for t in section_g.tests %}
+    <tr>
+      <td>{{ t.name }}</td>
+      <td>{{ t.method }}</td>
+      <td>{{ t.pass_criterion }}</td>
+      <td>{{ 'DNO' if t.witness_by_dno else 'Self-certified' }}</td>
+      <td>{{ t.clause }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>G3. Commissioning window</h3>
+  <table class="form">
+    <tr><td class="lbl">Planned commissioning window</td>
+        <td>{{ field(section_g.schedule.window) }}</td></tr>
+    <tr><td class="lbl">Witness points total</td>
+        <td>{{ section_g.schedule.witness_points_count }}</td></tr>
+    <tr><td class="lbl">DNO lead engineer notified</td>
+        <td>{{ field(section_g.schedule.dno_engineer_notified) }}</td></tr>
+    <tr><td class="lbl">G99 A2 completion confirmation due</td>
+        <td>{{ field(section_g.schedule.a2_due_date) }}</td></tr>
+  </table>
+</section>

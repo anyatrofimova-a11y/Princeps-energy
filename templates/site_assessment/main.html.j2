@@ -1,0 +1,325 @@
+{# =========================================================================
+   site_assessment/main.html.j2 — Land-agent / acquisition-analyst audience.
+
+   Consumes the context produced by utils/report_renderer.generate_report
+   (the aggregate_site_data() payload + charts + bng + redline_map).
+
+   Primary context keys:
+     site        — full site dict (name, lat, lon, capacity_mw, scores,
+                   geeflow, substations, terrain, planning, environmental,
+                   land_use, grid_costs, bng, parcel)
+     charts      — base64 chart strings (radar, redline_map, terrain,
+                   land_use, grid_proximity, etc.)
+     map_image   — base64 Mapbox static map
+   ========================================================================= #}
+{% extends "_shared/_base.html.j2" %}
+{% import "_shared/_macros.html.j2" as m %}
+
+{% block content %}
+
+{# ========== 2. Site summary ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 1</div>
+  <h2>Site summary</h2>
+
+  {% set parcel = site.parcel or {} %}
+  <table class="pp-table">
+    <tbody>
+      <tr><td class="pp-lbl">Site name</td><td colspan="2">{{ site.name }}</td></tr>
+      <tr><td class="pp-lbl">WGS84 coordinates</td><td colspan="2" class="pp-mono">{{ "%.6f"|format(site.lat) }}, {{ "%.6f"|format(site.lon) }}</td></tr>
+      <tr><td class="pp-lbl">Proposed capacity</td><td colspan="2">{{ "%.1f"|format(site.capacity_mw) }} MW</td></tr>
+      <tr><td class="pp-lbl">Parcel ID (INSPIRE/HMLR)</td><td colspan="2" class="pp-mono">{{ parcel.inspire_id or parcel.id or m.na("Not available — register with HM Land Registry required") | safe }}</td></tr>
+      <tr><td class="pp-lbl">Site area</td><td colspan="2">{{ ("%.1f ha"|format(site.area_ha)) if site.area_ha else m.na() | safe }}</td></tr>
+      <tr><td class="pp-lbl">Current use</td><td colspan="2">{{ site.current_use or (site.land_use.dominant if site.land_use else m.na() | safe) }}</td></tr>
+      <tr><td class="pp-lbl">Local Planning Authority</td><td colspan="2">{{ site.lpa or site.planning.lpa if site.planning else m.na() | safe }}</td></tr>
+      <tr><td class="pp-lbl">A-road proximity</td><td colspan="2">{{ site.accessibility.a_road if site.accessibility else m.na() | safe }}</td></tr>
+    </tbody>
+  </table>
+
+  {% if charts and charts.redline_map %}
+    <img class="pp-chart" src="data:image/png;base64,{{ charts.redline_map }}" alt="Red-line site boundary"/>
+    <div class="pp-chart-caption">Indicative red-line boundary (OSM basemap, Princeps overlay)</div>
+  {% elif map_image %}
+    <img class="pp-chart" src="data:image/png;base64,{{ map_image }}" alt="Site location"/>
+    <div class="pp-chart-caption">Site location (Mapbox static tile)</div>
+  {% endif %}
+</section>
+
+{# ========== 3. Resource ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 2</div>
+  <h2>Resource</h2>
+
+  {% set res = site.resource or {} %}
+  {% set geeflow = site.geeflow or {} %}
+  {% set monthly = geeflow.monthly_ghi or site.monthly_solar or [] %}
+
+  {{ m.metric_row([
+    {"label": "Annual GHI", "value": (("%.0f"|format(res.annual_ghi_kwh_m2)) ~ " kWh/m²") if res.annual_ghi_kwh_m2 else (("%.0f"|format(site.annual_ghi)) ~ " kWh/m²") if site.annual_ghi else "—", "sub": "ERA5-Land 10-yr mean"},
+    {"label": "P50 yield (SAM)", "value": (("%.0f"|format(res.p50_yield_kwh_kwp)) ~ " kWh/kWp/yr") if res.p50_yield_kwh_kwp else "—", "sub": "PVWattsv8"},
+    {"label": "P90 yield", "value": (("%.0f"|format(res.p90_yield_kwh_kwp)) ~ " kWh/kWp/yr") if res.p90_yield_kwh_kwp else "—", "sub": "one-year exceedance"},
+    {"label": "Capacity factor", "value": (("%.1f%%"|format(res.capacity_factor * 100)) if res.capacity_factor else "—"), "sub": "modelled"}
+  ]) }}
+
+  {% if monthly %}
+    {% set vals = [] %}
+    {% for m_obj in monthly %}
+      {% set _ = vals.append(m_obj.ghi_kwh_m2_day * 30 if m_obj.ghi_kwh_m2_day else (m_obj.ghi_monthly_kwh_m2 or m_obj.ghi or 0)) %}
+    {% endfor %}
+    {{ m.monthly_bar(vals, unit="Monthly GHI (kWh/m²)") }}
+    <div class="pp-chart-caption">Monthly global horizontal irradiance — ERA5-Land reanalysis</div>
+  {% elif charts and charts.solar_monthly %}
+    <img class="pp-chart" src="data:image/png;base64,{{ charts.solar_monthly }}" alt="Monthly solar profile"/>
+  {% endif %}
+
+  {{ m.cite("Copernicus ERA5-Land reanalysis (ECMWF); NREL SAM PVWattsv8 (Princeps deployment).") }}
+</section>
+
+{# ========== 4. Terrain ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 3</div>
+  <h2>Terrain and ground conditions</h2>
+
+  {% set t = site.terrain or {} %}
+  <table class="pp-table">
+    <thead><tr><th>Parameter</th><th class="pp-right">Value</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td class="pp-lbl">Mean slope</td><td class="pp-right pp-num">{{ (("%.1f%%"|format(t.slope_pct)) if t.slope_pct is not none else m.na()) | safe }}</td><td>NASADEM 30 m</td></tr>
+      <tr><td class="pp-lbl">Dominant aspect</td><td class="pp-right">{{ t.aspect or m.na() | safe }}</td><td>NASADEM 30 m</td></tr>
+      <tr><td class="pp-lbl">Flood risk zone (EA)</td><td class="pp-right">{{ (t.flood_risk or site.flood_zone or m.na()) | safe }}</td><td>Environment Agency Flood Map for Planning</td></tr>
+      <tr><td class="pp-lbl">BMV land grade</td><td class="pp-right">{{ t.bmv_grade or m.na() | safe }}</td><td>Natural England ALC</td></tr>
+      <tr><td class="pp-lbl">BMV coverage (grade 1–3a)</td><td class="pp-right pp-num">{{ ("%.0f%%"|format(t.bmv_pct)) if t.bmv_pct is not none else m.na() | safe }}</td><td>Natural England ALC</td></tr>
+      <tr><td class="pp-lbl">Tree cover (canopy ≥50%)</td><td class="pp-right pp-num">{{ ("%.0f%%"|format(t.canopy_pct)) if t.canopy_pct is not none else m.na() | safe }}</td><td>GlobalCanopyHeight (Meta)</td></tr>
+      <tr><td class="pp-lbl">Watercourses in-parcel</td><td class="pp-right">{{ t.watercourses or m.na() | safe }}</td><td>OS OpenRivers</td></tr>
+    </tbody>
+  </table>
+
+  {% if charts and charts.terrain_profile %}
+    <img class="pp-chart" src="data:image/png;base64,{{ charts.terrain_profile }}" alt="Terrain profile"/>
+    <div class="pp-chart-caption">Terrain elevation profile — NASADEM 30 m</div>
+  {% endif %}
+
+  {{ m.cite("NASADEM (NASA JPL); Environment Agency Flood Map for Planning; Natural England ALC Dataset.") }}
+</section>
+
+{# ========== 5. Land-use classification ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 4</div>
+  <h2>Land-use classification (DynamicWorld)</h2>
+
+  {% set lu = site.land_use or {} %}
+  {% if lu.class_pcts %}
+  <table class="pp-table">
+    <thead><tr><th>Class</th><th class="pp-right">Share</th></tr></thead>
+    <tbody>
+      {% for k, v in lu.class_pcts.items() %}
+      <tr><td class="pp-lbl">{{ k | replace("_", " ") | title }}</td><td class="pp-right pp-num">{{ "%.1f%%"|format(v * 100) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    {{ m.callout("Land-use composite unavailable", "DynamicWorld V1 extraction did not return a composite for this AOI. Run `utils/geeflow_runner.py` to refresh.", "amber") }}
+  {% endif %}
+
+  {% if charts and charts.land_use_pie %}
+    <img class="pp-chart" src="data:image/png;base64,{{ charts.land_use_pie }}" alt="Land-use pie"/>
+    <div class="pp-chart-caption">Dominant classes and 5-year change — Google Dynamic World V1</div>
+  {% endif %}
+
+  {{ m.cite("Google/WRI Dynamic World V1 (1 Sep 2022 baseline, per-class confidence).") }}
+</section>
+
+{# ========== 6. Grid proximity ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 5</div>
+  <h2>Grid proximity</h2>
+
+  {% set subs = site.substations or [] %}
+  {% if subs %}
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th>Substation</th>
+        <th>Voltage</th>
+        <th class="pp-right">Distance</th>
+        <th class="pp-right">Firm headroom</th>
+        <th class="pp-right">Indicative cost</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in subs[:8] %}
+      <tr>
+        <td>{{ s.name or "Unnamed" }}</td>
+        <td>{{ s.voltage_kv or s.voltage or "—" }} kV</td>
+        <td class="pp-right pp-num">{{ "%.2f"|format(s.distance_km or 0) }} km</td>
+        <td class="pp-right pp-num">{{ ("%.1f MW"|format(s.gen_headroom_mw)) if s.gen_headroom_mw is not none else m.na() | safe }}</td>
+        <td class="pp-right pp-num">{{ ("£%.0fk"|format(s.indicative_cost_k)) if s.indicative_cost_k is not none else "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    {{ m.callout("No substation records in database", "Run utils/grid_data_ingester.py to populate the DNO registry for this region.", "amber") }}
+  {% endif %}
+
+  {% if charts and charts.grid_proximity %}
+    <img class="pp-chart" src="data:image/png;base64,{{ charts.grid_proximity }}" alt="Grid proximity"/>
+  {% endif %}
+
+  {{ m.cite("OpenDataSoft DNO APIs (UKPN/SPEN/SSEN/NPg/ENWL); NGED CKAN; OSM Overpass for auxiliary assets.") }}
+</section>
+
+{# ========== 7. Planning risk score ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 6</div>
+  <h2>Planning risk score (ML from REPD)</h2>
+
+  {% set pl = site.planning or {} %}
+  {{ m.metric_row([
+    {"label": "Approval probability (XGBoost)", "value": ("%.0f%%"|format(pl.probability_approved * 100)) if pl.probability_approved is not none else "—", "feature": true},
+    {"label": "Precedent refusals (≤20 km)", "value": (pl.precedent_refusals | string) if pl.precedent_refusals is not none else "—"},
+    {"label": "Local plan designation", "value": pl.local_plan or "—"},
+    {"label": "Confidence", "value": ("%.0f%%"|format(pl.confidence * 100)) if pl.confidence is not none else "—"}
+  ]) }}
+
+  {% if pl.top_factors %}
+  <h3>Top contributing factors</h3>
+  <ul style="margin-left: 20px;">
+    {% for f in pl.top_factors[:5] %}
+      <li><strong>{{ f.name }}:</strong> {{ f.explanation or f.value }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {{ m.cite("BEIS Renewable Energy Planning Database (REPD) Q1 2026 + XGBoost model trained on 14,280 UK decisions.") }}
+</section>
+
+{# ========== 8. Environmental screening ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 7</div>
+  <h2>Environmental screening</h2>
+
+  {% set env = site.environmental or {} %}
+  <table class="pp-table">
+    <thead><tr><th>Designation</th><th>Status</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td class="pp-lbl">SSSI overlap</td><td>{{ env.sssi or m.na() | safe }}</td><td>Natural England MAGIC</td></tr>
+      <tr><td class="pp-lbl">AONB / National Park</td><td>{{ env.aonb or m.na() | safe }}</td><td>Natural England</td></tr>
+      <tr><td class="pp-lbl">SAC / SPA / Ramsar</td><td>{{ env.sac_spa_ramsar or m.na() | safe }}</td><td>JNCC / Natural England</td></tr>
+      <tr><td class="pp-lbl">Ancient woodland</td><td>{{ env.ancient_woodland or m.na() | safe }}</td><td>Natural England Ancient Woodland Inventory</td></tr>
+      <tr><td class="pp-lbl">Listed buildings (1 km)</td><td>{{ env.listed_buildings or m.na() | safe }}</td><td>Historic England List</td></tr>
+      <tr><td class="pp-lbl">Conservation areas / scheduled monuments</td><td>{{ env.conservation_areas or m.na() | safe }}</td><td>Historic England</td></tr>
+    </tbody>
+  </table>
+  {{ m.cite("Natural England MAGIC, Historic England Register, JNCC Designated Sites.") }}
+</section>
+
+{# ========== 9. Shadow flicker / noise / visual ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 8</div>
+  <h2>Amenity and visual impact</h2>
+
+  {% set amenity = site.amenity or {} %}
+  <table class="pp-table">
+    <thead><tr><th>Screen</th><th>Result</th><th>Basis</th></tr></thead>
+    <tbody>
+      <tr><td class="pp-lbl">Shadow flicker (wind)</td><td>{{ amenity.shadow_flicker or m.na() | safe }}</td><td>DECC 2011 guidance (10-rotor-diameter radius)</td></tr>
+      <tr><td class="pp-lbl">Noise contour (dB LA<sub>r,T</sub>)</td><td>{{ amenity.noise or m.na() | safe }}</td><td>BS 4142:2014+A1:2019</td></tr>
+      <tr><td class="pp-lbl">LVIA sample viewpoints</td><td>{{ amenity.lvia_viewpoints or m.na() | safe }}</td><td>GLVIA3 (Landscape Institute 2013)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+{# ========== 10. BNG baseline ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 9</div>
+  <h2>Biodiversity net gain (BNG) baseline</h2>
+
+  {% set bng = site.bng or {} %}
+  {% set pre_hab  = bng.get('pre_habitat_units')     if bng is mapping else none %}
+  {% set post_hab = bng.get('post_habitat_units')    if bng is mapping else none %}
+  {% set up_hab   = bng.get('habitat_uplift_pct')    if bng is mapping else none %}
+  {% set pre_hed  = bng.get('pre_hedgerow_units')    if bng is mapping else none %}
+  {% set post_hed = bng.get('post_hedgerow_units')   if bng is mapping else none %}
+  {% set up_hed   = bng.get('hedgerow_uplift_pct')   if bng is mapping else none %}
+  {% set pre_wc   = bng.get('pre_watercourse_units') if bng is mapping else none %}
+  {% set post_wc  = bng.get('post_watercourse_units')if bng is mapping else none %}
+  {% set up_wc    = bng.get('watercourse_uplift_pct')if bng is mapping else none %}
+  {% if pre_hab is not none or post_hab is not none %}
+  <table class="pp-table">
+    <thead><tr><th>BNG metric</th><th class="pp-right">Pre-dev</th><th class="pp-right">Post-dev</th><th class="pp-right">Uplift</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="pp-lbl">Habitat units (biodiversity)</td>
+        <td class="pp-right pp-num">{{ ("%.2f"|format(pre_hab)) if pre_hab is not none else "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%.2f"|format(post_hab)) if post_hab is not none else "—" }}</td>
+        <td class="pp-right pp-num pp-bold">{{ ("%+.1f%%"|format(up_hab)) if up_hab is not none else "—" }}</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">Hedgerow units</td>
+        <td class="pp-right pp-num">{{ ("%.2f"|format(pre_hed)) if pre_hed is not none else "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%.2f"|format(post_hed)) if post_hed is not none else "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%+.1f%%"|format(up_hed)) if up_hed is not none else "—" }}</td>
+      </tr>
+      <tr>
+        <td class="pp-lbl">Watercourse units</td>
+        <td class="pp-right pp-num">{{ ("%.2f"|format(pre_wc)) if pre_wc is not none else "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%.2f"|format(post_wc)) if post_wc is not none else "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%+.1f%%"|format(up_wc)) if up_wc is not none else "—" }}</td>
+      </tr>
+    </tbody>
+  </table>
+  {{ m.callout("Statutory requirement",
+    "Under the Environment Act 2021, planning permission for major development (post 12 Feb 2024) is conditional on a minimum 10% biodiversity net gain secured for 30 years.",
+    "default") }}
+  {% else %}
+    {{ m.callout("BNG baseline deferred",
+      "A Tier 2 ecology field survey is required to confirm UKHab v2.0 habitat parcels before a statutory-quality BNG baseline can be issued. The figures derived from DynamicWorld land-cover here are indicative only.",
+      "amber") }}
+  {% endif %}
+
+  {{ m.cite("DEFRA Statutory Biodiversity Metric 4.0 (April 2023); UKHab v2.0.") }}
+</section>
+
+{# ========== 11. Recommendation ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 10</div>
+  <h2>Recommendation</h2>
+
+  {% set verd = (site.verdict or "CAUTION") | upper %}
+  {% if verd == "GO" %}{% set variant = "green" %}
+  {% elif verd == "NO-GO" or verd == "NOGO" %}{% set variant = "red" %}
+  {% else %}{% set variant = "amber" %}{% endif %}
+
+  <p>
+    Overall:
+    {{ m.verdict(verd, variant) }}
+    {% if site.score_pct %} — composite suitability {{ "%.0f"|format(site.score_pct) }} / 100{% endif %}
+  </p>
+
+  {% if site.strengths %}
+  <h3>Top strengths</h3>
+  <ol style="margin-left: 20px;">
+    {% for s in site.strengths[:3] %}<li>{{ s }}</li>{% endfor %}
+  </ol>
+  {% endif %}
+
+  {% if site.blockers %}
+  <h3>Top blockers</h3>
+  <ol style="margin-left: 20px;">
+    {% for b in site.blockers[:3] %}<li>{{ b }}</li>{% endfor %}
+  </ol>
+  {% endif %}
+
+  <h3>Suggested next actions</h3>
+  <ol style="margin-left: 20px;">
+    {% for a in (site.next_actions or [
+      "Request LPA pre-application meeting to confirm local-plan compatibility.",
+      "Commission Tier 2 ecology survey for BNG baseline (UKHab v2.0 habitat parcels).",
+      "Issue a formal connection enquiry to the DNO under CCCM v19."]) %}
+      <li>{{ a }}</li>
+    {% endfor %}
+  </ol>
+</section>
+
+{% endblock %}

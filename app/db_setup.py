@@ -172,6 +172,29 @@ async def setup_database(pool: asyncpg.Pool) -> None:
         except Exception:
             log.exception("N-1 dataset seed failed — dataset row may be missing")
 
+        # ── BOT-DQ root migrations (2026-04-21 c + d) ─────────────────────
+        # c: Dedupe the pre-existing "Thames BESS Phase 1" duplicate row.
+        # d: Seed demo dockets + project_docket_pins so Intelligence panel
+        #    list_dockets(project_id=...) returns ≥3 pins per demo project.
+        # Both are fully idempotent (EXISTS guards + ON CONFLICT DO NOTHING)
+        # and live in the repo-root `migrations/` dir alongside 2026-04-21b.
+        # Applied AFTER the main seed path so the keeper UUIDs exist.
+        _repo_root_migrations_dir = pathlib.Path(__file__).parent.parent / "migrations"
+        for _mig_name in (
+            "2026_04_21c_dedupe_thames_bess.sql",
+            "2026_04_21d_seed_docket_pins.sql",
+        ):
+            _path = _repo_root_migrations_dir / _mig_name
+            if _path.exists():
+                try:
+                    await conn.execute(_path.read_text())
+                    log.info("Applied %s", _mig_name)
+                except Exception:
+                    log.exception(
+                        "%s failed — demo project dockets / dedupe may be degraded",
+                        _mig_name,
+                    )
+
         # ── Planning applications + sample energy data ────────────────────
         await planning_setup(conn)
         await planning_seed(conn)

@@ -1,0 +1,164 @@
+{# =========================================================================
+   _shared/_macros.html.j2 — repeated building-block patterns.
+
+   Each macro is deliberately small so Jinja inheritance can nest them.
+   ========================================================================= #}
+
+{# ---- Metric card ------------------------------------------------------- #}
+{% macro metric(label, value, sub=None, feature=False) %}
+<div class="pp-metric {% if feature %}pp-metric-feature{% endif %}">
+  <div class="pp-metric-label">{{ label }}</div>
+  <div class="pp-metric-value">{{ value }}</div>
+  {% if sub %}<div class="pp-metric-sub">{{ sub }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{# ---- Row of metric cards ---------------------------------------------- #}
+{% macro metric_row(cards) %}
+<div class="pp-metric-row">
+  {% for c in cards %}
+    {{ metric(c.label, c.value, c.sub, c.feature or false) }}
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{# ---- Verdict badge ---------------------------------------------------- #}
+{% macro verdict(text, variant="caution") %}
+<span class="pp-verdict pp-verdict-{{ variant }}">{{ text }}</span>
+{% endmacro %}
+
+{# ---- RAG dot + label -------------------------------------------------- #}
+{% macro rag(label, variant="grey") %}
+<span class="pp-rag-dot pp-rag-{{ variant }}"></span>{{ label }}
+{% endmacro %}
+
+{# ---- Source citation -------------------------------------------------- #}
+{% macro cite(text) %}
+<div class="pp-cite">{{ text }}</div>
+{% endmacro %}
+
+{# ---- Italic-grey placeholder for missing data ------------------------- #}
+{% macro na(text="Not applicable at this stage") %}
+<span class="pp-italic-muted">{{ text }}</span>
+{% endmacro %}
+
+{# ---- N-1 contingency row ---------------------------------------------- #}
+{% macro n1_row(outage, bus, v_kv, v_dev_pct, loading_pct, compliance, rag_class="green") %}
+<tr class="pp-risk-row">
+  <td>{{ outage }}</td>
+  <td>{{ bus }}</td>
+  <td class="pp-right pp-num">{{ v_kv }}</td>
+  <td class="pp-right pp-num">{{ v_dev_pct }}</td>
+  <td class="pp-right pp-num">{{ loading_pct }}</td>
+  <td>
+    <span class="pp-rag-dot pp-rag-{{ rag_class }}"></span>{{ compliance }}
+  </td>
+</tr>
+{% endmacro %}
+
+{# ---- Risk register row (likelihood x impact) -------------------------- #}
+{% macro risk_row(idx, description, category, likelihood, impact, mitigation, residual) %}
+<tr class="pp-risk-row">
+  <td class="pp-num">{{ idx }}</td>
+  <td>{{ description }}<br/><span class="pp-xs pp-muted">{{ category }}</span></td>
+  <td class="pp-risk-lh pp-risk-L{{ likelihood }}">{{ likelihood }}</td>
+  <td class="pp-risk-im pp-risk-I{{ impact }}">{{ impact }}</td>
+  <td>{{ mitigation }}</td>
+  <td>{{ residual }}</td>
+</tr>
+{% endmacro %}
+
+{# ---- Callout box ------------------------------------------------------ #}
+{% macro callout(title, body, variant="default") %}
+<div class="pp-callout {% if variant != 'default' %}pp-callout-{{ variant }}{% endif %}">
+  {% if title %}<h4>{{ title }}</h4>{% endif %}
+  <div>{{ body | safe }}</div>
+</div>
+{% endmacro %}
+
+{# ---- Risk likelihood x impact scatter (hand-rolled inline SVG) -------- #}
+{% macro risk_scatter(risks, width=460, height=300) %}
+{# risks: list of {idx, description, likelihood (1-5), impact (1-5)} #}
+<svg class="pp-svg-chart" viewBox="0 0 {{ width }} {{ height }}" xmlns="http://www.w3.org/2000/svg">
+  {# axes #}
+  <rect x="40" y="12" width="{{ width - 60 }}" height="{{ height - 50 }}" fill="#FBF8F2" stroke="#E5DCC0"/>
+  {# quadrant bands #}
+  {% set cx = 40 + (width - 60) / 2 %}
+  {% set cy = 12 + (height - 50) / 2 %}
+  <line x1="{{ cx }}" y1="12" x2="{{ cx }}" y2="{{ height - 38 }}" stroke="#E5DCC0" stroke-dasharray="3,3"/>
+  <line x1="40" y1="{{ cy }}" x2="{{ width - 20 }}" y2="{{ cy }}" stroke="#E5DCC0" stroke-dasharray="3,3"/>
+  {# axis labels #}
+  <text x="{{ 40 + (width - 60) / 2 }}" y="{{ height - 8 }}" text-anchor="middle" font-size="9" fill="#3E444C" font-family="Inter, sans-serif">Likelihood (1 — 5)</text>
+  <text x="12" y="{{ 12 + (height - 50) / 2 }}" text-anchor="middle" transform="rotate(-90 12 {{ 12 + (height - 50) / 2 }})" font-size="9" fill="#3E444C" font-family="Inter, sans-serif">Impact (1 — 5)</text>
+  {# tick labels #}
+  {% for i in range(1, 6) %}
+    <text x="{{ 40 + ((width - 60) / 5) * (i - 0.5) }}" y="{{ height - 22 }}" text-anchor="middle" font-size="7" fill="#6B7280">{{ i }}</text>
+    <text x="32" y="{{ 12 + ((height - 50) / 5) * (5.5 - i) }}" text-anchor="end" font-size="7" fill="#6B7280">{{ i }}</text>
+  {% endfor %}
+  {# risk markers #}
+  {% for r in risks %}
+    {% set rx = 40 + ((width - 60) / 5) * (r.likelihood - 0.5) %}
+    {% set ry = 12 + ((height - 50) / 5) * (5.5 - r.impact) %}
+    {% set score = r.likelihood * r.impact %}
+    {% if score >= 15 %}
+      {% set fill = "#B23B3B" %}
+    {% elif score >= 8 %}
+      {% set fill = "#B8860B" %}
+    {% else %}
+      {% set fill = "#1E7B3A" %}
+    {% endif %}
+    <circle cx="{{ rx }}" cy="{{ ry }}" r="11" fill="{{ fill }}" fill-opacity="0.85" stroke="white" stroke-width="1.5"/>
+    <text x="{{ rx }}" y="{{ ry + 3 }}" text-anchor="middle" font-size="8" fill="white" font-weight="700">{{ r.idx }}</text>
+  {% endfor %}
+</svg>
+{% endmacro %}
+
+{# ---- Monthly-yield bar chart (inline SVG) ----------------------------- #}
+{% macro monthly_bar(values, labels=None, unit="kWh/m²", width=500, height=180) %}
+{# values: list[float], labels: list[str] — defaults to Jan..Dec #}
+{% set mlabels = labels or ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] %}
+{% set mx = values | max %}
+<svg class="pp-svg-chart" viewBox="0 0 {{ width }} {{ height }}" xmlns="http://www.w3.org/2000/svg">
+  <rect x="40" y="10" width="{{ width - 60 }}" height="{{ height - 40 }}" fill="#FBF8F2" stroke="#E5DCC0"/>
+  {% set bar_w = (width - 80) / (values | length) %}
+  {% for v in values %}
+    {% set bh = ((v / mx) * (height - 50)) if mx > 0 else 0 %}
+    {% set bx = 50 + loop.index0 * bar_w %}
+    {% set by = (height - 30) - bh %}
+    <rect x="{{ bx }}" y="{{ by }}" width="{{ bar_w - 4 }}" height="{{ bh }}" fill="#F5B731"/>
+    <text x="{{ bx + (bar_w - 4) / 2 }}" y="{{ height - 18 }}" text-anchor="middle" font-size="7" fill="#6B7280">{{ mlabels[loop.index0] }}</text>
+    <text x="{{ bx + (bar_w - 4) / 2 }}" y="{{ by - 3 }}" text-anchor="middle" font-size="7" fill="#3E444C" font-variant-numeric="tabular-nums">{{ "%.0f"|format(v) }}</text>
+  {% endfor %}
+  <text x="{{ width / 2 }}" y="{{ height - 4 }}" text-anchor="middle" font-size="8" fill="#6B7280" font-style="italic">{{ unit }}</text>
+</svg>
+{% endmacro %}
+
+{# ---- N-1 loading heatmap (inline SVG) --------------------------------- #}
+{% macro n1_heatmap(rows, width=500, height=180) %}
+{# rows: list of {label, cells=[float 0-100+, ...]}. First row usually 'Base case'. #}
+{% if rows %}
+{% set cols = (rows[0].cells | length) if rows[0].cells else 1 %}
+{% set cell_w = (width - 140) / cols %}
+{% set cell_h = (height - 40) / (rows | length) %}
+<svg class="pp-svg-chart" viewBox="0 0 {{ width }} {{ height }}" xmlns="http://www.w3.org/2000/svg">
+  {% for row in rows %}
+    {% set ry = 10 + loop.index0 * cell_h %}
+    <text x="134" y="{{ ry + cell_h / 2 + 3 }}" text-anchor="end" font-size="8" fill="#3E444C">{{ row.label }}</text>
+    {% for v in row.cells %}
+      {% set cx = 140 + loop.index0 * cell_w %}
+      {% if v >= 100 %}
+        {% set fill = "#B23B3B" %}
+      {% elif v >= 80 %}
+        {% set fill = "#B8860B" %}
+      {% elif v >= 60 %}
+        {% set fill = "#E8C54A" %}
+      {% else %}
+        {% set fill = "#9DBFA3" %}
+      {% endif %}
+      <rect x="{{ cx }}" y="{{ ry }}" width="{{ cell_w - 2 }}" height="{{ cell_h - 2 }}" fill="{{ fill }}" fill-opacity="0.9"/>
+      <text x="{{ cx + cell_w / 2 }}" y="{{ ry + cell_h / 2 + 3 }}" text-anchor="middle" font-size="7" fill="white" font-weight="600">{{ "%.0f"|format(v) }}</text>
+    {% endfor %}
+  {% endfor %}
+</svg>
+{% endif %}
+{% endmacro %}

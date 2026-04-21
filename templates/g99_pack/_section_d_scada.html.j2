@@ -1,0 +1,74 @@
+{#-
+  Section D — Control, Monitoring and SCADA.
+  Heading verbatim from ENA EREC G99 Issue 2 application form.
+  Context:
+    section_d : dict with 'scada', 'iccp_dnp3', 'anm', 'black_start'.
+-#}
+<section class="g99-section section-d">
+  <h2>Section D &mdash; Control, Monitoring and SCADA</h2>
+  <p class="section-lead">
+    DNO telecontrol / monitoring interface, Active Network Management (ANM)
+    compatibility and restoration capability. <em>Clause 7, G99 Issue 2;
+    SCADA availability ≥99% is mandatory for schemes &gt; 10 MW per Clause 7.5.</em>
+  </p>
+
+  <h3>D1. SCADA interface</h3>
+  <table class="form">
+    <tr><td class="lbl">SCADA platform / vendor</td>
+        <td>{{ field(section_d.scada.platform) }}</td></tr>
+    <tr><td class="lbl">Availability target</td>
+        <td>{{ field(section_d.scada.availability_target) }}
+          {% if section_d.scada.availability_mandatory %}
+            <span class="note">(≥99% mandatory — Clause 7.5, scheme &gt; 10 MW)</span>
+          {% endif %}
+        </td></tr>
+    <tr><td class="lbl">Communication protocol</td>
+        <td>{{ field(section_d.scada.protocol) }}</td></tr>
+    <tr><td class="lbl">Telecontrol transport</td>
+        <td>{{ field(section_d.scada.transport) }}</td></tr>
+    <tr><td class="lbl">Cyber security standard</td>
+        <td>{{ field(section_d.scada.cyber_standard) }}</td></tr>
+    <tr><td class="lbl">Redundancy / dual-path</td>
+        <td>{{ field(section_d.scada.redundancy) }}</td></tr>
+  </table>
+
+  <h3>D2. ICCP / DNP3 signal list</h3>
+  <table class="set">
+    <tr><th>Group</th><th>Point</th><th>Type</th><th>Direction</th><th>Notes</th></tr>
+    {% for s in section_d.iccp_dnp3 %}
+    <tr>
+      <td>{{ s.group }}</td>
+      <td>{{ s.point }}</td>
+      <td>{{ s.type }}</td>
+      <td>{{ s.direction }}</td>
+      <td>{{ s.note }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>D3. Active Network Management (ANM) compatibility</h3>
+  <table class="form">
+    <tr><td class="lbl">Connecting to an ANM zone</td>
+        <td>{{ field(section_d.anm.in_anm_zone) }}</td></tr>
+    <tr><td class="lbl">ANM vendor / platform</td>
+        <td>{{ field(section_d.anm.platform) }}</td></tr>
+    <tr><td class="lbl">Curtailment signal path</td>
+        <td>{{ field(section_d.anm.curtailment_path) }}</td></tr>
+    <tr><td class="lbl">Response time (setpoint → MW output)</td>
+        <td>{{ field(section_d.anm.response_time_s) }} s</td></tr>
+    <tr><td class="lbl">Expected curtailment envelope</td>
+        <td>{{ field(section_d.anm.expected_curtailment_pct) }}</td></tr>
+  </table>
+
+  <h3>D4. Restoration / black start</h3>
+  <table class="form">
+    <tr><td class="lbl">Black start capability</td>
+        <td>{{ field(section_d.black_start.capable) }}</td></tr>
+    <tr><td class="lbl">Restoration time to rated output</td>
+        <td>{{ field(section_d.black_start.restoration_time_minutes) }} min</td></tr>
+    <tr><td class="lbl">Grid-forming converter declaration</td>
+        <td>{{ field(section_d.black_start.grid_forming) }}</td></tr>
+    <tr><td class="lbl">Virtual inertia declaration (MWs/MW)</td>
+        <td>{{ field(section_d.black_start.virtual_inertia) }}</td></tr>
+  </table>
+</section>

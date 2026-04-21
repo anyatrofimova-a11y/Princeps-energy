@@ -1,0 +1,403 @@
+{# =========================================================================
+   ic_memo/pack.html.j2 — Equity IC memo pack (6 sections + precedents).
+
+   Consumes the context produced by utils/ic_memo/pack.py::assemble_ic_memo_context.
+   Extends _shared/_base.html.j2 and uses _shared/_macros.html.j2.
+
+   Section indices:
+     1  Recommendation box (page 1, feature)
+     2  Executive summary (narrative)
+     3  Project detail (site, grid, counterparties, assumptions)
+     4  Financial case (base + Lender Case + upside)
+     5  Risk matrix (5×5)
+     6  Investment ask + vote
+     7  UK precedent comps
+   ========================================================================= #}
+{% extends "_shared/_base.html.j2" %}
+{% import "_shared/_macros.html.j2" as m %}
+
+{% block content %}
+
+{% set rec = sections.s01_recommendation %}
+{% set es  = sections.s02_exec_summary %}
+{% set pd  = sections.s03_project_detail %}
+{% set fc  = sections.s04_financial_case %}
+{% set rm  = sections.s05_risk_matrix %}
+{% set av  = sections.s06_ask_vote %}
+{% set pc  = sections.s_precedents %}
+
+{# ========== 1. Recommendation box (page 1) ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 1</div>
+  <h2>Recommendation</h2>
+
+  <div class="pp-two-col">
+    <div>
+      <p class="pp-lead">
+        {{ m.verdict(rec.verdict, rec.verdict_variant) }}
+        &nbsp; {{ rec.one_liner }}
+      </p>
+      <p>{{ rec.vote_ask }}</p>
+    </div>
+  </div>
+
+  {{ m.metric_row([
+    {"label": rec.kpis[0].label, "value": rec.kpis[0].value, "sub": rec.kpis[0].sub, "feature": true},
+    {"label": rec.kpis[1].label, "value": rec.kpis[1].value, "sub": rec.kpis[1].sub, "feature": true},
+    {"label": rec.kpis[2].label, "value": rec.kpis[2].value, "sub": rec.kpis[2].sub},
+    {"label": rec.kpis[3].label, "value": rec.kpis[3].value, "sub": rec.kpis[3].sub}
+  ]) }}
+
+  {{ m.cite(rec.citation) }}
+</section>
+
+{# ========== 2. Executive summary (2-page narrative) ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 2</div>
+  <h2>Executive summary</h2>
+
+  {% for p in es.paragraphs %}
+    <h3>{{ p.heading }}</h3>
+    <p>{{ p.body }}</p>
+  {% endfor %}
+
+  <h3>Headline risks (traffic light)</h3>
+  <table class="pp-table">
+    <thead><tr><th>#</th><th>Risk</th><th>RAG</th></tr></thead>
+    <tbody>
+      {% for hr in es.headline_risks %}
+      <tr>
+        <td class="pp-num">{{ loop.index }}</td>
+        <td>{{ hr.text }}</td>
+        <td>{{ m.rag(hr.rag | upper, hr.rag) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {{ m.cite(es.citation) }}
+</section>
+
+{# ========== 3. Project detail ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 3</div>
+  <h2>Project detail</h2>
+
+  <h3>Site</h3>
+  <table class="pp-table">
+    <tbody>
+      <tr><td class="pp-lbl">Name</td><td>{{ pd.site.name }}</td></tr>
+      <tr><td class="pp-lbl">Technology</td><td>{{ pd.site.tech }}</td></tr>
+      <tr><td class="pp-lbl">Capacity</td><td>{{ (("%.0f MW"|format(pd.site.capacity_mw)) if pd.site.capacity_mw else "—") }}</td></tr>
+      <tr><td class="pp-lbl">Region</td><td>{{ pd.site.region }}</td></tr>
+      <tr><td class="pp-lbl">LPA</td><td>{{ pd.site.lpa }}</td></tr>
+      <tr><td class="pp-lbl">COD target</td><td>{{ pd.site.cod_target }}</td></tr>
+      <tr><td class="pp-lbl">Area</td><td>{{ (("%.1f ha"|format(pd.site.area_ha)) if pd.site.area_ha else "—") }}</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Grid connection</h3>
+  <table class="pp-table">
+    <tbody>
+      <tr><td class="pp-lbl">Point of connection</td><td>{{ pd.grid.poc_substation }}</td></tr>
+      <tr><td class="pp-lbl">Voltage</td><td>{{ pd.grid.poc_voltage_kv }} kV</td></tr>
+      <tr><td class="pp-lbl">Gate 2 status</td><td>{{ pd.grid.gate_status }}</td></tr>
+      <tr><td class="pp-lbl">TMO4+ alignment</td><td>{{ pd.grid.tmo4_status }}</td></tr>
+      <tr><td class="pp-lbl">Conn. cost (P50)</td><td>{{ "£%.2fm"|format(pd.grid.conn_cost_p50_gbp_m) }}</td></tr>
+      <tr><td class="pp-lbl">Headroom</td><td>{{ (("%.1f MW"|format(pd.grid.headroom_mw)) if pd.grid.headroom_mw else "TBC") }}</td></tr>
+      <tr><td class="pp-lbl">Queue years</td><td>{{ (("%.1f"|format(pd.grid.queue_years)) if pd.grid.queue_years else "TBC") }}</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Counterparties</h3>
+  <table class="pp-table">
+    <thead><tr><th>Role</th><th>Counterparty</th></tr></thead>
+    <tbody>
+      <tr><td class="pp-lbl">Developer / sponsor</td><td>{{ pd.counterparties.developer }}</td></tr>
+      <tr><td class="pp-lbl">EPC</td><td>{{ pd.counterparties.epc }}</td></tr>
+      <tr><td class="pp-lbl">Legal counsel</td><td>{{ pd.counterparties.legal }}</td></tr>
+      <tr><td class="pp-lbl">Technical advisor</td><td>{{ pd.counterparties.tech_advisor }}</td></tr>
+      <tr><td class="pp-lbl">PPA offtaker</td><td>{{ pd.counterparties.ppa_offtaker }}</td></tr>
+      <tr><td class="pp-lbl">Land agent</td><td>{{ pd.counterparties.land_agent }}</td></tr>
+      <tr><td class="pp-lbl">Insurance broker</td><td>{{ pd.counterparties.insurance_broker }}</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Key assumptions</h3>
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th>Assumption</th><th>Value</th><th>Source</th>
+        <th>Date</th><th>Band</th><th>Class</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in pd.assumptions %}
+      <tr>
+        <td class="pp-lbl">{{ a.name }}</td>
+        <td>{{ a.value }}</td>
+        <td>{{ a.source }}</td>
+        <td class="pp-num">{{ a.date }}</td>
+        <td>{{ a.confidence }}</td>
+        <td><span class="pp-xs pp-muted">{{ a.class | replace("_", "-") }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ m.cite(pd.citation) }}
+</section>
+
+{# ========== 4. Financial case ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 4</div>
+  <h2>Financial case</h2>
+
+  <p>{{ fc.summary_narrative }}</p>
+
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th>Case</th>
+        <th class="pp-right">Equity IRR</th>
+        <th class="pp-right">Δ vs base</th>
+        <th class="pp-right">MOIC</th>
+        <th class="pp-right">NPV @ WACC</th>
+        <th class="pp-right">Min DSCR</th>
+        <th>Note</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in fc.case_rows %}
+      <tr>
+        <td class="pp-bold">{{ r.label }}</td>
+        <td class="pp-right pp-num">{{ (("%.1f%%"|format(r.irr_pct)) if r.irr_pct is not none else "—") }}</td>
+        <td class="pp-right pp-num">{{ (("%+.1f pp"|format(r.delta_pp)) if r.delta_pp is not none else "—") }}</td>
+        <td class="pp-right pp-num">{{ (("%.2fx"|format(r.moic)) if r.moic else "—") }}</td>
+        <td class="pp-right pp-num">{{ (("£%.1fm"|format(r.npv_m)) if r.npv_m is not none else "—") }}</td>
+        <td class="pp-right pp-num">{{ (("%.2fx"|format(r.min_dscr)) if r.min_dscr else "—") }}</td>
+        <td>{{ r.note }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Lender Case shock composition</h3>
+  <table class="pp-table">
+    <thead><tr><th>Shock</th><th>Magnitude</th></tr></thead>
+    <tbody>
+      <tr><td>Revenue (volume × price)</td><td>{{ "%+.0f%%"|format(fc.shocks.revenue_pct * 100) }}</td></tr>
+      <tr><td>Capex</td><td>{{ "%+.0f%%"|format(fc.shocks.capex_pct * 100) }}</td></tr>
+      <tr><td>Availability (absolute)</td><td>{{ "%+.1f pp"|format(fc.shocks.availability_pp * 100) }}</td></tr>
+      <tr><td>Construction delay</td><td>+{{ fc.shocks.delay_months }} months</td></tr>
+      <tr><td>WACC</td><td>{{ "%+d bps"|format(fc.shocks.wacc_bps) }}</td></tr>
+    </tbody>
+  </table>
+
+  {{ m.cite(fc.citation) }}
+</section>
+
+{# ========== 5. Risk matrix ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 5</div>
+  <h2>Risk matrix — {{ rm.total_rows }} rows, 5×5 likelihood × impact</h2>
+
+  <p>
+    Counts by residual RAG: red {{ rm.counts_by_rag.red }},
+    amber {{ rm.counts_by_rag.amber }},
+    yellow {{ rm.counts_by_rag.yellow }},
+    green {{ rm.counts_by_rag.green }}.
+  </p>
+
+  <h3>5 × 5 heatmap</h3>
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th rowspan="2">Impact ↓ / Likelihood →</th>
+        <th colspan="5" class="pp-center">Likelihood</th>
+      </tr>
+      <tr>
+        <th class="pp-center">1</th><th class="pp-center">2</th>
+        <th class="pp-center">3</th><th class="pp-center">4</th>
+        <th class="pp-center">5</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row_idx in range(5, 0, -1) %}
+      <tr>
+        <td class="pp-lbl pp-right">{{ row_idx }}</td>
+        {% for col_idx in range(1, 6) %}
+          {% set count = rm.grid[row_idx - 1][col_idx - 1] %}
+          {% set score = row_idx * col_idx %}
+          {% set rag = "red" if score >= 20 else ("amber" if score >= 12 else ("yellow" if score >= 6 else "green")) %}
+          <td class="pp-center pp-risk-I{{ row_idx }} pp-risk-L{{ col_idx }}">
+            {{ count if count > 0 else "" }}
+          </td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Top-5 residual risks</h3>
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th class="pp-right">#</th>
+        <th>Risk / category</th>
+        <th class="pp-center">L</th>
+        <th class="pp-center">I</th>
+        <th class="pp-center">L×I</th>
+        <th>Linked to</th>
+        <th>Residual</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rm.top5 %}
+      <tr>
+        <td class="pp-num">{{ r.idx }}</td>
+        <td>{{ r.description }}<br/><span class="pp-xs pp-muted">{{ r.category }}</span></td>
+        <td class="pp-center pp-risk-lh pp-risk-L{{ r.likelihood }}">{{ r.likelihood }}</td>
+        <td class="pp-center pp-risk-im pp-risk-I{{ r.impact }}">{{ r.impact }}</td>
+        <td class="pp-center pp-num">{{ r.score }}</td>
+        <td><span class="pp-xs pp-muted">{{ r.linked_to }}</span></td>
+        <td>{{ r.residual_label }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Full risk register</h3>
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th class="pp-right">#</th>
+        <th>Risk / category</th>
+        <th class="pp-center">L</th>
+        <th class="pp-center">I</th>
+        <th>Mitigation</th>
+        <th>Linked to</th>
+        <th>Residual</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rm.rows %}
+      <tr>
+        <td class="pp-num">{{ r.idx }}</td>
+        <td>{{ r.description }}<br/><span class="pp-xs pp-muted">{{ r.category }}</span></td>
+        <td class="pp-center pp-risk-lh pp-risk-L{{ r.likelihood }}">{{ r.likelihood }}</td>
+        <td class="pp-center pp-risk-im pp-risk-I{{ r.impact }}">{{ r.impact }}</td>
+        <td>{{ r.mitigation }}</td>
+        <td><span class="pp-xs pp-muted">{{ r.linked_to }}</span></td>
+        <td>{{ r.residual_label }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {{ m.cite(rm.citation) }}
+</section>
+
+{# ========== 6. Investment ask ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 6</div>
+  <h2>Investment ask and decision frame</h2>
+
+  <div class="pp-callout pp-callout-{{ verdict_variant }}">
+    <h4>{{ rec.verdict }} — £{{ "%.1f"|format(av.ticket_gbp_m) }}m, {{ av.hold_years }}-year hold</h4>
+    <p>{{ av.ask_statement }}</p>
+  </div>
+
+  {{ m.metric_row([
+    {"label": "Ticket", "value": ("£" ~ ("%.1f"|format(av.ticket_gbp_m)) ~ "m"), "sub": "sponsor equity"},
+    {"label": "Hold", "value": (("%d"|format(av.hold_years)) ~ " yrs"), "sub": "to target exit"},
+    {"label": "Target IRR", "value": (("%.1f%%"|format(av.target_irr_pct))), "sub": "post-tax levered"},
+    {"label": "Target MOIC", "value": (("%.2fx"|format(av.target_moic))), "sub": "gross to LPs"},
+    {"label": "CIO delegation", "value": ("£" ~ ("%.1f"|format(av.delegated_cap_gbp_m)) ~ "m"), "sub": "working-capital"}
+  ]) }}
+
+  <h3>Conditions precedent</h3>
+  <ol style="margin-left: 20px;">
+    {% for cp in av.cps %}
+      <li style="margin: 4px 0;">{{ cp }}</li>
+    {% endfor %}
+  </ol>
+
+  <h3>Conditions subsequent</h3>
+  <ol style="margin-left: 20px;">
+    {% for cs in av.css %}
+      <li style="margin: 4px 0;">{{ cs }}</li>
+    {% endfor %}
+  </ol>
+
+  <h3>Reporting cadence</h3>
+  <p>{{ av.reporting_cadence }}</p>
+
+  <h3>Decision options</h3>
+  <table class="pp-table">
+    <thead><tr><th>Option</th><th>Frame</th></tr></thead>
+    <tbody>
+      {% for d in av.decision_options %}
+      <tr><td class="pp-lbl pp-bold">{{ d.option }}</td><td>{{ d.body }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p><em>{{ av.preconditions_narrative }}</em></p>
+  {{ m.cite(av.citation) }}
+</section>
+
+{# ========== 7. UK precedent comps ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 7</div>
+  <h2>UK precedent transactions — comp set</h2>
+
+  <p>
+    Comp set drawn from the maintained Princeps UK precedent database
+    ({{ pc.total_universe }} entries total; {{ pc.returned_count }} shown).
+    Mean £/MW across this filter: {{ (("£" ~ ("%.0f"|format(pc.mean_gbp_per_mw / 1000)) ~ "k/MW") if pc.mean_gbp_per_mw else "n/a") }};
+    mean EV/EBITDA: {{ (("%.1fx"|format(pc.mean_ev_ebitda)) if pc.mean_ev_ebitda else "n/a") }}.
+  </p>
+
+  <p class="pp-xs pp-muted">{{ pc.filter_note }}</p>
+
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th>Deal</th><th>Sponsor</th><th>Tech</th>
+        <th class="pp-right">MW</th>
+        <th class="pp-num">Yr</th>
+        <th class="pp-right">£k/MW</th>
+        <th class="pp-right">£k/MWh</th>
+        <th class="pp-right">EV/EBITDA</th>
+        <th>Advisor / lender</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in pc.rows %}
+      <tr>
+        <td>{{ r.name or r.deal_name or "—" }}</td>
+        <td>{{ r.sponsor or r.buyer or "—" }}</td>
+        <td>{{ (r.tech or r.technology or "—") | upper }}</td>
+        <td class="pp-right pp-num">{{ "%.0f"|format(r.capacity_mw) if r.capacity_mw else "—" }}</td>
+        <td class="pp-num">{{ r.year or "—" }}</td>
+        <td class="pp-right pp-num">{{ "%.0f"|format(r.gbp_per_mw / 1000) if r.gbp_per_mw else "—" }}</td>
+        <td class="pp-right pp-num">{{ "%.0f"|format(r.gbp_per_mwh / 1000) if r.gbp_per_mwh else "—" }}</td>
+        <td class="pp-right pp-num">{{ "%.1fx"|format(r.ev_ebitda) if r.ev_ebitda else "—" }}</td>
+        <td>
+          {{ r.advisor or "—" }}
+          {% if r.lender %}<br/><span class="pp-xs pp-muted">{{ r.lender }}</span>{% endif %}
+        </td>
+      </tr>
+      {% if r.source %}
+      <tr>
+        <td colspan="9" class="pp-xs pp-muted">Source: {{ r.source }}</td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {{ m.cite(pc.citation) }}
+</section>
+
+{% endblock %}

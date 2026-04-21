@@ -171,6 +171,17 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
     else:
         log.info("PRINCEPS_INGESTION_ENABLED not set — intelligence ingestion disabled")
 
+    # ── grid_lines endpoint linker (task #36) ─────────────────────────
+    # 1.6M rows in grid_lines land with from_sub_id / to_sub_id NULL
+    # because OSM ingesters carry geometry only. Snap endpoints to the
+    # nearest substation within 100m on boot. Idempotent — only touches
+    # rows where at least one end is still NULL. Gated on an env flag
+    # because a cold run can take several minutes on a full DB.
+    if os.getenv("PRINCEPS_LINK_GRID_LINES_ON_STARTUP", "false").lower() == "true":
+        asyncio.create_task(_safe_bg(
+            "grid_line_linker_startup", _run_grid_line_linker, pool,
+        ))
+
     # ── Princeps Dockets — authorities registry + consultee rules ────
     # Gated by PRINCEPS_SEED_AUTHORITIES. Consultee rules FK into
     # authorities, so run authorities first and only proceed to the
@@ -728,6 +739,37 @@ async def _ensure_utility_layers(pool: asyncpg.Pool) -> None:
         log.info("utility_layers: fibre POP seed -> %s", summary)
     except Exception as e:
         log.warning("utility_layers fibre seed failed: %s", e)
+
+
+async def _run_grid_line_linker(pool: asyncpg.Pool) -> None:
+    """Optional startup pass — snap grid_lines endpoints to grid_substations.
+
+    Tuned for a background boot run: batch_size=5000, threshold=100m,
+    max_rows configurable via PRINCEPS_LINK_GRID_LINES_MAX_ROWS (default
+    None — run until no candidates left).
+    """
+    try:
+        from utils.grid_line_linker import link_grid_lines
+    except Exception as e:
+        log.warning("grid_line_linker import failed: %s", e)
+        return
+
+    max_rows_env = os.getenv("PRINCEPS_LINK_GRID_LINES_MAX_ROWS")
+    max_rows = int(max_rows_env) if max_rows_env and max_rows_env.isdigit() else None
+    threshold = float(os.getenv("PRINCEPS_LINK_GRID_LINES_THRESHOLD_M", "100"))
+
+    try:
+        async with pool.acquire() as conn:
+            summary = await link_grid_lines(
+                conn,
+                max_distance_m=threshold,
+                batch_size=5000,
+                max_rows=max_rows,
+                dry_run=False,
+            )
+        log.info("grid_line_linker startup pass: %s", summary)
+    except Exception as e:
+        log.warning("grid_line_linker startup pass failed: %s", e)
 
 
 def register_audit_middleware(app) -> bool:

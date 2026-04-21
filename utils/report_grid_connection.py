@@ -62,7 +62,13 @@ from utils.g99_table_101 import get_table_101
 
 log = logging.getLogger("princeps.report_grid_connection")
 
-_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "report"
+# Legacy templates/report/* kept for backward compatibility with other packs
+# (g99_pack, dco_pack, lender_pack) that still extend the old institutional
+# base. The *new* rewritten Grid Connection Report renders from
+# templates/grid_connection/main.html.j2 which extends templates/_shared/.
+_TEMPLATES_ROOT = Path(__file__).resolve().parent.parent / "templates"
+_TEMPLATES_DIR = _TEMPLATES_ROOT / "report"        # legacy
+
 
 # ---------------------------------------------------------------------------
 # Brand palette — consolidated gold per paperwork_rewrite_spec §b
@@ -85,6 +91,12 @@ BRAND = {
 
 _jinja_env = Environment(
     loader=FileSystemLoader(str(_TEMPLATES_DIR)),
+    autoescape=True,
+)
+
+# Institutional rewrite: templates/_shared/* + templates/grid_connection/*
+_institutional_env = Environment(
+    loader=FileSystemLoader(str(_TEMPLATES_ROOT)),
     autoescape=True,
 )
 
@@ -982,11 +994,117 @@ def _revision_block(project_id: str | None, project_meta: dict | None) -> list[d
 
 
 # ---------------------------------------------------------------------------
+# Fault level helper (IEC 60909 approximation — POC indicative only)
+# ---------------------------------------------------------------------------
+def _estimate_fault_level(poc_voltage_kv: float, capacity_mw: float) -> dict:
+    """Rough IEC 60909 three-phase / single-phase-earth fault levels at POC.
+
+    Used when the DNO has not yet supplied a formal fault level study.
+    Values are deliberately conservative (source impedance + transformer
+    short-circuit reactance derived from typical primary substation specs).
+    """
+    # Nominal MVA base for the POC bus.
+    mva_base = max(capacity_mw * 1.2, 20.0)
+    # Typical source impedance % + transformer %: 10% each at primary level.
+    z_source_pu = 0.10
+    z_tx_pu = 0.10
+    z_total_pu = (z_source_pu ** 2 + z_tx_pu ** 2) ** 0.5
+    # I_fault (kA) = MVA_base / (sqrt(3) * V_kv * Z_pu)
+    if poc_voltage_kv <= 0 or z_total_pu <= 0:
+        return {"three_phase_ka": None, "single_phase_earth_ka": None,
+                "switchgear_rating_ka": None, "clearance_ms": None,
+                "source": "fallback"}
+    i_3ph = mva_base / (1.7320508 * poc_voltage_kv * z_total_pu)
+    # Single-phase-earth is typically ~0.85× three-phase on UK distribution.
+    i_1ph_e = i_3ph * 0.85
+    # Standard DNO switchgear withstand by voltage class.
+    swgear = {11: 25.0, 33: 25.0, 66: 31.5, 132: 40.0, 400: 50.0}.get(
+        int(poc_voltage_kv) if poc_voltage_kv in (11, 33, 66, 132, 400) else 33, 25.0)
+    return {
+        "three_phase_ka": round(i_3ph, 2),
+        "single_phase_earth_ka": round(i_1ph_e, 2),
+        "switchgear_rating_ka": swgear,
+        "clearance_ms": 100,
+        "source": "IEC 60909 approximation (Princeps)",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Reference registry (for the shared _references block)
+# ---------------------------------------------------------------------------
+def _grid_connection_references(ltds: dict | None) -> list[dict]:
+    refs = [
+        {"n": 1, "title": "ENA EREC G99 Issue 2 — Type B/C/D generator connection",
+         "publisher": "Energy Networks Association", "year": 2025,
+         "url": "https://www.energynetworks.org/industry-hub/resource-library/"},
+        {"n": 2, "title": "Common Connection Charging Methodology v19 (DCUSA Schedule 19)",
+         "publisher": "Ofgem / DCUSA", "year": 2026,
+         "url": "https://www.ofgem.gov.uk/"},
+        {"n": 3, "title": "ENA EREC P28 Issue 2 — Voltage fluctuations",
+         "publisher": "Energy Networks Association", "year": 2019, "url": None},
+        {"n": 4, "title": "ENA ER P2/7 — Security of supply",
+         "publisher": "Energy Networks Association", "year": 2019, "url": None},
+        {"n": 5, "title": "NESO Future Energy Scenarios 2024 — pathways and demand forecasts",
+         "publisher": "National Energy System Operator", "year": 2024,
+         "url": "https://www.neso.energy/future-energy/future-energy-scenarios"},
+        {"n": 6, "title": "Distribution Code v43 (DCode)", "publisher": "ENA", "year": 2024,
+         "url": "https://www.dcode.org.uk/"},
+        {"n": 7, "title": "IEC 60909 — Short-circuit currents in three-phase a.c. systems",
+         "publisher": "International Electrotechnical Commission", "year": 2016, "url": None},
+    ]
+    if ltds:
+        refs.append({
+            "n": len(refs) + 1,
+            "title": ltds.get("publication") or "DNO Long Term Development Statement",
+            "publisher": ltds.get("long_name") or "DNO", "year": 2024,
+            "url": ltds.get("url"),
+        })
+    return refs
+
+
+# ---------------------------------------------------------------------------
 # Render & PDF
 # ---------------------------------------------------------------------------
+def _doc_hash(payload: dict) -> str:
+    """Short content hash used in the running footer."""
+    import hashlib
+    key = f"{payload.get('project_id','')}{payload.get('site_name','')}{payload.get('generated_at','')}"
+    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:10].upper()
+
+
 def render_grid_connection_html(report_data: dict, charts: dict[str, str]) -> str:
+    """Render the institutional Grid Connection Report (new shared base)."""
+    # Shared-base context
+    fault = _estimate_fault_level(
+        poc_voltage_kv=float(((report_data.get("best_candidate") or {}).get("voltage_kv") or 33.0)),
+        capacity_mw=float(report_data.get("capacity_mw") or 50.0),
+    )
+    # If the underlying assess_connection returned a richer fault level on the
+    # best candidate, prefer that.
+    bc_fault = (report_data.get("best_candidate") or {}).get("fault_level_ka")
+    if bc_fault is not None:
+        fault["three_phase_ka"] = float(bc_fault)
+        fault["source"] = "DNO data (" + (report_data.get("dno_area") or {}).get("code", "DNO") + ")"
+
+    revision = (report_data.get("revision") or [{}])[0] if report_data.get("revision") else {}
     ctx = {
+        # Shared-base contract
+        "report_type": "Grid Connection Report",
+        "project_title": report_data.get("site_name") or "Untitled Project",
+        "tagline": "CCCM v19 connection feasibility and N-1 study",
+        "revision": revision.get("rev", "P01"),
+        "revision_date": revision.get("date", datetime.utcnow().strftime("%Y-%m-%d")),
+        "recipient": report_data.get("addressee") or "DNO Connection Team",
+        "reliance_type": "dno",
+        "client_ref": (report_data.get("project_meta") or {}).get("client_ref"),
+        "doc_ref": (report_data.get("project_id") or "PPS") + "-GCR",
+        "project_ref": report_data.get("project_id"),
+        "doc_hash": _doc_hash(report_data),
+        "references": _grid_connection_references(report_data.get("ltds")),
+
+        # Main payload
         "r": report_data,
+        "fault": fault,
         "charts": charts,
         "brand": BRAND,
         "now": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -995,14 +1113,22 @@ def render_grid_connection_html(report_data: dict, charts: dict[str, str]) -> st
         "rag_class": _rag_class,
     }
     try:
-        template = _jinja_env.get_template("grid_connection_report.html")
+        template = _institutional_env.get_template("grid_connection/main.html.j2")
         return template.render(**ctx)
     except Exception:
-        log.exception("Grid connection report template render failed")
+        log.exception("Institutional Grid Connection Report template render failed")
         raise
 
 
 async def html_to_pdf(html_string: str) -> bytes:
+    """Render HTML → PDF via headless Chromium.
+
+    When the body is the institutional rewrite (detected by a marker class
+    ``pp-header`` present in the document), we pass Chromium's
+    ``header_template`` + ``footer_template`` so the running header/footer +
+    Page X of Y renders natively. Legacy HTML falls back to a marginless
+    render with print_background so the existing templates are unaffected.
+    """
     import tempfile
     try:
         from playwright.async_api import async_playwright
@@ -1010,6 +1136,8 @@ async def html_to_pdf(html_string: str) -> bytes:
         raise RuntimeError(
             "playwright not installed. Run: pip install playwright && playwright install chromium"
         )
+
+    institutional = "pp-header" in html_string
 
     tmp = tempfile.NamedTemporaryFile(
         suffix=".html", delete=False, mode="w", encoding="utf-8",
@@ -1025,12 +1153,72 @@ async def html_to_pdf(html_string: str) -> bytes:
                 raise RuntimeError("Chromium not installed. Run: playwright install chromium")
             page = await browser.new_page()
             await page.goto(file_url, wait_until="networkidle", timeout=60000)
-            pdf_bytes = await page.pdf(
-                format="A4",
-                print_background=True,
-                margin={"top": "0.5in", "bottom": "0.6in",
-                        "left": "0.4in", "right": "0.4in"},
-            )
+
+            if institutional:
+                # Extract the inline header / footer strip text (best effort)
+                # by locating the first .pp-header and .pp-footer elements
+                # and reading their .innerText values.
+                try:
+                    header_text = await page.evaluate(
+                        "() => { const el=document.querySelector('.pp-header');"
+                        " return el ? el.innerText.replace(/\\s+/g,' ').trim() : ''; }"
+                    )
+                except Exception:
+                    header_text = "PRINCEPS"
+                try:
+                    footer_text = await page.evaluate(
+                        "() => { const el=document.querySelector('.pp-footer');"
+                        " return el ? el.innerText.replace(/\\s+/g,' ').trim() : ''; }"
+                    )
+                except Exception:
+                    footer_text = "Princeps Energy — Confidential"
+
+                # Hide the in-body header/footer so only the printed running
+                # strip shows (otherwise we'd get a double banner).
+                await page.add_style_tag(content=".pp-header, .pp-footer { display: none !important; }")
+
+                header_html = (
+                    "<div style=\"font-family: Inter, -apple-system, sans-serif;"
+                    " font-size: 8pt; color: #3E444C; width: 100%;"
+                    " padding: 0 15mm; display: flex; justify-content: space-between;"
+                    " align-items: center; border-bottom: 2px solid #F5B731;\">"
+                    f"<span style=\"font-weight:700; letter-spacing:2.5px; color:#0F1318;\">"
+                    "<span style='color:#F5B731; margin-right:6px;'>◆</span>PRINCEPS</span>"
+                    f"<span style=\"color:#6B7280;\">{header_text.split('PRINCEPS',1)[-1].strip() or ''}</span>"
+                    "<span style=\"font-family: 'JetBrains Mono', Menlo, monospace;\">"
+                    "Page <span class=\"pageNumber\"></span> of <span class=\"totalPages\"></span>"
+                    "</span>"
+                    "</div>"
+                )
+                footer_html = (
+                    "<div style=\"font-family: Inter, -apple-system, sans-serif;"
+                    " font-size: 7.5pt; color: #6B7280; width: 100%;"
+                    " padding: 0 15mm; display: flex; justify-content: space-between;"
+                    " align-items: center; border-top: 1px solid #E5DCC0;\">"
+                    f"<span style=\"letter-spacing:1.2px; font-weight:600; color:#3E444C;\">"
+                    "Princeps Energy &mdash; Confidential &mdash; for intended recipient only</span>"
+                    f"<span style=\"font-family: 'JetBrains Mono', Menlo, monospace;\">"
+                    f"{footer_text.split('Princeps Energy')[-1].split('—')[-1].strip() if footer_text else ''}"
+                    "</span>"
+                    "</div>"
+                )
+
+                pdf_bytes = await page.pdf(
+                    format="A4",
+                    print_background=True,
+                    display_header_footer=True,
+                    header_template=header_html,
+                    footer_template=footer_html,
+                    margin={"top": "22mm", "bottom": "18mm",
+                            "left": "15mm", "right": "15mm"},
+                )
+            else:
+                pdf_bytes = await page.pdf(
+                    format="A4",
+                    print_background=True,
+                    margin={"top": "0.5in", "bottom": "0.6in",
+                            "left": "0.4in", "right": "0.4in"},
+                )
             await browser.close()
             return pdf_bytes
     finally:

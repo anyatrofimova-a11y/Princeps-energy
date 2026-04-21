@@ -1,0 +1,84 @@
+{#-
+  Section F — Harmonic Emission and Flicker Assessment.
+  Per ENA EREC G5/5 Issue 1 (2020) and ENA EREC P28 Issue 2 (2019, amendment 1).
+  Context:
+    section_f : dict with 'harmonics', 'thdv', 'flicker', 'basis'.
+-#}
+<section class="g99-section section-f">
+  <h2>Section F &mdash; Harmonic Emission and Flicker Assessment</h2>
+  <p class="section-lead">
+    Harmonic distortion and flicker emission against ENA EREC G5/5 Issue 1
+    (harmonics) and ENA EREC P28 Issue 2 (flicker). Emissions below show the
+    2nd–50th harmonic individual limits with the applicant's declared
+    emission; THDv and flicker Pst/Plt reported at PoC for worst-case
+    switching and continuous operation.
+  </p>
+
+  <h3>F1. Basis and assumptions</h3>
+  <table class="form">
+    <tr><td class="lbl">Voltage level at PoC</td><td>{{ field(section_f.basis.voltage_kv) }} kV</td></tr>
+    <tr><td class="lbl">Voltage band</td><td>{{ field(section_f.basis.voltage_band) }}</td></tr>
+    <tr><td class="lbl">Applicable planning limit (THDv)</td>
+        <td>{{ field(section_f.basis.thdv_limit_pct) }}%</td></tr>
+    <tr><td class="lbl">Reference document</td>
+        <td>{{ field(section_f.basis.reference) }}</td></tr>
+    <tr><td class="lbl">Measurement method</td>
+        <td>IEC 61000-4-7 / 61000-4-30 class A instrumentation, 10-min
+            aggregation windows (95% probability values).</td></tr>
+  </table>
+
+  <h3>F2. THD(V) summary at PoC</h3>
+  <table class="form">
+    <tr><td class="lbl">Declared THDv at Pmax (95%)</td>
+        <td>{{ field(section_f.thdv.declared_pct) }}%
+          <span class="prov">[Princeps v{{ meta.princeps_version }}]</span></td></tr>
+    <tr><td class="lbl">Planning limit</td>
+        <td>{{ section_f.basis.thdv_limit_pct }}%</td></tr>
+    <tr><td class="lbl">Headroom against limit</td>
+        <td>{{ field(section_f.thdv.headroom_pct) }}%</td></tr>
+  </table>
+
+  <h3>F3. Individual harmonic emission (2nd–50th)</h3>
+  <table class="set harmonic-table">
+    <tr>
+      <th>h</th><th>Type</th><th>G5/5 limit (%Un)</th>
+      <th>Declared H% at PoC</th><th>Status</th>
+    </tr>
+    {% for row in section_f.harmonics %}
+    <tr class="{{ 'over-limit' if row.over_limit else '' }}">
+      <td>{{ row.h }}</td>
+      <td>{{ row.type }}</td>
+      <td>{{ '%.3f'|format(row.limit_pct) }}</td>
+      <td>{{ field(row.declared_pct) }}</td>
+      <td>{{ 'OVER' if row.over_limit else 'OK' }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>F4. Flicker (P28 Issue 2) at PoC</h3>
+  <table class="set">
+    <tr>
+      <th>Metric</th><th>Planning limit</th>
+      <th>Declared worst-case switching</th><th>Declared continuous</th><th>Status</th>
+    </tr>
+    <tr>
+      <td>Short-term severity (Pst, 10 min)</td>
+      <td>{{ section_f.flicker.pst_limit }}</td>
+      <td>{{ field(section_f.flicker.pst_worst) }}</td>
+      <td>{{ field(section_f.flicker.pst_continuous) }}</td>
+      <td>{{ section_f.flicker.pst_status }}</td>
+    </tr>
+    <tr>
+      <td>Long-term severity (Plt, 2 h)</td>
+      <td>{{ section_f.flicker.plt_limit }}</td>
+      <td>{{ field(section_f.flicker.plt_worst) }}</td>
+      <td>{{ field(section_f.flicker.plt_continuous) }}</td>
+      <td>{{ section_f.flicker.plt_status }}</td>
+    </tr>
+  </table>
+  <p class="note">
+    Detailed connection impact assessment per ENA EREC G5/5 Issue 1 Stage 2/3
+    may be required where either Pst or any individual harmonic is within
+    10% of the planning limit.
+  </p>
+</section>

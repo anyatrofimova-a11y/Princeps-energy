@@ -1,0 +1,297 @@
+{# =========================================================================
+   ic_memo/main.html.j2 — Investment Committee audience.
+
+   Consumes the context produced by utils/report_ic_memo.py
+   (project summary, financials, grid, planning, precedents, risk register,
+   ESG + case table).
+
+   Key context:
+     proj          dict (name, workload, capacity_mw, region, area_ha, lat, lon)
+     fin           {p50_irr, payback_years, capex_m, equity_multiple, moic,
+                    hold_years, moic_target, investment_size_m}
+     grid          {conn_cost_k, headroom_mw, queue_years, cost_p50_m}
+     plan          {planning_p, lpa}
+     precedents    list[dict]
+     cases         list[{label, capex_m, ppa, curtailment, cod, irr, moic, prob}]
+     risks         list[{idx, description, category, likelihood, impact,
+                         mitigation, residual}]
+     esg           {flood_zone, sssi, aonb, listed_buildings, bng_required,
+                    green_belt, protected_species}
+     sponsor       {developer, epc, legal, tech_advisor}
+     fes_pathway   str — e.g. "Leading the Way"
+     demand_gsp    str — e.g. "Wymondley"
+     ppa_bench_gbp str
+     market_source str
+     recommendation dict {verdict, statement, next_steps: list[str]}
+     verdict_variant  "go" | "caution" | "nogo"
+   ========================================================================= #}
+{% extends "_shared/_base.html.j2" %}
+{% import "_shared/_macros.html.j2" as m %}
+
+{% block content %}
+
+{# ========== 2. Deal-at-a-glance ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 1</div>
+  <h2>Deal at a glance</h2>
+
+  <div class="pp-two-col">
+    <div>
+      <p class="pp-lead">
+        {{ m.verdict(recommendation.verdict or "CAUTION", verdict_variant or "caution") }}
+        &nbsp; {{ recommendation.statement or "Recommendation subject to committee review." }}
+      </p>
+    </div>
+  </div>
+
+  {{ m.metric_row([
+    {"label": "P50 project IRR", "value": (("%.1f"|format(fin.p50_irr)) ~ "%") if fin.p50_irr else "—", "feature": true},
+    {"label": "Equity multiple (MOIC)", "value": (("%.2fx"|format(fin.moic)) if fin.moic else "—"), "sub": ("target " ~ (("%.2fx"|format(fin.moic_target)) if fin.moic_target else "—"))},
+    {"label": "Investment size", "value": (("£" ~ ("%.1f"|format(fin.investment_size_m)) ~ "m") if fin.investment_size_m else "—"), "sub": "sponsor equity"},
+    {"label": "Hold period", "value": (("%.0f yrs"|format(fin.hold_years)) if fin.hold_years else "—"), "sub": "to target exit"},
+    {"label": "Simple payback", "value": (("%.1f yrs"|format(fin.payback_years)) if fin.payback_years else "—")}
+  ]) }}
+</section>
+
+{# ========== 3. Deal thesis ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 2</div>
+  <h2>Deal thesis</h2>
+
+  {% if thesis_paragraphs %}
+    {% for para in thesis_paragraphs[:3] %}
+      <p>{{ para }}</p>
+    {% endfor %}
+  {% else %}
+    <p>
+      <strong>Why this project.</strong>
+      The {{ proj.name }} asset is a {{ "%.0f"|format(proj.capacity_mw) }} MW
+      {{ proj.workload | lower }} project in the {{ proj.region }} region, with
+      {{ "%.1f"|format(proj.area_ha or 0) }} ha of contiguous developable land and
+      a nearest primary substation offering
+      {{ (("%.0f MW"|format(grid.headroom_mw)) if grid.headroom_mw else "to-be-confirmed") }}
+      of residual headroom. Connection cost at the P50 confidence
+      {{ (("is £%s K"|format(grid.conn_cost_k)) if grid.conn_cost_k else "is under refinement") }},
+      well below typical precedent £/MW for comparable consents in the region.
+    </p>
+    <p>
+      <strong>Why now.</strong>
+      The {{ fes_pathway or "Leading the Way" }} pathway of NESO FES 2024
+      projects sustained capacity demand at this GSP through 2035. Ofgem's
+      Gate 2 sift has cleared the accepted queue, creating a narrow window
+      to secure a connection offer before the next TMO cycle. Cornwall Insight's
+      Q1 2026 merchant curve has stabilised at £{{ ppa_bench_gbp or "—" }}/MWh
+      which supports debt sizing at current SONIA + 225 bps.
+    </p>
+    <p>
+      <strong>Why Princeps sponsors.</strong>
+      Our platform's planning-ML probability and precedent-match scoring
+      give us a differentiated underwriting edge. Grid connection feasibility
+      is independently modelled (pandapower N-1) rather than taken from
+      DNO-supplied data, reducing downside capex risk.
+    </p>
+  {% endif %}
+</section>
+
+{# ========== 4. Market + comp set ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 3</div>
+  <h2>Market context and comparable schemes</h2>
+
+  <p>
+    Comparable consented schemes within 100 km of the site are sourced from
+    BEIS REPD (Q1 2026 release). Pricing benchmark is Cornwall Insight UK
+    Power Market Forecast (Q1 2026). Demand context is taken from the NESO
+    FES 2024 pathways applied to the GSP serving this project.
+  </p>
+
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th>Deal</th><th>Tech</th>
+        <th class="pp-right">MW</th>
+        <th>Region</th><th>Year</th><th>Stage</th>
+        <th class="pp-right">£m/MW</th>
+        <th class="pp-right">Strike</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if precedents %}
+        {% for p in precedents[:8] %}
+        <tr>
+          <td>{{ p.deal_name or "—" }}</td>
+          <td>{{ (p.technology or "") | upper }}</td>
+          <td class="pp-right pp-num">{{ ("%.0f"|format(p.capacity_mw)) if p.capacity_mw else "—" }}</td>
+          <td>{{ p.region or "—" }}</td>
+          <td class="pp-num">{{ p.year or "—" }}</td>
+          <td>{{ (p.stage or "—") | title }}</td>
+          <td class="pp-right pp-num">{{ (("£%.2fm"|format(p.gbp_per_mw / 1e6)) if p.gbp_per_mw else "—") }}</td>
+          <td class="pp-right pp-num">{{ (("£%.0f/MWh"|format(p.strike_price_gbp_per_mwh)) if p.strike_price_gbp_per_mwh else "—") }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <tr><td colspan="8" class="pp-center pp-italic-muted">No REPD-matched precedents within search radius.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+  {{ m.cite((market_source or "BEIS REPD Q1 2026; Cornwall Insight UK Power Market Forecast Q1 2026; NESO FES 2024 — " ~ (fes_pathway or "Leading the Way") ~ " pathway.")) }}
+</section>
+
+{# ========== 5. Base / upside / downside cases ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 4</div>
+  <h2>Base, upside and downside cases</h2>
+
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th>Case</th>
+        <th class="pp-right">Probability</th>
+        <th class="pp-right">Capex (£m)</th>
+        <th class="pp-right">PPA (£/MWh)</th>
+        <th class="pp-right">Curtailment</th>
+        <th class="pp-right">COD</th>
+        <th class="pp-right">Equity IRR</th>
+        <th class="pp-right">MOIC</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in (cases or []) %}
+      <tr>
+        <td class="pp-bold">{{ c.label }}</td>
+        <td class="pp-right pp-num">{{ ("%.0f%%"|format(c.prob * 100)) if c.prob else "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%.1f"|format(c.capex_m)) if c.capex_m else "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%.0f"|format(c.ppa)) if c.ppa else "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%.1f%%"|format(c.curtailment * 100)) if c.curtailment is not none else "—" }}</td>
+        <td class="pp-right pp-num">{{ c.cod or "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%.1f%%"|format(c.irr)) if c.irr else "—" }}</td>
+        <td class="pp-right pp-num">{{ ("%.2fx"|format(c.moic)) if c.moic else "—" }}</td>
+      </tr>
+      {% endfor %}
+      {% if cases %}
+        {% set weighted = namespace(irr=0, p=0) %}
+        {% for c in cases %}
+          {% if c.prob and c.irr %}
+            {% set weighted.irr = weighted.irr + c.prob * c.irr %}
+            {% set weighted.p = weighted.p + c.prob %}
+          {% endif %}
+        {% endfor %}
+        <tr>
+          <td class="pp-bold">Probability-weighted expected IRR</td>
+          <td colspan="6" class="pp-right"></td>
+          <td class="pp-right pp-num pp-bold">{{ "%.1f%%"|format(weighted.irr / weighted.p) if weighted.p else "—" }}</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  {{ m.cite("Base case uses Cornwall Insight merchant curve Q1 2026; downside applies NESO FES Falling Short pathway; upside applies Leading the Way.") }}
+</section>
+
+{# ========== 6. Risk register ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 5</div>
+  <h2>Risk register — top 10</h2>
+
+  <table class="pp-table">
+    <thead>
+      <tr>
+        <th class="pp-right">#</th>
+        <th>Risk / category</th>
+        <th class="pp-center">L</th>
+        <th class="pp-center">I</th>
+        <th>Mitigation</th>
+        <th>Residual</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in (risks or [])[:10] %}
+        {{ m.risk_row(r.idx, r.description, r.category, r.likelihood, r.impact, r.mitigation, r.residual) }}
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if risks %}
+    {{ m.risk_scatter(risks[:10]) }}
+    <div class="pp-chart-caption">Likelihood × impact scatter (1–5 × 1–5); colour = residual risk after mitigation</div>
+  {% endif %}
+</section>
+
+{# ========== 7. ESG screening ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 6</div>
+  <h2>ESG screening</h2>
+
+  {% set e = esg or {} %}
+  <table class="pp-table">
+    <thead>
+      <tr><th>Screen</th><th>Status</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="pp-lbl">Flood risk zone</td><td>{{ e.flood_zone or m.na() | safe }}</td><td>EA Flood Map for Planning</td></tr>
+      <tr><td class="pp-lbl">SSSI / SAC / SPA / Ramsar overlap</td><td>{{ e.sssi or m.na() | safe }}</td><td>Natural England MAGIC</td></tr>
+      <tr><td class="pp-lbl">AONB / National Park</td><td>{{ e.aonb or m.na() | safe }}</td><td>Natural England</td></tr>
+      <tr><td class="pp-lbl">Green Belt</td><td>{{ e.green_belt or m.na() | safe }}</td><td>MHCLG Green Belt dataset</td></tr>
+      <tr><td class="pp-lbl">Listed buildings / heritage</td><td>{{ e.listed_buildings or m.na() | safe }}</td><td>Historic England List</td></tr>
+      <tr><td class="pp-lbl">Protected species records</td><td>{{ e.protected_species or m.na() | safe }}</td><td>Natural England priority species layer</td></tr>
+      <tr><td class="pp-lbl">BNG baseline uplift required</td><td>{{ e.bng_required or "10% — Environment Act 2021" }}</td><td>DEFRA Biodiversity Metric 4.0</td></tr>
+    </tbody>
+  </table>
+
+  {{ m.cite("Environment Agency, Natural England MAGIC, Historic England, DEFRA Biodiversity Metric 4.0 (April 2023).") }}
+</section>
+
+{# ========== 8. Sponsor + team ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 7</div>
+  <h2>Sponsor and team</h2>
+
+  {% set s = sponsor or {} %}
+  <table class="pp-table">
+    <thead><tr><th>Role</th><th>Counterparty</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td class="pp-lbl">Developer / sponsor</td><td>{{ s.developer or m.na() | safe }}</td><td>Track record (MW operational)</td></tr>
+      <tr><td class="pp-lbl">EPC shortlist</td><td>{{ s.epc or m.na() | safe }}</td><td>Tier-1 UK EPCs under evaluation</td></tr>
+      <tr><td class="pp-lbl">Legal counsel</td><td>{{ s.legal or m.na() | safe }}</td><td>Lead transaction counsel</td></tr>
+      <tr><td class="pp-lbl">Technical advisor</td><td>{{ s.tech_advisor or m.na() | safe }}</td><td>Lender-appointed IE</td></tr>
+    </tbody>
+  </table>
+</section>
+
+{# ========== 9. Recommendation ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 8</div>
+  <h2>Recommendation</h2>
+
+  <div class="pp-callout pp-callout-{{ verdict_variant or 'default' }}">
+    <h4>{{ recommendation.verdict or "CAUTION" }}</h4>
+    <p>{{ recommendation.statement or "Subject to committee review." }}</p>
+  </div>
+
+  <h3>Next steps</h3>
+  <ol style="margin-left: 20px;">
+    {% for step in (recommendation.next_steps or [
+        "Confirm connection offer in writing with the DNO under CCCM v19.",
+        "Instruct independent planning advisor pre-app meeting with LPA.",
+        "Commission Tier 2 ecology survey (BNG baseline)."]) %}
+      <li style="margin: 4px 0;">{{ step }}</li>
+    {% endfor %}
+  </ol>
+</section>
+
+{# ========== 10. Appendices ========== #}
+<section class="pp-section">
+  <div class="pp-eyebrow">Section 9</div>
+  <h2>Appendix — pack cross-references</h2>
+
+  <table class="pp-table">
+    <thead><tr><th>Pack</th><th>Purpose</th><th>Reference</th></tr></thead>
+    <tbody>
+      <tr><td class="pp-lbl">Financial viability report</td><td>DCF, debt sizing, sensitivity</td><td>FVR — latest rev</td></tr>
+      <tr><td class="pp-lbl">Grid connection report</td><td>POC, CCCM v19, N-1, SLD</td><td>GCR — latest rev</td></tr>
+      <tr><td class="pp-lbl">Site assessment</td><td>Parcel, resource, terrain, planning risk</td><td>SAR — latest rev</td></tr>
+    </tbody>
+  </table>
+</section>
+
+{% endblock %}

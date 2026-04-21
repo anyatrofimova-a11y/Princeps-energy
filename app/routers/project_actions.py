@@ -30,6 +30,7 @@ from pydantic import BaseModel
 from app.deps import get_pool
 from app.helpers import _run_generic_subprocess
 from utils.report_grid_connection import html_to_pdf
+from utils.report_ic_memo import generate_ic_memo_pdf
 from utils import solar_benchmarks
 from utils.finance_benchmarks import ppa_price_merchant, wacc as _finance_wacc
 
@@ -430,7 +431,12 @@ async def api_ic_memo(
     project_id: str = Query(..., description="Project UUID"),
     pool: asyncpg.Pool = Depends(get_pool),
 ):
-    """Generate an Investment Committee Memo PDF for a project."""
+    """Generate an Investment Committee Memo PDF for a project.
+
+    Rewritten (Apr 2026) to render the institutional template at
+    templates/ic_memo/main.html.j2 (shared _base / _cover / _header /
+    _footer / _references), via utils/report_ic_memo.generate_ic_memo_pdf.
+    """
     pid = UUID(project_id)
     async with pool.acquire() as conn:
         proj = await _load_project_summary(conn, pid)
@@ -446,22 +452,47 @@ async def api_ic_memo(
     plan = await _real_planning(proj, capacity_mw)
     precedents = await _real_precedents(proj, capacity_mw, pool)
 
-    html = _IC_MEMO_HTML.format(
-        name=proj["name"], project_id=proj["project_id"],
-        generated_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
-        verdict="GO", verdict_class="go",
-        verdict_rationale=f"{proj['workload_type'].upper()} project sited in {region} with viable grid headroom and IRR above hurdle.",
-        workload=proj["workload_type"].upper(),
-        capacity_mw=capacity_mw, region=region, area_ha=area_ha,
-        p50_irr=fin["p50_irr"], payback_years=fin["payback_years"], capex_m=fin["capex_m"],
-        conn_cost_k=grid["conn_cost_k"],
-        headroom_mw=grid["headroom_mw"],
-        queue_years=grid["queue_years"],
-        planning_p=plan["planning_p"],
-        lpa=plan["lpa"],
-        precedent_rows=_format_precedent_rows(precedents),
+    # Build investment-committee verdict — GO if IRR & headroom OK.
+    verdict = "GO"
+    if (fin.get("p50_irr") or 0) < 9:
+        verdict = "CAUTION"
+    if (fin.get("p50_irr") or 0) < 6 or (grid.get("headroom_mw") or 0) < capacity_mw * 0.5:
+        verdict = "NO-GO"
+
+    proj_ctx = {
+        "project_id": proj["project_id"],
+        "name": proj["name"],
+        "workload": proj["workload_type"].upper(),
+        "capacity_mw": capacity_mw,
+        "region": region,
+        "area_ha": area_ha,
+        "lat": proj["lat"],
+        "lon": proj["lon"],
+        "client_ref": proj["project_id"][:8].upper(),
+    }
+    plan_full = {**plan, "confidence": 0.72}
+
+    pdf = await generate_ic_memo_pdf(
+        proj=proj_ctx,
+        fin=fin,
+        grid=grid,
+        plan=plan_full,
+        precedents=precedents,
+        recommendation={
+            "verdict": verdict,
+            "statement": (
+                f"{proj['workload_type'].upper()} project sited in {region}. "
+                f"P50 IRR {fin['p50_irr']}% with £{fin['capex_m']}m capex; "
+                f"grid headroom {grid.get('headroom_mw','?')} MW at recommended POC."
+            ),
+            "next_steps": [
+                "Confirm DNO connection offer under CCCM v19 within 60 days.",
+                "Instruct pre-application meeting with the LPA.",
+                "Commission Tier 2 ecology survey (UKHab v2.0) for BNG baseline.",
+                "Initiate senior debt term-sheet negotiation post-ICC sign-off.",
+            ],
+        },
     )
-    pdf = await html_to_pdf(html)
     return StreamingResponse(
         io.BytesIO(pdf), media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{proj["name"]}-ic-memo.pdf"'},
