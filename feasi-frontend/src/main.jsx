@@ -32,6 +32,10 @@ const DocketsIndex = lazy(() => import("./pages/Intelligence/Dockets/DocketsInde
 
 // Tracker admin (SME review + publish) at /tracker-admin.
 const TrackerDashboard = lazy(() => import("./pages/Tracker/TrackerDashboard.jsx"));
+
+// Workshop Module Builder MVP — AI-composed manifest runtime.
+const ModuleRuntime = lazy(() => import("./runtime/ModuleRuntime.jsx"));
+const ComposeDemo = lazy(() => import("./runtime/ComposeDemo.jsx"));
 const DatasetsIndex = lazy(() => import("./pages/Intelligence/Datasets/DatasetsIndex.jsx"));
 const EngagementsIndex = lazy(() => import("./pages/Intelligence/Engagements/EngagementsIndex.jsx"));
 
@@ -180,6 +184,22 @@ createRoot(document.getElementById("root")).render(
           element={
             <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading connectors…</div>}>
               <ConnectorHealthDashboard />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/v2/modules/:id"
+          element={
+            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading module…</div>}>
+              <ModuleRuntime />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/v2/builder"
+          element={
+            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading composer…</div>}>
+              <ComposeDemo />
             </Suspense>
           }
         />

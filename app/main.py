@@ -280,6 +280,7 @@ _ROUTER_MODULES = [
     "utilities",
     "dno_engagement_workflow",
     "dno_engagement",
+    "workshop_modules",  # Workshop Module Builder MVP — AI-composed manifests
 ]
 
 app.include_router(graph_router)
