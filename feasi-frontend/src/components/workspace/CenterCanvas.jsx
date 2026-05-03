@@ -53,6 +53,30 @@ export default function CenterCanvas({ children, dashboardView }) {
     }, ms));
   }, [setActiveViewMode]);
 
+  // Stage funnel click → projects view filtered by stage. Same race-proof
+  // pattern as goToProject: stash the stage in sessionStorage AND fire an
+  // event on three timers so the lazy-loaded RedesignLayout catches it
+  // whether it's already mounted or just loaded.
+  React.useEffect(() => {
+    const onStage = (e) => {
+      const stage = e.detail?.stage;
+      const label = e.detail?.label || stage;
+      if (!stage) return;
+      try {
+        sessionStorage.setItem("princeps.pendingStageFilter", stage);
+        sessionStorage.setItem("princeps.pendingStageLabel", String(label));
+      } catch {}
+      setActiveViewMode("projects");
+      [30, 400, 1200].forEach((ms) => setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("princeps-redesign-filter-stage", {
+          detail: { stage, label },
+        }));
+      }, ms));
+    };
+    window.addEventListener("princeps:open-projects-by-stage", onStage);
+    return () => window.removeEventListener("princeps:open-projects-by-stage", onStage);
+  }, [setActiveViewMode]);
+
   // Dispatcher for activity-feed rows: route per entity_type so every row
   // opens a real thing — projects → project page, substations → grid view +
   // focus event, memos → project page with an intent hint the project page

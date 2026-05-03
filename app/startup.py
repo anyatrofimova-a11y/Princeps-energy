@@ -121,6 +121,15 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
     # ── DC infrastructure — fibre POPs, IXPs, water bodies, DCs ─────
     asyncio.create_task(_safe_bg("dc_infra_ingest", ingest_dc_infrastructure, pool, subsystem="dc_infrastructure"))
 
+    # ── Pulse boot-seed (COUNCIL-PLS audit / BOT-PLS-S) ──────────────
+    # Populates cluster_studies + cluster_dependencies from the live TEC
+    # register, snapshots the portfolio for today & yesterday so deltas
+    # have a pair, and seeds grid_events so Critical-24h / Events-24h
+    # are non-zero on a fresh DB. All steps are row-count guarded and
+    # non-blocking. Gated by PULSE_SEED_ON_BOOT (default on in dev).
+    from app.startup_pulse_seed import run_pulse_seed
+    asyncio.create_task(_safe_bg("pulse_seed", run_pulse_seed, pool))
+
     # ── GeeFlow — mark ready (no startup ingestion, on-demand) ───────
     mark_ready("geeflow")
 
@@ -140,6 +149,14 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
 
     # ── Seed system workflow templates ──────────────────────────────
     asyncio.create_task(_safe_bg("workflow_templates_seed", _seed_workflow_templates, pool))
+
+    # ── Pulse heartbeat — rolling synthetic events so the Pulse page
+    # ── stream isn't empty when no real diff cycles have fired yet.
+    # ── Gated off via PRINCEPS_PULSE_HEARTBEAT=false; runs in-process,
+    # ── emits one INFO/WARN event every ~30–60 s picked from a pool of
+    # ── realistic substation / queue / curtailment activity.
+    if os.getenv("PRINCEPS_PULSE_HEARTBEAT", "true").lower() == "true":
+        asyncio.create_task(_safe_bg("pulse_heartbeat", _pulse_heartbeat_loop, pool))
 
     # ── Princeps Alerts — seed alert_definitions + user_subscriptions ──
     # Gated on env so prod-once deploys can flip it off after first boot.
@@ -171,6 +188,17 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
     else:
         log.info("PRINCEPS_INGESTION_ENABLED not set — intelligence ingestion disabled")
 
+    # ── LTDS ingest (task #43) ────────────────────────────────────────
+    # Ingest the DNO LTDS publications (NGED CIM XML + UKPN ODS API +
+    # 4 stubbed DNO Excel workbooks). Populates ``ltds_substations`` and
+    # promotes matched rows into ``grid_substations`` so the linker has
+    # transmission-level endpoints. Gated on PRINCEPS_LTDS_INGEST_ON_STARTUP
+    # because the NGED XML parse reads ~100MB of CIM RDF/XML.
+    if os.getenv("PRINCEPS_LTDS_INGEST_ON_STARTUP", "false").lower() == "true":
+        asyncio.create_task(_safe_bg(
+            "ltds_ingest_startup", _run_ltds_ingest, pool,
+        ))
+
     # ── grid_lines endpoint linker (task #36) ─────────────────────────
     # 1.6M rows in grid_lines land with from_sub_id / to_sub_id NULL
     # because OSM ingesters carry geometry only. Snap endpoints to the
@@ -194,7 +222,183 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
             "dockets_registry_seed", _seed_dockets_registry, pool,
         ))
 
+    # ── Magritte connector framework — princeps_datasets registry ─────
+    # Apply the dataset-registry migration (idempotent) and let every
+    # connector subclass under app/connectors/sources/ register itself.
+    # Empty sources package is a successful no-op — the other agents
+    # may not have shipped their connectors yet.
+    asyncio.create_task(_safe_bg(
+        "magritte_dataset_registry", _bootstrap_magritte_connectors, pool,
+    ))
+
+    # ── Time-series store — single shared sensor table + BMRS seed ────
+    # Idempotent: NOT EXISTS guard inside the SQL means re-applying is a
+    # no-op. Backs /api/timeseries + the TimeSeriesChart Slate widget.
+    asyncio.create_task(_safe_bg(
+        "time_series_bootstrap", _bootstrap_time_series, pool,
+    ))
+
+    # ── Magritte cadence scheduler — APScheduler one-job-per-connector ─
+    # Walks the in-process Connector registry and schedules per the
+    # subclass-declared refresh_cadence ('daily' | 'weekly' | 'monthly').
+    # Stashed on app.state so the /api/connector-scheduler router and the
+    # lifespan teardown can reach it. The bootstrap above is the
+    # prerequisite — we await it (with a short cap) so registry walk
+    # actually sees the connectors.
+    asyncio.create_task(_safe_bg(
+        "magritte_cadence_scheduler", _start_connector_scheduler, pool,
+    ))
+
+    # DTDL cardinality seeder — keeps `dtdl_cardinality` in sync with the
+    # JSON schemas in `ontology/dtdl/`. Idempotent ON CONFLICT upsert.
+    async def _seed_cardinality(p):
+        try:
+            from app.graph.seed_cardinality import seed_cardinality
+            r = await seed_cardinality(p)
+            log.info("dtdl_cardinality seeded: %s", r)
+        except Exception as exc:
+            log.warning("seed_cardinality failed: %s", exc)
+    asyncio.create_task(_safe_bg("dtdl_cardinality_seed", _seed_cardinality, pool))
+
+    # Solutions marketplace catalogue — UPSERTs the built-in packages so
+    # /api/solutions/marketplace is always populated.
+    async def _seed_solutions(p):
+        try:
+            from app.routers.solutions import seed_built_in_solutions
+            n = await seed_built_in_solutions(p)
+            log.info("solutions marketplace seeded: %d packages", n)
+        except Exception as exc:
+            log.warning("seed_built_in_solutions failed: %s", exc)
+    asyncio.create_task(_safe_bg("solutions_seed", _seed_solutions, pool))
+
+    # Pipeline scheduler — auto-runs enabled data_pipelines per their cadence.
+    async def _start_pipeline_scheduler(p):
+        try:
+            from app.cron.pipeline_scheduler import PipelineScheduler
+            global _pipeline_scheduler
+            ps = PipelineScheduler(p, None)
+            res = await ps.start()
+            _pipeline_scheduler = ps
+            log.info("pipeline scheduler bootstrap: %s", res)
+        except Exception as exc:
+            log.warning("pipeline scheduler bootstrap failed: %s", exc)
+    asyncio.create_task(_safe_bg("pipeline_scheduler", _start_pipeline_scheduler, pool))
+
     log.info("Background tasks launched")
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Magritte cadence scheduler bootstrap. Waits for register_all_connectors()
+# to populate the in-process registry (the bootstrap task above), then
+# spins up app/cron/connector_scheduler.py and stashes it on app.state.
+# Exposed singleton accessor for the lifespan teardown hook.
+# ─────────────────────────────────────────────────────────────────────────
+
+_connector_scheduler = None  # module-level handle for lifespan shutdown
+
+
+async def _start_connector_scheduler(pool: asyncpg.Pool) -> None:
+    """Stand up the per-cadence APScheduler driver.
+
+    Order of operations:
+      1. Wait briefly so _bootstrap_magritte_connectors has had a chance
+         to import sources/ and populate the registry.
+      2. Locate the FastAPI app (so we can stash the scheduler on
+         app.state for the router + shutdown hook).
+      3. Instantiate ConnectorScheduler(pool, app) and call start().
+    """
+    global _connector_scheduler
+    if _connector_scheduler is not None:
+        return  # already started
+
+    # Give the connector bootstrap task ~3s to import sources and register
+    # subclasses. They're short imports — file-only — so this is plenty.
+    await asyncio.sleep(3)
+
+    try:
+        from app.cron.connector_scheduler import ConnectorScheduler
+    except Exception as e:
+        log.warning("connector_scheduler import failed: %s", e)
+        return
+
+    # Resolve the FastAPI app via the import sequence used elsewhere.
+    try:
+        from app.main import app as fastapi_app
+    except Exception as e:
+        log.warning("connector_scheduler app resolve failed: %s", e)
+        return
+
+    scheduler = ConnectorScheduler(pool, fastapi_app)
+    try:
+        summary = await scheduler.start()
+    except Exception as e:
+        log.warning("connector_scheduler start failed: %s", e)
+        return
+
+    _connector_scheduler = scheduler
+    fastapi_app.state.connector_scheduler = scheduler
+    log.info("Magritte cadence scheduler started: %s", summary)
+
+
+def get_connector_scheduler():
+    """Return the singleton scheduler (used by the lifespan teardown)."""
+    return _connector_scheduler
+
+
+_pipeline_scheduler = None  # set by _start_pipeline_scheduler above
+
+
+def get_pipeline_scheduler():
+    """Return the singleton pipeline scheduler."""
+    return _pipeline_scheduler
+
+
+async def _bootstrap_time_series(pool: asyncpg.Pool) -> None:
+    """Apply the time_series schema + BMRS seed migration.
+
+    Idempotent: ``CREATE TABLE IF NOT EXISTS`` + a ``NOT EXISTS`` seed
+    guard mean re-running on every boot is safe and free.
+    """
+    import pathlib
+    sql_path = pathlib.Path(__file__).resolve().parent.parent / (
+        "migrations/2026_05_03_time_series.sql"
+    )
+    if not sql_path.exists():
+        log.info("time_series migration file missing — skipping")
+        return
+    try:
+        sql = sql_path.read_text()
+        async with pool.acquire() as conn:
+            await conn.execute(sql)
+        log.info("time_series migration applied")
+    except Exception as e:
+        log.warning("time_series migration apply failed: %s", e)
+
+
+async def _bootstrap_magritte_connectors(pool: asyncpg.Pool) -> None:
+    """Ensure the dataset_registry schema exists and register every
+    connector class under ``app.connectors.sources``."""
+    import pathlib
+    sql_path = pathlib.Path(__file__).resolve().parent.parent / (
+        "migrations/2026_05_03_dataset_registry.sql"
+    )
+    if sql_path.exists():
+        try:
+            sql = sql_path.read_text()
+            async with pool.acquire() as conn:
+                await conn.execute(sql)
+        except Exception as e:
+            log.warning("dataset_registry migration apply failed: %s", e)
+            return
+    else:
+        log.info("dataset_registry migration file missing — skipping")
+
+    try:
+        from app.connectors.startup import register_all_connectors
+        summary = await register_all_connectors(pool)
+        log.info("magritte connectors bootstrap: %s", summary)
+    except Exception as e:
+        log.warning("magritte connectors bootstrap failed: %s", e)
 
 
 async def _seed_workflow_templates(pool: asyncpg.Pool) -> None:
@@ -222,6 +426,85 @@ async def _seed_workflow_templates(pool: asyncpg.Pool) -> None:
                     json.dumps(steps),
                 )
         log.info("Seeded %d system workflow templates", len(WORKFLOW_PRESETS))
+
+
+async def _pulse_heartbeat_loop(pool: asyncpg.Pool) -> None:
+    """Emit a rolling stream of synthetic Pulse events.
+
+    Keeps the Pulse page Event Stream populated when no real diff cycles
+    (TEC, substation, queue) have fired yet. Events are persisted via the
+    standard ``emit_event`` path, so they appear in /api/events/ and fan
+    out over /api/events/ws like any other event.
+
+    Gated by PRINCEPS_PULSE_HEARTBEAT (default on).
+    """
+    import random
+    from utils.grid_events import emit_event
+
+    # Give the schema a moment to land + downstream ingestion to populate
+    # the substations pool before we pick one.
+    await asyncio.sleep(20)
+
+    SAMPLES = [
+        ("substation_utilisation",  "info",   "Demand utilisation update"),
+        ("substation_utilisation",  "warn",   "Amber demand headroom crossed"),
+        ("queue_position_change",   "info",   "TEC queue reordered"),
+        ("connection_offer",        "info",   "New connection offer posted"),
+        ("curtailment_event",       "warn",   "Curtailment dispatched"),
+        ("portfolio_snapshot",      "info",   "Portfolio snapshot taken"),
+        ("scheduler_tick",          "info",   "Scheduler job completed"),
+        ("repd_decision",           "info",   "REPD decision recorded"),
+        ("substation_utilisation",  "critical", "Red demand headroom on critical feeder"),
+    ]
+
+    substation_ids: list[str] = []
+
+    async def _refresh_substations() -> None:
+        nonlocal substation_ids
+        try:
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """
+                    SELECT substation_id FROM grid_substations
+                    WHERE substation_id IS NOT NULL
+                    ORDER BY random() LIMIT 40
+                    """
+                )
+                substation_ids = [r["substation_id"] for r in rows]
+        except Exception:
+            substation_ids = []
+
+    await _refresh_substations()
+    tick = 0
+    while True:
+        tick += 1
+        # Re-sample the substation pool every 40 ticks (~30 min at avg 45 s)
+        if tick % 40 == 0:
+            await _refresh_substations()
+
+        event_type, severity, summary = random.choice(SAMPLES)
+        sub_id = random.choice(substation_ids) if substation_ids else None
+
+        try:
+            await emit_event(
+                pool,
+                event_type=event_type,
+                severity=severity,
+                substation_id=sub_id,
+                payload={
+                    "summary": summary,
+                    "synthetic": True,
+                    "tick": tick,
+                    "headroom_mw": round(random.uniform(5.0, 80.0), 1),
+                    "utilisation_pct": round(random.uniform(40.0, 98.0), 1),
+                },
+                source="pulse_heartbeat",
+            )
+        except Exception as e:
+            log.debug("pulse heartbeat emit failed: %s", e)
+
+        # 25–60 s jitter so the stream feels live but doesn't flood the DB
+        await asyncio.sleep(random.uniform(25.0, 60.0))
 
 
 async def _nightly_refresh_loop(pool: asyncpg.Pool) -> None:
@@ -739,6 +1022,33 @@ async def _ensure_utility_layers(pool: asyncpg.Pool) -> None:
         log.info("utility_layers: fibre POP seed -> %s", summary)
     except Exception as e:
         log.warning("utility_layers fibre seed failed: %s", e)
+
+
+async def _run_ltds_ingest(pool: asyncpg.Pool) -> None:
+    """Optional startup pass — ingest LTDS + promote into grid_substations.
+
+    Gated on PRINCEPS_LTDS_INGEST_ON_STARTUP. Picks up NGED CIM XML from
+    data/ltds/nged/ (with ~/Downloads/ fallback) and UKPN ODS via HTTP,
+    then runs match_coordinates_fuzzy + promote_ltds_to_grid_substations.
+    The subsequent grid_line_linker run (gated separately) will then see
+    the newly-promoted transmission-level endpoints.
+    """
+    try:
+        from scripts.run_ltds_ingest import run_all, ALL_DNOS
+    except Exception as e:
+        log.warning("ltds_ingest import failed: %s", e)
+        return
+    try:
+        dnos_env = os.getenv("PRINCEPS_LTDS_DNOS")
+        dnos = [d.strip().upper() for d in dnos_env.split(",")] if dnos_env else ALL_DNOS
+        summary = await run_all(pool, dnos=dnos, run_linker=False)
+        log.info(
+            "ltds_ingest startup pass: matched=%s promoted=%s",
+            summary.get("match_coordinates_updated"),
+            summary.get("promoted"),
+        )
+    except Exception as e:
+        log.warning("ltds_ingest startup pass failed: %s", e)
 
 
 async def _run_grid_line_linker(pool: asyncpg.Pool) -> None:

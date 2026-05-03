@@ -8,6 +8,7 @@ import AssessTwinLegend from "./AssessTwinLegend";
 import AssessTwinInspector from "./AssessTwinInspector";
 import useProjectTwinLayers from "../../hooks/useProjectTwinLayers";
 import { fetchProjectTwinContext, isMockMode } from "../../api/projectTwin";
+import { fetchBessDesign } from "../../api/bessDesign";
 import TwinLazy from "../twin3d/TwinLazy";
 
 // localStorage key persisting the user's 2D↔3D preference per session.
@@ -142,8 +143,15 @@ export default function AssessProjectTwin({
   const [loading, setLoading] = useState(true);
   const [mapReady, setMapReady] = useState(false);
   const [error, setError] = useState(null);
-  // 2D · 3D toggle — additive over the existing deck.gl map.
-  const [viewMode, setViewMode] = useState(() => readStoredViewMode());
+  // BESS engineering pack (containers, cables, fence, BoQ, single-line, LCOS).
+  // Hydrated only when tech === 'bess' AND we have a polygon + capacity. Lives
+  // alongside ctx because the user can flip 2D↔3D without refetching it.
+  const [bessDesign, setBessDesign] = useState(null);
+  // 2D · 3D toggle — for BESS we override the persisted preference and force
+  // 3D as the default so the user sees the proper engineered twin first.
+  const [viewMode, setViewMode] = useState(() =>
+    String(tech || '').toLowerCase() === 'bess' ? '3d' : readStoredViewMode(),
+  );
   const handleSetViewMode = useCallback((v) => {
     setViewMode(v);
     writeStoredViewMode(v);
@@ -186,6 +194,32 @@ export default function AssessProjectTwin({
       });
     return () => { cancelled = true; };
   }, [projectId, polygon_wkt, tech, capacity_mw]);
+
+  /* ── Fetch BESS engineering design when tech is bess ─────────────────── */
+  useEffect(() => {
+    const t = String(tech || ctx?.tech || '').toLowerCase();
+    if (t !== 'bess') {
+      setBessDesign(null);
+      return undefined;
+    }
+    const wkt = polygon_wkt || ctx?.polygon_wkt;
+    const cap = Number(capacity_mw || ctx?.capacity_mw);
+    if (!wkt || !Number.isFinite(cap) || cap <= 0) return undefined;
+
+    let cancelled = false;
+    fetchBessDesign({
+      capacity_mw: cap,
+      duration_h: 2,
+      site_polygon_wkt: wkt,
+      poc_distance_m: Number(ctx?.poc_substation?.distance_km) > 0
+        ? Math.round(ctx.poc_substation.distance_km * 1000)
+        : 250,
+      grid_voltage_kv: Number(ctx?.poc_substation?.voltage_kv) || 132,
+    })
+      .then((d) => { if (!cancelled) setBessDesign(d); })
+      .catch(() => { if (!cancelled) setBessDesign(null); });
+    return () => { cancelled = true; };
+  }, [tech, ctx, polygon_wkt, capacity_mw]);
 
   const bbox = useMemo(() => polygonBbox(ctx?.polygon), [ctx]);
   const paddedBbox = useMemo(() => expandBbox(bbox, 0.35), [bbox]);
@@ -557,6 +591,7 @@ export default function AssessProjectTwin({
             tech={derivedTech}
             capacity_mw={derivedCapacity}
             mode="oblique"
+            bessDesign={bessDesign}
             fallback2D={render2D}
             onError={(err) => { /* eslint-disable-next-line no-console */
               console.warn("[AssessProjectTwin] 3D twin mount failed:", err?.message);

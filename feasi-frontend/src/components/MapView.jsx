@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
+import AssetIntelPanel from "./AssetIntelPanel";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { Protocol } from "pmtiles";
@@ -14,6 +15,12 @@ import FESLegend from "./map/FESLegend";
 import { useMapTime } from "../hooks/useMapTime";
 import { MapboxOverlay } from "@deck.gl/mapbox";
 import { buildDynamicLayers } from "./map/dynamicLayers";
+// D5 — UK queue overlay (TEC + ECR + REPD + voltage-banded lines) on the
+// primary cockpit map, with project-info card slide-in.
+import GridQueueLayer from "./grid-overlay/GridQueueLayer";
+import QueueFilterBar from "./grid-overlay/QueueFilterBar";
+import ProjectInfoCard from "./grid-overlay/ProjectInfoCard";
+import "./grid-overlay/queue-overlay.css";
 
 const PROXY = "pmtiles://http://localhost:3000/pmtiles-proxy";
 
@@ -122,6 +129,18 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   const markerRef = useRef(null);
   const deckOverlayRef = useRef(null);
   const [mapReady, setMapReady] = React.useState(false);
+  // D5 — UK queue overlay state. voltage default = 0 (All) so ECR rows
+  // with NULL voltage_kv are included; otherwise the layer would be empty.
+  const [queueOn, setQueueOn] = React.useState(true);
+  const [queueSources, setQueueSources] = React.useState(['tec', 'ecr', 'repd']);
+  const [queueVoltageMin, setQueueVoltageMin] = React.useState(0);
+  const [queueShowLines, setQueueShowLines] = React.useState(true);
+  const [queueCounts, setQueueCounts] = React.useState({queue: 0, lines: 0});
+  const [openProjectId, setOpenProjectId] = React.useState(null);
+  // Asset intel slide-in panel target ({lat, lon, name, tech, radius_km}).
+  // Set by the energy-asset click handler; rendered as a sibling to the
+  // Mapbox container at the bottom of the JSX tree.
+  const [assetIntelTarget, setAssetIntelTarget] = useState(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -153,10 +172,11 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       maxPitch: 85,
     };
     if (hasMapboxToken) {
-      // Light vector style — DM-Sans-friendly, clean basemap. Vector tiles
-      // give us smooth zoom at arbitrary levels, feature querying and correct
-      // terrain occlusion, which raster Carto does not.
-      mapOptions.style = "mapbox://styles/mapbox/light-v11";
+      // Satellite-streets v12 — high-detail aerial basemap with vector road
+      // + label overlays. Per user brief: "highest level of 3d and clarity
+      // of satellite applied on map". Terrain DEM + 3D buildings layered on
+      // top by setupMap() below.
+      mapOptions.style = "mapbox://styles/mapbox/satellite-streets-v12";
     } else {
       mapOptions.style = {
         version: 8,
@@ -196,13 +216,13 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       const safe = (label, fn) => { try { fn(); } catch(e) { console.error(`[MapView] ${label}:`, e.message, e); } };
 
       safe("terrain", () => {
-        map.addSource("terrainSource", { type: "raster-dem", url: "mapbox://mapbox.mapbox-terrain-dem-v1", tileSize: 512, maxzoom: 14 });
-        map.addSource("hillshadeSource", { type: "raster-dem", url: "mapbox://mapbox.mapbox-terrain-dem-v1", tileSize: 512, maxzoom: 14 });
+        map.addSource("terrainSource", { type: "raster-dem", url: "mapbox://mapbox.mapbox-terrain-dem-v1", tileSize: 512, maxzoom: 15 });
+        map.addSource("hillshadeSource", { type: "raster-dem", url: "mapbox://mapbox.mapbox-terrain-dem-v1", tileSize: 512, maxzoom: 15 });
         map.addLayer({
           id: "hillshade", type: "hillshade", source: "hillshadeSource",
-          paint: { "hillshade-shadow-color": "#8a9a8a", "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#2e7d32", "hillshade-illumination-anchor": "map", "hillshade-exaggeration": 0.4 },
+          paint: { "hillshade-shadow-color": "#8a9a8a", "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#2e7d32", "hillshade-illumination-anchor": "map", "hillshade-exaggeration": 0.55 },
         });
-        map.setTerrain({ source: "terrainSource", exaggeration: 2.0 });
+        map.setTerrain({ source: "terrainSource", exaggeration: 1.5 });
       });
 
       safe("sky+fog", () => {
@@ -214,6 +234,79 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
           range: [1, 12], color: "rgba(200, 210, 230, 0.9)", "high-color": "#add8e6",
           "space-color": "#0b1026", "horizon-blend": 0.05, "star-intensity": 0.1,
         });
+      });
+
+      // Mapbox stock 3D buildings — pops at zoom >=15 on satellite-streets-v12.
+      // `composite.building` is the same source used by streets/satellite-streets
+      // styles, so extent is UK-wide + global. Inserted below the first label
+      // layer so street labels stay readable.
+      safe("3d-buildings", () => {
+        if (map.getLayer("mapbox-3d-buildings")) return;
+        const layers = map.getStyle().layers || [];
+        let firstSymbolId;
+        for (const l of layers) {
+          if (l.type === "symbol" && l.layout && l.layout["text-field"]) {
+            firstSymbolId = l.id;
+            break;
+          }
+        }
+        map.addLayer(
+          {
+            id: "mapbox-3d-buildings",
+            source: "composite",
+            "source-layer": "building",
+            filter: ["==", "extrude", "true"],
+            type: "fill-extrusion",
+            minzoom: 14,
+            paint: {
+              // Height-tinted concrete/brick: darker footprint → warm top for depth cue.
+              "fill-extrusion-color": [
+                "interpolate", ["linear"], ["get", "height"],
+                0, "#c7c3ba",
+                30, "#d9d6cf",
+                120, "#e6e0d4",
+                250, "#efe6d0",
+              ],
+              "fill-extrusion-height": [
+                "interpolate", ["linear"], ["zoom"],
+                14, 0,
+                15.05, ["coalesce", ["get", "height"], 6],
+              ],
+              "fill-extrusion-base": [
+                "interpolate", ["linear"], ["zoom"],
+                14, 0,
+                15.05, ["coalesce", ["get", "min_height"], 0],
+              ],
+              "fill-extrusion-opacity": 0.96,
+              // Ambient occlusion — darkens corners/bases, adds volumetric depth.
+              "fill-extrusion-ambient-occlusion-intensity": 0.35,
+              "fill-extrusion-ambient-occlusion-radius": 3.5,
+              // Flood light — directional lift on upper faces, sells the 3D.
+              "fill-extrusion-flood-light-color": "#fff3d6",
+              "fill-extrusion-flood-light-intensity": 0.25,
+              "fill-extrusion-flood-light-wall-radius": 12,
+              "fill-extrusion-flood-light-ground-radius": 8,
+              "fill-extrusion-vertical-gradient": true,
+            },
+          },
+          firstSymbolId,
+        );
+      });
+
+      // Map-wide dynamic lighting — pairs with building AO + flood-light above.
+      // `dynamic` mode respects map.light config; flat stops ambient-only so colours don't blow out.
+      safe("lights", () => {
+        if (typeof map.setLights === "function") {
+          map.setLights([
+            { id: "ambient", type: "ambient", properties: { color: "#ffffff", intensity: 0.55 } },
+            { id: "directional", type: "directional", properties: {
+              color: "#fff3d6", intensity: 0.55,
+              direction: [210, 35],
+              "cast-shadows": true,
+              "shadow-intensity": 0.6,
+            } },
+          ]);
+        }
       });
 
       // Expose map instance to parent
@@ -417,25 +510,31 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         minzoom: 11,
       });
 
-      // Energy asset click popup
+      // Energy asset click — open the rich AssetIntelPanel and drop a small
+      // popup so the user has visual confirmation of which feature they hit.
       map.on("click", "energy-assets-circle", (e) => {
         if (map._pickMode) return;
         const p = e.features[0].properties;
-        const status = p.status ? `<br/>Status: ${p.status}` : "";
-        const operator = p.operator ? `<br/>Operator: ${p.operator}` : "";
-        const voltage = p.voltage_kv ? `<br/>Voltage: ${p.voltage_kv} kV` : "";
         const echelon = p.echelon_symbol ? ` <span style="font-weight:bold;opacity:0.6">[${p.echelon_symbol}]</span>` : "";
-        new mapboxgl.Popup({ maxWidth: "260px" })
+        new mapboxgl.Popup({ maxWidth: "240px", closeButton: false, closeOnClick: true })
           .setLngLat(e.lngLat)
           .setHTML(
             `<div style="font-size:12px">` +
             `<strong>${p.name}</strong>${echelon}<br/>` +
-            `Type: ${p.asset_type}${p.subtype ? ` (${p.subtype})` : ""}<br/>` +
-            `Capacity: ${p.capacity_mw} MW` +
-            `${voltage}${operator}${status}` +
+            `<span style="color:#6b6b6b">Loading rich intel…</span>` +
             `</div>`
           )
           .addTo(map);
+        const techGuess = (p.asset_type || p.subtype || '').toLowerCase().includes('battery')
+          ? 'bess'
+          : (p.asset_type || p.subtype || '').toLowerCase();
+        setAssetIntelTarget({
+          lat: e.lngLat.lat,
+          lon: e.lngLat.lng,
+          name: p.name || null,
+          tech: techGuess || null,
+          radius_km: 5,
+        });
       });
 
       // Slope raster from our backend
@@ -681,6 +780,23 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       map.addSource("env-constraints", { type: "geojson", data: EMPTY_FC });
       // Land registry parcels source
       map.addSource("land-parcels", { type: "geojson", data: EMPTY_FC });
+      // ── BOT-LR: Land Rights overlay sources (vector, bbox-loaded) ────
+      map.addSource("lr-crown",        { type: "geojson", data: EMPTY_FC });
+      map.addSource("lr-mod",          { type: "geojson", data: EMPTY_FC });
+      map.addSource("lr-forestry",     { type: "geojson", data: EMPTY_FC });
+      map.addSource("lr-nt",           { type: "geojson", data: EMPTY_FC });
+      map.addSource("lr-common",       { type: "geojson", data: EMPTY_FC });
+      map.addSource("lr-prow",         { type: "geojson", data: EMPTY_FC });
+      map.addSource("lr-parcels-own",  { type: "geojson", data: EMPTY_FC });
+      // ── LinkedIn-style "scan zone" sources (BOT-SZ) ──────────────────
+      // Dashed bbox the user draws to define their search area.
+      map.addSource("scan-zone", { type: "geojson", data: EMPTY_FC });
+      // ST_Union of every negative constraint inside the zone — one purple
+      // wash, far cleaner than 7 stacked overlay fills.
+      map.addSource("scan-union", { type: "geojson", data: EMPTY_FC });
+      // Top-2 routed connection corridors from zone centroid to nearest
+      // substations of suitable headroom (orange primary, yellow alternate).
+      map.addSource("scan-corridors", { type: "geojson", data: EMPTY_FC });
       // Highlight pulse marker for selected land listing
       map.addSource("land-highlight", { type: "geojson", data: EMPTY_FC });
 
@@ -1326,20 +1442,34 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         minzoom: 11,
       });
 
-      // NGED substation click popup
+      // NGED substation click popup. NULL-aware: shows "not reported" instead
+      // of fake zeros when the upstream LTDS CIM is missing rating or load.
       map.on("click", "nged-sub-circles", (e) => {
         if (map._pickMode) return;
         const p = e.features[0].properties;
         const name = p.name || "Substation";
         const region = p.region ? `<br/>Region: ${p.region.replace(/_/g, " ")}` : "";
         const voltage = p.voltage_kv ? `<br/>Voltage: ${p.voltage_kv} kV` : "";
-        const rated = p.rated_mva ? `<br/>Rated: ${p.rated_mva} MVA` : "";
-        const load = p.connected_load_mw != null ? `<br/>Load: ${p.connected_load_mw} MW` : "";
-        const headroom = p.headroom_mw != null ? `<br/><strong>Headroom: ${p.headroom_mw} MW</strong>` : "";
-        const confidence = p.osm_match_score ? `<br/><span style="opacity:0.6">Match: ${Math.round(p.osm_match_score * 100)}%</span>` : "";
-        new mapboxgl.Popup({ maxWidth: "260px" })
+        const muted = (s) => `<span style="color:#9CA3AF;font-style:italic">${s}</span>`;
+        const rated = p.rated_mva != null
+          ? `<br/>Rated: ${p.rated_mva} MVA`
+          : `<br/>Rated: ${muted("not reported")}`;
+        const load = p.connected_load_mw != null
+          ? `<br/>Load: ${p.connected_load_mw} MW`
+          : `<br/>Load: ${muted("not reported")}`;
+        const headroom = p.headroom_mw != null
+          ? `<br/><strong>Headroom: ${p.headroom_mw} MW</strong>`
+          : `<br/><strong>Headroom: ${muted("unknown")}</strong>`;
+        const dq = p.data_quality && p.data_quality !== "complete"
+          ? `<br/><span style="color:#F1C21B;font-size:10px">⚠ data quality: ${p.data_quality.replace(/_/g, " ")}</span>`
+          : "";
+        const confidence = p.osm_match_score
+          ? `<br/><span style="opacity:0.6">OSM name match: ${Math.round(p.osm_match_score * 100)}%</span>`
+          : "";
+        const sourceNote = `<br/><span style="opacity:0.5;font-size:10px">Source: NGED LTDS CIM. Cross-check NESO ECR for live headroom.</span>`;
+        new mapboxgl.Popup({ maxWidth: "300px" })
           .setLngLat(e.lngLat)
-          .setHTML(`<div style="font-size:12px"><strong>${name}</strong>${region}${voltage}${rated}${load}${headroom}${confidence}</div>`)
+          .setHTML(`<div style="font-size:12px"><strong>${name}</strong>${region}${voltage}${rated}${load}${headroom}${dq}${confidence}${sourceNote}</div>`)
           .addTo(map);
       });
       map.on("mouseenter", "nged-sub-circles", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
@@ -1720,17 +1850,110 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         map.on("mouseleave", lid, () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
       });
 
+      // ── BOT-LR: Land Rights polygon + line layers (added BEFORE the
+      // parcel fill so parcels remain visible on top). All start hidden;
+      // toggled by layerMap below.
+      const lrPaint = (color, baseOpacity = 0.20, outlineColor = null) => ({
+        fill: {
+          paint: {
+            "fill-color": color,
+            "fill-opacity": [
+              "interpolate", ["linear"], ["zoom"],
+              7, baseOpacity * 0.5,
+              10, baseOpacity,
+              14, baseOpacity * 1.2,
+            ],
+          },
+        },
+        line: {
+          paint: {
+            "line-color": outlineColor || color,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 7, 0.6, 12, 1.4],
+            "line-opacity": 0.8,
+          },
+        },
+      });
+      const lrSpecs = [
+        { key: "lr-crown",    color: "#9C27B0", outline: "#7B1FA2", minzoom: 8 },
+        { key: "lr-mod",      color: "#5D4037", outline: "#3E2723", minzoom: 9 },
+        { key: "lr-forestry", color: "#2E7D32", outline: "#1B5E20", minzoom: 9 },
+        { key: "lr-nt",       color: "#00897B", outline: "#004D40", minzoom: 9 },
+        { key: "lr-common",   color: "#FFB300", outline: "#E65100", minzoom: 10 },
+      ];
+      for (const spec of lrSpecs) {
+        const p = lrPaint(spec.color, 0.20, spec.outline);
+        map.addLayer({
+          id: `${spec.key}-fill`, type: "fill", source: spec.key,
+          ...p.fill, layout: { visibility: "none" }, minzoom: spec.minzoom,
+        });
+        map.addLayer({
+          id: `${spec.key}-outline`, type: "line", source: spec.key,
+          ...p.line, layout: { visibility: "none" }, minzoom: spec.minzoom,
+        });
+      }
+      // PROW lines styled by row_class (footpath/bridleway/byway).
+      map.addLayer({
+        id: "lr-prow-line", type: "line", source: "lr-prow",
+        paint: {
+          "line-color": [
+            "match", ["get", "row_class"],
+            "footpath",              "#D32F2F",
+            "bridleway",             "#7B1FA2",
+            "restricted_byway",      "#1565C0",
+            "byway_open_to_traffic", "#1565C0",
+            "#9CA3AF",
+          ],
+          "line-width": [
+            "interpolate", ["linear"], ["zoom"], 12, 0.8, 16, 2.0,
+          ],
+          "line-dasharray": [
+            "match", ["get", "row_class"],
+            "bridleway",             ["literal", [4, 2]],
+            "restricted_byway",      ["literal", [3, 2, 1, 2]],
+            "byway_open_to_traffic", ["literal", [1, 2]],
+            ["literal", [1, 0]],
+          ],
+          "line-opacity": 0.85,
+        },
+        layout: { visibility: "none" }, minzoom: 13,
+      });
+      // Parcels coloured by HMLR ownership category.
+      map.addLayer({
+        id: "lr-parcels-own-fill", type: "fill", source: "lr-parcels-own",
+        paint: {
+          "fill-color": [
+            "match", ["get", "category"],
+            "uk_company",            "#1F8FFF",
+            "overseas_company",      "#E04545",
+            "crown_or_public",       "#A368FF",
+            "charity_or_trust",      "#21BF73",
+            "individual_or_unknown", "#9CA3AF",
+            "#9CA3AF",
+          ],
+          "fill-opacity": [
+            "interpolate", ["linear"], ["zoom"], 11, 0.20, 16, 0.45,
+          ],
+          "fill-outline-color": "#FFFFFF",
+        },
+        layout: { visibility: "none" }, minzoom: 11,
+      });
+
       // ── Land Registry Parcels ──
-      // Purple fill matches the GridTwin land-rights overlay (#c040ff at
-      // 0.3 alpha). Per-feature `color` is respected when the API supplies
-      // one; otherwise everything falls back to the purple ownership tint.
+      // Toned-down rendering: outline-only at moderate zoom, light fill at
+      // close zoom only — was an opaque purple wash blanketing the whole
+      // viewport at zoom 12. Hover/click still uses the fill layer.
       map.addLayer({
         id: "land-parcels-fill",
         type: "fill",
         source: "land-parcels",
         paint: {
           "fill-color": ["coalesce", ["get", "color"], "#c040ff"],
-          "fill-opacity": 0.3,
+          "fill-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            12, 0.04,   // barely visible at parcel-overview zoom
+            14, 0.10,
+            16, 0.18,   // visible enough to confirm selection at site zoom
+          ],
         },
         layout: { visibility: "none" },
       });
@@ -1740,8 +1963,18 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         source: "land-parcels",
         paint: {
           "line-color": ["coalesce", ["get", "color"], "#ffffff"],
-          "line-width": 1.2,
-          "line-opacity": 0.75,
+          "line-width": [
+            "interpolate", ["linear"], ["zoom"],
+            12, 0.4,
+            14, 0.8,
+            16, 1.4,
+          ],
+          "line-opacity": [
+            "interpolate", ["linear"], ["zoom"],
+            12, 0.30,
+            14, 0.55,
+            16, 0.80,
+          ],
         },
         layout: { visibility: "none" },
       });
@@ -1784,26 +2017,102 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       });
       map.on("click", "land-parcels-fill", (e) => {
         if (map._pickMode) return;
-        const p = e.features[0].properties;
-        const hmlrLink = p.hmlr_url ? `<br/><a href="${p.hmlr_url}" target="_blank" rel="noopener" style="color:#3b82f6;text-decoration:underline">View on HMLR</a>` : "";
-        // Land verdict based on ALC grade + area
-        const alcGrade = p.alc_grade || p.land_grade || "";
+        const p = e.features[0].properties || {};
+        const inspireId = p.poly_id || p.inspire_id || p.title_number || "";
+        const titleNo = p.title_number || (inspireId ? "(no title)" : "Parcel");
+        const tenure = p.tenure || "Freehold";
+        const tenureColor = p.color || "#8b5cf6";
         const areaHa = parseFloat(p.area_ha) || 0;
-        const landVerdict = (alcGrade && parseInt(alcGrade) <= 2) ? "NO-GO" : areaHa < 1 ? "CAUTION" : "GO";
-        const landVerdictColor = landVerdict === "GO" ? "#24a148" : landVerdict === "CAUTION" ? "#f1c21b" : "#da1e28";
-        new mapboxgl.Popup({ maxWidth: "280px" })
+        const lat = e.lngLat.lat;
+        const lon = e.lngLat.lng;
+
+        // Skeleton popup — replaced as soon as /api/parcels/enrich responds.
+        const popup = new mapboxgl.Popup({ maxWidth: "360px", className: "lp-mini-popup" })
           .setLngLat(e.lngLat)
-          .setHTML(`<div style="font-size:12px;line-height:1.6">
-            <strong>${p.title_number || "Parcel"}</strong>
-            <br/>Tenure: <span style="color:${p.color}">${p.tenure}</span>
-            | Area: <strong>${p.area_ha} ha</strong>
-            ${alcGrade ? `| ALC Grade: <strong>${alcGrade}</strong>` : ""}
-            <br/>Verdict: <span style="color:${landVerdictColor};font-weight:700;background:rgba(0,0,0,0.6);padding:1px 6px;border-radius:3px">${landVerdict}</span>
-            ${p.poly_id ? `<br/>INSPIRE ID: ${p.poly_id}` : ""}
-            ${p.available ? '<br/><span style="color:#16a34a;font-weight:600">Potentially available</span>' : ""}
-            ${hmlrLink}
+          .setHTML(`<div class="lp-popup-card">
+            <div class="lp-popup-head">
+              <strong class="lp-popup-title">${titleNo}</strong>
+              <span class="lp-popup-verdict-loading">scanning…</span>
+            </div>
+            <div class="lp-popup-meta">
+              <span class="lp-popup-tenure" style="color:${tenureColor}">${tenure}</span>
+              <span class="lp-popup-area">${areaHa.toFixed(2)} ha</span>
+            </div>
+            <div class="lp-popup-row lp-popup-muted">Loading site facts…</div>
+            ${inspireId ? `<div class="lp-popup-row lp-popup-mono">${inspireId}</div>` : ""}
           </div>`)
           .addTo(map);
+
+        const renderEnriched = (d) => {
+          const v = d.verdict || { label: "GO", reasons: [] };
+          const verdictColor = v.label === "GO" ? "#24a148"
+            : v.label === "CAUTION" ? "#f1c21b" : "#da1e28";
+          const sub = d.nearest_substation || {};
+          const subDistKm = sub.distance_m != null ? (sub.distance_m / 1000).toFixed(1) : null;
+          const repd = d.nearest_repd || {};
+          const repdDistKm = repd.distance_m != null ? (repd.distance_m / 1000).toFixed(1) : null;
+          const designations = (d.designation_overlaps || []);
+          const lb = d.nearest_listed_building || {};
+
+          const facts = [];
+          if (sub.name) {
+            facts.push(`<div class="lp-popup-row"><b>Nearest substation:</b> ${sub.name}${subDistKm ? ` · ${subDistKm} km` : ""}${sub.dno ? ` · ${sub.dno.toUpperCase()}` : ""}${sub.gen_headroom_mw != null ? ` · headroom ${sub.gen_headroom_mw} MW` : ""}</div>`);
+          }
+          if (d.dno_licence_area) {
+            facts.push(`<div class="lp-popup-row"><b>DNO licence area:</b> ${d.dno_licence_area}</div>`);
+          }
+          if (d.flood_zone && d.flood_zone !== "Zone 1") {
+            facts.push(`<div class="lp-popup-row"><b>Flood:</b> <span style="color:#c2410c">${d.flood_zone}</span></div>`);
+          } else if (d.flood_zone) {
+            facts.push(`<div class="lp-popup-row"><b>Flood:</b> ${d.flood_zone}</div>`);
+          }
+          if (d.alc_grade) {
+            facts.push(`<div class="lp-popup-row"><b>ALC grade:</b> ${d.alc_grade}</div>`);
+          }
+          if (designations.length) {
+            const chips = designations.map((x) =>
+              `<span class="lp-popup-chip lp-popup-chip-warn">${x.type}${x.name ? ` (${x.name})` : ""}</span>`
+            ).join(" ");
+            facts.push(`<div class="lp-popup-row"><b>Designations:</b> ${chips}</div>`);
+          }
+          if (repd.site_name) {
+            facts.push(`<div class="lp-popup-row"><b>Nearest planning record:</b> ${repd.site_name}${repd.capacity_mw ? ` · ${repd.capacity_mw} MW` : ""} (${repd.status || "?"})${repdDistKm ? ` · ${repdDistKm} km` : ""}</div>`);
+          }
+          if (lb.name && lb.distance_m) {
+            const lbDist = (lb.distance_m / 1000).toFixed(2);
+            facts.push(`<div class="lp-popup-row"><b>Listed building nearby:</b> ${lb.name} · ${lbDist} km</div>`);
+          }
+          if (d.solar_potential_mwp != null) {
+            facts.push(`<div class="lp-popup-row"><b>Solar potential:</b> ~${d.solar_potential_mwp} MWp · ${d.solar_potential_gwh_yr || "?"} GWh/yr (${d.solar_yield_kwh_per_kwp_yr} kWh/kWp)</div>`);
+          }
+
+          const reasons = (v.reasons || []).map((r) =>
+            `<li class="lp-popup-reason">${r}</li>`
+          ).join("");
+
+          popup.setHTML(`<div class="lp-popup-card">
+            <div class="lp-popup-head">
+              <strong class="lp-popup-title">${titleNo}</strong>
+              <span class="lp-popup-verdict" style="background:${verdictColor}">${v.label}</span>
+            </div>
+            <div class="lp-popup-meta">
+              <span class="lp-popup-tenure" style="color:${tenureColor}">${tenure}</span>
+              <span class="lp-popup-area">${areaHa.toFixed(2)} ha</span>
+            </div>
+            ${facts.join("")}
+            ${reasons ? `<ul class="lp-popup-reasons">${reasons}</ul>` : ""}
+            ${inspireId ? `<div class="lp-popup-row lp-popup-mono">${inspireId}</div>` : ""}
+          </div>`);
+        };
+
+        fetch("/api/parcels/enrich", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat, lon, area_ha: areaHa, inspire_id: inspireId }),
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((d) => { if (d && popup.isOpen()) renderEnriched(d); })
+          .catch(() => {});
       });
       map.on("mouseenter", "land-parcels-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "land-parcels-fill", () => { if (!map._pickMode) map.getCanvas().style.cursor = ""; });
@@ -2929,6 +3238,59 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       source: () => ({ type: "raster", tiles: ["https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual/default/2023-01-01/GoogleMapsCompatible_Level12/{z}/{y}/{x}.jpg"], tileSize: 256, maxzoom: 12 }),
       layer: { type: "raster", paint: { "raster-opacity": 0.85 } },
     },
+    // ── BOT-FLOOD: EA flood overlays via the FastAPI /api/ea/wms proxy.
+    // Mapbox substitutes {bbox-epsg-3857} per tile request. The proxy
+    // returns a transparent PNG on EA failure so tiles never break.
+    eaFloodZone3: {
+      sourceId: "ea-flood-zone-3", layerId: "ea-flood-zone-3-layer",
+      source: () => ({
+        type: "raster",
+        tiles: ["/api/ea/wms?dataset=flood_zone_3&bbox={bbox-epsg-3857}&width=512&height=512"],
+        tileSize: 512,
+        attribution: "© Environment Agency / OGL v3",
+      }),
+      layer: { type: "raster", paint: { "raster-opacity": 0.55, "raster-fade-duration": 250 }, minzoom: 6 },
+    },
+    eaFloodZone2: {
+      sourceId: "ea-flood-zone-2", layerId: "ea-flood-zone-2-layer",
+      source: () => ({
+        type: "raster",
+        tiles: ["/api/ea/wms?dataset=flood_zone_2&bbox={bbox-epsg-3857}&width=512&height=512"],
+        tileSize: 512,
+        attribution: "© Environment Agency / OGL v3",
+      }),
+      layer: { type: "raster", paint: { "raster-opacity": 0.40, "raster-fade-duration": 250 }, minzoom: 6 },
+    },
+    eaRofrs: {
+      sourceId: "ea-rofrs", layerId: "ea-rofrs-layer",
+      source: () => ({
+        type: "raster",
+        tiles: ["/api/ea/wms?dataset=rofrs&bbox={bbox-epsg-3857}&width=512&height=512"],
+        tileSize: 512,
+        attribution: "© EA NaFRA 2024 / OGL v3",
+      }),
+      layer: { type: "raster", paint: { "raster-opacity": 0.55 }, minzoom: 7 },
+    },
+    eaRofrsw: {
+      sourceId: "ea-rofrsw", layerId: "ea-rofrsw-layer",
+      source: () => ({
+        type: "raster",
+        tiles: ["/api/ea/wms?dataset=rofrsw&bbox={bbox-epsg-3857}&width=512&height=512"],
+        tileSize: 512,
+        attribution: "© Environment Agency / OGL v3",
+      }),
+      layer: { type: "raster", paint: { "raster-opacity": 0.55 }, minzoom: 8 },
+    },
+    eaReservoir: {
+      sourceId: "ea-reservoir", layerId: "ea-reservoir-layer",
+      source: () => ({
+        type: "raster",
+        tiles: ["/api/ea/wms?dataset=reservoir&bbox={bbox-epsg-3857}&width=512&height=512"],
+        tileSize: 512,
+        attribution: "© Environment Agency / OGL v3",
+      }),
+      layer: { type: "raster", paint: { "raster-opacity": 0.45 }, minzoom: 8 },
+    },
     viirs: {
       sourceId: "viirs-truecolor", layerId: "viirs-layer",
       source: () => {
@@ -2971,6 +3333,14 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       envConstraints: ["env-sssi-circles", "env-aonb-circles", "env-flood-circles", "env-heritage-circles", "env-constraint-labels"],
       queueDepth: ["queue-depth-circles", "queue-depth-labels"],
       landParcels: ["land-parcels-fill", "land-parcels-outline", "land-parcels-labels", "land-available-markers"],
+      // ── BOT-LR: land-rights layer toggles ──
+      lrCrown:         ["lr-crown-fill", "lr-crown-outline"],
+      lrMod:           ["lr-mod-fill", "lr-mod-outline"],
+      lrForestry:      ["lr-forestry-fill", "lr-forestry-outline"],
+      lrNationalTrust: ["lr-nt-fill", "lr-nt-outline"],
+      lrCommon:        ["lr-common-fill", "lr-common-outline"],
+      lrProw:          ["lr-prow-line"],
+      lrParcelsOwn:    ["lr-parcels-own-fill"],
       planningDensity: ["planning-density-circles", "planning-density-labels"],
       planningConstraints: ["planning-constraints-fill", "planning-constraints-outline", "planning-constraints-labels"],
       demandGsps: ["demand-gsp-circles", "demand-gsp-labels"],
@@ -3488,6 +3858,201 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     };
   }, [mapReady, layers.envConstraints]);
 
+  // ── BOT-SZ: LinkedIn-style scan-zone workflow ──────────────────────
+  // Listens for the SearchZone button's `princeps:scan-zone` events,
+  // captures two map clicks to define a bbox, then in parallel fetches:
+  //   - /api/scan/zone           → layer manifest (counts)
+  //   - /api/constraints/union   → combined negative-constraint polygon
+  //   - /api/scan/grid-corridors → top-2 connection corridors
+  // and animates the reveal. Fires `princeps:scan-result` so the
+  // SearchZone button + the LayerControlPanel can update their badges.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    // Add scan-mode layers once. Idempotent so HMR doesn't double-add.
+    const ensureLayers = () => {
+      if (!map.getLayer("scan-zone-fill")) {
+        map.addLayer({
+          id: "scan-zone-fill", type: "fill", source: "scan-zone",
+          paint: { "fill-color": "#ffffff", "fill-opacity": 0.05 },
+        });
+      }
+      if (!map.getLayer("scan-zone-outline")) {
+        map.addLayer({
+          id: "scan-zone-outline", type: "line", source: "scan-zone",
+          paint: {
+            "line-color": "#7C3AED", "line-width": 2,
+            "line-dasharray": [4, 3], "line-opacity": 0.95,
+          },
+        });
+      }
+      if (!map.getLayer("scan-union-fill")) {
+        map.addLayer({
+          id: "scan-union-fill", type: "fill", source: "scan-union",
+          paint: {
+            "fill-color": "#7C3AED", "fill-opacity": 0,
+            "fill-outline-color": "#5B21B6",
+          },
+        }, "scan-zone-fill");
+      }
+      if (!map.getLayer("scan-corridors-line")) {
+        map.addLayer({
+          id: "scan-corridors-line", type: "line", source: "scan-corridors",
+          paint: {
+            "line-color": [
+              "match", ["get", "rank"],
+              1, "#F97316",   // primary — orange
+              2, "#FACC15",   // alternate — yellow
+              "#9CA3AF",
+            ],
+            "line-width": [
+              "match", ["get", "rank"], 1, 6, 2, 4, 2,
+            ],
+            "line-opacity": 0,
+            "line-blur": 0.4,
+          },
+        });
+      }
+      if (!map.getLayer("scan-corridors-glow")) {
+        map.addLayer({
+          id: "scan-corridors-glow", type: "line", source: "scan-corridors",
+          paint: {
+            "line-color": [
+              "match", ["get", "rank"], 1, "#F97316", 2, "#FACC15", "#9CA3AF",
+            ],
+            "line-width": 14, "line-opacity": 0, "line-blur": 6,
+          },
+        }, "scan-corridors-line");
+      }
+    };
+    ensureLayers();
+
+    let drawing = false;
+    let firstCorner = null;
+    let prevCursor = "";
+
+    const setCursor = (c) => {
+      try { map.getCanvas().style.cursor = c; } catch {}
+    };
+
+    const drawZoneFromCorners = (a, b) => {
+      const w = Math.min(a.lng, b.lng), e = Math.max(a.lng, b.lng);
+      const s = Math.min(a.lat, b.lat), n = Math.max(a.lat, b.lat);
+      const fc = {
+        type: "FeatureCollection",
+        features: [{
+          type: "Feature", properties: {},
+          geometry: {
+            type: "Polygon",
+            coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
+          },
+        }],
+      };
+      map.getSource("scan-zone")?.setData(fc);
+      return [w, s, e, n];
+    };
+
+    // Linear opacity ramp on a paint property over `duration` ms.
+    const fadeIn = (layerId, prop, target, duration = 1200, delay = 0) => {
+      const start = performance.now() + delay;
+      const step = (t) => {
+        if (t < start) { requestAnimationFrame(step); return; }
+        const k = Math.min(1, (t - start) / duration);
+        try { map.setPaintProperty(layerId, prop, target * k); } catch {}
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    };
+
+    const runScan = async (bbox) => {
+      try {
+        const zonePromise = api.scan.zone(bbox).catch(() => null);
+        const unionPromise = api.scan.constraintsUnion(bbox).catch(() => null);
+        const corridorsPromise = api.scan.gridCorridors(bbox, 50).catch(() => null);
+        const [zoneRes, unionRes, corridorsRes] = await Promise.all([
+          zonePromise, unionPromise, corridorsPromise,
+        ]);
+
+        // Reset paint, then animate in.
+        try { map.setPaintProperty("scan-union-fill", "fill-opacity", 0); } catch {}
+        try { map.setPaintProperty("scan-corridors-line", "line-opacity", 0); } catch {}
+        try { map.setPaintProperty("scan-corridors-glow", "line-opacity", 0); } catch {}
+
+        if (unionRes && unionRes.features) {
+          map.getSource("scan-union")?.setData(unionRes);
+          fadeIn("scan-union-fill", "fill-opacity", 0.30, 1500, 0);
+        }
+        if (corridorsRes && corridorsRes.features) {
+          map.getSource("scan-corridors")?.setData(corridorsRes);
+          fadeIn("scan-corridors-glow", "line-opacity", 0.35, 800, 600);
+          fadeIn("scan-corridors-line", "line-opacity", 0.95, 800, 600);
+        }
+        window.dispatchEvent(new CustomEvent("princeps:scan-result", {
+          detail: zoneRes || { layers: [], groups: [] },
+        }));
+      } catch (err) {
+        console.warn("scan failed:", err);
+        window.dispatchEvent(new CustomEvent("princeps:scan-result", {
+          detail: { layers: [], groups: [], error: String(err).slice(0, 200) },
+        }));
+      }
+    };
+
+    const onMapClick = (e) => {
+      if (!drawing) return;
+      if (!firstCorner) {
+        firstCorner = e.lngLat;
+        // Show a 1×1 hint of the first corner so the user has feedback
+        const tiny = {
+          type: "FeatureCollection",
+          features: [{
+            type: "Feature", properties: {},
+            geometry: { type: "Point", coordinates: [e.lngLat.lng, e.lngLat.lat] },
+          }],
+        };
+        map.getSource("scan-zone")?.setData(tiny);
+        return;
+      }
+      const bbox = drawZoneFromCorners(firstCorner, e.lngLat);
+      drawing = false;
+      firstCorner = null;
+      setCursor(prevCursor);
+      window.dispatchEvent(new CustomEvent("princeps:scan-zone", {
+        detail: { phase: "drawing-complete", bbox },
+      }));
+      runScan(bbox);
+    };
+
+    const onPhaseEvent = (ev) => {
+      const phase = ev.detail?.phase;
+      if (phase === "start") {
+        drawing = true;
+        firstCorner = null;
+        prevCursor = map.getCanvas().style.cursor || "";
+        setCursor("crosshair");
+        // Clear previous results
+        map.getSource("scan-zone")?.setData(EMPTY_FC);
+        map.getSource("scan-union")?.setData(EMPTY_FC);
+        map.getSource("scan-corridors")?.setData(EMPTY_FC);
+      } else if (phase === "cancel") {
+        drawing = false;
+        firstCorner = null;
+        setCursor(prevCursor);
+        map.getSource("scan-zone")?.setData(EMPTY_FC);
+        map.getSource("scan-union")?.setData(EMPTY_FC);
+        map.getSource("scan-corridors")?.setData(EMPTY_FC);
+      }
+    };
+
+    map.on("click", onMapClick);
+    window.addEventListener("princeps:scan-zone", onPhaseEvent);
+    return () => {
+      map.off("click", onMapClick);
+      window.removeEventListener("princeps:scan-zone", onPhaseEvent);
+    };
+  }, [mapReady]);
+
   // Queue depth per substation — fetch ECR queue metrics
   useEffect(() => {
     const map = mapRef.current;
@@ -3510,28 +4075,126 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
     };
   }, [mapReady, layers.queueDepth]);
 
+  // ── BOT-LR: shared viewport loader for all land-rights layers ─────
+  // One useEffect per layer key. Each fetches /api/land-rights/<key>
+  // for the current viewport on toggle-on + on moveend (debounced).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const LAYER_KEYS = [
+      ["lrCrown",         "crown",         "lr-crown",         8],
+      ["lrMod",           "mod",           "lr-mod",           9],
+      ["lrForestry",      "forestry",      "lr-forestry",      9],
+      ["lrNationalTrust", "national-trust","lr-nt",            9],
+      ["lrCommon",        "common",        "lr-common",       10],
+      ["lrProw",          "prow",          "lr-prow",         13],
+    ];
+    const unsubs = [];
+    for (const [stateKey, apiKey, sourceId, minZoom] of LAYER_KEYS) {
+      if (!layers[stateKey]) continue;
+      let timer = null;
+      let cancelled = false;
+      const load = async () => {
+        if (cancelled) return;
+        if (map.getZoom() < minZoom) return;
+        const b = map.getBounds();
+        const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        try {
+          const data = await api.landRights.layer(apiKey, bbox);
+          if (data && !cancelled) {
+            const src = map.getSource(sourceId);
+            if (src) src.setData(data);
+          }
+        } catch {}
+      };
+      const debounced = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(load, 350);
+      };
+      load();
+      map.on("moveend", debounced);
+      unsubs.push(() => {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+        map.off("moveend", debounced);
+      });
+    }
+    // Ownership-coloured parcels uses a different endpoint (joins INSPIRE).
+    if (layers.lrParcelsOwn) {
+      let timer = null;
+      let cancelled = false;
+      const load = async () => {
+        if (cancelled || map.getZoom() < 11) return;
+        const b = map.getBounds();
+        const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+        try {
+          const data = await api.landRights.ownershipParcels(bbox);
+          if (data && !cancelled) {
+            const src = map.getSource("lr-parcels-own");
+            if (src) src.setData(data);
+          }
+        } catch {}
+      };
+      const debounced = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(load, 350);
+      };
+      load();
+      map.on("moveend", debounced);
+      unsubs.push(() => {
+        cancelled = true;
+        if (timer) clearTimeout(timer);
+        map.off("moveend", debounced);
+      });
+    }
+    return () => unsubs.forEach((u) => u());
+  }, [
+    mapReady,
+    layers.lrCrown, layers.lrMod, layers.lrForestry, layers.lrNationalTrust,
+    layers.lrCommon, layers.lrProw, layers.lrParcelsOwn,
+  ]);
+
   // Land registry parcels — viewport-based loading (zoom 12+)
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layers.landParcels) return;
     let timer = null;
 
+    // Cache: skip refetch unless the new viewport extends meaningfully beyond
+    // what we've already pulled. Avoids the per-pan flicker where every
+    // moveend triggered a setData swap.
+    let cachedBbox = null;        // [w,s,e,n]
+    let inflight = false;
+    const bboxContains = (outer, inner) =>
+      outer && inner &&
+      inner[0] >= outer[0] && inner[1] >= outer[1] &&
+      inner[2] <= outer[2] && inner[3] <= outer[3];
+
     const loadParcels = async () => {
-      if (map.getZoom() < 12) {
-        const src = map.getSource("land-parcels");
-        if (src) src.setData(EMPTY_FC);
-        return;
-      }
+      // Below z12 the layer's own minzoom hides it — don't clear the source,
+      // just skip the fetch. Polygons remain in memory so they reappear
+      // instantly when the user zooms back in.
+      if (map.getZoom() < 12) return;
+      if (inflight) return;
       const bounds = map.getBounds();
       const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+      if (bboxContains(cachedBbox, bbox)) return;
+      // Pad the requested bbox so a small pan doesn't immediately re-trigger.
+      const dx = (bbox[2] - bbox[0]) * 0.5;
+      const dy = (bbox[3] - bbox[1]) * 0.5;
+      const padded = [bbox[0] - dx, bbox[1] - dy, bbox[2] + dx, bbox[3] + dy];
+      inflight = true;
       try {
-        const data = await api.land.parcels(bbox);
+        const data = await api.land.parcels(padded);
         if (data) {
           const src = map.getSource("land-parcels");
           if (src) src.setData(data);
+          cachedBbox = padded;
         }
       } catch (err) {
         console.warn("Land parcels load error:", err);
+      } finally {
+        inflight = false;
       }
     };
 
@@ -4132,13 +4795,44 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   return (
     <>
       <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />
-      {/* BOT-EE: time scrubber + FES switcher mounted at map footer */}
-      <FesPathwaySwitcher />
-      <TimeScrubber />
-      {/* BOT-FS: legend explaining what (year × pathway) is simulating */}
-      <FESLegend />
-      {/* mapTimeAsOf is available as a prop for any layer factory that wants it */}
-      {mapTimeAsOf ? null : null}
+      <AssetIntelPanel
+        target={assetIntelTarget}
+        onClose={() => setAssetIntelTarget(null)}
+      />
+
+      {/* D5 — UK queue overlay (TEC + ECR + REPD + voltage-banded lines).
+          Mounts onto the existing Mapbox map; toggleable via the chip. */}
+      {mapReady && queueOn && (
+        <GridQueueLayer
+          map={mapRef.current}
+          voltageMin={queueVoltageMin}
+          sources={queueSources}
+          showLines={queueShowLines}
+          onProjectClick={setOpenProjectId}
+          onFeaturesLoaded={setQueueCounts}
+        />
+      )}
+      {queueOn && (
+        <QueueFilterBar
+          voltageMin={queueVoltageMin}
+          onVoltageMin={setQueueVoltageMin}
+          sources={queueSources}
+          onSourcesToggle={setQueueSources}
+          showLines={queueShowLines}
+          onShowLinesToggle={setQueueShowLines}
+          counts={queueCounts}
+        />
+      )}
+      {openProjectId && (
+        <ProjectInfoCard
+          featureId={openProjectId}
+          onClose={() => setOpenProjectId(null)}
+        />
+      )}
+      {/* FES pathway switcher, time scrubber, and legend removed per user
+          request — too noisy on the default map view. The projections logic
+          is still wired (fesProjections.js) so we can reintroduce behind a
+          toggle later. */}
     </>
   );
 }

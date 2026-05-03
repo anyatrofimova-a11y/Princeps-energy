@@ -17,7 +17,28 @@ try:
 except ImportError:
     _HAS_BCRYPT = False
 
-JWT_SECRET = os.environ.get("JWT_SECRET", secrets.token_hex(32))
+def _resolve_jwt_secret() -> str:
+    """Return JWT_SECRET, failing fast in production rather than silently
+    falling back to a per-process random secret (which would invalidate all
+    tokens on restart and break multi-replica token verification)."""
+    secret = os.environ.get("JWT_SECRET")
+    if secret:
+        return secret
+    if os.environ.get("PRINCEPS_ENV", "development").lower() == "production":
+        raise RuntimeError(
+            "JWT_SECRET must be set in production. A per-process random "
+            "fallback would invalidate all tokens on restart and break "
+            "multi-replica token verification."
+        )
+    import logging as _logging
+    _logging.getLogger("princeps.auth").warning(
+        "JWT_SECRET unset — using ephemeral random secret (dev only). "
+        "Set JWT_SECRET to a stable value before deploying to production."
+    )
+    return secrets.token_hex(32)
+
+
+JWT_SECRET = _resolve_jwt_secret()
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_SECONDS = int(os.environ.get("JWT_EXPIRY_SECONDS", "86400"))  # 24h default
 

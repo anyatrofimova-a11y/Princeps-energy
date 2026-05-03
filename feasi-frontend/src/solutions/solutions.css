@@ -1,0 +1,158 @@
+/* Princeps Solutions Marketplace — light/gold/glass. */
+
+.sol-page {
+  padding: 28px 36px;
+  max-width: 1200px;
+  margin: 0 auto;
+  font-family: "DM Sans", -apple-system, sans-serif;
+  color: #0F1318;
+}
+
+.sol-head { margin-bottom: 18px; padding-bottom: 12px;
+  border-bottom: 1px solid rgba(15,19,24,0.08); }
+.sol-crumb { font-size: 11px; color: #5A5F66; text-decoration: none; letter-spacing: 0.04em; text-transform: uppercase; }
+.sol-crumb:hover { color: #F5B731; }
+.sol-title { font-size: 22px; font-weight: 600; margin: 6px 0 4px 0; }
+.sol-sub { font-size: 12px; color: #5A5F66; }
+
+.sol-controls {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 12px 16px; margin-bottom: 18px;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(15,19,24,0.08);
+  border-radius: 12px;
+}
+.sol-search {
+  border: 1px solid rgba(15,19,24,0.10);
+  background: #FBF8F2; border-radius: 6px;
+  padding: 7px 12px;
+  font-family: "DM Sans", sans-serif; font-size: 12.5px;
+  outline: none; min-width: 240px;
+}
+.sol-search:focus { border-color: #F5B731; }
+
+.sol-cat-row { display: flex; gap: 4px; flex-wrap: wrap; }
+.sol-cat-pill {
+  background: rgba(255,255,255,0.8);
+  border: 1px solid rgba(15,19,24,0.10);
+  color: #0F1318;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 100ms;
+}
+.sol-cat-pill:hover { border-color: #F5B731; }
+.sol-cat-pill.is-active { font-weight: 600; }
+
+.sol-featured-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; color: #5A5F66;
+  margin-left: auto;
+}
+
+.sol-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
+.sol-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(15,19,24,0.10);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+  position: relative;
+  transition: transform 100ms, box-shadow 100ms, border-color 100ms;
+}
+.sol-card:hover {
+  transform: translateY(-2px);
+  border-color: #F5B731;
+  box-shadow: 0 8px 24px rgba(245,183,49,0.15);
+}
+.sol-card.is-featured {
+  background: linear-gradient(180deg, #FFF8E5 0%, #FFFFFF 50%);
+  border-color: #F5B731;
+}
+
+.sol-feat-badge {
+  position: absolute; top: 12px; right: 12px;
+  font-size: 9px; letter-spacing: 0.10em;
+  background: #F5B731; color: #0F1318;
+  padding: 3px 8px; border-radius: 4px;
+  font-weight: 700;
+}
+
+.sol-card-head { display: flex; align-items: center; gap: 8px; }
+.sol-cat {
+  display: inline-block; font-size: 9.5px;
+  letter-spacing: 0.10em; text-transform: uppercase;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 4px;
+  color: #FFFFFF;
+}
+.sol-version {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px; color: #94A3B8;
+}
+
+.sol-card-title {
+  font-size: 16px; font-weight: 600;
+  margin: 4px 0 0 0; color: #0F1318;
+}
+.sol-card-desc {
+  font-size: 12px; color: #5A5F66;
+  line-height: 1.50; margin: 0;
+}
+
+.sol-card-meta {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  font-size: 11px; color: #5A5F66;
+  font-family: "JetBrains Mono", monospace;
+  margin-top: 4px;
+}
+.sol-card-meta b { color: #0F1318; font-weight: 600; }
+
+.sol-card-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.sol-tag {
+  font-size: 9.5px;
+  background: rgba(245,183,49,0.15);
+  color: #4A3208;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.sol-install-btn {
+  background: linear-gradient(180deg, #FFD75A 0%, #F5B731 100%);
+  border: 1px solid #E8A012;
+  color: #0F1318;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  margin-top: 6px;
+}
+.sol-install-btn:hover:not(:disabled) {
+  box-shadow: 0 4px 12px rgba(245,183,49,0.30);
+}
+.sol-install-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.sol-author {
+  font-size: 9.5px; color: #94A3B8;
+  font-family: "JetBrains Mono", monospace;
+  margin-top: 2px;
+}
+
+.sol-empty {
+  grid-column: 1 / -1;
+  padding: 60px;
+  text-align: center;
+  color: #5A5F66; font-size: 13px;
+}

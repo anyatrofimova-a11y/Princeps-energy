@@ -25,6 +25,43 @@ from pydantic import BaseModel
 
 log = logging.getLogger("princeps.helpers")
 
+
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+GRID_PYTHON = os.environ.get(
+    "GRID_PYTHON",
+    os.path.join(_PROJECT_ROOT, ".venv-grid", "bin", "python"),
+)
+_GRID_POWER_FLOW = os.path.join(_PROJECT_ROOT, "utils", "grid_power_flow.py")
+
+
+async def _run_grid_subprocess(payload: dict, timeout: float = 180) -> dict:
+    """Shell to .venv-grid/bin/python utils/grid_power_flow.py with JSON stdin."""
+    if not os.path.exists(GRID_PYTHON):
+        raise RuntimeError(f"GRID_PYTHON missing at {GRID_PYTHON}")
+    if not os.path.exists(_GRID_POWER_FLOW):
+        raise RuntimeError(f"grid_power_flow.py missing at {_GRID_POWER_FLOW}")
+    proc = await asyncio.create_subprocess_exec(
+        GRID_PYTHON, _GRID_POWER_FLOW,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=json.dumps(payload).encode()),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise RuntimeError(f"grid subprocess timed out after {timeout}s")
+    if proc.returncode != 0:
+        err = (stderr.decode(errors="ignore") or "")[:500]
+        raise RuntimeError(f"grid subprocess returncode={proc.returncode}: {err}")
+    try:
+        return json.loads(stdout.decode())
+    except json.JSONDecodeError:
+        raise RuntimeError(f"grid subprocess non-JSON output: {stdout.decode()[:200]}")
+
 # ---------------------------------------------------------------------------
 # Configuration (read from environment, shared across routers)
 # ---------------------------------------------------------------------------

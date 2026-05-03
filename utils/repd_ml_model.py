@@ -13,6 +13,7 @@ Model is trained lazily on first API call and cached to disk.
 
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 import math
 import os
@@ -28,7 +29,14 @@ log = logging.getLogger("princeps.repd_ml")
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_CACHE_PATH = Path("/tmp/princeps_repd_model.pkl")
+# Bump filename when the cached pickle structure changes — old caches
+# (without time_aware stats) will be ignored and a retrain happens.
+_CACHE_PATH = Path("/tmp/princeps_repd_model_v1.1.pkl")
+
+# Cutoff used for the time-aware (chronological) train/test split.
+# Train on planning_submitted < cutoff, test on >= cutoff.
+# 2024-01-01 picks up the post-NPPF-Sep-2023 + EN-3 lead-in regime.
+_TIME_SPLIT_CUTOFF = _dt.date(2024, 1, 1)
 
 # ---------------------------------------------------------------------------
 # Status classification — maps dev_status to binary outcome
@@ -129,6 +137,11 @@ async def train_model(pool) -> dict:
     log.info("Training REPD planning ML model on real outcomes...")
 
     async with pool.acquire() as conn:
+        # Training involves a ~12k × 12k spatial self-join; the default
+        # asyncpg statement_timeout (inherited from the pool at 60s) is not
+        # enough on first-run cold indexes, so raise the per-statement cap.
+        await conn.execute("SET statement_timeout = '300s'")
+
         # ── 1. Fetch all labelled projects ────────────────────────────
         rows = await conn.fetch("""
             SELECT
@@ -152,7 +165,11 @@ async def train_model(pool) -> dict:
         """)
 
         # ── 2. Pre-compute nearby counts per project (5km radius) ────
-        # Using SRID 4326 geometry with ST_DWithin in degrees (~0.045 ≈ 5km)
+        # IMPORTANT: we use `ST_DWithin(a.geometry, b.geometry, 0.045)` on
+        # SRID 4326 (not the geography cast) so Postgres can use the GIST
+        # spatial index on `geometry` — the geography cast bypasses the
+        # index and produces an O(N²) nested loop that times out on
+        # 12k × 12k rows. 0.045 degrees ≈ 5km at UK latitudes.
         nearby_rows = await conn.fetch("""
             SELECT
                 a.ref_id,
@@ -169,7 +186,7 @@ async def train_model(pool) -> dict:
                 )) AS nearby_refused
             FROM repd_project a
             LEFT JOIN repd_project b
-                ON ST_DWithin(a.geometry::geography, b.geometry::geography, 5000)
+                ON ST_DWithin(a.geometry, b.geometry, 0.045)
                 AND a.ref_id != b.ref_id
             WHERE a.geometry IS NOT NULL
             GROUP BY a.ref_id
@@ -217,6 +234,7 @@ async def train_model(pool) -> dict:
     features = []
     labels = []
     ref_ids = []
+    dates: list[_dt.date | None] = []   # planning_submitted (preferred) or planning_granted; None if both null
 
     for row in rows:
         status = row["dev_status"]
@@ -257,6 +275,10 @@ async def train_model(pool) -> dict:
         })
         labels.append(label)
         ref_ids.append(row["ref_id"])
+        # Use planning_submitted preferentially (when the application was
+        # filed) — falls back to planning_granted if missing. Either gives
+        # a defensible chronological anchor for the time-aware split.
+        dates.append(row["planning_submitted"] or row["planning_granted"])
 
     n_approved = sum(labels)
     n_refused = len(labels) - n_approved
@@ -311,7 +333,7 @@ async def train_model(pool) -> dict:
     )
     model.fit(X_train, y_train)
 
-    # ── 7. Evaluate ──────────────────────────────────────────────────
+    # ── 7. Evaluate (random 80/20 split — kept for backward compat) ──
     y_pred = model.predict(X_test)
     y_proba = model.predict_proba(X_test)[:, 1]
     accuracy = accuracy_score(y_test, y_pred)
@@ -330,6 +352,99 @@ async def train_model(pool) -> dict:
     log.info("REPD model trained in %.1fs — accuracy=%.3f AUC=%.3f (%d features)",
              elapsed, accuracy, auc, len(feature_names))
 
+    # ── 7b. Time-aware (chronological) holdout ───────────────────────
+    # Random 80/20 splits leak future planning regimes (NPPF 2018, EN-3 Sep
+    # 2023, EN-1 update Jan 2026, etc.) into the train set, inflating AUC.
+    # Train a SECOND model on planning_submitted < cutoff and evaluate on
+    # >= cutoff. Surfaces the honest "would have predicted novel 2024+
+    # decisions" performance, plus calibration bins.
+    is_pre = np.array(
+        [bool(d is not None and d < _TIME_SPLIT_CUTOFF) for d in dates],
+        dtype=bool,
+    )
+    is_post = np.array(
+        [bool(d is not None and d >= _TIME_SPLIT_CUTOFF) for d in dates],
+        dtype=bool,
+    )
+    rows_missing_date = int(sum(1 for d in dates if d is None))
+
+    time_aware: dict[str, Any]
+    if int(is_pre.sum()) >= 200 and int(is_post.sum()) >= 50:
+        X_pre, y_pre = X[is_pre], y[is_pre]
+        X_post, y_post = X[is_post], y[is_post]
+
+        ta_model = GradientBoostingClassifier(
+            n_estimators=300, max_depth=5, learning_rate=0.1,
+            subsample=0.8, min_samples_leaf=20, random_state=42,
+        )
+        ta_model.fit(X_pre, y_pre)
+
+        ta_pred = ta_model.predict(X_post)
+        ta_proba = ta_model.predict_proba(X_post)[:, 1]
+        ta_acc = accuracy_score(y_post, ta_pred)
+        ta_auc = (
+            roc_auc_score(y_post, ta_proba)
+            if len(set(y_post.tolist())) > 1 else None
+        )
+        ta_cm = confusion_matrix(y_post, ta_pred).tolist()
+
+        # Calibration bins — 10 deciles of predicted probability vs actual.
+        # A well-calibrated model has mean_predicted ≈ mean_actual per bin.
+        bin_edges = np.linspace(0.0, 1.0, 11)
+        calibration_bins = []
+        for i in range(10):
+            lo, hi = float(bin_edges[i]), float(bin_edges[i + 1])
+            mask = (ta_proba >= lo) & (ta_proba <= hi if i == 9 else ta_proba < hi)
+            n = int(mask.sum())
+            calibration_bins.append({
+                "p_lo": round(lo, 2),
+                "p_hi": round(hi, 2),
+                "n": n,
+                "mean_predicted": round(float(ta_proba[mask].mean()), 4) if n > 0 else None,
+                "mean_actual": round(float(y_post[mask].mean()), 4) if n > 0 else None,
+            })
+
+        pre_dates = [d for d in dates if d is not None and d < _TIME_SPLIT_CUTOFF]
+        post_dates = [d for d in dates if d is not None and d >= _TIME_SPLIT_CUTOFF]
+
+        time_aware = {
+            "cutoff_date": _TIME_SPLIT_CUTOFF.isoformat(),
+            "train_n": int(is_pre.sum()),
+            "test_n": int(is_post.sum()),
+            "rows_missing_date": rows_missing_date,
+            "train_date_min": min(pre_dates).isoformat() if pre_dates else None,
+            "train_date_max": max(pre_dates).isoformat() if pre_dates else None,
+            "test_date_min": min(post_dates).isoformat() if post_dates else None,
+            "test_date_max": max(post_dates).isoformat() if post_dates else None,
+            "accuracy": round(float(ta_acc), 4),
+            "auc": round(float(ta_auc), 4) if ta_auc is not None else None,
+            "auc_drift_vs_random_split": (
+                round(float(ta_auc) - float(auc), 4) if ta_auc is not None else None
+            ),
+            "confusion_matrix": ta_cm,
+            "calibration_bins": calibration_bins,
+        }
+        log.info(
+            "Time-aware holdout — train=%d (≤%s) test=%d (≥%s) AUC=%s drift=%s",
+            int(is_pre.sum()), _TIME_SPLIT_CUTOFF.isoformat(),
+            int(is_post.sum()), _TIME_SPLIT_CUTOFF.isoformat(),
+            f"{ta_auc:.3f}" if ta_auc is not None else "n/a",
+            f"{ta_auc - auc:+.3f}" if ta_auc is not None else "n/a",
+        )
+    else:
+        time_aware = {
+            "cutoff_date": _TIME_SPLIT_CUTOFF.isoformat(),
+            "train_n": int(is_pre.sum()),
+            "test_n": int(is_post.sum()),
+            "rows_missing_date": rows_missing_date,
+            "skipped": True,
+            "reason": "insufficient rows on either side of cutoff (need ≥200 train, ≥50 test)",
+        }
+        log.warning(
+            "Time-aware holdout skipped — train=%d test=%d missing_date=%d",
+            int(is_pre.sum()), int(is_post.sum()), rows_missing_date,
+        )
+
     # ── 8. Cache ─────────────────────────────────────────────────────
     _model_data = {
         "model": model,
@@ -345,6 +460,7 @@ async def train_model(pool) -> dict:
         "approved_count": n_approved,
         "refused_count": n_refused,
         "trained_at": time.time(),
+        "time_aware": time_aware,
     }
 
     try:
@@ -364,6 +480,7 @@ async def train_model(pool) -> dict:
         "refused_count": n_refused,
         "training_time_s": round(elapsed, 1),
         "feature_count": len(feature_names),
+        "time_aware": time_aware,
     }
 
 
@@ -709,13 +826,35 @@ async def get_comparable_projects(
 # ═══════════════════════════════════════════════════════════════════════════
 
 async def get_model_stats(pool) -> dict:
-    """Return model accuracy, feature importances, training info."""
+    """Return model accuracy, feature importances, training info.
+
+    Surfaces both the historical random-split metrics (kept for
+    backward compatibility with existing dashboards / `predict_approval`)
+    AND a time-aware (chronological) holdout. The latter is the
+    defensible metric — random splits over 15 years of REPD data leak
+    future planning regimes (NPPF 2018, EN-3 2023+) into the train set
+    and inflate AUC.
+    """
     md = await _ensure_model(pool)
     return {
         "trained": True,
+        "model_version": "1.1-time-aware",
+        # Legacy top-level fields — random-split, kept for backward compat.
         "accuracy": round(md["accuracy"], 4),
         "auc": round(md["auc"], 4),
         "confusion_matrix": md["confusion_matrix"],
+        # Explicit framing of which metric is which.
+        "random_split": {
+            "accuracy": round(md["accuracy"], 4),
+            "auc": round(md["auc"], 4),
+            "confusion_matrix": md["confusion_matrix"],
+            "warning": (
+                "Random 80/20 split on data spanning 2010-2026 — leaks "
+                "post-NPPF / post-EN-3 outcomes into the train set and "
+                "inflates AUC. Use time_aware.auc as the defensible metric."
+            ),
+        },
+        "time_aware": md.get("time_aware"),
         "feature_importances": md["feature_importances"][:20],
         "training_samples": md["training_samples"],
         "approved_count": md["approved_count"],

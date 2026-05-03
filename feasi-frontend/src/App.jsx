@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import { useLocation } from "react-router-dom";
 import mapboxgl from "mapbox-gl";
 import { useSite } from "./SiteContext";
+import { usePanel } from "./hooks/useUiPanels.js";
 import api from "./services/api";
 
 // ── Core layout (always loaded) ──
 import AppShell from "./components/shell/AppShell";
 import WorkspaceRouter from "./components/workspace/WorkspaceRouter";
 import MapView from "./components/MapView";
+import SearchZone from "./components/SearchZone";
 import OnboardingDemo from "./components/OnboardingDemo";
 import ErrorBoundary from "./components/ErrorBoundary";
 import LayerRail from "./components/LayerRail";
@@ -63,11 +66,14 @@ const ComponentPalette = lazy(() => import("./components/ComponentPalette"));
 const AssetDock = lazy(() => import("./components/AssetDock"));
 const EnergyFlowPanel = lazy(() => import("./components/EnergyFlowPanel"));
 const ScenarioCompare = lazy(() => import("./components/ScenarioCompare"));
+const ConnectedAssetPanel = lazy(() => import("./components/portfolio/ConnectedAssetPanel"));
 const LazyFallback = () => <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)", zIndex: 9999, color: "#fff", fontSize: 13 }}>Loading...</div>;
 import {
   MODES, createDrawState, handleClick as drawHandleClick, handleDoubleClick as drawHandleDoubleClick,
   moveVertex, insertVertex, deleteFeature, getMeasurements, findSnapTarget,
 } from "./lib/draw-modes";
+import LoginPage from "./components/LoginPage";
+import useAuth from "./auth/useAuth";
 
 export default function App() {
   const {
@@ -87,30 +93,38 @@ export default function App() {
     chatLayers, setChatLayers,
     setActiveTab, setPanelOpen,
     setSelectedLsoa,
-    dashboardOpen, setDashboardOpen,
-    digitalTwinOpen, setDigitalTwinOpen, terrainTwinOpen, setTerrainTwinOpen, twinData, realSiteContext,
+    twinData, realSiteContext,
     workflowStage,
-    gridTwinOpen, setGridTwinOpen,
-    bemsOpen, setBemsOpen,
-    assetInspectorOpen, setAssetInspectorOpen,
-    gridGraphOpen, setGridGraphOpen,
-    bessFacilityOpen, setBessFacilityOpen,
-    hwConfigOpen, setHwConfigOpen,
-    asset3dOpen, setAsset3dOpen,
     setSelectedEntity,
-    thermalModelOpen, setThermalModelOpen,
-    dcTwinOpen, setDcTwinOpen,
-    dcLandingOpen, setDcLandingOpen,
-    dcComparisonOpen, setDcComparisonOpen,
     dcComparisonSites, setDcComparisonSites,
     activeIntent,
     placedAssets, addPlacedAsset, removePlacedAsset, clearPlacedAssets,
     assetValidations, designProjectId, setDesignProjectId, designDirty, saveDesign, loadDesign,
-    energyFlowOpen, setEnergyFlowOpen,
     solarYield, gridContext,
   } = useSite();
 
+  // Stage B5: 15 panel flags moved out of SiteContext into URL-hash-backed
+  // usePanel(). Behaviour identical; deep-linking now works for these panels.
+  const [dashboardOpen, setDashboardOpen] = usePanel('dashboard');
+  const [digitalTwinOpen, setDigitalTwinOpen] = usePanel('digital-twin');
+  const [terrainTwinOpen, setTerrainTwinOpen] = usePanel('terrain-twin');
+  const [gridTwinOpen, setGridTwinOpen] = usePanel('grid-twin');
+  const [bemsOpen, setBemsOpen] = usePanel('bems');
+  const [assetInspectorOpen, setAssetInspectorOpen] = usePanel('asset-inspector');
+  const [gridGraphOpen, setGridGraphOpen] = usePanel('grid-graph');
+  const [bessFacilityOpen, setBessFacilityOpen] = usePanel('bess-facility');
+  const [hwConfigOpen, setHwConfigOpen] = usePanel('hw-config');
+  const [asset3dOpen, setAsset3dOpen] = usePanel('asset3d');
+  const [thermalModelOpen, setThermalModelOpen] = usePanel('thermal-model');
+  const [dcTwinOpen, setDcTwinOpen] = usePanel('dc-twin');
+  const [dcLandingOpen, setDcLandingOpen] = usePanel('dc-landing');
+  const [dcComparisonOpen, setDcComparisonOpen] = usePanel('dc-comparison');
+  const [energyFlowOpen, setEnergyFlowOpen] = usePanel('energy-flow');
+
   const { activeWorkspace, setActiveWorkspace, activeViewMode, setActiveViewMode } = useWorkspace();
+
+  // ── Auth gate — LoginPage shows whenever no token is in localStorage ──
+  const { isAuthenticated } = useAuth();
 
   const [mapInstance, setMapInstance] = useState(null);
   const [devConsoleOpen, setDevConsoleOpen] = useState(false);
@@ -145,6 +159,31 @@ export default function App() {
     window.addEventListener("princeps-node-click", handler);
     return () => window.removeEventListener("princeps-node-click", handler);
   }, [setSelectedEntity]);
+
+  // Auto-center map on the active project whenever chat context arrives
+  // with a project lat/lon. Keeps the map visually aligned with whatever
+  // Princeps AI is reasoning about, per user brief.
+  useEffect(() => {
+    const lastFly = { key: "" };
+    const onCtx = (e) => {
+      const p = e?.detail?.project || e?.detail?.projectContext || null;
+      if (!p) return;
+      const lat = Number(p.lat);
+      const lon = Number(p.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      const key = `${lat.toFixed(4)},${lon.toFixed(4)}`;
+      if (key === lastFly.key) return;
+      lastFly.key = key;
+      if (mapInstance) {
+        mapInstance.flyTo({
+          center: [lon, lat], zoom: 13, pitch: 40, bearing: 0,
+          duration: 1800, essential: true,
+        });
+      }
+    };
+    window.addEventListener("princeps-chat-context", onCtx);
+    return () => window.removeEventListener("princeps-chat-context", onCtx);
+  }, [mapInstance]);
 
   // ── Linked Views: bridge intent triggers from SmartOverlays ──
   useEffect(() => {
@@ -273,9 +312,20 @@ export default function App() {
     });
   }, [mapInstance]);
 
-  // NOM Explorer + Settings modes
+  // NOM Explorer + Settings modes. settingsMode initialises from the URL so
+  // opening /settings directly (incognito, bookmark, copy-paste) lands on
+  // the Settings page instead of falling through to Mission Control.
   const [nomMode, setNomMode] = useState(false);
-  const [settingsMode, setSettingsMode] = useState(false);
+  const location = useLocation();
+  const [settingsMode, setSettingsMode] = useState(
+    typeof window !== "undefined" && window.location.pathname.startsWith("/settings")
+  );
+  // Keep settingsMode in sync with the URL — the Sidebar uses react-router's
+  // navigate(), which only updates location, not our local state.
+  useEffect(() => {
+    const isSettings = location.pathname.startsWith("/settings");
+    setSettingsMode((v) => (v === isSettings ? v : isSettings));
+  }, [location.pathname]);
   const [pitchMode, setPitchMode] = useState(false);
   const [capabilitiesMode, setCapabilitiesMode] = useState(false);
   const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
@@ -355,6 +405,19 @@ export default function App() {
     // Announce the agent — don't auto-run any analysis. User drives what happens next.
     window.dispatchEvent(new CustomEvent("princeps-chat", {
       detail: { announce: true, lat, lon },
+    }));
+    // Flow the clicked coordinates into the chat context as a focus chip so
+    // the user can see "Picked: 51.5260, -0.6155" pinned above the input and
+    // Claude receives the coords in `ui_context.picked_location` on the next
+    // message. ChatRail listens for this event at ChatRail.jsx:161.
+    const label = `${Number(lat).toFixed(4)}, ${Number(lon).toFixed(4)}`;
+    window.dispatchEvent(new CustomEvent("princeps-chat-focus", {
+      detail: {
+        type: "location",
+        id: `loc:${label}`,
+        label: `Picked ${label}`,
+        data: { lat, lon, kind: "map_click" },
+      },
     }));
   };
 
@@ -485,12 +548,28 @@ export default function App() {
 
   const measurement = getMeasurements(drawState);
 
+  // ── Auth gate: before anything else, if no token in localStorage,
+  // render the login page and stop. useAuth's internal state flip re-renders
+  // the tree once login() writes the token. ──
+  if (!isAuthenticated) {
+    return <LoginPage onLoginSuccess={() => { /* no-op; hook state will flip */ }} />;
+  }
+
   // Full-screen overlays
   if (nomMode) {
     return <NOMExplorer onExit={() => setNomMode(false)} onAnalyseSubstation={handleNomAnalyse} />;
   }
   if (settingsMode) {
-    return <SettingsPage onExit={() => setSettingsMode(false)} />;
+    return <SettingsPage onExit={() => {
+      setSettingsMode(false);
+      // Restore the prior URL (or go home) so /settings doesn't linger while
+      // the dashboard is showing again.
+      try {
+        if (window.location.pathname.startsWith("/settings")) {
+          window.history.replaceState({}, "", "/");
+        }
+      } catch {}
+    }} />;
   }
   if (pitchMode) {
     return <PitchPage onExit={() => setPitchMode(false)} />;
@@ -524,6 +603,9 @@ export default function App() {
 
       <ErrorBoundary name="MapAssetLayer" fallback={null}>
         <MapAssetLayer map={mapInstance} />
+      </ErrorBoundary>
+      <ErrorBoundary name="SearchZone" fallback={null}>
+        <SearchZone />
       </ErrorBoundary>
       <ErrorBoundary name="DCMapOverlay" fallback={null}>
         <DCMapOverlay mapInstance={mapInstance} dcAssets={placedAssets.filter(a => a.assetType === "data_centre")} />
@@ -978,16 +1060,18 @@ export default function App() {
       {activeWorkspace === "home" && (activeViewMode === "dashboard" || !activeViewMode) && (
         <div style={{
           position: "fixed",
-          top: 0, left: "var(--sidebar-width, 240px)", right: 0, bottom: 32,
+          top: 0, left: "var(--sidebar-width, 240px)", right: 0, bottom: 0,
           zIndex: 100,
           background: "var(--bg, #F2F3F5)",
           overflow: "auto",
+          paddingBottom: 32,
         }}>
           <Suspense fallback={<div style={{padding:40,fontFamily:"DM Sans"}}>Loading Mission Control…</div>}>
             <MissionControl
               onSelectProject={(pid) => {
                 if (!pid) return;
                 const idStr = String(pid);
+                setActiveWorkspace("projects");
                 // Stash so RedesignLayout's mount effect can pick it up even
                 // if the lazy import finishes after the event fires.
                 try { sessionStorage.setItem("princeps.pendingProjectId", idStr); } catch {}
@@ -1004,6 +1088,7 @@ export default function App() {
                 }, ms));
               }}
               onNewProject={() => {
+                setActiveWorkspace("projects");
                 const url = new URL(window.location.href);
                 url.searchParams.set("redesign", "1");
                 window.history.replaceState({}, "", url);
@@ -1011,6 +1096,7 @@ export default function App() {
                 window.dispatchEvent(new CustomEvent("princeps-redesign-new-project"));
               }}
               onPickWorkload={(workload) => {
+                setActiveWorkspace("projects");
                 const url = new URL(window.location.href);
                 url.searchParams.set("redesign", "1");
                 window.history.replaceState({}, "", url);
@@ -1025,6 +1111,14 @@ export default function App() {
       {/* Inbox Bridge — global modal triggered by 'princeps-inbox-open'
           event from Mission Control or cmd-K command palette. */}
       <InboxBridgeModal />
+
+      {/* Connected asset financial exposure drawer — global listener for
+          'princeps-asset-click' from any map. Shows portfolio-wide MW /
+          NPV / IRR + HHI concentration + stress cases for the clicked
+          grid asset. */}
+      <Suspense fallback={null}>
+        <ConnectedAssetPanel />
+      </Suspense>
     </AppShell>
   );
 }

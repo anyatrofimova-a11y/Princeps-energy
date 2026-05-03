@@ -11,16 +11,6 @@
  *   layer so stale invalidation is explicit.
  */
 
-import mockData from "../data/mock-tracker.json";
-
-const MOCK = (() => {
-  try {
-    return String(import.meta.env?.VITE_MOCK_TRACKER || "true").toLowerCase() === "true";
-  } catch {
-    return true;
-  }
-})();
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const delay = async () => sleep(60 + Math.random() * 80);
 
@@ -78,14 +68,7 @@ function applyFilters(rows, f = {}) {
 export async function listSubstations(filters = {}) {
   const limit = filters.limit ?? 100;
   const cursor = Number(filters.cursor ?? 0);
-  if (MOCK) {
-    await delay();
-    const filtered = applyFilters(mockData.substations, filters);
-    const page = filtered.slice(cursor, cursor + limit);
-    const nextCursor = cursor + page.length < filtered.length ? cursor + page.length : null;
-    return { rows: page, total: filtered.length, next_cursor: nextCursor };
-  }
-  const qs = new URLSearchParams();
+    const qs = new URLSearchParams();
   Object.entries(filters).forEach(([k, v]) => {
     if (v != null && v !== "") qs.set(k, String(v));
   });
@@ -96,59 +79,28 @@ export async function listSubstations(filters = {}) {
 
 // ── Detail ──────────────────────────────────────────────────────
 export async function getSubstation(id) {
-  if (MOCK) {
-    await delay();
-    const row = mockData.substations.find((s) => s.project_id === id);
-    if (!row) throw new Error(`substation ${id} not found`);
-    return row;
-  }
-  const r = await fetch(`/api/tracker/substations/${encodeURIComponent(id)}`);
+    const r = await fetch(`/api/tracker/substations/${encodeURIComponent(id)}`);
   if (!r.ok) throw new Error(`detail ${r.status}`);
   return r.json();
 }
 
 // ── GeoJSON for map ─────────────────────────────────────────────
 export async function getGeoJSON() {
-  if (MOCK) {
-    await delay();
-    return {
-      type: "FeatureCollection",
-      features: mockData.substations
-        .filter((s) => s.longitude != null && s.latitude != null)
-        .map((s) => ({
-          type: "Feature",
-          geometry: { type: "Point", coordinates: [s.longitude, s.latitude] },
-          properties: s,
-        })),
-    };
-  }
-  const r = await fetch("/api/tracker/substations/geojson");
+    const r = await fetch("/api/tracker/substations/geojson");
   if (!r.ok) throw new Error(`geojson ${r.status}`);
   return r.json();
 }
 
 // ── Stats ───────────────────────────────────────────────────────
 export async function getStats() {
-  if (MOCK) {
-    await delay();
-    return mockData.stats;
-  }
-  const r = await fetch("/api/tracker/stats");
+    const r = await fetch("/api/tracker/stats");
   if (!r.ok) throw new Error(`stats ${r.status}`);
   return r.json();
 }
 
 // ── Refresh (admin trigger) ─────────────────────────────────────
 export async function triggerRefresh() {
-  if (MOCK) {
-    await sleep(400);
-    return {
-      ok: true,
-      started_at: new Date().toISOString(),
-      note: "Mock refresh — no backend call made.",
-    };
-  }
-  const r = await fetch("/api/tracker/refresh", { method: "POST" });
+    const r = await fetch("/api/tracker/refresh", { method: "POST" });
   if (!r.ok) throw new Error(`refresh ${r.status}`);
   return r.json();
 }
@@ -166,28 +118,7 @@ function triggerDownload(blob, filename) {
 }
 
 export async function downloadCSV() {
-  if (MOCK) {
-    const rows = mockData.substations;
-    const cols = [
-      "project_id", "substation_name", "region", "developer",
-      "voltage_kv_primary", "construction_status",
-      "construction_year", "operation_year",
-      "capex_gbp_millions", "capex_price_base_year",
-      "source_type", "confidence", "sme_reviewed",
-      "longitude", "latitude",
-    ];
-    const esc = (v) => {
-      if (v == null) return "";
-      const s = String(v).replace(/"/g, '""');
-      return /[",\n]/.test(s) ? `"${s}"` : s;
-    };
-    const csv = [cols.join(",")]
-      .concat(rows.map((r) => cols.map((c) => esc(r[c])).join(",")))
-      .join("\n");
-    triggerDownload(new Blob([csv], { type: "text/csv" }), "tracker-substations.csv");
-    return { ok: true };
-  }
-  const r = await fetch("/api/tracker/substations.csv");
+    const r = await fetch("/api/tracker/substations.csv");
   if (!r.ok) throw new Error(`csv ${r.status}`);
   const blob = await r.blob();
   triggerDownload(blob, "tracker-substations.csv");
@@ -205,11 +136,7 @@ export async function downloadGeoJSON() {
 
 export async function downloadParquet() {
   // Parquet export isn't wired on the backend side yet. Stub: warn + fall back to CSV.
-  if (MOCK) {
-    console.warn("[tracker] parquet export not available in mock mode — downloading CSV");
-    return downloadCSV();
-  }
-  const r = await fetch("/api/tracker/substations.parquet");
+    const r = await fetch("/api/tracker/substations.parquet");
   if (!r.ok) throw new Error(`parquet ${r.status}`);
   const blob = await r.blob();
   triggerDownload(blob, "tracker-substations.parquet");
@@ -219,12 +146,7 @@ export async function downloadParquet() {
 // ── Edit (PATCH) — backend endpoint TBC ─────────────────────────
 // TODO: wire to PATCH /api/tracker/substations/{id} once the backend route lands.
 export async function updateSubstation(id, patch) {
-  if (MOCK) {
-    console.log("[tracker] (stub) PATCH", id, patch);
-    await delay();
-    return { ok: true, id, patch, stub: true };
-  }
-  const r = await fetch(`/api/tracker/substations/${encodeURIComponent(id)}`, {
+    const r = await fetch(`/api/tracker/substations/${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -254,4 +176,4 @@ export async function batchApprove(ids, reviewer = "current-user") {
   return { ok: true, results };
 }
 
-export const MOCK_MODE = MOCK;
+export const MOCK_MODE = false;

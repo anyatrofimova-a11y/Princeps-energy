@@ -9,6 +9,7 @@ from pydantic import BaseModel
 import asyncpg
 
 import chat as chat_module
+from app.chat_classify_council import needs_council as classify_needs_council
 from app.deps import get_pool, get_claude
 from app.helpers import (
     CLAUDE_MODEL,
@@ -17,6 +18,24 @@ from app.helpers import (
 )
 
 router = APIRouter(tags=["chat"])
+
+
+class CouncilClassifyRequest(BaseModel):
+    query: str
+
+
+@router.post("/api/chat/classify-council")
+async def classify_council(
+    body: CouncilClassifyRequest,
+    claude=Depends(get_claude),
+):
+    """Classify whether a user query should be routed to the Council surface.
+
+    Used by the Princeps AI ChatRail to decide between single-pass chat and
+    a multi-pod Council session. Falls back to a keyword heuristic if the
+    classifier model errors. See app/chat_classify_council.py.
+    """
+    return await classify_needs_council(claude, body.query)
 
 
 class ChatSessionRequest(BaseModel):

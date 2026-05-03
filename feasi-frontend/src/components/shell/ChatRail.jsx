@@ -3,6 +3,8 @@ import { useWorkspace } from "../../contexts/WorkspaceContext";
 import { getSuggestions } from "../../lib/chatSuggestions";
 import { buildPageContext } from "../../lib/pageContext";
 import useMapTime from "../../hooks/useMapTime";
+import useCouncilDispatch from "../../chat/useCouncilDispatch";
+import CouncilTimelinePanel from "../../chat/CouncilTimelinePanel.jsx";
 
 const GridCanvas = lazy(() => import("../GridCanvas"));
 
@@ -42,10 +44,22 @@ function ToolCallCard({ call, onToggle, expanded }) {
   );
 }
 
+function stripMarkdownEmphasis(text) {
+  if (!text || typeof text !== "string") return text;
+  return text
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/__(.+?)__/g, "$1")
+    .replace(/(^|[\s(])\*([^\s*][^*]*?)\*(?=[\s).,!?;:]|$)/g, "$1$2")
+    .replace(/(^|[\s(])_([^\s_][^_]*?)_(?=[\s).,!?;:]|$)/g, "$1$2")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "");
+}
+
 function Message({ msg, onToggleTool, expandedTools }) {
   if (msg.role === "user") {
     return <div className="cr-msg cr-msg-user"><div className="cr-bubble cr-bubble-user">{msg.content}</div></div>;
   }
+  const cleaned = stripMarkdownEmphasis(msg.content);
   return (
     <div className="cr-msg cr-msg-assistant">
       <div className="cr-bubble cr-bubble-assistant">
@@ -64,7 +78,7 @@ function Message({ msg, onToggleTool, expandedTools }) {
             })}
           </div>
         )}
-        {msg.content && <div className="cr-content">{msg.content}</div>}
+        {cleaned && <div className="cr-content">{cleaned}</div>}
       </div>
     </div>
   );
@@ -118,6 +132,16 @@ export default function ChatRail({
   // which FES scenario/year the user is viewing. useMapTime is safe outside
   // SiteProvider (vanilla external store) so no guard needed.
   const mapTime = useMapTime();
+
+  // ── Council dispatch ──
+  // Multi-domain queries (e.g. "low-headroom DC sites with PPA-ready BESS
+  // pairs") are routed through /api/council/session (SSE) instead of the
+  // single-pass chat. The dispatch hook handles classification + session
+  // creation + SSE consumption. Single-domain queries fall through to the
+  // regular send() path below.
+  const council = useCouncilDispatch();
+  const [councilEverFired, setCouncilEverFired] = useState(false);
+  const councilModeActive = !!(council.classification?.needs_council && council.sessionRid);
 
   useEffect(() => {
     const onCtx = (e) => {
@@ -280,8 +304,24 @@ export default function ChatRail({
     const text = (override ?? input).trim();
     if (!text || streaming) return;
     setInput("");
-    setStreaming(true);
 
+    // Council fork — classify first; if multi-domain, the rail flips into
+    // CouncilTimelinePanel mode for this query and we skip regular chat.
+    setCouncilEverFired(true);
+    const cls = await council.dispatch(
+      text,
+      chatContextRef.current?.project?.id || projectId || null,
+    );
+    if (cls?.needs_council && cls?.session_rid) {
+      // Append the user's prompt to the message thread so they still see
+      // what they asked, but do not create an assistant placeholder — the
+      // CouncilTimelinePanel renders the live SSE answer in place of the
+      // chat input area.
+      setMessages((p) => [...p, { role: "user", content: text, timestamp: Date.now() }]);
+      return;
+    }
+
+    setStreaming(true);
     const userMsg = { role: "user", content: text, timestamp: Date.now() };
     const assistantMsg = { role: "assistant", content: "", toolCalls: [], mapLayers: [], timestamp: Date.now() + 1 };
     setMessages((p) => [...p, userMsg, assistantMsg]);
@@ -405,7 +445,7 @@ export default function ChatRail({
     } finally {
       setStreaming(false);
     }
-  }, [input, streaming, ensureSession, parcelId, projectId, onMapLayer, onZoomTo]);
+  }, [input, streaming, ensureSession, parcelId, projectId, onMapLayer, onZoomTo, council, buildUiContext]);
 
   const onKey = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -468,12 +508,18 @@ export default function ChatRail({
             </Suspense>
             <div className="cr-empty-fg">
               <div className="cr-empty-title">How can I help?</div>
+              {councilEverFired && (
+                <div className="cr-council-ready">
+                  <span className="cr-council-ready-dot" />
+                  Council ready
+                </div>
+              )}
               <div className="cr-empty-sub">
                 {suggestions.header || "Ask about grid connection, site scoring, demand, planning."}
               </div>
-              {suggestions.pills && suggestions.pills.length > 0 && (
+              {((suggestions.pills && suggestions.pills.length > 0) || true) && (
                 <div className="cr-pills" role="list">
-                  {suggestions.pills.map((p, i) => (
+                  {(suggestions.pills || []).map((p, i) => (
                     <button
                       key={p.label + i}
                       type="button"
@@ -486,6 +532,16 @@ export default function ChatRail({
                       {p.label}
                     </button>
                   ))}
+                  <button
+                    type="button"
+                    role="listitem"
+                    className="cr-pill cr-pill-council"
+                    onClick={() => handlePillClick("Find low-headroom DC sites with PPA-ready BESS pairs in East England")}
+                    disabled={streaming || council.classifying}
+                    title="Demo: route a multi-domain query through the Council surface"
+                  >
+                    Try a Council query
+                  </button>
                 </div>
               )}
               <div className="cr-hint">⌘K to focus input</div>
@@ -498,26 +554,50 @@ export default function ChatRail({
         <div ref={endRef} />
       </div>
 
-      <div className="cr-input-row">
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKey}
-          placeholder={streaming ? "Streaming…" : "Ask anything about this project"}
-          disabled={streaming}
-          className="cr-input"
-          rows={1}
-        />
-        <button
-          className={"cr-send" + (input.trim() && !streaming ? " cr-send-ready" : "")}
-          onClick={send}
-          disabled={!input.trim() || streaming}
-          aria-label="Send"
-        >
-          {streaming ? "…" : "↑"}
-        </button>
-      </div>
+      {councilModeActive ? (
+        <div className="cr-council-mount">
+          <CouncilTimelinePanel
+            events={council.events}
+            state={council.state}
+            classification={council.classification}
+            onBack={() => council.reset()}
+            onViewFull={(rid) => {
+              try { window.location.href = `/v2/council/${encodeURIComponent(rid)}`; }
+              catch { /* ignore */ }
+            }}
+          />
+        </div>
+      ) : (
+        <>
+          {council.classification?.needs_council && !council.sessionRid && (
+            <div className="cr-council-pill">Council mode</div>
+          )}
+          <div className="cr-input-row">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKey}
+              placeholder={
+                council.classifying ? "Classifying…"
+                : streaming ? "Streaming…"
+                : "Ask anything about this project"
+              }
+              disabled={streaming || council.classifying}
+              className="cr-input"
+              rows={1}
+            />
+            <button
+              className={"cr-send" + (input.trim() && !streaming && !council.classifying ? " cr-send-ready" : "")}
+              onClick={send}
+              disabled={!input.trim() || streaming || council.classifying}
+              aria-label="Send"
+            >
+              {streaming || council.classifying ? "…" : "↑"}
+            </button>
+          </div>
+        </>
+      )}
 
       <style>{baseCSS}</style>
     </aside>
@@ -808,4 +888,55 @@ const baseCSS = `
   }
   .cr-send-ready:hover { background: var(--gold-dark); }
   .cr-content { white-space: pre-wrap; }
+
+  /* Council mount — swaps in for the input row when a multi-domain
+     query has opened a Council session. Lives inside the rail card so
+     the SSE timeline scrolls with the rest of the thread surface. */
+  .cr-council-mount {
+    flex-shrink: 0;
+    border-top: 1px solid var(--cds-border-subtle);
+    max-height: 60%;
+    min-height: 220px;
+    display: flex;
+  }
+  .cr-council-mount > * { width: 100%; }
+
+  /* Tiny banner shown above the input when the next answer will route
+     to Council (before the session opens). Visual signal only. */
+  .cr-council-pill {
+    font-family: var(--mono, "JetBrains Mono", monospace);
+    font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 6px 12px -2px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(var(--accent-rgb), 0.10);
+    border: 1px solid rgba(var(--accent-rgb), 0.45);
+    color: var(--ink);
+    align-self: flex-start;
+  }
+
+  /* "Council ready" chip beneath the empty-state title once dispatch
+     has fired at least once this session. */
+  .cr-council-ready {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono, "JetBrains Mono", monospace);
+    font-size: 10px; letter-spacing: 0.06em;
+    color: var(--cds-text-secondary);
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(var(--accent-rgb), 0.08);
+    border: 1px solid rgba(var(--accent-rgb), 0.3);
+    margin: 0 auto 10px;
+  }
+  .cr-council-ready-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--gold);
+  }
+
+  .cr-pill-council {
+    border-color: var(--gold);
+    background: rgba(var(--accent-rgb), 0.10);
+    font-weight: 600;
+  }
 `;

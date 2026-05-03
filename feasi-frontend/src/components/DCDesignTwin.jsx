@@ -49,6 +49,17 @@ import { useThermalField, thermalHeatmapLayers } from "./dc/DCThermalHeatmap";
 import { useNoiseContours, noiseContourLayers } from "./dc/DCNoiseContour";
 import { useGlintCones, glintConeLayers } from "./dc/DCGlintCone";
 import DCLiveOpsStrip from "./dc/DCLiveOpsStrip";
+// D2.5 — D1 constraint overlay (red forbidden buildings) + D2 draggable
+// centroid marker with collision feedback against forbidden zones.
+import ConstraintOverlay from "./dc/ConstraintOverlay";
+import DraggableComponent from "./dc/DraggableComponent";
+import "./dc/dc-design-overlay.css";
+// D4 — UK queue overlay (TEC + ECR + REPD) so the user sees nearby
+// queue projects, lines and a project-info card directly in the DC twin.
+import GridQueueLayer from "./grid-overlay/GridQueueLayer";
+import QueueFilterBar from "./grid-overlay/QueueFilterBar";
+import ProjectInfoCard from "./grid-overlay/ProjectInfoCard";
+import "./grid-overlay/queue-overlay.css";
 
 /* ── Valid selection keys (anything else falls back to clearing selection).
  *  Structure keys: shell / hall_* / spine / mvlv / genset_yard / gen_N
@@ -212,6 +223,12 @@ export default function DCDesignTwin({
   tier = 3,
   redundancy = "N+1",
   coolingType = "hybrid",
+  /* Optional project identity — when provided, the legend fetches BOT-REAL
+   * layout specs from GET /api/design/layout-specs so every number shows a
+   * source pill (planning / benchmark / estimated). Back-compat safe: absent
+   * → local synthetic math (the existing `buildCampusLayout` path). */
+  projectId = null,
+  projectName = null,
   /* Buildable mask — if provided, the layout recipe tries to fit inside it.
    * Contract (rectangular form, local metres frame centred on shell):
    *   { minX, maxX, minY, maxY }
@@ -247,6 +264,26 @@ export default function DCDesignTwin({
   const selected = isValidSelection(selectedRaw) ? selectedRaw : null;
   // Ambient grid overlay — nearby substations fetched from backend
   const [nearbySubs, setNearbySubs] = useState([]);
+  // BOT-REAL layout specs — each legend row carries a `source` tag
+  // ("planning" | "benchmark" | "estimated") and a citation string. When the
+  // fetch hasn't completed (or projectId/name aren't provided), falls back to
+  // local synthetic math inside the legend render.
+  const [layoutSpecs, setLayoutSpecs] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams();
+    if (projectId) params.set("project_id", projectId);
+    if (projectName) params.set("project_name", projectName);
+    if (itLoadMw) params.set("capacity_mw", String(itLoadMw));
+    if (tier) params.set("tier", String(tier));
+    if (redundancy) params.set("redundancy", redundancy);
+    if (coolingType) params.set("cooling", coolingType);
+    fetch(`/api/design/layout-specs?${params.toString()}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) setLayoutSpecs(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectId, projectName, itLoadMw, tier, redundancy, coolingType]);
   // Which inspector tab to show: "spec" | "cost" | "provenance"
   const [inspectorTab, setInspectorTab] = useState("spec");
   // Continuous orbit flag (driven by the "Orbit" camera preset button).
@@ -264,6 +301,16 @@ export default function DCDesignTwin({
     redline: true, designations: false, flood: false, alc: false,
   });
   const [utilitySelected, setUtilitySelected] = useState(null);
+
+  // D2.5 — placement-intelligence state.
+  const [forbiddenZones, setForbiddenZones] = useState({type: 'FeatureCollection', features: []});
+  const [showOverlay, setShowOverlay] = useState(true);
+  const [showQueue, setShowQueue] = useState(false);
+  const [queueSources, setQueueSources] = useState(['tec', 'ecr', 'repd']);
+  const [queueVoltageMin, setQueueVoltageMin] = useState(33);
+  const [queueShowLines, setQueueShowLines] = useState(true);
+  const [queueCounts, setQueueCounts] = useState({queue: 0, lines: 0});
+  const [openProjectId, setOpenProjectId] = useState(null);
 
   const handleUtilityToggle = useCallback((key, val) => {
     setUtilityToggles((s) => ({ ...s, [key]: val }));
@@ -849,6 +896,70 @@ export default function DCDesignTwin({
     >
       <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
 
+      {/* D2.5 — placement intelligence + UK queue overlay. Both bind onto
+          the existing Mapbox map ref once it's ready. */}
+      {mapReady && showOverlay && (
+        <ConstraintOverlay
+          map={mapRef.current}
+          lat={lat}
+          lng={lon}
+          radiusM={500}
+          onZonesReady={(features) => setForbiddenZones({type: 'FeatureCollection', features})}
+        />
+      )}
+      {mapReady && (
+        <DraggableComponent
+          map={mapRef.current}
+          id="campus-centroid"
+          label="CAMPUS"
+          position={[lon, lat]}
+          forbiddenZones={forbiddenZones}
+          onMove={(_id, [lng, la]) => { setLon(lng); setLat(la); }}
+        />
+      )}
+      {mapReady && showQueue && (
+        <GridQueueLayer
+          map={mapRef.current}
+          voltageMin={queueVoltageMin}
+          sources={queueSources}
+          showLines={queueShowLines}
+          onProjectClick={setOpenProjectId}
+          onFeaturesLoaded={setQueueCounts}
+        />
+      )}
+      {showQueue && (
+        <QueueFilterBar
+          voltageMin={queueVoltageMin}
+          onVoltageMin={setQueueVoltageMin}
+          sources={queueSources}
+          onSourcesToggle={setQueueSources}
+          showLines={queueShowLines}
+          onShowLinesToggle={setQueueShowLines}
+          counts={queueCounts}
+        />
+      )}
+      {openProjectId && (
+        <ProjectInfoCard
+          featureId={openProjectId}
+          onClose={() => setOpenProjectId(null)}
+        />
+      )}
+      {/* Quick toggles for the new overlays. Sits below the existing layer chips. */}
+      <div style={{
+        position: 'absolute', top: 12, right: 12, zIndex: 4,
+        display: 'flex', gap: 6,
+        background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(10px)',
+        padding: '6px 8px', borderRadius: 10, border: '1px solid rgba(15,19,24,0.08)',
+        fontFamily: '"DM Sans", sans-serif', fontSize: 11,
+      }}>
+        <button onClick={() => setShowOverlay(s => !s)}
+          style={{...chipBtn(showOverlay), color: '#0F1318'}}
+          title="Red-zone forbidden buildings + project red-line">Forbidden</button>
+        <button onClick={() => setShowQueue(s => !s)}
+          style={{...chipBtn(showQueue), color: '#0F1318'}}
+          title="UK queue (TEC / ECR / REPD) + power lines">UK Queue</button>
+      </div>
+
       {!mapboxgl.accessToken && (
         <div style={{
           position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
@@ -997,7 +1108,10 @@ export default function DCDesignTwin({
         />
       )}
 
-      {/* Legend — each swatch is now a clickable chip that opens its sub-drawer */}
+      {/* Legend — each swatch is now a clickable chip that opens its sub-drawer.
+          BOT-REAL: when /api/design/layout-specs returns rows, render the
+          real/benchmark-tagged labels and show a source pill. Otherwise fall
+          back to the local synthetic math (geom.layout.*). */}
       <div style={{
         position: "absolute", bottom: 12, left: 12,
         background: "rgba(15,23,42,0.88)", padding: "10px 12px", borderRadius: 8,
@@ -1007,62 +1121,96 @@ export default function DCDesignTwin({
         <div style={{ fontWeight: 700, marginBottom: 4, letterSpacing: 0.4, textTransform: "uppercase", fontSize: 9, color: "#94a3b8" }}>
           Pre-FID layout · {itLoadMw} MW · Tier {tier} · {redundancy}
         </div>
+        {layoutSpecs?.summary && (
+          <div style={{ fontSize: 9, color: "#94a3b8", marginBottom: 4 }}
+               title={layoutSpecs.summary.citation || ""}>
+            {layoutSpecs.summary.source === "planning"
+              ? `Anchored to ${layoutSpecs.summary.confidence || "submission"} · `
+              : "Benchmark-sourced · "}
+            {layoutSpecs.summary.source_url ? (
+              <a href={layoutSpecs.summary.source_url} target="_blank" rel="noreferrer"
+                 style={{ color: "#fde68a", textDecoration: "underline" }}>source</a>
+            ) : (
+              <span>{layoutSpecs.summary.citation?.slice(0, 40) || "ASHRAE / Uptime"}</span>
+            )}
+          </div>
+        )}
         {/* Campus structure roster — one swatch per dominant role, each
             showing area and (where useful) count. Click to focus. */}
-        <Swatch
-          c={ROLE_COLOURS.shell}
-          label={`Shell ${(geom.layout.shell.area / 10_000).toFixed(2)} ha · ${geom.layout.meta.shellHeight.toFixed(0)} m · ${geom.layout.meta.hallCount} halls`}
-          active={selected === "shell"}
-          onClick={() => setSelected("shell")}
-        />
-        <Swatch
-          c={ROLE_COLOURS.hall}
-          label={`Halls · IT white space ${(geom.layout.shell.itAreaM2 / 10_000).toFixed(2)} ha`}
-          active={selected?.startsWith("hall_")}
-          onClick={() => setSelected("hall_0_0")}
-        />
-        <Swatch
-          c={ROLE_COLOURS.mvlv}
-          label={`MV/LV · ${Math.round(geom.layout.mvlv.width * geom.layout.mvlv.depth).toLocaleString()} m² · switchgear + UPS`}
-          active={selected === "mvlv"}
-          onClick={() => setSelected("mvlv")}
-        />
-        <Swatch
-          c={ROLE_COLOURS.genset}
-          label={`Genset yard · ${geom.layout.meta.genCount} × 5 MW · ${(geom.layout.genset.area / 10_000).toFixed(2)} ha`}
-          active={selected === "genset_yard" || selected?.startsWith("gen_")}
-          onClick={() => setSelected("genset_yard")}
-        />
-        <Swatch
-          c={ROLE_COLOURS.tx}
-          label={`TX yard · ${geom.layout.meta.txCount} × 20 MVA · ${(geom.layout.tx.area / 10_000).toFixed(2)} ha`}
-          active={selected === "tx_yard" || selected?.startsWith("tx_")}
-          onClick={() => setSelected("tx_yard")}
-        />
-        <Swatch
-          c={ROLE_COLOURS.water}
-          label={`Water plant · ${(geom.layout.water.area / 10_000).toFixed(2)} ha · ${coolingType}`}
-          active={selected === "water"}
-          onClick={() => setSelected("water")}
-        />
-        <Swatch
-          c={ROLE_COLOURS.office}
-          label={`Office / NOC · ${Math.round(geom.layout.office.area).toLocaleString()} m² · 2-storey`}
-          active={selected === "office"}
-          onClick={() => setSelected("office")}
-        />
-        <Swatch
-          c={ROLE_COLOURS.security}
-          label={`Gatehouse · ${Math.round(geom.layout.security.area).toLocaleString()} m² · access control`}
-          active={selected === "security"}
-          onClick={() => setSelected("security")}
-        />
-        <Swatch
-          c={ROLE_COLOURS.loading}
-          label={`Loading bay · ${Math.round(geom.layout.loading.area).toLocaleString()} m² · HGV dock`}
-          active={selected === "loading"}
-          onClick={() => setSelected("loading")}
-        />
+        {(() => {
+          const rows = layoutSpecs?.legend_rows || [];
+          const row = (i) => rows[i] || null;
+          const shell = row(0), halls = row(1), mvlv = row(2),
+                genset = row(3), tx = row(4), water = row(5),
+                office = row(6), gatehouse = row(7), loading = row(8);
+          return (
+            <>
+              <Swatch
+                c={ROLE_COLOURS.shell}
+                label={shell?.label ?? `Shell ${(geom.layout.shell.area / 10_000).toFixed(2)} ha · ${geom.layout.meta.shellHeight.toFixed(0)} m · ${geom.layout.meta.hallCount} halls`}
+                source={shell?.source} citation={shell?.citation}
+                active={selected === "shell"}
+                onClick={() => setSelected("shell")}
+              />
+              <Swatch
+                c={ROLE_COLOURS.hall}
+                label={halls?.label ?? `Halls · IT white space ${(geom.layout.shell.itAreaM2 / 10_000).toFixed(2)} ha`}
+                source={halls?.source} citation={halls?.citation}
+                active={selected?.startsWith("hall_")}
+                onClick={() => setSelected("hall_0_0")}
+              />
+              <Swatch
+                c={ROLE_COLOURS.mvlv}
+                label={mvlv?.label ?? `MV/LV · ${Math.round(geom.layout.mvlv.width * geom.layout.mvlv.depth).toLocaleString()} m² · switchgear + UPS`}
+                source={mvlv?.source} citation={mvlv?.citation}
+                active={selected === "mvlv"}
+                onClick={() => setSelected("mvlv")}
+              />
+              <Swatch
+                c={ROLE_COLOURS.genset}
+                label={genset?.label ?? `Genset yard · ${geom.layout.meta.genCount} × 5 MW · ${(geom.layout.genset.area / 10_000).toFixed(2)} ha`}
+                source={genset?.source} citation={genset?.citation}
+                active={selected === "genset_yard" || selected?.startsWith("gen_")}
+                onClick={() => setSelected("genset_yard")}
+              />
+              <Swatch
+                c={ROLE_COLOURS.tx}
+                label={tx?.label ?? `TX yard · ${geom.layout.meta.txCount} × 20 MVA · ${(geom.layout.tx.area / 10_000).toFixed(2)} ha`}
+                source={tx?.source} citation={tx?.citation}
+                active={selected === "tx_yard" || selected?.startsWith("tx_")}
+                onClick={() => setSelected("tx_yard")}
+              />
+              <Swatch
+                c={ROLE_COLOURS.water}
+                label={water?.label ?? `Water plant · ${(geom.layout.water.area / 10_000).toFixed(2)} ha · ${coolingType}`}
+                source={water?.source} citation={water?.citation}
+                active={selected === "water"}
+                onClick={() => setSelected("water")}
+              />
+              <Swatch
+                c={ROLE_COLOURS.office}
+                label={office?.label ?? `Office / NOC · ${Math.round(geom.layout.office.area).toLocaleString()} m² · 2-storey`}
+                source={office?.source} citation={office?.citation}
+                active={selected === "office"}
+                onClick={() => setSelected("office")}
+              />
+              <Swatch
+                c={ROLE_COLOURS.security}
+                label={gatehouse?.label ?? `Gatehouse · ${Math.round(geom.layout.security.area).toLocaleString()} m² · access control`}
+                source={gatehouse?.source} citation={gatehouse?.citation}
+                active={selected === "security"}
+                onClick={() => setSelected("security")}
+              />
+              <Swatch
+                c={ROLE_COLOURS.loading}
+                label={loading?.label ?? `Loading bay · ${Math.round(geom.layout.loading.area).toLocaleString()} m² · HGV dock`}
+                source={loading?.source} citation={loading?.citation}
+                active={selected === "loading"}
+                onClick={() => setSelected("loading")}
+              />
+            </>
+          );
+        })()}
         <Swatch c={C.cable} label="Cable corridor · MV/LV → TX yard"  active={selected === "cable"} onClick={() => setSelected("cable")} />
         <Swatch c={C.road}  label="Access road · HGV spur"            active={selected === "road"}  onClick={() => setSelected("road")} />
       </div>
@@ -1191,11 +1339,24 @@ function Readout({ label, value }) {
   );
 }
 
-function Swatch({ c, label, active = false, onClick = null }) {
+function Swatch({ c, label, active = false, onClick = null, source = null, citation = null }) {
   const Tag = onClick ? "button" : "div";
+  // BOT-REAL: source pill. "planning" = transcribed from a real planning
+  // submission → green. "benchmark" = ASHRAE/Uptime/industry standard → amber.
+  // "estimated" = no source yet → muted grey (muted italics label too).
+  const pillStyle = source === "planning"
+    ? { bg: "rgba(46,87,53,0.35)", fg: "#a7f3d0", label: "planning" }
+    : source === "benchmark"
+    ? { bg: "rgba(245,183,49,0.20)", fg: "#fde68a", label: "benchmark" }
+    : source === "mixed"
+    ? { bg: "rgba(96,125,139,0.35)", fg: "#cbd5e1", label: "mixed" }
+    : source === "estimated"
+    ? { bg: "rgba(148,163,184,0.15)", fg: "#94a3b8", label: "estimated" }
+    : null;
   return (
     <Tag
       onClick={onClick || undefined}
+      title={citation || undefined}
       style={{
         display: "flex", alignItems: "center", gap: 6,
         width: "100%", textAlign: "left",
@@ -1217,7 +1378,21 @@ function Swatch({ c, label, active = false, onClick = null }) {
         display: "inline-block",
         flexShrink: 0,
       }} />
-      <span>{label}</span>
+      <span style={{ flex: 1, fontStyle: source === "estimated" ? "italic" : "normal",
+                     color: source === "estimated" ? "#94a3b8" : "inherit" }}>{label}</span>
+      {pillStyle ? (
+        <span style={{
+          flexShrink: 0,
+          fontSize: 8,
+          fontWeight: 700,
+          letterSpacing: 0.3,
+          textTransform: "uppercase",
+          padding: "1px 5px",
+          borderRadius: 3,
+          background: pillStyle.bg,
+          color: pillStyle.fg,
+        }}>{pillStyle.label}</span>
+      ) : null}
     </Tag>
   );
 }

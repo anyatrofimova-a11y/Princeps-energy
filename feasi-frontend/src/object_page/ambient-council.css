@@ -1,0 +1,255 @@
+/* AmbientCouncilPanel — slim docked rail counter to Kongsberg's Asset Copilot */
+
+.ac-panel {
+  position: sticky;
+  top: 24px;
+  width: 320px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: linear-gradient(180deg, #FBF8F2 0%, #F2F3F5 100%);
+  border: 1px solid rgba(245, 183, 49, 0.40);
+  border-radius: 12px;
+  padding: 14px;
+  font-family: "DM Sans", -apple-system, sans-serif;
+  color: #0F1318;
+  box-shadow: 0 4px 24px rgba(15, 19, 24, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ac-tab-collapsed {
+  position: sticky;
+  top: 24px;
+  background: linear-gradient(180deg, #FFD75A 0%, #F5B731 100%);
+  border: 1px solid #E8A012;
+  border-radius: 999px;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #0F1318;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 14px rgba(245, 183, 49, 0.30);
+}
+.ac-tab-collapsed:hover { box-shadow: 0 4px 18px rgba(245, 183, 49, 0.45); }
+.ac-tab-bullet { color: #166534; }
+
+.ac-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 8px; padding-bottom: 8px;
+  border-bottom: 1px solid rgba(245, 183, 49, 0.30);
+}
+.ac-eyebrow {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  color: #F5B731;
+}
+.ac-sub {
+  font-size: 11px;
+  color: #5A5F66;
+  margin-top: 2px;
+}
+.ac-collapse-btn {
+  background: transparent;
+  border: 1px solid rgba(15, 19, 24, 0.10);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: #5A5F66;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.ac-suggestions { display: flex; flex-direction: column; gap: 4px; }
+.ac-suggestions-eyebrow {
+  font-size: 9.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #5A5F66;
+}
+.ac-suggestion {
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(15, 19, 24, 0.10);
+  border-radius: 6px;
+  padding: 7px 10px;
+  text-align: left;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: #0F1318;
+  cursor: pointer;
+  line-height: 1.40;
+  transition: background 100ms;
+}
+.ac-suggestion:hover {
+  background: rgba(245, 183, 49, 0.15);
+  border-color: rgba(245, 183, 49, 0.5);
+}
+
+.ac-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ac-prompt-input {
+  border: 1px solid rgba(15, 19, 24, 0.10);
+  background: #FFFFFF;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 12.5px;
+  color: #0F1318;
+  outline: none;
+  resize: vertical;
+}
+.ac-prompt-input:focus { border-color: #F5B731; }
+.ac-send-btn {
+  background: linear-gradient(180deg, #FFD75A 0%, #F5B731 100%);
+  border: 1px solid #E8A012;
+  color: #0F1318;
+  padding: 7px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.04em;
+}
+.ac-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ac-pods { display: flex; flex-direction: column; gap: 4px; }
+.ac-pods-eyebrow {
+  font-size: 9.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #5A5F66;
+}
+.ac-pod {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(15, 19, 24, 0.10);
+  border-radius: 6px;
+  padding: 6px 9px;
+  font-size: 11px;
+}
+.ac-pod.idle    { opacity: 0.55; }
+.ac-pod.running { background: rgba(245, 183, 49, 0.15); border-color: #F5B731; animation: ac-pulse 1.2s ease-in-out infinite; }
+.ac-pod.done    { background: rgba(34, 197, 94, 0.08); border-color: rgba(34, 197, 94, 0.40); }
+
+@keyframes ac-pulse {
+  0%,100% { opacity: 0.7; }
+  50%     { opacity: 1; }
+}
+
+.ac-pod-name {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 700;
+  color: #0F1318;
+  font-size: 11px;
+}
+.ac-pod-status {
+  font-size: 9.5px;
+  color: #5A5F66;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ac-pod-verdict {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+.v-go        { background: rgba(34, 197, 94, 0.18); color: #166534; }
+.v-caution   { background: rgba(245, 183, 49, 0.20); color: #854D0E; }
+.v-no_go     { background: rgba(239, 68, 68, 0.18); color: #991B1B; }
+.v-no\-go    { background: rgba(239, 68, 68, 0.18); color: #991B1B; }
+
+.ac-pod-conf {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: #5A5F66;
+}
+
+.ac-adj {
+  background: rgba(255,255,255,0.85);
+  border: 1px solid rgba(15, 19, 24, 0.10);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.ac-adj-eyebrow {
+  font-size: 9.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: #4A3208;
+}
+.ac-adj-summary {
+  font-size: 11.5px;
+  color: #0F1318;
+  margin-top: 4px;
+  line-height: 1.50;
+}
+
+.ac-final {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.12) 0%, rgba(255,255,255,0.5) 100%);
+  border: 1px solid rgba(34, 197, 94, 0.40);
+  border-radius: 8px;
+  padding: 12px;
+}
+.ac-final.v-caution {
+  background: linear-gradient(180deg, rgba(245, 183, 49, 0.18) 0%, rgba(255,255,255,0.5) 100%);
+  border-color: rgba(245, 183, 49, 0.45);
+}
+.ac-final.v-no_go, .ac-final.v-no\-go {
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.12) 0%, rgba(255,255,255,0.5) 100%);
+  border-color: rgba(239, 68, 68, 0.40);
+}
+.ac-final-eyebrow {
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+  color: #5A5F66;
+}
+.ac-final-verdict {
+  font-size: 18px; font-weight: 700;
+  margin-top: 4px;
+  font-family: "DM Sans", sans-serif;
+}
+.ac-final-conf {
+  font-size: 10.5px;
+  color: #5A5F66;
+  font-family: "JetBrains Mono", monospace;
+  margin-top: 2px;
+}
+.ac-final-summary {
+  font-size: 11.5px;
+  margin-top: 6px;
+  line-height: 1.50;
+  color: #0F1318;
+}
+.ac-final-link {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  color: #4A3208;
+  font-family: "JetBrains Mono", monospace;
+  text-decoration: none;
+}
+.ac-final-link:hover { text-decoration: underline; }
+
+.ac-err {
+  background: rgba(239, 68, 68, 0.10);
+  color: #991B1B;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+}

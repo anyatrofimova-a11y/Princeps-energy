@@ -19,9 +19,19 @@ Stripe integration lives here, not in the alerts router.
 from __future__ import annotations
 
 from app.billing.price_catalog import PRICE_IDS, TIER_METADATA, tier_from_price_id
+from app.billing.spend_cap import (
+    SpendCap,
+    SpendCapExceeded,
+    check_and_consume,
+    get_cap,
+)
 
 __all__ = [
     "PRICE_IDS",
     "TIER_METADATA",
     "tier_from_price_id",
+    "SpendCap",
+    "SpendCapExceeded",
+    "check_and_consume",
+    "get_cap",
 ]

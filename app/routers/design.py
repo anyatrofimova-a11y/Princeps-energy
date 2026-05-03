@@ -1380,6 +1380,51 @@ async def _latest_assessments(conn, project_id: UUID, limit: int = 5) -> list[di
         return []
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Layout specs — BOT-REAL grounding for the Site Designer legend.
+# Delegates to utils.dc_design_specs; do NOT re-derive numbers here.
+# ═══════════════════════════════════════════════════════════════════════════
+
+@router.get("/layout-specs")
+async def design_layout_specs(
+    project_id: str | None = Query(None, description="Project UUID — pulls real anchor spec when available"),
+    project_name: str | None = Query(None, description="Fallback when caller doesn't have a project_id yet"),
+    capacity_mw: float | None = Query(None, description="Override capacity (MW IT load)"),
+    tier: int = Query(3, ge=1, le=4),
+    redundancy: str = Query("N+1", pattern="^(N|N\\+1|2N|2N\\+1)$"),
+    cooling: str = Query("hybrid", description="hybrid | mechanical | free_cooling | evaporative | a2_dry | a3_evap | l2c | immersion_1p | immersion_2p"),
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Return the layout spec with source tags per field.
+
+    Resolution order: project_id → REAL_DC_SPECS by project.name → benchmark
+    fallback. Callers (the Site Designer legend, chat tools, PDF reports)
+    should pipe through this endpoint rather than computing numbers inline."""
+    from utils.dc_design_specs import compute_layout_specs, layout_legend_rows
+
+    proj_row = None
+    if project_id:
+        try:
+            pid = UUID(project_id)
+        except ValueError:
+            raise HTTPException(400, "Invalid project_id")
+        async with pool.acquire() as conn:
+            proj_row = await _load_project_row(conn, pid)
+        if not proj_row:
+            raise HTTPException(404, f"Project {project_id} not found")
+
+    specs = compute_layout_specs(
+        project=proj_row,
+        project_name=project_name,
+        capacity_mw=capacity_mw,
+        tier=tier,
+        redundancy=redundancy,
+        cooling=cooling,
+    )
+    specs["legend_rows"] = layout_legend_rows(specs)
+    return specs
+
+
 @router.get("/{project_id}/full-doc")
 async def full_project_doc(project_id: str, pool: asyncpg.Pool = Depends(get_pool)):
     """Single blob combining project, current design state, derived KPIs,

@@ -173,9 +173,11 @@ async def ingest_flood_zones_bbox(
     }) as client:
         async with pool.acquire() as conn:
             run_id = await conn.fetchval(
-                "INSERT INTO ea_ingest_log (dataset, bbox, started_at) "
-                "VALUES ($1, $2::jsonb, now()) RETURNING id",
-                "flood_map_planning", json.dumps(list(bbox)),
+                "INSERT INTO ea_ingest_log "
+                "(dataset, bbox_min_lon, bbox_min_lat, bbox_max_lon, bbox_max_lat, started_at) "
+                "VALUES ($1, $2, $3, $4, $5, now()) RETURNING id",
+                "flood_map_planning",
+                float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]),
             )
         for zone in zones:
             try:
@@ -188,9 +190,12 @@ async def ingest_flood_zones_bbox(
         async with pool.acquire() as conn:
             await conn.execute(
                 "UPDATE ea_ingest_log SET finished_at = now(), "
-                "rows_inserted = $1, rows_updated = $2 WHERE id = $3",
-                sum(z.get("inserted", 0) for z in result["zones"].values() if isinstance(z, dict)),
-                sum(z.get("updated", 0) for z in result["zones"].values() if isinstance(z, dict)),
+                "features_upserted = $1 WHERE id = $2",
+                sum(
+                    z.get("inserted", 0) + z.get("updated", 0)
+                    for z in result["zones"].values()
+                    if isinstance(z, dict)
+                ),
                 run_id,
             )
     return result

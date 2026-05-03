@@ -64,7 +64,19 @@ async def take_snapshot(pool: asyncpg.Pool, taken_at: date | None = None) -> int
 
         for r in rows:
             proj_id = str(r["project_id"])
-            meta = r["metadata"] or {}
+            raw_meta = r["metadata"]
+            # asyncpg returns JSONB as str unless a codec is registered —
+            # normalise to dict defensively so downstream `.get(...)` never
+            # explodes regardless of pool configuration.
+            if isinstance(raw_meta, str):
+                try:
+                    meta = json.loads(raw_meta) or {}
+                except Exception:
+                    meta = {}
+            elif isinstance(raw_meta, dict):
+                meta = raw_meta
+            else:
+                meta = {}
             score = _safe_num(meta.get("score") or meta.get("site_score") or meta.get("feasibility_score"))
             irr = _safe_num(meta.get("irr") or meta.get("simple_irr_pct"))
             blocker = meta.get("blocker")

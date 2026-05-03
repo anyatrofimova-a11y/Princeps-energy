@@ -1,0 +1,173 @@
+/* Workshop shell — Foundry-style overlay drawers + supporting primitives.
+   All class names are namespaced `px-*`. No global selectors.
+*/
+
+/* ──────────────────────────── Shell mount ──────────────────────────── */
+
+.px-shell-mount {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+}
+
+/* ──────────────────────────── Drawers ──────────────────────────── */
+
+.px-drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 36px;
+  z-index: 80;
+  display: flex;
+  background: rgba(15, 19, 24, 0.96);
+  color: #E5E7EB;
+  font-family: 'Inter', 'DM Sans', -apple-system, system-ui, sans-serif;
+  transition: width 180ms ease;
+  backdrop-filter: blur(6px);
+}
+.px-drawer-left  { left: 0;  border-right: 1px solid #1F2937; flex-direction: row; }
+.px-drawer-right { right: 0; border-left:  1px solid #1F2937; flex-direction: row-reverse; }
+
+.px-drawer.is-expanded {
+  width: 320px;
+  z-index: 100;
+  box-shadow: 0 0 24px rgba(0, 0, 0, 0.3);
+}
+
+.px-drawer-toggle {
+  flex: 0 0 36px;
+  background: transparent;
+  color: #94A3B8;
+  border: 0;
+  border-bottom: 1px solid #1F2937;
+  height: 36px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.px-drawer-toggle:hover { color: #D4A018; background: rgba(212, 160, 24, 0.06); }
+
+.px-drawer-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.px-drawer-title {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94A3B8;
+  border-bottom: 1px solid #1F2937;
+}
+
+.px-drawer-content {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 8px 0;
+}
+
+/* ──────────────────────────── Asset tree ──────────────────────────── */
+
+.px-tree { list-style: none; margin: 0; padding: 0; font-size: 12.5px; }
+.px-tree ul { list-style: none; margin: 0; padding: 0; }
+.px-tree-row {
+  display: flex; align-items: center; gap: 4px; padding: 4px 8px;
+  cursor: default; color: #CBD5E1;
+}
+.px-tree-row:hover { background: rgba(212, 160, 24, 0.08); }
+.px-tree-row.is-selected { background: rgba(15, 107, 255, 0.14); color: #fff; }
+.px-tree-disclosure, .px-tree-label {
+  background: transparent; color: inherit; border: 0; cursor: pointer;
+  font: inherit; padding: 0; text-align: left;
+}
+.px-tree-disclosure { width: 14px; flex: 0 0 14px; color: #94A3B8; }
+.px-tree-disclosure-spacer { width: 14px; flex: 0 0 14px; }
+.px-tree-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.px-tree-empty { padding: 12px; color: #94A3B8; font-size: 12px; }
+.px-tree-error { color: #EF4444; }
+
+/* Badges */
+.px-badges { display: inline-flex; gap: 3px; }
+.px-badge {
+  font-size: 10px; padding: 0 6px; line-height: 16px; border-radius: 8px;
+  color: #0F1318; font-weight: 600;
+}
+.px-badge-red    { background: #EF4444; color: #fff; }
+.px-badge-yellow { background: #FBBF24; }
+.px-badge-blue   { background: #60A5FA; color: #fff; }
+.px-badge-green  { background: #34D399; color: #0F1318; }
+
+/* ──────────────────────────── ObjectInspector ──────────────────────────── */
+
+.px-inspector {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 0 14px 14px; font-size: 12.5px;
+}
+.px-inspector-header {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 0 8px; border-bottom: 1px solid #1F2937;
+}
+.px-inspector-type {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #94A3B8;
+}
+.px-inspector-name {
+  font-size: 14px; font-weight: 600; color: #fff;
+  word-break: break-word;
+}
+.px-inspector-empty, .px-inspector-error {
+  padding: 18px 14px; color: #94A3B8;
+}
+.px-inspector-error { color: #EF4444; }
+
+.px-inspector-section h4 {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #94A3B8;
+  margin: 8px 0 6px; padding: 0;
+}
+
+.px-prop-list { display: grid; grid-template-columns: max-content 1fr; gap: 4px 10px; margin: 0; }
+.px-prop-row { display: contents; }
+.px-prop-row dt { color: #94A3B8; font-weight: 500; }
+.px-prop-row dd { margin: 0; color: #CBD5E1; word-break: break-word; }
+
+.px-rels { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.px-rel { display: flex; align-items: center; gap: 6px; }
+.px-rel-type { color: #94A3B8; font-size: 11px; min-width: 60px; }
+.px-rel-target { color: #CBD5E1; font-size: 11px; word-break: break-all; }
+
+.px-inspector-actions { display: flex; flex-direction: column; gap: 6px; }
+
+/* ──────────────────────────── ActionButton ──────────────────────────── */
+
+.px-action-button button {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(212, 160, 24, 0.12);
+  border: 1px solid rgba(212, 160, 24, 0.3);
+  color: #FBBF24; padding: 6px 10px; font: inherit; font-size: 12px;
+  border-radius: 4px; cursor: pointer;
+  transition: background 120ms;
+}
+.px-action-button button:hover:not(:disabled) {
+  background: rgba(212, 160, 24, 0.24);
+}
+.px-action-button button:disabled { opacity: 0.5; cursor: not-allowed; }
+.px-action-result { font-size: 11.5px; padding: 6px 0; }
+.px-action-result-ok    { color: #34D399; }
+.px-action-result-error { color: #EF4444; }
+.px-action-side-effect {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 3px;
+  background: rgba(96, 165, 250, 0.15); color: #93C5FD; font-size: 10px;
+}
+.px-action-spinner { animation: px-spin 1s infinite linear; }
+@keyframes px-spin { from { opacity: 0.3 } to { opacity: 1 } }
+
+.px-empty { color: #94A3B8; font-size: 11.5px; padding: 4px 0; }

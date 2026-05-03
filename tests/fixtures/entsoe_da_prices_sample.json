@@ -1,0 +1,1010 @@
+[
+  {
+    "datetime_utc": "2026-04-24T00:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T01:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T02:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T03:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T04:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T05:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T06:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T07:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T08:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T09:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T10:00:00Z",
+    "price_eur_mwh": 103.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T11:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T12:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T13:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T14:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T15:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T16:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T17:00:00Z",
+    "price_eur_mwh": 106.53,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T18:00:00Z",
+    "price_eur_mwh": 100.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T19:00:00Z",
+    "price_eur_mwh": 95.32,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T20:00:00Z",
+    "price_eur_mwh": 91.35,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T21:00:00Z",
+    "price_eur_mwh": 53.85,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T22:00:00Z",
+    "price_eur_mwh": 53.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-24T23:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260424"
+  },
+  {
+    "datetime_utc": "2026-04-25T00:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T01:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T02:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T03:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T04:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T05:00:00Z",
+    "price_eur_mwh": 81.88,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T06:00:00Z",
+    "price_eur_mwh": 85.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T07:00:00Z",
+    "price_eur_mwh": 88.61,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T08:00:00Z",
+    "price_eur_mwh": 90.99,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T09:00:00Z",
+    "price_eur_mwh": 92.49,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T10:00:00Z",
+    "price_eur_mwh": 93.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T11:00:00Z",
+    "price_eur_mwh": 92.49,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T12:00:00Z",
+    "price_eur_mwh": 90.99,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T13:00:00Z",
+    "price_eur_mwh": 88.61,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T14:00:00Z",
+    "price_eur_mwh": 85.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T15:00:00Z",
+    "price_eur_mwh": 81.88,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T16:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T17:00:00Z",
+    "price_eur_mwh": 95.12,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T18:00:00Z",
+    "price_eur_mwh": 91.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T19:00:00Z",
+    "price_eur_mwh": 88.39,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T20:00:00Z",
+    "price_eur_mwh": 86.01,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T21:00:00Z",
+    "price_eur_mwh": 63.51,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T22:00:00Z",
+    "price_eur_mwh": 63.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-25T23:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260425"
+  },
+  {
+    "datetime_utc": "2026-04-26T00:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T01:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T02:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T03:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T04:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T05:00:00Z",
+    "price_eur_mwh": 81.88,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T06:00:00Z",
+    "price_eur_mwh": 85.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T07:00:00Z",
+    "price_eur_mwh": 88.61,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T08:00:00Z",
+    "price_eur_mwh": 90.99,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T09:00:00Z",
+    "price_eur_mwh": 92.49,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T10:00:00Z",
+    "price_eur_mwh": 93.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T11:00:00Z",
+    "price_eur_mwh": 92.49,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T12:00:00Z",
+    "price_eur_mwh": 90.99,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T13:00:00Z",
+    "price_eur_mwh": -8.4,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T14:00:00Z",
+    "price_eur_mwh": 85.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T15:00:00Z",
+    "price_eur_mwh": 81.88,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T16:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T17:00:00Z",
+    "price_eur_mwh": 95.12,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T18:00:00Z",
+    "price_eur_mwh": 91.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T19:00:00Z",
+    "price_eur_mwh": 88.39,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T20:00:00Z",
+    "price_eur_mwh": 86.01,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T21:00:00Z",
+    "price_eur_mwh": 63.51,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T22:00:00Z",
+    "price_eur_mwh": 63.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-26T23:00:00Z",
+    "price_eur_mwh": 72.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260426"
+  },
+  {
+    "datetime_utc": "2026-04-27T00:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T01:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T02:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T03:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T04:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T05:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T06:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T07:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T08:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T09:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T10:00:00Z",
+    "price_eur_mwh": 103.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T11:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T12:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T13:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T14:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T15:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T16:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T17:00:00Z",
+    "price_eur_mwh": 106.53,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T18:00:00Z",
+    "price_eur_mwh": 100.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T19:00:00Z",
+    "price_eur_mwh": 95.32,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T20:00:00Z",
+    "price_eur_mwh": 91.35,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T21:00:00Z",
+    "price_eur_mwh": 53.85,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T22:00:00Z",
+    "price_eur_mwh": 53.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-27T23:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260427"
+  },
+  {
+    "datetime_utc": "2026-04-28T00:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T01:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T02:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T03:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T04:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T05:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T06:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T07:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T08:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T09:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T10:00:00Z",
+    "price_eur_mwh": 103.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T11:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T12:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T13:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T14:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T15:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T16:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T17:00:00Z",
+    "price_eur_mwh": 106.53,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T18:00:00Z",
+    "price_eur_mwh": 100.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T19:00:00Z",
+    "price_eur_mwh": 95.32,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T20:00:00Z",
+    "price_eur_mwh": 91.35,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T21:00:00Z",
+    "price_eur_mwh": 53.85,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T22:00:00Z",
+    "price_eur_mwh": 53.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-28T23:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260428"
+  },
+  {
+    "datetime_utc": "2026-04-29T00:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T01:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T02:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T03:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T04:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T05:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T06:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T07:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T08:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T09:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T10:00:00Z",
+    "price_eur_mwh": 103.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T11:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T12:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T13:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T14:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T15:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T16:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T17:00:00Z",
+    "price_eur_mwh": 106.53,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T18:00:00Z",
+    "price_eur_mwh": 245.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T19:00:00Z",
+    "price_eur_mwh": 95.32,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T20:00:00Z",
+    "price_eur_mwh": 91.35,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T21:00:00Z",
+    "price_eur_mwh": 53.85,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T22:00:00Z",
+    "price_eur_mwh": 53.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-29T23:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260429"
+  },
+  {
+    "datetime_utc": "2026-04-30T00:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T01:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T02:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T03:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T04:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T05:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T06:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T07:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T08:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T09:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T10:00:00Z",
+    "price_eur_mwh": 103.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T11:00:00Z",
+    "price_eur_mwh": 102.15,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T12:00:00Z",
+    "price_eur_mwh": 99.65,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T13:00:00Z",
+    "price_eur_mwh": 95.68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T14:00:00Z",
+    "price_eur_mwh": 90.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T15:00:00Z",
+    "price_eur_mwh": 84.47,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T16:00:00Z",
+    "price_eur_mwh": 78.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T17:00:00Z",
+    "price_eur_mwh": 106.53,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T18:00:00Z",
+    "price_eur_mwh": 100.5,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T19:00:00Z",
+    "price_eur_mwh": 95.32,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T20:00:00Z",
+    "price_eur_mwh": 91.35,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T21:00:00Z",
+    "price_eur_mwh": 53.85,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T22:00:00Z",
+    "price_eur_mwh": 53.0,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  },
+  {
+    "datetime_utc": "2026-04-30T23:00:00Z",
+    "price_eur_mwh": 68,
+    "currency": "EUR",
+    "document_id": "FIXTURE-GB-DA-20260430"
+  }
+]

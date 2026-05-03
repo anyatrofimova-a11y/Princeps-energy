@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useMemo, useEffect } from "react";
 import api from "./services/api";
+import { usePanel } from "./hooks/useUiPanels.js";
+import { useSettings } from "./hooks/useSettings.js";
+import { useSiteTarget } from "./hooks/useSiteTarget.js";
 
 const SiteContext = createContext(null);
 
@@ -29,15 +32,19 @@ function loadSettings() {
 }
 
 export function SiteProvider({ children }) {
-  // ── Settings ──
-  const [settings, setSettings] = useState(loadSettings);
-  const [settingsForm, setSettingsForm] = useState(loadSettings);
+  // ── Settings (Stage B2 — backed by useSettings hook, localStorage-persisted) ──
+  const [settings, setSettings] = useSettings();
+  const [settingsForm, setSettingsForm] = useState(() => settings);
+
+  // Keep settingsForm in sync with persisted settings (cross-tab edits, etc.).
+  useEffect(() => {
+    setSettingsForm(settings);
+  }, [settings]);
 
   const saveSettings = useCallback((form) => {
-    setSettings(form);
+    setSettings(form);          // useSettings handles localStorage write
     setSettingsForm(form);
-    localStorage.setItem("princeps_settings", JSON.stringify(form));
-  }, []);
+  }, [setSettings]);
 
   const resetSettingsForm = useCallback(() => {
     setSettingsForm(settings);
@@ -46,10 +53,12 @@ export function SiteProvider({ children }) {
   const updateSettingsForm = useCallback((updates) => {
     setSettingsForm(prev => ({ ...prev, ...updates }));
   }, []);
-  // ── Site identity ──
-  const [parcelId, setParcelId] = useState("");
-  const [pickedLocation, setPickedLocation] = useState(null);
-  const [pickMode, setPickMode] = useState(false);
+  // ── Site identity (Stage B3 — URL-search-param-backed via useSiteTarget) ──
+  const {
+    parcelId, setParcelId,
+    pickedLocation, setPickedLocation,
+    pickMode, setPickMode,
+  } = useSiteTarget();
 
   // ── SAM parameters ──
   const [samCapacity, setSamCapacity] = useState(100);
@@ -82,111 +91,111 @@ export function SiteProvider({ children }) {
   const [geeflowJobId, setGeeflowJobId] = useState(null);
 
   // ── Grid Connection Panel ──
-  const [gridConnectionOpen, setGridConnectionOpen] = useState(false);
+  const [gridConnectionOpen, setGridConnectionOpen] = usePanel('grid-connection');
   const [gridHighlightSub, setGridHighlightSub] = useState(null); // candidate substation to highlight on map
 
   // ── Demand Forecast Panel ──
-  const [demandForecastOpen, setDemandForecastOpen] = useState(false);
+  const [demandForecastOpen, setDemandForecastOpen] = usePanel('demand-forecast');
 
   // ── Council Search Panel ──
-  const [councilSearchOpen, setCouncilSearchOpen] = useState(false);
+  const [councilSearchOpen, setCouncilSearchOpen] = usePanel('council-search');
 
   // ── Grid Digital Twin ──
-  const [gridTwinOpen, setGridTwinOpen] = useState(false);
+  const [gridTwinOpen, setGridTwinOpen] = usePanel('grid-twin');
 
   // ── Advanced Grid Panel ──
-  const [advancedGridOpen, setAdvancedGridOpen] = useState(false);
+  const [advancedGridOpen, setAdvancedGridOpen] = usePanel('advanced-grid');
 
   // ── Connection Strategy Panel ──
-  const [connectionStrategyOpen, setConnectionStrategyOpen] = useState(false);
+  const [connectionStrategyOpen, setConnectionStrategyOpen] = usePanel('connection-strategy');
 
   // ── Dispatch Panel ──
-  const [dispatchOpen, setDispatchOpen] = useState(false);
+  const [dispatchOpen, setDispatchOpen] = usePanel('dispatch');
 
   // ── Route-to-Market Panel ──
-  const [rtmOpen, setRtmOpen] = useState(false);
+  const [rtmOpen, setRtmOpen] = usePanel('rtm');
 
   // ── Sustainability Panel ──
-  const [sustainabilityOpen, setSustainabilityOpen] = useState(false);
+  const [sustainabilityOpen, setSustainabilityOpen] = usePanel('sustainability');
 
   // ── Investment Panel ──
-  const [investmentOpen, setInvestmentOpen] = useState(false);
+  const [investmentOpen, setInvestmentOpen] = usePanel('investment');
 
   // ── Financial Model Panel ──
-  const [financialModelOpen, setFinancialModelOpen] = useState(false);
+  const [financialModelOpen, setFinancialModelOpen] = usePanel('financial-model');
 
   // ── Site Prospector Panel ──
-  const [siteProspectorOpen, setSiteProspectorOpen] = useState(false);
+  const [siteProspectorOpen, setSiteProspectorOpen] = usePanel('site-prospector');
 
   // ── Data Centre Twin (unified) ──
-  const [dcTwinOpen, setDcTwinOpen] = useState(false);
-  const [dcLandingOpen, setDcLandingOpen] = useState(false);
-  const [dcComparisonOpen, setDcComparisonOpen] = useState(false);
+  const [dcTwinOpen, setDcTwinOpen] = usePanel('dc-twin');
+  const [dcLandingOpen, setDcLandingOpen] = usePanel('dc-landing');
+  const [dcComparisonOpen, setDcComparisonOpen] = usePanel('dc-comparison');
   const [dcComparisonSites, setDcComparisonSites] = useState([]);
 
   // ── BEMS Digital Twin ──
-  const [bemsOpen, setBemsOpen] = useState(false);
+  const [bemsOpen, setBemsOpen] = usePanel('bems');
 
   // ── Asset Inspector (LiDAR) ──
-  const [assetInspectorOpen, setAssetInspectorOpen] = useState(false);
+  const [assetInspectorOpen, setAssetInspectorOpen] = usePanel('asset-inspector');
 
   // ── Grid Graph Topology ──
-  const [gridGraphOpen, setGridGraphOpen] = useState(false);
+  const [gridGraphOpen, setGridGraphOpen] = usePanel('grid-graph');
 
   // ── Planning Intelligence Panel ──
-  const [planningIntelOpen, setPlanningIntelOpen] = useState(false);
+  const [planningIntelOpen, setPlanningIntelOpen] = usePanel('planning-intel');
 
   // ── BESS Panel ──
-  const [bessPanelOpen, setBessPanelOpen] = useState(false);
+  const [bessPanelOpen, setBessPanelOpen] = usePanel('bess-panel');
 
   // ── Portfolio Panel ──
-  const [portfolioPanelOpen, setPortfolioPanelOpen] = useState(false);
+  const [portfolioPanelOpen, setPortfolioPanelOpen] = usePanel('portfolio-panel');
 
   // ── Cable Routing Panel ──
-  const [cableRoutingOpen, setCableRoutingOpen] = useState(false);
+  const [cableRoutingOpen, setCableRoutingOpen] = usePanel('cable-routing');
 
   // ── Yield Assessment Panel ──
-  const [yieldAssessmentOpen, setYieldAssessmentOpen] = useState(false);
+  const [yieldAssessmentOpen, setYieldAssessmentOpen] = usePanel('yield-assessment');
 
   // ── Construction Panel ──
-  const [constructionPanelOpen, setConstructionPanelOpen] = useState(false);
+  const [constructionPanelOpen, setConstructionPanelOpen] = usePanel('construction-panel');
 
   // ── BESS Facility Twin ──
-  const [bessFacilityOpen, setBessFacilityOpen] = useState(false);
+  const [bessFacilityOpen, setBessFacilityOpen] = usePanel('bess-facility');
 
   // ── Hardware Configurator ──
-  const [hwConfigOpen, setHwConfigOpen] = useState(false);
+  const [hwConfigOpen, setHwConfigOpen] = usePanel('hw-config');
 
   // ── Gemini 3D Asset Modeller ──
-  const [asset3dOpen, setAsset3dOpen] = useState(false);
+  const [asset3dOpen, setAsset3dOpen] = usePanel('asset3d');
 
   // ── Thermal Model (TEASER) ──
-  const [thermalModelOpen, setThermalModelOpen] = useState(false);
+  const [thermalModelOpen, setThermalModelOpen] = usePanel('thermal-model');
 
   // ── Terrain Analysis Panel ──
-  const [terrainAnalysisOpen, setTerrainAnalysisOpen] = useState(false);
+  const [terrainAnalysisOpen, setTerrainAnalysisOpen] = usePanel('terrain-analysis');
 
   // ── Reports Hub Panel ──
-  const [reportsHubOpen, setReportsHubOpen] = useState(false);
+  const [reportsHubOpen, setReportsHubOpen] = usePanel('reports-hub');
 
   // ── Electrical Design Panel ──
-  const [electricalDesignOpen, setElectricalDesignOpen] = useState(false);
+  const [electricalDesignOpen, setElectricalDesignOpen] = usePanel('electrical-design');
 
   // ── Documents Panel ──
-  const [documentsPanelOpen, setDocumentsPanelOpen] = useState(false);
+  const [documentsPanelOpen, setDocumentsPanelOpen] = usePanel('documents');
 
   // ── Tier 3 Panels ──
-  const [ppaOriginationOpen, setPpaOriginationOpen] = useState(false);
-  const [workflowPanelOpen, setWorkflowPanelOpen] = useState(false);
-  const [assessmentSnapshotOpen, setAssessmentSnapshotOpen] = useState(false);
-  const [exportPanelOpen, setExportPanelOpen] = useState(false);
-  const [alertRulesOpen, setAlertRulesOpen] = useState(false);
-  const [prospectorV2Open, setProspectorV2Open] = useState(false);
+  const [ppaOriginationOpen, setPpaOriginationOpen] = usePanel('ppa-origination');
+  const [workflowPanelOpen, setWorkflowPanelOpen] = usePanel('workflow');
+  const [assessmentSnapshotOpen, setAssessmentSnapshotOpen] = usePanel('assessment-snapshot');
+  const [exportPanelOpen, setExportPanelOpen] = usePanel('export');
+  const [alertRulesOpen, setAlertRulesOpen] = usePanel('alert-rules');
+  const [prospectorV2Open, setProspectorV2Open] = usePanel('prospector-v2');
 
   // ── Palantir-style shared entity selection (cross-view linking) ──
   const [selectedEntity, setSelectedEntity] = useState(null);
   // Shape: { type: "substation"|"project"|"constraint"|"ecr"|"site", id, data, source }
-  const [actionSidebarOpen, setActionSidebarOpen] = useState(false);
+  const [actionSidebarOpen, setActionSidebarOpen] = usePanel('action-sidebar');
 
   // ── Real Site Context (REPD, OSM, grid, TEC) ──
   const [realSiteContext, setRealSiteContext] = useState(null);
@@ -195,8 +204,8 @@ export function SiteProvider({ children }) {
   const [visionData, setVisionData] = useState(null);
   const [visionLoading, setVisionLoading] = useState(false);
   const [visionUploads, setVisionUploads] = useState([]);
-  const [digitalTwinOpen, setDigitalTwinOpen] = useState(false);
-  const [terrainTwinOpen, setTerrainTwinOpen] = useState(false);
+  const [digitalTwinOpen, setDigitalTwinOpen] = usePanel('digital-twin');
+  const [terrainTwinOpen, setTerrainTwinOpen] = usePanel('terrain-twin');
   const [twinData, setTwinData] = useState(null);
 
   // ── Loading flags ──
@@ -219,7 +228,7 @@ export function SiteProvider({ children }) {
 
   // ── Placed assets (map drag-drop) with persistence + validation ──
   const [placedAssets, setPlacedAssets] = useState([]);
-  const [energyFlowOpen, setEnergyFlowOpen] = useState(false);
+  const [energyFlowOpen, setEnergyFlowOpen] = usePanel('energy-flow');
   const [assetValidations, setAssetValidations] = useState({});
   const [designProjectId, setDesignProjectId] = useState(null);
   const [designDirty, setDesignDirty] = useState(false);
@@ -303,7 +312,7 @@ export function SiteProvider({ children }) {
   const [workflowStage, setWorkflowStage] = useState("site"); // site | study | connect | plan | impact | act
   const [studySubStep, setStudySubStep] = useState("feasibility");
   const [workflowHistory, setWorkflowHistory] = useState(["site"]);
-  const [dashboardOpen, setDashboardOpen] = useState(false);
+  const [dashboardOpen, setDashboardOpen] = usePanel('dashboard');
 
   // ── Chained Workflows ──
   const [workflowResults, setWorkflowResults] = useState({});  // intent → agent result
@@ -373,6 +382,20 @@ export function SiteProvider({ children }) {
     gibsFire: false,
     gridConstraints: false,
     envConstraints: true,        // Default-on 2026-04-19 — flood/SSSI/AONB are first-pass feasibility filters
+    // ── BOT-FLOOD: first-class EA flood overlays via WMS proxy (2026-04-29) ──
+    eaFloodZone3:    false,    // 1-in-100y fluvial / 1-in-200y tidal
+    eaFloodZone2:    false,    // 1-in-1000y outline (Flood Map for Planning)
+    eaRofrs:         false,    // Risk of Flooding from Rivers and Sea (NaFRA 2024)
+    eaRofrsw:        false,    // Risk of Flooding from Surface Water
+    eaReservoir:     false,    // Reservoir inundation (wet day, national)
+    // ── BOT-LR: land-rights overlays via /api/land-rights/{layer} ────────────
+    lrCrown:         false,    // Crown Estate land
+    lrMod:           false,    // MOD safeguarding zones
+    lrForestry:      false,    // Forestry England subcompartments
+    lrNationalTrust: false,    // National Trust always-open land
+    lrCommon:        false,    // CRoW s.4 conclusively-registered common land
+    lrProw:          false,    // Public rights of way (lines)
+    lrParcelsOwn:    false,    // INSPIRE parcels coloured by ownership category
     queueDepth: false,
     landParcels: true,           // Default-on — HMLR parcels are a primary discovery surface
     planningDensity: false,

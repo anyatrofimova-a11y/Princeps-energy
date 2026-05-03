@@ -156,21 +156,41 @@ _SEVERITY_ORDER = {"info": 0, "warn": 1, "critical": 2}
 
 
 async def _evaluate_rules(conn: asyncpg.Connection, event_id: int, event: dict) -> None:
-    """Match the event against alert_rules and insert notifications for each hit."""
-    rules = await conn.fetch("SELECT * FROM alert_rules WHERE enabled = TRUE")
+    """Match the event against alert_rules and insert notifications for each hit.
+
+    The grid_events subsystem expects a specific ``alert_rules`` shape
+    (event_types[], min_severity, project_scope, scope_value). Some
+    deployments already have a different ``alert_rules`` owned by the
+    Princeps Alerts module — in that case we silently no-op rather than
+    crash event emission.
+    """
+    try:
+        rules = await conn.fetch("SELECT * FROM alert_rules WHERE enabled = TRUE")
+    except Exception as e:
+        log.debug("alert_rules fetch skipped: %s", e)
+        return
     for r in rules:
-        types = list(r["event_types"] or [])
+        # Defensive field access — foreign-shape alert_rules tables
+        # won't have these columns. asyncpg Record raises KeyError on
+        # missing columns; treat that as "skip this rule".
+        try:
+            raw_types = r["event_types"]
+            types = list(raw_types or [])
+            min_sev = r["min_severity"] or "info"
+            scope = r["project_scope"] or "all"
+            scope_val = r["scope_value"]
+        except (KeyError, TypeError):
+            continue
         if types and event["event_type"] not in types:
             continue
-        if _SEVERITY_ORDER.get(event["severity"], 0) < _SEVERITY_ORDER.get(r["min_severity"] or "info", 0):
+        if _SEVERITY_ORDER.get(event["severity"], 0) < _SEVERITY_ORDER.get(min_sev, 0):
             continue
         # project_scope matching is permissive for now (default scope matches everything)
-        scope = r["project_scope"] or "all"
-        if scope == "by_region" and r["scope_value"]:
-            if (event.get("payload") or {}).get("region") != r["scope_value"]:
+        if scope == "by_region" and scope_val:
+            if (event.get("payload") or {}).get("region") != scope_val:
                 continue
-        if scope == "by_technology" and r["scope_value"]:
-            if (event.get("payload") or {}).get("technology") != r["scope_value"]:
+        if scope == "by_technology" and scope_val:
+            if (event.get("payload") or {}).get("technology") != scope_val:
                 continue
 
         title = f"{event['event_type'].replace('_', ' ').title()}"

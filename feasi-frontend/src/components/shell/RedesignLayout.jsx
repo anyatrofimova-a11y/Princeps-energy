@@ -100,6 +100,10 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
   const [sites, setSites] = useState([]);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardPortfolioId, setWizardPortfolioId] = useState(null);
+  // Stage filter pushed by Dashboard's "Stage funnel" rows. When set, the
+  // overview pane should show projects at this stage sorted by recency.
+  const [stageFilter, setStageFilter] = useState(null);
+  const [stageFilterLabel, setStageFilterLabel] = useState(null);
   // Ref holds the latest tree so event handlers (attached once) read fresh data.
   const treeRef = useRef([]);
 
@@ -193,13 +197,36 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
         sessionStorage.setItem("princeps.designSeed", JSON.stringify(e.detail || {}));
       } catch {}
     };
+    // Pending stage filter stashed by CenterCanvas (Dashboard funnel click).
+    try {
+      const pendingStage = sessionStorage.getItem("princeps.pendingStageFilter");
+      const pendingLabel = sessionStorage.getItem("princeps.pendingStageLabel");
+      if (pendingStage) {
+        sessionStorage.removeItem("princeps.pendingStageFilter");
+        sessionStorage.removeItem("princeps.pendingStageLabel");
+        setStageFilter(pendingStage);
+        setStageFilterLabel(pendingLabel || pendingStage);
+        setSelectedProjectId(null);
+        setActiveTab("overview");
+      }
+    } catch {}
+    const onStageFilter = (e) => {
+      const stage = e.detail?.stage;
+      if (!stage) return;
+      setStageFilter(stage);
+      setStageFilterLabel(e.detail?.label || stage);
+      setSelectedProjectId(null);
+      setActiveTab("overview");
+    };
     window.addEventListener("princeps-redesign-select-project", onSelect);
     window.addEventListener("princeps-redesign-new-project", onNew);
     window.addEventListener("princeps-open-site-designer", onOpenDesigner);
+    window.addEventListener("princeps-redesign-filter-stage", onStageFilter);
     return () => {
       window.removeEventListener("princeps-redesign-select-project", onSelect);
       window.removeEventListener("princeps-redesign-new-project", onNew);
       window.removeEventListener("princeps-open-site-designer", onOpenDesigner);
+      window.removeEventListener("princeps-redesign-filter-stage", onStageFilter);
     };
   }, [selectedPortfolioId]);
 
@@ -222,21 +249,31 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
     }
   }, [workspace?.activeWorkspace, workspace?.activeViewMode, site?.activeIntent]); // eslint-disable-line
 
-  // Load project + candidate sites whenever selection changes
+  // Load project + candidate sites whenever selection changes.
+  // allSettled (not all) — a flaky /candidate-sites shouldn't block the page
+  // from rendering the project record we already fetched successfully.
   useEffect(() => {
-    if (!selectedProjectId) { setProject(null); setSites([]); return; }
+    if (!selectedProjectId) { setProject(null); setSites([]); setLoadError(null); return; }
     let cancelled = false;
+    setLoadError(null);
     (async () => {
-      try {
-        const [proj, cand] = await Promise.all([
-          getProject(selectedProjectId),
-          listCandidateSites(selectedProjectId),
-        ]);
-        if (cancelled) return;
-        setProject(proj);
-        setSites(cand.candidates || []);
-      } catch (e) {
-        if (!cancelled) setLoadError(e.message || "Failed to load project");
+      const [projRes, candRes] = await Promise.allSettled([
+        getProject(selectedProjectId),
+        listCandidateSites(selectedProjectId),
+      ]);
+      if (cancelled) return;
+      if (projRes.status === "fulfilled" && projRes.value) {
+        setProject(projRes.value);
+      } else {
+        console.warn("[RedesignLayout] getProject failed", selectedProjectId, projRes.reason);
+        setProject(null);
+        setLoadError(projRes.reason?.message || "Failed to load project");
+      }
+      if (candRes.status === "fulfilled" && candRes.value) {
+        setSites(candRes.value.candidates || []);
+      } else {
+        console.warn("[RedesignLayout] listCandidateSites failed", selectedProjectId, candRes.reason);
+        setSites([]);  // render project without candidates rather than the whole page breaking
       }
     })();
     return () => { cancelled = true; };
@@ -280,7 +317,47 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
   // ProjectPage header. BOT-LX 2026-04-19: gate the PanelGroup on
   // activeViewMode === "projects" and otherwise render the center pane at
   // full width.
-  const showTreePane = workspace?.activeViewMode === "projects";
+  // Auto-collapse tree pane at narrow viewports (below 1400px total). The
+  // Sidebar itself is 240px fixed; leaving room for a ~240px tree plus the
+  // project page crushes the content. Only show the secondary tree on wide
+  // screens — the Sidebar's Projects row expander is sufficient on narrow.
+  const [isNarrow, setIsNarrow] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 1400
+  );
+  useEffect(() => {
+    const onResize = () => setIsNarrow(window.innerWidth < 1400);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  const showTreePane = workspace?.activeViewMode === "projects" && !isNarrow;
+
+  // ── Stage funnel filter view ──────────────────────────────────────
+  // When the user clicks a row in Dashboard's "Stage funnel" we land here
+  // with stageFilter set + no selectedProjectId. Render a sortable list
+  // of matching projects across all portfolios; clicking a project opens
+  // it (which clears the filter via setSelectedProjectId).
+  const stageFilterMatches = React.useMemo(() => {
+    if (!stageFilter) return null;
+    const norm = String(stageFilter).toLowerCase();
+    const out = [];
+    for (const pf of (tree || [])) {
+      for (const p of (pf.projects || [])) {
+        if (String(p.stage || "").toLowerCase() === norm) {
+          out.push({
+            ...p,
+            portfolio_id: pf.portfolio_id,
+            portfolio_name: pf.portfolio_name || pf.name,
+          });
+        }
+      }
+    }
+    out.sort((a, b) => {
+      const ta = a.stage_entered_at || a.updated_at || a.created_at || "";
+      const tb = b.stage_entered_at || b.updated_at || b.created_at || "";
+      return String(tb).localeCompare(String(ta));
+    });
+    return out;
+  }, [tree, stageFilter]);
 
   const centerPane = (
     <div className="rd-center">
@@ -291,6 +368,54 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
           <div className="rd-error-title">Could not load</div>
           <div className="rd-error-sub">{loadError}</div>
           <button className="rd-retry" onClick={reloadTree}>Retry</button>
+        </div>
+      ) : (stageFilter && stageFilterMatches && !selectedProjectId) ? (
+        <div className="rd-stage-list">
+          <header className="rd-stage-list-head">
+            <div>
+              <div className="rd-stage-list-eyebrow">FILTERED BY STAGE</div>
+              <h2 className="rd-stage-list-title">
+                {stageFilterLabel || stageFilter}
+                <span className="rd-stage-list-count"> · {stageFilterMatches.length}</span>
+              </h2>
+            </div>
+            <button
+              className="rd-stage-list-clear"
+              onClick={() => { setStageFilter(null); setStageFilterLabel(null); }}
+            >Clear filter</button>
+          </header>
+          {stageFilterMatches.length === 0 ? (
+            <div className="rd-stage-list-empty">
+              No projects at this stage yet.
+            </div>
+          ) : (
+            <ul className="rd-stage-list-rows">
+              {stageFilterMatches.map((p) => (
+                <li
+                  key={p.project_id}
+                  className="rd-stage-list-row"
+                  onClick={() => {
+                    setSelectedPortfolioId(p.portfolio_id);
+                    setSelectedProjectId(p.project_id);
+                    setActiveTab("overview");
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="rd-stage-list-row-main">
+                    <span className="rd-stage-list-row-name">{p.name || p.project_id}</span>
+                    <span className="rd-stage-list-row-meta">
+                      {p.technology || ""}{p.capacity_mw ? ` · ${p.capacity_mw} MW` : ""}
+                      {p.portfolio_name ? ` · ${p.portfolio_name}` : ""}
+                    </span>
+                  </div>
+                  <span className="rd-stage-list-row-date">
+                    {p.stage_entered_at ? new Date(p.stage_entered_at).toLocaleDateString() : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       ) : (
         <ProjectPage
@@ -327,14 +452,14 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
            resize; double-click to snap-collapse the project tree. */
         <PanelGroup
           direction="horizontal"
-          autoSaveId="princeps-rd-layout"
+          autoSaveId="princeps-rd-layout-v2"
           style={{ height: "100%", width: "100%" }}
         >
           <Panel
             id="rd-tree"
             order={1}
             defaultSize={20}
-            minSize={12}
+            minSize={16}
             maxSize={40}
             collapsible
             collapsedSize={0}

@@ -8,8 +8,9 @@ consumes a payload produced by a ``utils.*`` composer and emits a PDF
 Current generators
 ------------------
 * ``report_dno_engagement`` — DNO Engagement Pack v1 (Task #18).
+* ``lender_im`` — 30-page Data-Centre Lender Information Memorandum.
 """
 
 from __future__ import annotations
 
-__all__ = ["report_dno_engagement"]
+__all__ = ["report_dno_engagement", "lender_im"]

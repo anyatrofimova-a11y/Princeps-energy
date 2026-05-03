@@ -29,6 +29,20 @@ const LAYER_DEFS = [
   { key: "constraintPins", label: "Constraint Pins", color: "#e53935", group: "Constraints" },
   { key: "satellite", label: "Satellite Imagery", color: "#78909c", group: "Base" },
   { key: "buildings", label: "3D Buildings", color: "#9e9e9e", group: "Base" },
+  // ── BOT-FLOOD: best-in-class EA flood overlays (raster via FastAPI proxy).
+  { key: "eaFloodZone3", label: "EA Flood Zone 3 (1-in-100y)",     color: "#0d47a1", group: "Flood (EA)" },
+  { key: "eaFloodZone2", label: "EA Flood Zone 2 (1-in-1000y)",    color: "#1976d2", group: "Flood (EA)" },
+  { key: "eaRofrs",      label: "Risk: Rivers & Sea (NaFRA 2024)", color: "#01579b", group: "Flood (EA)" },
+  { key: "eaRofrsw",     label: "Risk: Surface Water",             color: "#ef6c00", group: "Flood (EA)" },
+  { key: "eaReservoir",  label: "Reservoir Inundation",            color: "#6a1b9a", group: "Flood (EA)" },
+  // ── BOT-LR: Land Rights — bbox-loaded vector overlays ──────────────
+  { key: "lrParcelsOwn",   label: "Parcels by ownership",       color: "#1F8FFF", group: "Land Rights" },
+  { key: "lrCrown",        label: "Crown Estate",               color: "#9C27B0", group: "Land Rights" },
+  { key: "lrMod",          label: "MOD safeguarding",           color: "#5D4037", group: "Land Rights" },
+  { key: "lrForestry",     label: "Forestry estate",            color: "#2E7D32", group: "Land Rights" },
+  { key: "lrNationalTrust", label: "National Trust",            color: "#00897B", group: "Land Rights" },
+  { key: "lrCommon",       label: "Common land",                color: "#FFB300", group: "Land Rights" },
+  { key: "lrProw",         label: "Public rights of way",       color: "#D32F2F", group: "Land Rights" },
 ];
 
 const ALC_GRADES = ["Grade 1", "Grade 2", "Grade 3a", "Grade 3b", "Grade 4", "Grade 5"];
@@ -174,6 +188,19 @@ export default function LayerControlPanel({
     if (!groups[def.group]) groups[def.group] = [];
     groups[def.group].push(def);
   }
+
+  // ── Scan-zone results (from SearchZone button) ─────────────────────
+  // Listens for /api/scan/zone manifests so we can render the categorised
+  // "found N/M layers" badges that mirror the LinkedIn reference UI.
+  const [scanGroups, setScanGroups] = useState(null);
+  useEffect(() => {
+    const onResult = (e) => {
+      const r = e.detail || {};
+      setScanGroups(r.groups || null);
+    };
+    window.addEventListener("princeps:scan-result", onResult);
+    return () => window.removeEventListener("princeps:scan-result", onResult);
+  }, []);
 
   return (
     <div className="lyc-container">
@@ -340,6 +367,28 @@ export default function LayerControlPanel({
           {layersOpen && (
             <div className="lyc-dropdown lyc-layer-dropdown">
               <div className="lyc-dropdown-title">Layers</div>
+
+              {/* Scan-zone manifest banner — categorised badges (active/available)
+                  appear here once the user has run a "Scan area" search. */}
+              {scanGroups && scanGroups.length > 0 && (
+                <div className="lyc-scan-banner">
+                  <div className="lyc-scan-banner-title">Scan results</div>
+                  {scanGroups.map((g) => {
+                    const has = g.with_features > 0;
+                    return (
+                      <div
+                        key={g.group}
+                        className={`lyc-scan-row ${has ? "lyc-scan-row-hit" : "lyc-scan-row-empty"}`}
+                      >
+                        <span className="lyc-scan-name">{g.group}</span>
+                        <span className="lyc-scan-badge">
+                          {g.with_features}/{g.available}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {Object.entries(groups).map(([group, defs]) => (
                 <div key={group} className="lyc-layer-group">

@@ -127,26 +127,50 @@ export default function ClusterGraphView() {
   const [tooltip, setTooltip] = useState(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
+  const [studiesLoading, setStudiesLoading] = useState(true);
+  const [building, setBuilding] = useState(false);
+  const [buildError, setBuildError] = useState("");
 
-  // Load studies list on mount
+  // Load studies list (also invoked after a "Build now" click)
+  const loadStudies = useCallback(async () => {
+    setStudiesLoading(true);
+    try {
+      const list = await api.cluster.studies();
+      setStudies(list);
+      if (list.length && !selectedStudy) {
+        setSelectedStudy(list[0].study_id);
+      }
+    } catch (e) {
+      setMessage(`Failed to load studies: ${e.message || e}`);
+    } finally {
+      setStudiesLoading(false);
+    }
+  }, [selectedStudy]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const list = await api.cluster.studies();
-        if (cancelled) return;
-        setStudies(list);
-        if (list.length && !selectedStudy) {
-          setSelectedStudy(list[0].study_id);
-        } else if (list.length === 0) {
-          setMessage("No cluster studies yet. Run POST /api/cluster/ingest first.");
-        }
-      } catch (e) {
-        setMessage(`Failed to load studies: ${e.message || e}`);
-      }
+      if (cancelled) return;
+      await loadStudies();
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // "Build now" handler — invoked from the empty state button. Runs
+  // ingest + recompute server-side and then refetches the list.
+  const buildGraph = useCallback(async () => {
+    setBuilding(true);
+    setBuildError("");
+    try {
+      await api.cluster.ingest();
+      await api.cluster.recompute();
+      await loadStudies();
+    } catch (e) {
+      setBuildError(e?.message || String(e));
+    } finally {
+      setBuilding(false);
+    }
+  }, [loadStudies]);
 
   // Load + lay out a study
   const loadStudy = useCallback(async (studyId) => {
@@ -395,6 +419,8 @@ export default function ClusterGraphView() {
     }
   }, [selectedStudy, loadStudy]);
 
+  const showEmptyState = !studiesLoading && studies.length === 0;
+
   return (
     <div ref={containerRef} style={ST.root}>
       <canvas
@@ -404,6 +430,68 @@ export default function ClusterGraphView() {
         onMouseLeave={() => { hoverRef.current = null; setTooltip(null); }}
         onClick={handleClick}
       />
+
+      {(studiesLoading || building) && (
+        <div style={ST.empty}>
+          <div
+            style={{
+              width: 22,
+              height: 22,
+              border: `2px solid ${DARK.border}`,
+              borderTopColor: DARK.gold,
+              borderRadius: "50%",
+              animation: "cluster-spin 0.9s linear infinite",
+            }}
+          />
+          <div style={{ color: DARK.textDim, fontSize: 11 }}>
+            {building ? "Building dependency graph…" : "Loading cluster studies…"}
+          </div>
+          <style>{`@keyframes cluster-spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
+      {showEmptyState && !building && (
+        <div style={ST.empty}>
+          <div
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: "50%",
+              border: `1px solid ${DARK.gold}55`,
+              background: "rgba(245, 183, 49, 0.08)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: DARK.gold,
+              fontSize: 18,
+              fontWeight: 700,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+            aria-hidden
+          >
+            ◇
+          </div>
+          <div style={{ fontSize: 12, color: DARK.text, fontWeight: 600 }}>
+            No cluster studies yet
+          </div>
+          <div style={{ fontSize: 10, color: DARK.textDim, maxWidth: 240, textAlign: "center", lineHeight: 1.5 }}>
+            Build dependency edges from the live TEC register to see how
+            projects share upgrade costs.
+          </div>
+          <button
+            style={{ ...ST.button, pointerEvents: "auto" }}
+            onClick={buildGraph}
+            disabled={building}
+          >
+            Build now
+          </button>
+          {buildError && (
+            <div style={{ fontSize: 10, color: DARK.red, fontStyle: "italic", maxWidth: 240, textAlign: "center" }}>
+              {buildError}
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={ST.toolbar}>
         <select

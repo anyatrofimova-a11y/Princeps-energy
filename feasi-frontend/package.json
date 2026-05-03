@@ -38,6 +38,7 @@
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "@react-three/postprocessing": "^3.0.4",
+    "@tanstack/react-query": "^5.100.6",
     "@turf/turf": "^7.3.4",
     "@xyflow/react": "^12.3.0",
     "ai": "^6.0.168",
@@ -45,6 +46,7 @@
     "chart.js": "^4.5.1",
     "cmdk": "^1.1.1",
     "d3-force": "^3.0.0",
+    "lucide-react": "^1.14.0",
     "mapbox-gl": "^3.9.0",
     "maplibre-gl": "^5.23.0",
     "normalize.css": "^8.0.1",
@@ -58,10 +60,10 @@
     "resium": "^1.20.0",
     "suncalc": "^1.9.0",
     "three": "^0.165.0",
-    "zustand": "^4.5.7",
     "threebox-plugin": "^2.2.7",
     "vite-plugin-cesium": "^1.2.23",
-    "web-ifc": "^0.0.57"
+    "web-ifc": "^0.0.57",
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.0",

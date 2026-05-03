@@ -1,0 +1,68 @@
+/* D1+D2 styles — constraint overlay + draggable component handles. */
+
+.px-dc-component-handle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: grab;
+  pointer-events: auto;
+  user-select: none;
+  transition: transform 80ms ease;
+}
+.px-dc-component-handle:active,
+.px-dc-component-handle.is-dragging { cursor: grabbing; transform: scale(1.06); }
+
+.px-dc-handle-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  background: #F5B731;
+  transition: background 80ms, transform 80ms;
+}
+
+.px-dc-handle-label {
+  font-family: "DM Sans", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: #0F1318;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.px-dc-component-handle.is-selected .px-dc-handle-dot {
+  background: #E8A012;
+  transform: scale(1.2);
+  box-shadow: 0 0 0 4px rgba(245, 183, 49, 0.4), 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+.px-dc-component-handle.is-selected .px-dc-handle-label {
+  background: #FDD85D;
+  border-color: #E8A012;
+}
+
+.px-dc-component-handle.is-overlap .px-dc-handle-dot {
+  background: #DC2626;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.35), 0 1px 4px rgba(0, 0, 0, 0.35);
+  animation: px-dc-pulse 0.6s ease-in-out infinite alternate;
+}
+.px-dc-component-handle.is-overlap .px-dc-handle-label {
+  background: #FEE2E2;
+  border-color: #DC2626;
+  color: #991B1B;
+}
+
+@keyframes px-dc-pulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.15); }
+}
+
+/* When a component is being dragged, fade other components slightly so the
+   foreground operation reads cleanly. */
+.mapboxgl-canvas-container.dc-design-dragging .px-dc-component-handle:not(.is-dragging) {
+  opacity: 0.45;
+}

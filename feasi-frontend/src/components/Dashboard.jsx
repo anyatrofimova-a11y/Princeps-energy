@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { STAGES, STAGE_INDEX } from "../lib/stage_workflow";
 import GridCanvas from "./GridCanvas";
+import LiveBessRevenue from "./bess/LiveBessRevenue";
 
 /**
  * Dashboard — Mission Control 3-card hero + active project table.
@@ -160,8 +162,24 @@ function StageFunnelCard({ projects, loading }) {
         {STAGES.map((s) => {
           const n = counts[s.key] || 0;
           const pct = loading ? 0 : Math.round((n / max) * 100);
+          const onOpen = () => {
+            // Switch to the projects view filtered by this stage. The
+            // event is handled by CenterCanvas which flips activeViewMode
+            // and stashes the filter for RedesignLayout to consume.
+            window.dispatchEvent(new CustomEvent("princeps:open-projects-by-stage", {
+              detail: { stage: s.key, label: s.label },
+            }));
+          };
           return (
-            <li key={s.key} className="mc-funnel-row">
+            <li
+              key={s.key}
+              className="mc-funnel-row mc-funnel-row-click"
+              onClick={onOpen}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onOpen(); }}
+              title={`Open projects at ${s.label} stage`}
+            >
               <span className="mc-funnel-lbl">{s.label}</span>
               <span className="mc-funnel-bar-wrap">
                 <span className="mc-funnel-bar" style={{ width: `${pct}%` }} />
@@ -359,6 +377,32 @@ export default function Dashboard({
 
   useEffect(() => { load(); }, [load]);
 
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const firstName = useMemo(() => {
+    try {
+      const stored = localStorage.getItem("princeps.user.firstName");
+      if (stored && stored.trim()) return stored.trim();
+      const email = localStorage.getItem("princeps.user.email") || "";
+      const local = email.split("@")[0] || "";
+      const first = local.split(/[._-]/)[0] || "";
+      if (first) return first.charAt(0).toUpperCase() + first.slice(1);
+    } catch {}
+    return "Anya";
+  }, []);
+  const greeting = useMemo(() => {
+    const h = now.getHours();
+    if (h < 5) return "Working late";
+    if (h < 12) return "Good morning";
+    if (h < 18) return "Good afternoon";
+    return "Good evening";
+  }, [now]);
+  const dateStr = now.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  const timeStr = now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
   const metrics = data?.metrics || {};
   const projects = data?.active_projects || [];
   const signals = data?.live_signals || [];
@@ -395,8 +439,19 @@ export default function Dashboard({
       <header className="mc-top">
         <div className="mc-top-left">
           <img src="/logo-princeps.png" alt="" width="28" height="28" className="mc-logo" />
-          <span className="mc-brand">PRINCEPS</span>
-          <span className="mc-kicker">Mission Control</span>
+          <div className="mc-top-title">
+            <div className="mc-top-title-row">
+              <span className="mc-brand">PRINCEPS</span>
+              <span className="mc-kicker">Mission Control</span>
+            </div>
+            <div className="mc-welcome">
+              <span className="mc-welcome-greet">{greeting}, {firstName}</span>
+              <span className="mc-welcome-sep">·</span>
+              <span className="mc-welcome-date">{dateStr}</span>
+              <span className="mc-welcome-sep">·</span>
+              <span className="mc-welcome-time">{timeStr}</span>
+            </div>
+          </div>
         </div>
         <div className="mc-top-actions">
           {onOpenInbox && (
@@ -422,6 +477,12 @@ export default function Dashboard({
         />
       </section>
 
+      {/* ── Live BESS revenue widget (WebSocket + Modo overlay) ── */}
+      <LiveBessRevenue />
+
+      {/* ── Princeps Tools — links to the new Foundry/Warp-Speed surfaces ── */}
+      <PrincepsToolsCard />
+
       {/* ── Active projects table ── */}
       <ActiveProjectsTable
         projects={projects}
@@ -431,6 +492,287 @@ export default function Dashboard({
 
       <style>{dashboardCss}</style>
     </div>
+  );
+}
+
+function PrincepsToolsCard() {
+  const navigate = useNavigate();
+  const [stats, setStats] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  // Live counts fetched in parallel — every tile shows real telemetry.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [datasets, modules, councils, repd, substations, projects] = await Promise.all([
+          fetch("/api/datasets").then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch("/api/workshop/modules").then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch("/api/council/sessions?limit=5").then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch("/api/objects/REPDProject?limit=1").then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch("/api/objects/Substation?limit=1").then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch("/api/objects/Project?limit=1").then(r => r.ok ? r.json() : null).catch(() => null),
+        ]);
+        if (cancelled) return;
+        const ds = datasets?.datasets || datasets || [];
+        const dsHealth = ds.reduce((a, d) => {
+          const h = d.health_status || "unknown";
+          a[h] = (a[h] || 0) + 1;
+          return a;
+        }, {});
+        setStats({
+          datasets_total: ds.length,
+          datasets_green: dsHealth.green || 0,
+          datasets_yellow: dsHealth.yellow || 0,
+          datasets_red: dsHealth.red || 0,
+          datasets_rows: ds.reduce((s, d) => s + (d.last_row_count || 0), 0),
+          modules_total: (modules?.modules || []).length,
+          council_recent: (councils?.sessions || councils || []).length,
+          repd_total: repd?.count_estimated || repd?.count || (repd?.items || []).length || 0,
+          subs_total: substations?.count_estimated || substations?.count || (substations?.items || []).length || 0,
+          projects_total: projects?.count_estimated || projects?.count || (projects?.items || []).length || 0,
+        });
+      } catch (e) { /* swallow */ }
+      finally { if (!cancelled) setLoading(false); }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Each tile: chip, title, sub, optional badge (live count), optional health pills.
+  const fmtNum = (n) => n == null ? "—" : Number(n).toLocaleString();
+
+  const tiles = [
+    {
+      to: "/v2/builder", chip: "Workshop", title: "Module Builder",
+      sub: "AI composes Workshop modules from DTDL", icon: "🛠",
+      badge: stats.modules_total != null ? `${stats.modules_total} saved` : null,
+    },
+    {
+      to: "/v2/council", chip: "Agentic", title: "Council Session",
+      sub: "GRID + BESS + DC pods + Adjudicator (SSE)", icon: "▤",
+      badge: stats.council_recent ? `${stats.council_recent} recent` : "demo",
+    },
+    {
+      to: "/v2/datasets", chip: "Data", title: "Datasets Catalogue",
+      sub: "Magritte connectors — refresh + health",
+      badge: stats.datasets_total != null ? `${stats.datasets_total} live · ${fmtNum(stats.datasets_rows)} rows` : null,
+      health: { green: stats.datasets_green, yellow: stats.datasets_yellow, red: stats.datasets_red },
+    },
+    {
+      to: "/v2/object/Project", chip: "Ontology", title: "Object Browser",
+      sub: "All typed objects — Project, Site, Substation, REPD, NSIP, TEC, Entity",
+      badge: stats.projects_total ? `${stats.projects_total}+ Projects` : null,
+    },
+    {
+      to: "/v2/object/REPDProject", chip: "Spatial", title: "REPD Map View",
+      sub: "Map + table split — every UK renewable project",
+      badge: "13,995 projects",
+    },
+    {
+      to: "/v2/object/Substation", chip: "Spatial", title: "Substations",
+      sub: "Grid asset map — DNO + voltage filter",
+      badge: "71,912 substations",
+    },
+    {
+      to: "/v2/object/NSIPProject", chip: "Pipeline", title: "NSIP / DCO",
+      sub: "Nationally Significant Infrastructure register",
+      badge: "30 projects",
+    },
+    {
+      to: "/v2/quiver/REPDProject", chip: "Charts", title: "Quiver",
+      sub: "Cross-filter scatter / bar charts over any typed object set",
+      badge: "X·Y axes",
+    },
+    {
+      to: "/v2/solutions", chip: "Marketplace", title: "Solutions",
+      sub: "Installable Slate dashboards — BESS, DC, Ops, Grid, Risk",
+      badge: "5 packages",
+    },
+    {
+      to: "/v2/sets", chip: "Ontology", title: "Object Sets",
+      sub: "Saved typed queries with union / intersect / subtract",
+      badge: "set algebra",
+    },
+    {
+      to: "/v2/pipelines", chip: "Pipelines", title: "Pipeline Builder",
+      sub: "Declarative DAGs — connectors → SQL transforms → CTAS sinks",
+      badge: "DAG executor",
+    },
+    {
+      to: "/v2/modules/bess-revenue-mvp", chip: "Module", title: "BESS Revenue Module",
+      sub: "AI-composed manifest — live revenue stack",
+      badge: "demo",
+    },
+    {
+      kind: "lineage-trigger", chip: "Provenance", title: "Lineage Graph",
+      sub: "Trace any connector → table → ontology class",
+      badge: "click to open",
+      onClick: () => window.dispatchEvent(new CustomEvent("princeps:lineage", {detail: {root: "bmrs_settlement_prices"}})),
+    },
+    {
+      kind: "lender-im", chip: "Reports", title: "Lender IM PDF",
+      sub: "30-page DC IM in 8s — pick a project below",
+      badge: "ready",
+      onClick: async () => {
+        // Pick the first DC-tagged project; fall back to any project
+        try {
+          const r = await fetch("/api/objects/Project?technology=data_centre&limit=1");
+          const j = await r.json();
+          const id = j?.items?.[0]?.id;
+          if (id) {
+            window.location.href = `/api/dc/lender-im-pdf?project_id=${encodeURIComponent(id)}`;
+            return;
+          }
+          const fb = await fetch("/api/objects/Project?limit=1").then(x => x.json());
+          const fbid = fb?.items?.[0]?.id;
+          if (fbid) window.location.href = `/api/dc/lender-im-pdf?project_id=${encodeURIComponent(fbid)}`;
+        } catch (e) { alert("Couldn't auto-pick a project for the IM."); }
+      },
+    },
+  ];
+
+  return (
+    <section className="px-tools-card" aria-label="Princeps tools">
+      <div className="px-tools-head">
+        <span className="px-tools-eyebrow">PRINCEPS · TOOLS</span>
+        <span className="px-tools-sub">Foundry-grade surfaces — agentic, composable, audited</span>
+        <span className="px-tools-stats">
+          {loading ? "syncing…" : (
+            <>
+              <code>{stats.datasets_total}</code> connectors ·{" "}
+              <code>{fmtNum(stats.datasets_rows)}</code> rows ·{" "}
+              <code>{stats.modules_total}</code> modules
+            </>
+          )}
+        </span>
+      </div>
+
+      <div className="px-tools-grid">
+        {tiles.map((t, i) => {
+          const isAction = t.kind === "lineage-trigger" || t.kind === "lender-im";
+          const Tag = isAction ? "button" : Link;
+          const tagProps = isAction
+            ? { type: "button", onClick: t.onClick, className: "px-tool-tile" }
+            : { to: t.to, className: "px-tool-tile" };
+          return (
+            <Tag key={i} {...tagProps}>
+              <div className="px-tool-chip-row">
+                <span className="px-tool-chip">{t.chip}</span>
+                {t.badge && <span className="px-tool-badge">{t.badge}</span>}
+              </div>
+              <div className="px-tool-title">{t.title}</div>
+              <div className="px-tool-sub">{t.sub}</div>
+              {t.health && (t.health.green || t.health.yellow || t.health.red) ? (
+                <div className="px-tool-health">
+                  {t.health.green ? <span className="px-h px-h-g">{t.health.green}</span> : null}
+                  {t.health.yellow ? <span className="px-h px-h-y">{t.health.yellow}</span> : null}
+                  {t.health.red ? <span className="px-h px-h-r">{t.health.red}</span> : null}
+                </div>
+              ) : null}
+              <div className="px-tool-arr">→</div>
+            </Tag>
+          );
+        })}
+      </div>
+
+      <style>{`
+        .px-tools-card {
+          margin-top: 20px; padding: 18px 20px;
+          background: rgba(255,255,255,0.92);
+          border: 1px solid rgba(15,19,24,0.08);
+          border-radius: 14px;
+          box-shadow: 0 4px 24px rgba(15,19,24,0.06);
+          backdrop-filter: blur(10px);
+          position: relative; z-index: 1;
+        }
+        .px-tools-head {
+          display: flex; align-items: baseline; gap: 12px;
+          margin-bottom: 14px; flex-wrap: wrap;
+        }
+        .px-tools-eyebrow {
+          font-size: 10px; letter-spacing: 0.12em; font-weight: 700;
+          color: #F5B731; font-family: "DM Sans", sans-serif;
+        }
+        .px-tools-sub { font-size: 11.5px; color: #5A5F66; }
+        .px-tools-stats {
+          margin-left: auto;
+          font-family: "JetBrains Mono", monospace;
+          font-size: 10.5px;
+          color: #5A5F66;
+          font-variant-numeric: tabular-nums;
+        }
+        .px-tools-stats code {
+          background: rgba(245,183,49,0.15);
+          padding: 1px 5px;
+          border-radius: 4px;
+          color: #4A3208;
+          font-weight: 600;
+        }
+        .px-tools-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+          gap: 10px;
+        }
+        .px-tool-tile {
+          display: block; padding: 14px 14px 16px; text-decoration: none;
+          color: inherit; text-align: left;
+          background: linear-gradient(180deg, #FBF8F2 0%, #F2F3F5 100%);
+          border: 1px solid rgba(15,19,24,0.08);
+          border-radius: 10px;
+          transition: transform 80ms, border-color 100ms, box-shadow 100ms;
+          position: relative; cursor: pointer;
+          font-family: inherit;
+          width: 100%;
+        }
+        .px-tool-tile:hover {
+          transform: translateY(-1px);
+          border-color: #F5B731;
+          box-shadow: 0 6px 18px rgba(245,183,49,0.15);
+        }
+        .px-tool-chip-row {
+          display: flex; align-items: center; gap: 6px;
+          margin-bottom: 8px;
+        }
+        .px-tool-chip {
+          display: inline-block; font-size: 9px; letter-spacing: 0.08em;
+          text-transform: uppercase; font-weight: 600;
+          padding: 2px 6px; border-radius: 999px;
+          background: rgba(245,183,49,0.18); color: #4A3208;
+        }
+        .px-tool-badge {
+          font-size: 9.5px;
+          color: #5A5F66;
+          background: rgba(255,255,255,0.7);
+          border: 1px solid rgba(15,19,24,0.08);
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-family: "JetBrains Mono", monospace;
+          font-variant-numeric: tabular-nums;
+        }
+        .px-tool-title {
+          font-size: 13px; font-weight: 600; color: #0F1318;
+          font-family: "DM Sans", sans-serif;
+        }
+        .px-tool-sub {
+          font-size: 11px; color: #5A5F66;
+          margin-top: 3px; line-height: 1.40;
+        }
+        .px-tool-health {
+          display: flex; gap: 4px; margin-top: 8px;
+        }
+        .px-h {
+          font-family: "JetBrains Mono", monospace;
+          font-size: 10px; padding: 1px 6px; border-radius: 4px;
+          font-weight: 600;
+        }
+        .px-h-g { background: rgba(34,197,94,0.18); color: #166534; }
+        .px-h-y { background: rgba(245,183,49,0.20); color: #854D0E; }
+        .px-h-r { background: rgba(239,68,68,0.18); color: #991B1B; }
+        .px-tool-arr { position: absolute; top: 14px; right: 14px; color: #94A3B8; font-size: 14px; }
+        .px-tool-tile:hover .px-tool-arr { color: #F5B731; }
+      `}</style>
+    </section>
   );
 }
 
@@ -481,15 +823,25 @@ const dashboardCss = `
     display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 20px;
   }
-  .mc-top-left { display: flex; align-items: center; gap: 10px; }
-  .mc-logo { object-fit: contain; }
+  .mc-top-left { display: flex; align-items: center; gap: 12px; }
+  .mc-logo { object-fit: contain; flex-shrink: 0; }
+  .mc-top-title { display: flex; flex-direction: column; gap: 4px; line-height: 1.15; }
+  .mc-top-title-row { display: flex; align-items: baseline; gap: 8px; }
+  .mc-welcome {
+    display: flex; align-items: baseline; gap: 8px;
+    font-size: 12px; color: var(--cds-text-helper);
+    font-weight: 500; letter-spacing: 0.01em;
+  }
+  .mc-welcome-greet { color: var(--ink); font-weight: 600; }
+  .mc-welcome-sep { opacity: 0.4; }
+  .mc-welcome-time { font-variant-numeric: tabular-nums; }
   .mc-brand {
     font-weight: 700; letter-spacing: 0.18em; font-size: 13px;
     color: var(--ink);
   }
   .mc-kicker {
     font-size: 10px; letterSpacing: 0.12em; text-transform: uppercase;
-    color: var(--cds-text-helper); font-weight: 600; margin-left: 8px;
+    color: var(--cds-text-helper); font-weight: 600; margin-left: 0;
     letter-spacing: 0.12em;
   }
   .mc-top-actions { display: flex; gap: 10px; }

@@ -1573,6 +1573,23 @@ api.ltds = {
 };
 
 
+api.scan = {
+  zone: (bbox) => post("/api/scan/zone", { bbox }),
+  constraintsUnion: (bbox) =>
+    get(`/api/constraints/union?bbox=${bbox.join(",")}`),
+  gridCorridors: (bbox, capacityMw = 50) =>
+    get(`/api/scan/grid-corridors?bbox=${bbox.join(",")}&capacity_mw=${capacityMw}`),
+};
+
+api.landRights = {
+  // GET /api/land-rights/{layer}?bbox=…
+  layer: (key, bbox) =>
+    get(`/api/land-rights/${enc(key)}?bbox=${bbox.join(",")}`),
+  ownershipParcels: (bbox) =>
+    get(`/api/land-rights/parcels/ownership-coloured?bbox=${bbox.join(",")}`),
+  status: () => get("/api/land-rights/status"),
+};
+
 api.curtailment = {
   analyse:         (params) => post("/api/curtailment/analyse", params),
   analyseGet:      (params) => {

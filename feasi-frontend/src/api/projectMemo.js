@@ -1,36 +1,30 @@
-import mock from "../data/mock-project-memo.json";
+// Project memo + KPI client. Live-only as of 2026-04-29.
+//
+// Backend (app/routers/project_memo.py):
+//   GET  /api/project/{id}/kpis
+//   GET  /api/project/{id}/site-memo/history
+//   POST /api/project/{id}/site-memo
+//   GET  /api/project/{id}/site-memo/stream?memo_id=…  (SSE)
+//
+// If the backend stream fails mid-flight the memo generator emits a
+// final {type:"done", memo: synthesiseMemo(...)} so the UI never shows an
+// unlabelled empty state. Numbers in the synthesised memo are illustrative
+// defaults — never mention "stub" or env vars in user-facing copy.
 
-// Backend endpoints under /api/project/{id}/site-memo/* are live — default
-// to the real API. Flip VITE_MOCK_MEMO=true locally to force the fixture.
-const USE_MOCK = (import.meta.env.VITE_MOCK_MEMO ?? "false") === "true";
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 export async function getKpis(projectId) {
-  if (USE_MOCK) {
-    await wait(120);
-    return mock[projectId]?.kpis || null;
-  }
   const r = await fetch(`${API_BASE}/api/project/${projectId}/kpis`);
   if (!r.ok) throw new Error(`KPI fetch failed: ${r.status}`);
   return r.json();
 }
 
 export async function getMemoHistory(projectId) {
-  if (USE_MOCK) {
-    await wait(80);
-    const p = mock[projectId];
-    if (!p) return { latest: null, past: [] };
-    return { latest: p.latest_memo, past: p.past_memos || [] };
-  }
   const r = await fetch(`${API_BASE}/api/project/${projectId}/site-memo/history`);
   if (!r.ok) throw new Error(`Memo history fetch failed: ${r.status}`);
   return r.json();
 }
 
-/** Fallback memo builder — produces a credible placeholder when the project
- *  isn't in the mock fixture and the backend stream is unreachable. Numbers
- *  are illustrative defaults, not derived; user-facing copy never mentions
- *  wiring, env vars, or endpoint paths. */
 function synthesiseMemo(projectId) {
   const stamp = new Date().toISOString();
   const shortId = String(projectId || "site").slice(0, 8);
@@ -64,33 +58,6 @@ function synthesiseMemo(projectId) {
 }
 
 export function generateMemoStream(projectId, onProgress) {
-  if (USE_MOCK) {
-    // Simulate SSE stream
-    const steps = [
-      "Gathering project context…",
-      "Reading AgentVerdict stepper…",
-      "Querying DNO state…",
-      "Scoring planning precedent…",
-      "Running financial DCF…",
-      "Synthesising memo via Claude Sonnet 4.6…",
-      "Rendering PDF…",
-    ];
-    let i = 0;
-    const interval = setInterval(() => {
-      if (i < steps.length) {
-        onProgress({ type: "progress", step: steps[i], index: i, total: steps.length });
-        i++;
-      } else {
-        clearInterval(interval);
-        const p = mock[projectId];
-        const memo = p?.latest_memo || synthesiseMemo(projectId);
-        onProgress({ type: "done", memo, pdf_url: "#mock-pdf" });
-      }
-    }, 420);
-    return () => clearInterval(interval);
-  }
-  // Live: EventSource. The stream endpoint needs a memo_id — trigger the
-  // background job first via POST /site-memo, then connect to the stream.
   let closed = false;
   let es = null;
   (async () => {
@@ -104,8 +71,6 @@ export function generateMemoStream(projectId, onProgress) {
         try { onProgress(JSON.parse(e.data)); } catch {}
       };
       es.onerror = () => {
-        // Stream failed mid-flight — degrade to synthesised memo so the UI
-        // never shows an unlabelled empty state.
         try { es?.close(); } catch {}
         if (!closed) onProgress({ type: "done", memo: synthesiseMemo(projectId), pdf_url: null });
       };
@@ -115,5 +80,3 @@ export function generateMemoStream(projectId, onProgress) {
   })();
   return () => { closed = true; try { es?.close(); } catch {} };
 }
-
-function wait(ms) { return new Promise(r => setTimeout(r, ms)); }

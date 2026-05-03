@@ -23,7 +23,7 @@ import time
 from datetime import datetime, timezone
 
 import httpx
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 
 log = logging.getLogger("princeps.twin_dynamic")
 router = APIRouter(prefix="/api/twin", tags=["twin-dynamic"])
@@ -82,7 +82,7 @@ async def carbon_regional(force: bool = Query(False)):
 
 # ── Live flow (REST fallback, complements /ws/grid-twin) ───────────────────
 @router.get("/live-flow")
-async def live_flow(bbox: str | None = Query(None)):
+async def live_flow(request: Request, bbox: str | None = Query(None)):
     """Return current power flow per grid_line for dyn_flow_arrows.
 
     Proxies the existing `/api/grid-twin/state` endpoint where possible
@@ -90,16 +90,9 @@ async def live_flow(bbox: str | None = Query(None)):
     interpolated stub based on the current UTC hour so the layer renders.
     """
     try:
-        # Best effort in-process call — avoid import loops by delaying
         from app.routers.grid import api_grid_twin_state  # noqa: WPS433
-        from app.deps import get_pool  # noqa: WPS433
 
-        pool_gen = get_pool()
-        if hasattr(pool_gen, "__anext__"):
-            pool = await pool_gen.__anext__()
-        else:
-            pool = pool_gen
-
+        pool = request.app.state.pool
         state = await api_grid_twin_state(pool=pool, limit=120)  # type: ignore[arg-type]
         lines = state.get("lines", []) if isinstance(state, dict) else []
         return {

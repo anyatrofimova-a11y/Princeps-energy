@@ -235,6 +235,23 @@ export default function PulseWorkspace() {
     } catch {}
   }, []);
 
+  const [takingSnapshot, setTakingSnapshot] = useState(false);
+  const [snapshotError, setSnapshotError] = useState("");
+
+  const takeSnapshotNow = useCallback(async () => {
+    setTakingSnapshot(true);
+    setSnapshotError("");
+    try {
+      await api.portfolioDelta.snapshot();
+      const dl = await api.portfolioDelta.latest(20);
+      setDeltas(dl || []);
+    } catch (e) {
+      setSnapshotError(e?.message || String(e));
+    } finally {
+      setTakingSnapshot(false);
+    }
+  }, []);
+
   return (
     <div style={ST.page}>
       <style>{`
@@ -353,8 +370,64 @@ export default function PulseWorkspace() {
           <div style={ST.panelTitle}>Portfolio Deltas</div>
           <div style={ST.scroll} className="pulse-scroll">
             {deltas.length === 0 ? (
-              <div style={ST.empty}>
-                No snapshots yet. Run <code>POST /api/portfolio/snapshot/take</code>.
+              <div style={{
+                ...ST.empty,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 10,
+                padding: "24px 16px",
+              }}>
+                <div
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    border: `1px solid ${DARK.gold}55`,
+                    background: "rgba(245, 183, 49, 0.08)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: DARK.gold,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}
+                  aria-hidden
+                >
+                  Δ
+                </div>
+                <div style={{ fontSize: 11, color: DARK.text, fontWeight: 600 }}>
+                  No portfolio movements yet
+                </div>
+                <div style={{ fontSize: 10, color: DARK.textMuted, lineHeight: 1.5, maxWidth: 220 }}>
+                  Take a portfolio snapshot to start tracking day-over-day
+                  verdict, score, and capacity changes.
+                </div>
+                <button
+                  onClick={takeSnapshotNow}
+                  disabled={takingSnapshot}
+                  style={{
+                    padding: "6px 12px",
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: 0.5,
+                    background: DARK.goldSoft,
+                    color: DARK.gold,
+                    border: `1px solid ${DARK.gold}44`,
+                    borderRadius: 6,
+                    cursor: takingSnapshot ? "progress" : "pointer",
+                    textTransform: "uppercase",
+                    opacity: takingSnapshot ? 0.7 : 1,
+                  }}
+                >
+                  {takingSnapshot ? "Taking snapshot…" : "Take snapshot"}
+                </button>
+                {snapshotError && (
+                  <div style={{ fontSize: 10, color: DARK.red, fontStyle: "italic", maxWidth: 220, textAlign: "center" }}>
+                    {snapshotError}
+                  </div>
+                )}
               </div>
             ) : (
               deltas.slice(0, 10).map((d, i) => (

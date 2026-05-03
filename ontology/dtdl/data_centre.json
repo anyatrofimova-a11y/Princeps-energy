@@ -1,0 +1,102 @@
+{
+  "@context": "dtmi:dtdl:context;3",
+  "@id": "dtmi:com:princeps:DataCentre;1",
+  "@type": "Interface",
+  "displayName": "Data Centre",
+  "description": "Onshore data centre — full hierarchy + Kongsberg-grade SCADA + cooling + power-chain telemetry.",
+  "contents": [
+    {"@type": "Property", "name": "name", "schema": "string"},
+    {"@type": "Property", "name": "siteRid", "schema": "string"},
+    {"@type": "Property", "name": "operator", "schema": "string"},
+    {"@type": "Property", "name": "tier", "schema": "string"},
+    {"@type": "Property", "name": "itLoadMw", "schema": "double",
+     "description": "Critical IT load."},
+    {"@type": "Property", "name": "totalGridDrawMw", "schema": "double",
+     "description": "Including PUE overhead."},
+    {"@type": "Property", "name": "puEDesign", "schema": "double"},
+    {"@type": "Property", "name": "wuEDesign", "schema": "double",
+     "description": "Water Usage Effectiveness, m³/MWh."},
+    {"@type": "Property", "name": "numHalls", "schema": "integer"},
+    {"@type": "Property", "name": "numPodsPerHall", "schema": "integer"},
+    {"@type": "Property", "name": "numAislesPerPod", "schema": "integer"},
+    {"@type": "Property", "name": "numRacksPerAisle", "schema": "integer"},
+    {"@type": "Property", "name": "rackPowerKw", "schema": "double"},
+    {"@type": "Property", "name": "coolingType", "schema": {
+      "@type": "Enum", "valueSchema": "string",
+      "enumValues": [
+        {"name": "AIR_DX", "enumValue": "AIR_DX"},
+        {"name": "CHILLED_WATER", "enumValue": "CHILLED_WATER"},
+        {"name": "EVAPORATIVE", "enumValue": "EVAPORATIVE"},
+        {"name": "LIQUID_COLD_PLATE", "enumValue": "LIQUID_COLD_PLATE"},
+        {"name": "LIQUID_IMMERSION", "enumValue": "LIQUID_IMMERSION"}
+      ]
+    }},
+    {"@type": "Property", "name": "ttiTotalMinutesYtd", "schema": "double",
+     "description": "Time-to-Idle minutes year-to-date — operational availability."},
+
+    {"@type": "Telemetry", "name": "currentItLoadMw", "schema": "double"},
+    {"@type": "Telemetry", "name": "currentTotalDrawMw", "schema": "double"},
+    {"@type": "Telemetry", "name": "currentPue", "schema": "double"},
+    {"@type": "Telemetry", "name": "ambientDbTempC", "schema": "double"},
+    {"@type": "Telemetry", "name": "outdoorWbTempC", "schema": "double"},
+    {"@type": "Telemetry", "name": "chilledWaterSupplyTempC", "schema": "double"},
+    {"@type": "Telemetry", "name": "chilledWaterReturnTempC", "schema": "double"},
+    {"@type": "Telemetry", "name": "chilledWaterFlowLps", "schema": "double"},
+    {"@type": "Telemetry", "name": "coolingPowerMw", "schema": "double"},
+    {"@type": "Telemetry", "name": "upsBatteryHealthPct", "schema": "double"},
+    {"@type": "Telemetry", "name": "upsLoadPct", "schema": "double"},
+    {"@type": "Telemetry", "name": "atsPositionA", "schema": "boolean"},
+    {"@type": "Telemetry", "name": "gensetTestDueDays", "schema": "integer"},
+    {"@type": "Telemetry", "name": "gridFrequencyHz", "schema": "double"},
+    {"@type": "Telemetry", "name": "waterUsageM3PerMwh", "schema": "double"},
+    {"@type": "Telemetry", "name": "carbonIntensityGCo2PerKwh", "schema": "double"},
+
+    {"@type": "Relationship", "name": "connectsTo", "target": "dtmi:com:princeps:Substation;1",
+     "minMultiplicity": 1, "maxMultiplicity": 4},
+    {"@type": "Relationship", "name": "backedBy", "target": "dtmi:com:princeps:BESSUnit;1",
+     "minMultiplicity": 0, "maxMultiplicity": 50,
+     "description": "On-site BESS units providing UPS / load shifting."},
+    {"@type": "Relationship", "name": "operatedBy", "target": "dtmi:com:princeps:Counterparty;1",
+     "minMultiplicity": 0, "maxMultiplicity": 1},
+    {"@type": "Relationship", "name": "containsHall", "target": "dtmi:com:princeps:DcHall;1",
+     "minMultiplicity": 1, "maxMultiplicity": 30},
+
+    {"@type": "Component", "name": "coolingPlant",
+     "schema": {
+       "@type": "Interface", "@id": "dtmi:com:princeps:DcCoolingPlant;1",
+       "displayName": "DC Cooling Plant",
+       "contents": [
+         {"@type": "Property", "name": "numChillers", "schema": "integer"},
+         {"@type": "Property", "name": "numCoolingTowers", "schema": "integer"},
+         {"@type": "Telemetry", "name": "chillerLoadPct", "schema": "double"},
+         {"@type": "Telemetry", "name": "coolingTowerFanRpm", "schema": "double"},
+         {"@type": "Telemetry", "name": "freeCoolingActive", "schema": "boolean"}
+       ]
+     }
+    },
+    {"@type": "Component", "name": "powerChain",
+     "schema": {
+       "@type": "Interface", "@id": "dtmi:com:princeps:DcPowerChain;1",
+       "displayName": "DC Power Chain",
+       "contents": [
+         {"@type": "Property", "name": "numUtilityFeeders", "schema": "integer"},
+         {"@type": "Property", "name": "numGensets", "schema": "integer"},
+         {"@type": "Property", "name": "numUpsModules", "schema": "integer"},
+         {"@type": "Telemetry", "name": "feederACurrentA", "schema": "double"},
+         {"@type": "Telemetry", "name": "feederBCurrentA", "schema": "double"},
+         {"@type": "Telemetry", "name": "gensetReadyCount", "schema": "integer"}
+       ]
+     }
+    },
+
+    {"@type": "Command", "name": "runWhatIfCoolingFailure",
+     "description": "Simulate chiller / cooling-tower failure and return time-to-thermal-shutdown.",
+     "request": {"name": "scope", "schema": "string"},
+     "response": {"name": "minutesToShutdown", "schema": "double"}},
+    {"@type": "Command", "name": "balanceItLoad",
+     "description": "Rebalance IT load across halls to flatten hot-spots."},
+    {"@type": "Command", "name": "isolate",
+     "description": "Lock-out/tag-out specific cooling loop or electrical circuit.",
+     "request": {"name": "scope", "schema": "string"}}
+  ]
+}

@@ -1,0 +1,657 @@
+/* ============================================================
+   Princeps Lender Information Memorandum — embedded stylesheet
+   Cream / gold / dark-ink palette, DM Sans + JetBrains Mono.
+   A4 portrait, full-bleed cover, 22 mm margins on body pages.
+   ============================================================ */
+
+:root {
+  --cream:        #FBF8F2;
+  --cream-2:      #F5EFE3;
+  --cream-3:      #EFE7D6;
+  --gold:         #F5B731;
+  --gold-dark:    #E8A012;
+  --gold-soft:    rgba(245, 183, 49, 0.10);
+  --gold-line:    rgba(245, 183, 49, 0.40);
+  --ink:          #0F1318;
+  --ink-soft:     #1F2937;
+  --ink-dim:      #6B7280;
+  --ink-low:      #9CA3AF;
+  --border:       #E8EAED;
+  --border-strong: rgba(15, 19, 24, 0.10);
+  --ok:           #16A34A;
+  --warn:         #E8A012;
+  --alarm:        #DC2626;
+}
+
+@page {
+  size: A4 portrait;
+  margin: 22mm 18mm 22mm 18mm;
+  background: var(--cream);
+  @top-left {
+    content: "Princeps · Lender IM";
+    font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+    font-size: 8.5pt;
+    color: var(--ink-dim);
+    letter-spacing: 0.6pt;
+  }
+  @top-right {
+    content: "{{ project.name }}";
+    font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+    font-size: 8.5pt;
+    color: var(--ink-dim);
+  }
+  @bottom-left {
+    content: "{{ issued.ref }} · Confidential";
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 7.5pt;
+    color: var(--ink-low);
+    letter-spacing: 0.4pt;
+  }
+  @bottom-right {
+    content: "Page " counter(page) " of " counter(pages);
+    font-family: "JetBrains Mono", "Menlo", monospace;
+    font-size: 7.5pt;
+    color: var(--ink-low);
+  }
+}
+
+@page :first {
+  margin: 0;
+  @top-left { content: none; }
+  @top-right { content: none; }
+  @bottom-left { content: none; }
+  @bottom-right { content: none; }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 10.5pt; }
+
+body {
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  color: var(--ink);
+  background: var(--cream);
+  line-height: 1.50;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  font-feature-settings: "ss01", "tnum";
+}
+
+.mono, .num.mono, td.mono, span.mono, .v.mono {
+  font-family: "JetBrains Mono", "Menlo", "Consolas", monospace;
+  font-feature-settings: "tnum", "zero";
+  letter-spacing: -0.1pt;
+}
+
+.muted   { color: var(--ink-dim); }
+.small   { font-size: 8.5pt; color: var(--ink-dim); }
+.footnote {
+  margin-top: 2mm;
+  font-size: 8.5pt;
+  color: var(--ink-dim);
+  font-style: italic;
+  line-height: 1.50;
+}
+
+.page-break        { page-break-after: always; break-after: page; }
+.page-break-before { page-break-before: always; break-before: page; }
+.avoid-break       { page-break-inside: avoid; }
+
+/* ============================================================
+   Cover page — full-bleed cream + gold spine
+   ============================================================ */
+.cover {
+  height: 297mm;
+  width: 210mm;
+  padding: 24mm 22mm 18mm 22mm;
+  background:
+    linear-gradient(180deg, var(--cream) 0%, var(--cream) 70%, var(--cream-2) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+}
+
+.cover::before {
+  /* Gold spine on left edge — thin accent */
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6mm;
+  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-dark) 100%);
+}
+
+.cover::after {
+  /* Subtle constellation glow top-right (decorative) */
+  content: "";
+  position: absolute;
+  right: -40mm;
+  top: -20mm;
+  width: 140mm;
+  height: 140mm;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(245, 183, 49, 0.18) 0%, rgba(245, 183, 49, 0) 65%);
+  pointer-events: none;
+}
+
+.cover-top {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 0.6pt solid var(--gold-line);
+  padding-bottom: 6mm;
+}
+
+.cover-brand {
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 22pt;
+  font-weight: 700;
+  letter-spacing: 8pt;
+  color: var(--ink);
+}
+
+.cover-tag {
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 8.5pt;
+  letter-spacing: 1.2pt;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.cover-body {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  padding-top: 18mm;
+}
+
+.cover-doc-type {
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 9pt;
+  letter-spacing: 4pt;
+  text-transform: uppercase;
+  color: var(--gold-dark);
+  margin-bottom: 6mm;
+}
+
+.cover-title {
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 30pt;
+  font-weight: 700;
+  line-height: 1.10;
+  color: var(--ink);
+  margin-bottom: 4mm;
+  max-width: 145mm;
+}
+
+.cover-subtitle {
+  font-size: 12.5pt;
+  color: var(--ink-soft);
+  margin-bottom: 12mm;
+  font-weight: 400;
+  line-height: 1.40;
+  max-width: 145mm;
+}
+
+.cover-verdict-strip {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 14mm;
+  border: 0.6pt solid var(--gold-line);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.cover-verdict {
+  padding: 6mm 9mm;
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 17pt;
+  font-weight: 700;
+  letter-spacing: 1.5pt;
+  color: #fff;
+  min-width: 38mm;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cover-verdict-GO         { background: var(--ok); }
+.cover-verdict-CAUTION    { background: var(--warn); color: var(--ink); }
+.cover-verdict-NO-GO      { background: var(--alarm); }
+
+.cover-verdict-text {
+  flex: 1;
+  padding: 5mm 9mm;
+  font-size: 11pt;
+  line-height: 1.45;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+}
+
+.cover-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1pt;
+  background: var(--gold-line);
+  border: 0.6pt solid var(--gold-line);
+  margin-bottom: 12mm;
+}
+
+.cover-meta-cell {
+  padding: 3.5mm 5mm;
+  background: rgba(255, 255, 255, 0.78);
+  display: flex;
+  flex-direction: column;
+}
+
+.cover-meta-cell .k {
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 7.5pt;
+  letter-spacing: 0.6pt;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 1mm;
+}
+
+.cover-meta-cell .v {
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 10.5pt;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.cover-meta-cell .v.mono,
+.cover-meta-cell .v.mono * {
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 9.5pt;
+}
+
+.cover-reliance {
+  background: rgba(255, 255, 255, 0.65);
+  border-left: 2pt solid var(--gold);
+  padding: 5mm 6mm;
+  font-size: 9pt;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.cover-reliance .reliance-head {
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 8.5pt;
+  letter-spacing: 1.5pt;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 3mm;
+}
+
+.cover-footer {
+  position: relative;
+  z-index: 2;
+  border-top: 0.6pt solid var(--gold-line);
+  padding-top: 4mm;
+  display: flex;
+  justify-content: space-between;
+  font-size: 8.5pt;
+  color: var(--ink-dim);
+}
+
+/* ============================================================
+   Body sections
+   ============================================================ */
+.section {
+  page-break-before: always;
+  break-before: page;
+  padding-top: 2mm;
+}
+
+.section:first-of-type {
+  page-break-before: auto;
+}
+
+.section-title {
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 18pt;
+  font-weight: 700;
+  color: var(--ink);
+  border-bottom: 1.5pt solid var(--gold);
+  padding-bottom: 2mm;
+  margin-bottom: 5mm;
+  letter-spacing: 0.2pt;
+}
+
+.section-intro {
+  font-size: 10pt;
+  color: var(--ink-soft);
+  margin-bottom: 4mm;
+  line-height: 1.55;
+}
+
+h3.sub {
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 11.5pt;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 5mm 0 2.5mm 0;
+  letter-spacing: 0.2pt;
+}
+
+h3.sub::before {
+  content: "■ ";
+  color: var(--gold);
+  font-size: 10pt;
+}
+
+p {
+  font-size: 10pt;
+  margin-bottom: 1.5mm;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+ul.bullets {
+  margin: 2mm 0 2mm 6mm;
+}
+
+ul.bullets li {
+  font-size: 10pt;
+  color: var(--ink-soft);
+  margin-bottom: 1.5mm;
+  line-height: 1.55;
+}
+
+/* ============================================================
+   Verdict bar (executive summary)
+   ============================================================ */
+.verdict-bar {
+  display: flex;
+  align-items: stretch;
+  border: 0.6pt solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.65);
+  margin-bottom: 5mm;
+}
+
+.verdict-pill {
+  padding: 4mm 7mm;
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 14pt;
+  font-weight: 700;
+  letter-spacing: 1.2pt;
+  color: #fff;
+  min-width: 32mm;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.verdict-GO         { background: var(--ok); }
+.verdict-CAUTION    { background: var(--warn); color: var(--ink); }
+.verdict-NO-GO      { background: var(--alarm); }
+
+.verdict-detail {
+  flex: 1;
+  padding: 3mm 5mm;
+  font-size: 10pt;
+  color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  line-height: 1.45;
+}
+
+/* ============================================================
+   KPI strip
+   ============================================================ */
+.kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2.5mm;
+  margin: 4mm 0;
+}
+
+.kpi-cell {
+  background: rgba(255, 255, 255, 0.7);
+  border-left: 2pt solid var(--gold);
+  padding: 3mm 4mm;
+  page-break-inside: avoid;
+}
+
+.kpi-cell .v {
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  font-size: 14pt;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.10;
+  margin-bottom: 1mm;
+}
+
+.kpi-cell .v.mono,
+.kpi-cell .v {
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 13pt;
+}
+
+.kpi-cell .l {
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 7pt;
+  color: var(--ink-dim);
+  letter-spacing: 0.6pt;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   Tables
+   ============================================================ */
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 9.5pt;
+  margin: 2mm 0;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+table.data th {
+  background: var(--ink);
+  color: var(--gold);
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 7.5pt;
+  font-weight: 700;
+  letter-spacing: 0.7pt;
+  text-transform: uppercase;
+  padding: 2.2mm 2.8mm;
+  text-align: left;
+  border-bottom: 1.5pt solid var(--gold);
+}
+
+table.data th.num {
+  text-align: right;
+}
+
+table.data td {
+  padding: 1.8mm 2.8mm;
+  border-bottom: 0.4pt solid var(--cream-3);
+  color: var(--ink-soft);
+  vertical-align: top;
+  line-height: 1.45;
+}
+
+table.data td.k {
+  font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+  font-weight: 600;
+  color: var(--ink);
+  width: 50mm;
+  background: var(--cream-2);
+}
+
+table.data td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+table.data td.small {
+  font-size: 8.5pt;
+  color: var(--ink-dim);
+}
+
+table.data tr.total td {
+  font-weight: 700;
+  background: var(--gold-soft);
+  border-top: 1pt solid var(--gold);
+  border-bottom: 1pt solid var(--gold);
+  color: var(--ink);
+}
+
+table.data tr:nth-child(even) td:not(.k) {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+table.risk-summary td {
+  vertical-align: middle;
+}
+
+table.toc td {
+  font-size: 10pt;
+  padding: 2.4mm 3mm;
+}
+
+table.toc td.toc-num {
+  width: 12mm;
+  font-weight: 700;
+  color: var(--gold-dark);
+  font-size: 10.5pt;
+  text-align: right;
+}
+
+table.cashflow {
+  font-size: 8pt;
+}
+
+table.cashflow td {
+  padding: 1.3mm 1.5mm;
+}
+
+table.cashflow th {
+  padding: 1.5mm 1.5mm;
+  font-size: 6.8pt;
+  letter-spacing: 0.4pt;
+}
+
+/* ============================================================
+   RAG chips
+   ============================================================ */
+.rag {
+  display: inline-block;
+  padding: 0.6mm 2.5mm;
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 8pt;
+  font-weight: 700;
+  letter-spacing: 0.7pt;
+  text-transform: uppercase;
+  color: #fff;
+  border-radius: 1.5pt;
+  min-width: 16mm;
+  text-align: center;
+}
+
+.rag-G  { background: var(--ok); }
+.rag-A  { background: var(--warn); color: var(--ink); }
+.rag-R  { background: var(--alarm); }
+
+/* ============================================================
+   Map placeholder (cream-on-cream grid + pin)
+   ============================================================ */
+.map-placeholder {
+  height: 75mm;
+  margin: 4mm 0;
+  background: var(--cream-2);
+  border: 0.6pt solid var(--gold-line);
+  position: relative;
+  overflow: hidden;
+}
+
+.map-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(15, 19, 24, 0.05) 0.4pt, transparent 0.4pt),
+    linear-gradient(90deg, rgba(15, 19, 24, 0.05) 0.4pt, transparent 0.4pt);
+  background-size: 6mm 6mm;
+}
+
+.map-pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.map-pin-cross {
+  position: absolute;
+  width: 22mm;
+  height: 22mm;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.map-pin-cross::before,
+.map-pin-cross::after {
+  content: "";
+  position: absolute;
+  background: var(--gold);
+}
+
+.map-pin-cross::before {
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 0.6pt;
+  transform: translateX(-50%);
+}
+
+.map-pin-cross::after {
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 0.6pt;
+  transform: translateY(-50%);
+}
+
+.map-pin-circle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5mm;
+  height: 5mm;
+  transform: translate(-50%, -50%);
+  border: 1.5pt solid var(--gold);
+  border-radius: 50%;
+  background: rgba(245, 183, 49, 0.30);
+}
+
+.map-meta {
+  position: absolute;
+  bottom: 3mm;
+  left: 4mm;
+  right: 4mm;
+  font-family: "JetBrains Mono", "Menlo", monospace;
+  font-size: 7.5pt;
+  color: var(--ink-dim);
+  display: flex;
+  justify-content: space-between;
+  background: rgba(251, 248, 242, 0.92);
+  padding: 1.5mm 2mm;
+  border: 0.4pt solid var(--gold-line);
+}
+
+.map-meta .k {
+  text-transform: uppercase;
+  letter-spacing: 0.5pt;
+  color: var(--ink-low);
+  margin-right: 1.5mm;
+}

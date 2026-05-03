@@ -29,6 +29,64 @@ from . import connector as connector_mod
 
 log = logging.getLogger("princeps.ontology.dispatch")
 
+# Lowercase ontology type → DTDL label used in graph_nodes. Drives the
+# graph_sync hook + cardinality trigger. Falls back to capitalised type
+# when not declared here.
+_TYPE_TO_LABEL = {
+    "project": "Project",
+    "site": "Site",
+    "substation": "Substation",
+    "layout": "Layout",
+    "application": "Application",
+    "tender": "Tender",
+    "connector": "Connector",
+}
+
+
+async def _sync_to_graph(pool, object_type: str, object_id: str) -> None:
+    """Mirror the affected object into ``graph_nodes`` after a successful
+    action so the auto-emit trigger fires + the Cypher shim sees the
+    latest state. Best-effort — never surfaces to the caller.
+
+    The trigger ``trg_graph_nodes_emit`` writes an ``ObjectMutated`` row
+    to ``ontology_action_log`` automatically; we don't repeat that here.
+    """
+    if object_type not in OBJECTS:
+        return
+    label = _TYPE_TO_LABEL.get(object_type, object_type.capitalize())
+    rid = f"rid.princeps.{object_type}.{object_id}"
+    try:
+        obj = await OBJECTS[object_type].load_from_db(pool, object_id)
+    except ObjectNotFound:
+        # Action may have archived/deleted — best-effort delete from graph
+        try:
+            async with pool.acquire() as conn:
+                await conn.execute("DELETE FROM graph_nodes WHERE rid = $1", rid)
+        except Exception as exc:
+            log.warning("graph_sync delete failed for %s: %s", rid, exc)
+        return
+    except Exception as exc:
+        log.warning("graph_sync load failed for %s:%s: %s", object_type, object_id, exc)
+        return
+
+    props = getattr(obj, "metadata", None) or {}
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO graph_nodes (rid, label, props, updated_at)
+                VALUES ($1, $2, $3::jsonb, NOW())
+                ON CONFLICT (rid) DO UPDATE
+                  SET label = EXCLUDED.label,
+                      props = EXCLUDED.props,
+                      updated_at = NOW()
+                """,
+                rid, label, json.dumps(props, default=str),
+            )
+    except Exception as exc:
+        log.warning("graph_sync upsert failed for %s: %s", rid, exc)
+
+
 OBJECTS = {
     "project": project_mod.Project,
     "site": site_mod.Site,
@@ -60,6 +118,14 @@ async def _log_action(
     ok: bool, args: dict, result: ActionResult, started_utc, completed_utc,
     duration_ms: int, error: str | None,
 ) -> None:
+    # Normalise object_id to the canonical rid form so this row joins
+    # cleanly with auto-emitted ObjectMutated / EdgeMutated rows.
+    rid = (
+        object_id if str(object_id).startswith("rid.princeps.")
+        else f"rid.princeps.{object_type}.{object_id}"
+    )
+    # Use the DTDL-style label as object_type for consistency.
+    label = _TYPE_TO_LABEL.get(object_type, object_type.capitalize() if object_type else "unknown")
     try:
         async with pool.acquire() as conn:
             await conn.execute(
@@ -70,7 +136,7 @@ async def _log_action(
                     started_utc, completed_utc
                 ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11)
                 """,
-                object_type, object_id, action, actor, ok,
+                label, rid, action, actor, ok,
                 json.dumps(args, default=str),
                 json.dumps(result.to_dict(), default=str),
                 error, duration_ms, started_utc, completed_utc,
@@ -153,4 +219,13 @@ async def dispatch(
                       result=result, started_utc=started_utc,
                       completed_utc=completed_utc,
                       duration_ms=result.duration_ms, error=result.error)
+
+    # Mirror the affected object into graph_nodes so:
+    #   1. the auto-emit trigger writes a fine-grained ObjectMutated row
+    #      (with before/after props) to ontology_action_log
+    #   2. the Cypher shim + graph endpoints see the latest state
+    # Only on successful actions — failed handlers leave the graph alone.
+    if result.ok:
+        await _sync_to_graph(pool, object_type, object_id)
+
     return result

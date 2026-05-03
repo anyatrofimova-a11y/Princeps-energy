@@ -277,7 +277,17 @@ const WORKSPACE_FALLBACK = {
 // surface. These take precedence over every other resolver.
 function focusPack(focus) {
   if (!focus || !focus.type) return null;
-  const label = focus.label || focus.id || "this item";
+  // Never leak a raw UUID / numeric id into user-visible pill prompts.
+  // If no label arrived, synthesise a readable fallback from the type.
+  const typeLabel = {
+    alert: "this alert",
+    docket: "this docket",
+    dataset: "this dataset",
+    substation: "this substation",
+    candidate_site: "this site",
+    project: "this project",
+  }[focus.type] || "this item";
+  const label = (focus.label && String(focus.label).trim()) || typeLabel;
   switch (focus.type) {
     case "alert":
       return {
@@ -337,6 +347,21 @@ function focusPack(focus) {
           { label: "Downside case", prompt: `Run a downside scenario on ${label} — 20% capex overrun, 12-month grid slip, PPA £45 — and show IRR impact.` },
         ],
       };
+    case "location": {
+      const data = focus.data || {};
+      const lat = data.lat != null ? Number(data.lat).toFixed(5) : null;
+      const lon = data.lon != null ? Number(data.lon).toFixed(5) : null;
+      const coord = (lat != null && lon != null) ? `${lat}, ${lon}` : label;
+      return {
+        header: `Picked ${coord}`,
+        pills: [
+          { label: "What's here?", prompt: `What's at ${coord}? Identify the land use, LPA, postcode, and nearest substation.` },
+          { label: "Nearest POC", prompt: `Find the nearest 3 DNO-published substations to ${coord} with their firm headroom and voltage.` },
+          { label: "Screen as DC site", prompt: `Screen ${coord} as a data centre site — flood risk, constraints, and connection feasibility for 40 MW IT load.` },
+          { label: "Screen as BESS site", prompt: `Screen ${coord} as a 50 MW / 100 MWh BESS site — constraints, headroom, and likely blockers.` },
+        ],
+      };
+    }
     default:
       return null;
   }

@@ -1530,6 +1530,9 @@ async def api_mission_control(pool: asyncpg.Pool = Depends(get_pool)):
 
     async with pool.acquire() as conn:
         # ── metrics rollup ────────────────────────────────────────────────
+        # Pipeline scope: projects the user is actively working (verdict set
+        # OR portfolio-tagged). Excludes the ~4,600 public REPD/TEC rows that
+        # live in the same table but haven't been promoted into the pipeline.
         m = await conn.fetchrow(
             """
             SELECT
@@ -1540,6 +1543,7 @@ async def api_mission_control(pool: asyncpg.Pool = Depends(get_pool)):
               COUNT(*) FILTER (WHERE LOWER(COALESCE(stage,'discover'))
                                IN ('discover','prospect','assess','design'))::int AS in_queue
             FROM projects
+            WHERE verdict IS NOT NULL OR portfolio_id IS NOT NULL
             """
         ) or {}
         total_projects = int(m["total_projects"] or 0) if m else 0

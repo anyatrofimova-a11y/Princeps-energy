@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import mock from "../../../data/mock-alerts.json";
+import React, { useEffect, useMemo, useState } from "react";
+import { getAlertLibrary } from "../../../api/alerts";
 
 const C = {
   gold: "#F5B731",
@@ -84,7 +84,21 @@ function Row({ alert, checked, onToggle }) {
  */
 export default function SubscribeModal({ target, onClose, onSubscribeAlert, onSubscribeAll }) {
   const { alert, pack } = target || {};
-  const allAlerts = mock.alerts;
+
+  // Live alert library — flattened from the cluster groupings the
+  // backend returns at /api/alerts/library.
+  const [allAlerts, setAllAlerts] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    getAlertLibrary()
+      .then((d) => {
+        if (cancelled) return;
+        const flat = (d.clusters || []).flatMap((c) => c.items || []);
+        setAllAlerts(flat.length ? flat : d.alerts || []);
+      })
+      .catch(() => { if (!cancelled) setAllAlerts([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   const initialIds = useMemo(() => {
     if (pack) return new Set(pack.alert_ids);

@@ -35,8 +35,10 @@ import {
   bindStoreToProject,
 } from './stores/twinStore.js';
 import { getAssetRegistry } from './assets/registry.js';
+import { buildIntelligentDcLayout } from '../design/placement/intelligentLayout.js';
 import { createAssetInstancedLayers } from './deck/AssetInstancedLayer.js';
 import { createShadowPolygonLayer } from './deck/ShadowPolygonLayer.js';
+import { createBessFacilityLayers } from './deck/BessFacilityLayer.js';
 import { useCameraMode } from './camera/useCameraMode.js';
 
 // UX chrome — wired in on top of the Mapbox/deck.gl canvas
@@ -50,6 +52,7 @@ import SunSlider from './SunSlider.jsx';
 import Onboarding from './Onboarding.jsx';
 import AttributionFooter from './AttributionFooter.jsx';
 import ReferenceSourcesPanel from './ReferenceSourcesPanel.jsx';
+import BessEngineeringPanel from './BessEngineeringPanel.jsx';
 
 const MAPBOX_TOKEN = import.meta.env?.VITE_MAPBOX_TOKEN || '';
 
@@ -324,6 +327,25 @@ export default function TwinRoot({
   mapStyle = 'mapbox://styles/mapbox/dark-v11',
   style = null,
   onAssetSelected = null,
+  // DC campus placement context — honoured only when tech === 'dc'.
+  lat = null,
+  lon = null,
+  tier = 3,
+  redundancy = 'N+1',
+  cooling_type = 'hybrid',
+  poc_lat = null,
+  poc_lon = null,
+  road_lat = null,
+  road_lon = null,
+  // Feature flag — if explicitly set to false, falls back to naive
+  // computeLayout for DC tech. Defaults to true.
+  use_intelligent_layout = true,
+  // Best-in-class BESS pathway. When `bessDesign` is provided (payload from
+  // /api/twin/bess-design) the BESS branch ignores computeLayout and renders
+  // via BessFacilityLayer instead — containers, cables, fence, road, all
+  // sized by the backend engineering pass.
+  bessDesign = null,
+  bessLayerOptions = null,
 }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
@@ -373,10 +395,51 @@ export default function TwinRoot({
   }, [polygonRing]);
 
   // parametric layout
-  const assets = useMemo(
-    () => computeLayout(tech, capacity_mw, duration_h, polygonRing),
-    [tech, capacity_mw, duration_h, polygonRing],
-  );
+  //   - DC: intelligent polygon-aware placement (halls aligned to long
+  //     axis, ancillary blocks anchored to appropriate edges, everything
+  //     clipped to the 5 m red-line setback)
+  //   - BESS / Solar / Wind: legacy centroid-centred seed grid
+  const assets = useMemo(() => {
+    const t = String(tech || '').toLowerCase();
+    const isDc = t === 'dc' || t === 'datacentre' || t === 'data_centre';
+    if (isDc && use_intelligent_layout && polygonRing && polygonRing.length >= 4) {
+      try {
+        const layout = buildIntelligentDcLayout({
+          polygon: polygonRing,
+          capacityMw: capacity_mw,
+          pocLatLon:
+            Number.isFinite(poc_lat) && Number.isFinite(poc_lon)
+              ? [poc_lat, poc_lon]
+              : null,
+          roadLatLon:
+            Number.isFinite(road_lat) && Number.isFinite(road_lon)
+              ? [road_lat, road_lon]
+              : null,
+          tier,
+          redundancy,
+        });
+        if (layout && layout.assets && layout.assets.length > 0) {
+          return layout.assets;
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[TwinRoot] intelligent DC layout failed, falling back:', err);
+      }
+    }
+    return computeLayout(tech, capacity_mw, duration_h, polygonRing);
+  }, [
+    tech,
+    capacity_mw,
+    duration_h,
+    polygonRing,
+    use_intelligent_layout,
+    poc_lat,
+    poc_lon,
+    road_lat,
+    road_lon,
+    tier,
+    redundancy,
+  ]);
 
   const registry = useMemo(() => getAssetRegistry(), []);
 
@@ -449,18 +512,39 @@ export default function TwinRoot({
 
     // assets
     if (layerVisibility.assets) {
-      const assetLayers = createAssetInstancedLayers({
-        assets,
-        registry,
-        visible: true,
-        pickable: true,
-        selectedAssetId,
-        onClick: (payload) => {
-          setSelected(payload.id || null);
-          if (typeof onAssetSelected === 'function') onAssetSelected(payload);
-        },
-      });
-      layers.push(...assetLayers);
+      // BESS pathway with full engineering payload from backend.
+      const isBess = String(tech || '').toLowerCase() === 'bess';
+      if (isBess && bessDesign && Array.isArray(bessDesign.placed_assets)) {
+        const bessLayers = createBessFacilityLayers({
+          design: bessDesign,
+          centroid,
+          registry,
+          visible: true,
+          pickable: true,
+          showCables: bessLayerOptions?.showCables ?? true,
+          showFence: bessLayerOptions?.showFence ?? true,
+          showRoad: bessLayerOptions?.showRoad ?? true,
+          selectedAssetId,
+          onAssetClick: (payload) => {
+            setSelected(payload?.id || null);
+            if (typeof onAssetSelected === 'function') onAssetSelected(payload);
+          },
+        });
+        layers.push(...bessLayers);
+      } else {
+        const assetLayers = createAssetInstancedLayers({
+          assets,
+          registry,
+          visible: true,
+          pickable: true,
+          selectedAssetId,
+          onClick: (payload) => {
+            setSelected(payload.id || null);
+            if (typeof onAssetSelected === 'function') onAssetSelected(payload);
+          },
+        });
+        layers.push(...assetLayers);
+      }
     }
 
     // shadows (tied to environment toggle — available even when off by
@@ -487,6 +571,9 @@ export default function TwinRoot({
     centroid,
     onAssetSelected,
     setSelected,
+    tech,
+    bessDesign,
+    bessLayerOptions,
   ]);
 
   return (
@@ -533,6 +620,9 @@ export default function TwinRoot({
       {activeTool === 'sun' && <SunSlider lat={centroid[1]} lon={centroid[0]} />}
       <AssetSpecDrawer />
       {/* drawer reads selectedAssetId + clearSelection from twinStore directly */}
+      {String(tech || '').toLowerCase() === 'bess' && bessDesign && (
+        <BessEngineeringPanel design={bessDesign} open={true} />
+      )}
       <AttributionFooter />
       <ReferenceSourcesPanel
         open={referencesOpen}

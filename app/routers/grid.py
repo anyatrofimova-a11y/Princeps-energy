@@ -8,7 +8,7 @@ import math
 import random
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 import asyncpg
 import uuid
 
@@ -1757,12 +1757,13 @@ def _fallback_substations(diurnal, seasonal, hour, day_of_year):
 
 
 @router.websocket("/ws/grid-twin")
-async def ws_grid_twin(ws: WebSocket, pool: asyncpg.Pool = Depends(get_pool)):
+async def ws_grid_twin(ws: WebSocket):
     """
     WebSocket for real-time grid twin state updates.
     Sends grid state snapshot every 5 seconds with real DB data.
     """
     await ws.accept()
+    pool: asyncpg.Pool = ws.app.state.pool
     _grid_twin_clients.add(ws)
     try:
         while True:
@@ -2473,13 +2474,109 @@ async def api_environmental_constraints(
 
 @router.post("/api/grid/gate-readiness")
 async def api_gate_readiness(
-    lat: float = Query(...), lon: float = Query(...),
-    capacity_mw: float = Query(50), technology: str = Query("solar"),
+    payload: dict = Body(...),
     pool: asyncpg.Pool = Depends(get_pool),
 ):
-    """Score project readiness for each gate in the reformed UK connections process."""
+    """Score project readiness for each of the four Gate milestones under
+    the NESO TMO4+ Issue 2 connections process.
+
+    Accepts a JSON body so the frontend can send optional per-project
+    context (land rights, planning status, PPA, parcel area, target
+    energisation) which materially change the per-gate score.
+
+    Returns {overall_readiness, readiness_score, gates[], checklist[],
+    criteria{}, verdict, recommendations, context}.
+    The `checklist` and `criteria` aliases make the response directly
+    consumable by the DCHyperscaler docket strip without client-side
+    reshaping.
+    """
     from utils.connection_optimizer import score_gate_readiness
-    return await score_gate_readiness(pool, lat, lon, capacity_mw, technology)
+    lat = float(payload.get("lat"))
+    lon = float(payload.get("lon"))
+    capacity_mw = float(payload.get("capacity_mw", 50))
+    technology = payload.get("technology", "solar")
+
+    # Map frontend context fields to the project_details dict the scorer
+    # understands. Frontend sends land_rights(bool), planning_status(str),
+    # ppa_status(str), parcel_area_ha(float), target_energisation(str).
+    planning_status = (payload.get("planning_status") or "").lower()
+    ppa_status = (payload.get("ppa_status") or "").lower()
+    project_details = {
+        "has_land_option": bool(payload.get("land_rights")),
+        "has_planning": (
+            "granted" if "grant" in planning_status or "consent" in planning_status
+            else "submitted" if "submit" in planning_status or "app" in planning_status
+            else None
+        ),
+        "has_ppa": ppa_status in ("signed", "executed", "term_sheet", "heads_of_terms"),
+        "has_funding": ppa_status in ("signed", "executed"),
+        "parcel_area_ha": payload.get("parcel_area_ha"),
+        "target_energisation": payload.get("target_energisation"),
+    }
+
+    result = await score_gate_readiness(
+        pool, lat, lon, capacity_mw, technology, project_details,
+    )
+
+    # Enrich with aliases the frontend consumes directly.
+    gates = result.get("gates", [])
+    checklist = [
+        {
+            "title": f"Gate {g['gate']} — {g['name']}",
+            "criterion": g["name"],
+            "gate": g["gate"],
+            "status": (
+                "go" if g["status"] == "PASS"
+                else "caution" if g["status"] == "AT RISK"
+                else "blocker"
+            ),
+            "score": g["score"],
+            "note": "; ".join(g.get("risks", [])[:1]) or "; ".join(g.get("requirements", [])[:1]),
+        }
+        for g in gates
+    ]
+    criteria = {
+        # NESO TMO4+ Gate 2 criteria mapped from gate scores + project_details
+        "land_rights": {
+            "status": "go" if project_details["has_land_option"] else "blocker",
+            "note": "Signed option/lease on record" if project_details["has_land_option"]
+                    else "No land option or lease yet — required for Gate 2",
+        },
+        "planning": {
+            "status": "go" if project_details["has_planning"] == "granted"
+                      else "caution" if project_details["has_planning"] == "submitted"
+                      else "blocker",
+            "note": f"Planning: {planning_status or 'not submitted'}",
+        },
+        "capacity_mw": {
+            "status": "go" if capacity_mw <= 5000 else "caution",
+            "note": f"{capacity_mw} MW declared — within Gate 2 maximums",
+        },
+        "route_to_fid": {
+            "status": ("go" if project_details["has_funding"]
+                       else "caution" if project_details["has_ppa"] else "blocker"),
+            "note": f"PPA: {ppa_status or 'none'}",
+        },
+        "ppa": {
+            "status": "go" if project_details["has_ppa"] else "blocker",
+            "note": f"PPA status: {ppa_status or 'none'} — Gate 2 requires evidence of route to market",
+        },
+        "licences": {
+            # Generation licence exemption / demand connection licences: a
+            # DC under 100 MW is typically exempt; >100 MW triggers supply
+            # licence review.
+            "status": "go" if capacity_mw <= 100 else "caution",
+            "note": "Demand connection; generation licence not required" if capacity_mw <= 100
+                    else "Large demand — review Class Exemption (Electricity Act 1989 s.5)",
+        },
+    }
+
+    result["checklist"] = checklist
+    result["criteria"] = criteria
+    # Provide the score both as 0-1 and 0-100 so the frontend Pill doesn't
+    # have to guess which scale is in use.
+    result["readiness_score"] = result.get("overall_readiness", 0) / 100.0
+    return result
 
 
 @router.post("/api/grid/queue-reform-impact")

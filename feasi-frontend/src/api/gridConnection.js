@@ -1,41 +1,22 @@
 /**
- * Grid Connection API helper.
+ * Grid Connection API helper. Live-only as of 2026-04-29.
  *
- * When VITE_MOCK_GRID !== "false" (default ON for dev without backend),
- * returns a realistic Slough-DC fixture. Otherwise calls the live backend:
+ * Backend (app/routers/grid.py):
  *   POST /api/grid/assess              → Tier 1 ranked POCs
  *   POST /api/grid/power-flow          → Tier 2 pandapower sim
  *   GET  /api/grid/capacity-map        → GeoJSON of substations w/ headroom
  *   GET  /api/grid/substation/{id}/detail
  *   POST /api/grid/connection-forecast → timeline + cost
  *
- * All live shapes are passed through the mock-compatible normaliser so
- * GridConnectionPanel rendering is identical regardless of source.
+ * Live-shape adapter normalises into the contract GridConnectionPanel
+ * expects so the rendering code stays untouched.
  */
-import mock from "../data/mock-grid-connection.json";
 
-const USE_MOCK = (import.meta.env.VITE_MOCK_GRID ?? "true") !== "false";
 const API_BASE = import.meta.env.VITE_API_BASE || "";
 
-function wait(ms) { return new Promise((r) => setTimeout(r, ms)); }
-
-function pickFixture(projectId) {
-  // Any known DC project id falls back to the default Slough fixture.
-  return mock[projectId] || mock.default;
-}
-
-/** One payload with every Grid-Connection view needs. */
 export async function getGridConnection(projectId, opts = {}) {
   const { lat, lon, capacity_mw, technology = "dc" } = opts;
-
-  if (USE_MOCK) {
-    await wait(160);
-    return pickFixture(projectId);
-  }
-
   const params = new URLSearchParams({
-    // Slough Heat & Power Station (REPD 4699, 49.9 MW under construction) — real
-    // grid-connected anchor on Slough Trading Estate, 2.2 km south of Iver 132kV.
     lat: lat ?? 51.5239,
     lon: lon ?? -0.6269,
     capacity_mw: capacity_mw ?? 65,
@@ -49,21 +30,12 @@ export async function getGridConnection(projectId, opts = {}) {
   if (!assessRes.ok) throw new Error(`Grid assess HTTP ${assessRes.status}`);
   const assess = await assessRes.json();
   const forecast = forecastRes?.ok ? await forecastRes.json() : null;
-
-  return normaliseLive(assess, forecast, { lat, lon, capacity_mw, technology });
+  return normaliseLive(assess, forecast, { lat, lon, capacity_mw, technology, projectId });
 }
 
 export async function runTier2PowerFlow(projectId, opts = {}) {
   const { lat, lon, capacity_mw, technology = "dc", substation_id } = opts;
-
-  if (USE_MOCK) {
-    await wait(420); // feel of a real pandapower call
-    return pickFixture(projectId).power_flow_stub;
-  }
-
   const params = new URLSearchParams({
-    // Slough Heat & Power Station (REPD 4699, 49.9 MW under construction) — real
-    // grid-connected anchor on Slough Trading Estate, 2.2 km south of Iver 132kV.
     lat: lat ?? 51.5239,
     lon: lon ?? -0.6269,
     capacity_mw: capacity_mw ?? 65,
@@ -77,18 +49,6 @@ export async function runTier2PowerFlow(projectId, opts = {}) {
 }
 
 export async function getCapacityMap({ bbox } = {}) {
-  if (USE_MOCK) {
-    await wait(80);
-    const features = mock.default.capacity_map_features.map((f) => ({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [f.lon, f.lat] },
-      properties: {
-        id: f.id, name: f.name, voltage_kv: f.voltage_kv,
-        firm_mw: f.firm_mw, rag: f.rag,
-      },
-    }));
-    return { type: "FeatureCollection", features };
-  }
   const params = new URLSearchParams();
   if (bbox && bbox.length === 4) {
     params.set("west", bbox[0]); params.set("south", bbox[1]);
@@ -100,7 +60,7 @@ export async function getCapacityMap({ bbox } = {}) {
   return await res.json();
 }
 
-/* ── Live → Mock-shape adapter ─────────────────────────────────────────── */
+/* ── Live → panel-shape adapter ────────────────────────────────────────── */
 function normaliseLive(assess, forecast, opts) {
   const candidates = assess?.candidates || [];
   const best = candidates[0];
@@ -164,8 +124,8 @@ function normaliseLive(assess, forecast, opts) {
           })),
         }
       : null,
-    timeline_gantt: forecast?.gantt || mock.default.timeline_gantt,
-    compliance: mock.default.compliance, // regulatory registry shared
+    timeline_gantt: forecast?.gantt || null,
+    compliance: null,
     power_chain: null,
     _provenance: assess?.data_provenance || "live_backend",
   };

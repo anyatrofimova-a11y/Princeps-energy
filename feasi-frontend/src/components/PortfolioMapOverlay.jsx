@@ -116,6 +116,25 @@ export default function PortfolioMapOverlay({ map, onSelectProject, visible = tr
     return () => {};
   }, [map, projects, visible, onSelectProject]);
 
+  // ── Hide pipeline-stage markers below zoom 11 ──────────────────────
+  // 500+ HTML markers blanket the country at low zoom. Below z11 we
+  // hide them entirely; above z11 individual sites are visible. A
+  // proper Mapbox cluster source would be the next step.
+  useEffect(() => {
+    if (!map) return;
+    const updateVisibility = () => {
+      const z = map.getZoom();
+      const display = z < 11 ? "none" : "";
+      Object.values(markersRef.current).forEach((m) => {
+        const el = m.getElement?.();
+        if (el && el.style.display !== display) el.style.display = display;
+      });
+    };
+    updateVisibility();
+    map.on("zoomend", updateVisibility);
+    return () => { map.off("zoomend", updateVisibility); };
+  }, [map, projects]);
+
   // Cleanup
   useEffect(() => {
     return () => {

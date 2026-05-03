@@ -1,47 +1,80 @@
 """Princeps connector framework.
 
-A Connector is a contract for ingesting an external dataset into Princeps:
-it exposes a stable ``source_name``, a cron ``schedule``, and two async
-methods — ``refresh(pool)`` which upserts rows and returns an IngestReport,
-and ``health()`` which returns a ConnectorHealth snapshot.
+Two coexisting frameworks live in this package:
 
-Every connector is registered at import time via ``register()``. The router
-``app.routers.connectors`` exposes ``/api/connectors/health`` and
-``POST /api/connectors/{name}/refresh`` on top of the registry.
+1. **Magritte / dataset-registry** (``base.py``, ``registry.py``,
+   ``health.py``, ``startup.py``) — Foundry-style typed connectors
+   registered in :class:`princeps_datasets`. Subclass :class:`Connector`
+   (an ``ABC``) and override ``fetch`` + ``upsert``. Used by the new
+   ingestion sources under ``app/connectors/sources/``.
 
-Importing this package side-effect-imports each designation connector so
-that the registry is populated by the time FastAPI loads the router.
+2. **Legacy Protocol** (``protocol.py``) — pre-existing duck-typed
+   :class:`Connector` Protocol used by the planning.data.gov.uk
+   designation connectors. Persists into ``connectors_registry``.
+   Surfaced under ``/api/connectors/*``.
+
+Both are exported here so callers can pick whichever fits their needs.
 """
 
 from __future__ import annotations
 
-from .base import (
-    Connector,
+# ── New Magritte ABC + dataclasses + registry helpers ──────────────────
+from .base import Connector, HealthCheck, IngestResult
+from .registry import (
+    all_connectors,
+    get,
+    register as register_class,
+)
+
+# ── Legacy Protocol + dataclasses (kept for designation connectors) ────
+# The legacy Protocol type is re-exported as ``LegacyConnector`` so the
+# unqualified ``Connector`` name belongs to the new ABC. ``register`` is
+# the legacy instance-registration helper — re-exported here as
+# ``register_instance`` for clarity (designation modules still call the
+# original name from ``app.connectors.protocol`` directly).
+from .protocol import (
+    Connector as LegacyConnector,
     ConnectorHealth,
     IngestReport,
     get_connector,
     list_connectors,
-    register,
+    register as register_instance,
 )
 
-# Register all designation connectors at import time. Import-time side
-# effects are how the registry is populated — the router reads ``_REGISTRY``
-# when requests come in, it doesn't re-scan the filesystem.
-from .designations import (  # noqa: F401
-    aonb as _aonb,
-    sssi as _sssi,
-    spa_sac_ramsar as _spa_sac_ramsar,
-    green_belt as _green_belt,
-    flood_zones as _flood_zones,
-    priority_habitats as _priority_habitats,
-    alc_grade as _alc_grade,
-)
+# Register all legacy designation connectors at import time so the old
+# /api/connectors router has a populated registry without app/main needing
+# to import each one. Wrap in try/except so a single broken connector
+# doesn't kill the rest of the package import.
+try:
+    from .designations import (  # noqa: F401
+        aonb as _aonb,
+        sssi as _sssi,
+        spa_sac_ramsar as _spa_sac_ramsar,
+        green_belt as _green_belt,
+        flood_zones as _flood_zones,
+        priority_habitats as _priority_habitats,
+        alc_grade as _alc_grade,
+    )
+except Exception:  # pragma: no cover — defensive
+    import logging
+    logging.getLogger("princeps.connectors").warning(
+        "designations registry import failed — legacy connectors registry empty",
+        exc_info=True,
+    )
 
 __all__ = [
+    # New Magritte framework
     "Connector",
+    "HealthCheck",
+    "IngestResult",
+    "register_class",
+    "get",
+    "all_connectors",
+    # Legacy
+    "LegacyConnector",
     "ConnectorHealth",
     "IngestReport",
+    "register_instance",
     "get_connector",
     "list_connectors",
-    "register",
 ]

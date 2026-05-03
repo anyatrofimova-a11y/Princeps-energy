@@ -1,0 +1,221 @@
+/* D4 — Princeps queue overlay styling. Light / gold / glass — NOT Foundry-dark. */
+
+:root {
+  --pxq-bg: rgba(255, 255, 255, 0.92);
+  --pxq-ink: #0F1318;
+  --pxq-muted: #5A5F66;
+  --pxq-line: rgba(15, 19, 24, 0.08);
+  --pxq-gold: #F5B731;
+  --pxq-gold-soft: rgba(245, 183, 49, 0.18);
+}
+
+/* ───── Filter bar — pinned bottom-left so it doesn't fight the top bar
+        / pipeline legend / Find-a-Site panel that already occupy the top. ── */
+.px-queue-filterbar {
+  position: absolute;
+  bottom: 18px; left: 18px;
+  z-index: 5;
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  padding: 10px 14px;
+  background: var(--pxq-bg);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--pxq-line);
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(15, 19, 24, 0.08);
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px;
+  max-width: calc(100vw - 36px);
+}
+
+.px-fb-group { display: flex; gap: 6px; align-items: center; }
+
+.px-fb-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pxq-muted);
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.px-fb-chip {
+  border: 1px solid var(--pxq-line);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--pxq-ink);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms, border-color 100ms, transform 80ms;
+  font-family: inherit;
+}
+.px-fb-chip:hover { background: rgba(245, 183, 49, 0.10); }
+.px-fb-chip.is-active {
+  background: var(--pxq-gold-soft);
+  border-color: var(--pxq-gold);
+  color: #4A3208;
+  font-weight: 600;
+}
+
+.px-fb-counts {
+  margin-left: auto;
+  display: flex; gap: 6px;
+  color: var(--pxq-muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+}
+
+/* ───── Project info card ──────────────────────────────────────────── */
+.px-card-overlay {
+  position: absolute;
+  top: 12px; right: 12px;
+  z-index: 6;
+  width: 380px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  background: var(--pxq-bg);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--pxq-line);
+  border-radius: 14px;
+  box-shadow: 0 12px 48px rgba(15, 19, 24, 0.16);
+  padding: 16px;
+  font-family: "DM Sans", sans-serif;
+  color: var(--pxq-ink);
+}
+
+.px-card-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  gap: 8px; margin-bottom: 8px;
+}
+
+.px-card-chips {
+  display: flex; flex-wrap: wrap; gap: 4px;
+}
+
+.px-card-chip {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.06);
+  color: #0F1318;
+}
+
+.px-status-good   { background: #DCFCE7; color: #166534; }
+.px-status-bad    { background: #FEE2E2; color: #991B1B; }
+.px-status-pending{ background: #FEF3C7; color: #854D0E; }
+.px-status-neutral{ background: #E2E8F0; color: #334155; }
+
+.px-card-close {
+  border: none; background: transparent;
+  font-size: 22px; line-height: 1;
+  color: var(--pxq-muted);
+  cursor: pointer;
+  padding: 0; width: 24px; height: 24px;
+}
+.px-card-close:hover { color: var(--pxq-ink); }
+
+.px-card-title {
+  font-size: 16px; font-weight: 600;
+  line-height: 1.25;
+  margin: 4px 0 2px 0;
+}
+.px-card-sub {
+  font-size: 12px; color: var(--pxq-muted);
+  margin-bottom: 12px;
+}
+
+.px-card-kpis {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.px-card-kpi {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--pxq-line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.px-card-kpi-l {
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--pxq-muted);
+  font-weight: 600;
+}
+.px-card-kpi-v {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.px-card-attrs summary {
+  font-size: 11px;
+  color: var(--pxq-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  padding: 6px 0;
+  border-top: 1px solid var(--pxq-line);
+}
+.px-card-attrs table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.px-card-attrs th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--pxq-muted);
+  padding: 3px 8px 3px 0;
+  vertical-align: top;
+  white-space: nowrap;
+  width: 40%;
+}
+.px-card-attrs td {
+  padding: 3px 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  word-break: break-word;
+}
+
+.px-card-link {
+  display: inline-block;
+  margin-top: 12px;
+  color: #4338CA;
+  font-size: 12px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.px-card-link:hover { text-decoration: underline; }
+
+.px-card-loading, .px-card-err {
+  padding: 16px; text-align: center;
+  font-size: 12px;
+}
+.px-card-err { color: #991B1B; }
+
+/* ───── Voltage legend (optional helper) ───────────────────────────── */
+.px-voltage-legend {
+  position: absolute;
+  bottom: 14px; left: 14px;
+  z-index: 5;
+  background: var(--pxq-bg);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--pxq-line);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 10px;
+}
+.px-voltage-legend ul { list-style: none; padding: 0; margin: 4px 0 0 0; display: flex; gap: 10px; }
+.px-voltage-legend li { display: flex; align-items: center; gap: 4px; }
+.px-voltage-legend i {
+  display: inline-block; width: 14px; height: 3px; border-radius: 2px;
+}

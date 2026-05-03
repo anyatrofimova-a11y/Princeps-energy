@@ -59,10 +59,10 @@ function fmtGbp(v) {
   if (v == null || isNaN(v)) return "--";
   const abs = Math.abs(v);
   const sign = v < 0 ? "-" : "";
-  if (abs >= 1e9) return `${sign}\u00A3${(abs / 1e9).toFixed(1)}bn`;
-  if (abs >= 1e6) return `${sign}\u00A3${(abs / 1e6).toFixed(1)}M`;
-  if (abs >= 1e3) return `${sign}\u00A3${(abs / 1e3).toFixed(0)}k`;
-  return `${sign}\u00A3${abs.toFixed(0)}`;
+  if (abs >= 1e9) return `${sign}£${(abs / 1e9).toFixed(1)}bn`;
+  if (abs >= 1e6) return `${sign}£${(abs / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${sign}£${(abs / 1e3).toFixed(0)}k`;
+  return `${sign}£${abs.toFixed(0)}`;
 }
 function fmtNum(v, dp = 1) {
   if (v == null || isNaN(v)) return "--";
@@ -635,7 +635,7 @@ export default function FinancialModelPanel({ onClose }) {
               </div>
               <div className="fm-kpi">
                 <div className="fm-kpi-label">LCOE</div>
-                <div className="fm-kpi-value">{`\u00A3${model.lcoe?.toFixed(1)}/MWh`}</div>
+                <div className="fm-kpi-value">{`£${model.lcoe?.toFixed(1)}/MWh`}</div>
               </div>
               <div className="fm-kpi">
                 <div className="fm-kpi-label">Payback</div>
@@ -657,27 +657,27 @@ export default function FinancialModelPanel({ onClose }) {
               </div>
               <div className="fm-input-grid">
                 <div className="fm-field">
-                  <label>Modules/Turbines (\u00A3/kW)</label>
+                  <label>Modules/Turbines (£/kW)</label>
                   <input type="number" value={modulesCost} onChange={e => setModulesCost(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>BOS (\u00A3/kW)</label>
+                  <label>BOS (£/kW)</label>
                   <input type="number" value={bosCost} onChange={e => setBosCost(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>EPC (\u00A3/kW)</label>
+                  <label>EPC (£/kW)</label>
                   <input type="number" value={epcCost} onChange={e => setEpcCost(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>Grid Connection (\u00A3)</label>
+                  <label>Grid Connection (£)</label>
                   <input type="number" value={gridCost} onChange={e => setGridCost(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>Development (\u00A3)</label>
+                  <label>Development (£)</label>
                   <input type="number" value={devCosts} onChange={e => setDevCosts(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>Land (\u00A3/acre/yr)</label>
+                  <label>Land (£/acre/yr)</label>
                   <input type="number" value={landLeaseAcre} onChange={e => setLandLeaseAcre(+e.target.value)} />
                 </div>
               </div>
@@ -693,7 +693,7 @@ export default function FinancialModelPanel({ onClose }) {
               </div>
               <div className="fm-input-grid">
                 <div className="fm-field">
-                  <label>O&M (\u00A3/kW/yr)</label>
+                  <label>O&M (£/kW/yr)</label>
                   <input type="number" value={omPerKw} onChange={e => setOmPerKw(+e.target.value)} />
                 </div>
                 <div className="fm-field">
@@ -701,11 +701,11 @@ export default function FinancialModelPanel({ onClose }) {
                   <input type="number" value={insurancePct} step={0.1} onChange={e => setInsurancePct(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>Land Lease (\u00A3/yr)</label>
+                  <label>Land Lease (£/yr)</label>
                   <input type="number" value={landLeaseYr} onChange={e => setLandLeaseYr(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>Grid Charges (\u00A3/MWh)</label>
+                  <label>Grid Charges (£/MWh)</label>
                   <input type="number" value={gridChargesMwh} step={0.5} onChange={e => setGridChargesMwh(+e.target.value)} />
                 </div>
               </div>
@@ -719,7 +719,7 @@ export default function FinancialModelPanel({ onClose }) {
               </div>
               <div className="fm-input-grid">
                 <div className="fm-field">
-                  <label>PPA Price (\u00A3/MWh)</label>
+                  <label>PPA Price (£/MWh)</label>
                   <input type="number" value={ppaPrice} step={1} onChange={e => setPpaPrice(+e.target.value)} />
                 </div>
                 <div className="fm-field">
@@ -727,15 +727,15 @@ export default function FinancialModelPanel({ onClose }) {
                   <input type="number" value={escalation} step={0.5} onChange={e => setEscalation(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>CfD/ROC (\u00A3/MWh)</label>
+                  <label>CfD/ROC (£/MWh)</label>
                   <input type="number" value={cfdSubsidy} onChange={e => setCfdSubsidy(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>Capacity Mkt (\u00A3/kW)</label>
+                  <label>Capacity Mkt (£/kW)</label>
                   <input type="number" value={capacityMarket} onChange={e => setCapacityMarket(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>Ancillary (\u00A3/MW)</label>
+                  <label>Ancillary (£/MW)</label>
                   <input type="number" value={ancillary} onChange={e => setAncillary(+e.target.value)} />
                 </div>
                 <div className="fm-field">
@@ -970,7 +970,7 @@ export default function FinancialModelPanel({ onClose }) {
                   <input type="number" value={ppaTenor} min={1} max={25} onChange={e => setPpaTenor(+e.target.value)} />
                 </div>
                 <div className="fm-field">
-                  <label>Base Price (\u00A3/MWh)</label>
+                  <label>Base Price (£/MWh)</label>
                   <input type="number" value={ppaPrice} step={1} onChange={e => setPpaPrice(+e.target.value)} />
                 </div>
                 <div className="fm-field">
@@ -1022,7 +1022,7 @@ export default function FinancialModelPanel({ onClose }) {
                   return (
                     <div key={yr} className="fm-ppa-yr">
                       <span className="fm-ppa-yr-label">Year {yr}</span>
-                      <span className="fm-ppa-yr-price">{`\u00A3${price.toFixed(1)}`}/MWh</span>
+                      <span className="fm-ppa-yr-price">{`£${price.toFixed(1)}`}/MWh</span>
                     </div>
                   );
                 })}

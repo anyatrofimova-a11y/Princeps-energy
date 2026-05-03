@@ -221,15 +221,18 @@ async def list_projects(
 
 @router.get("/summary")
 async def pipeline_summary(pool: asyncpg.Pool = Depends(get_pool)):
-    """Aggregate pipeline stats — counts and MW by stage, technology, verdict."""
+    """Aggregate pipeline stats — counts and MW by stage, technology, verdict.
+    Scope: the user's active pipeline (verdict set or portfolio-tagged), NOT
+    the full ~4,600-row REPD/TEC import that co-lives in the projects table."""
+    pipeline_filter = "(verdict IS NOT NULL OR portfolio_id IS NOT NULL)"
     async with pool.acquire() as conn:
         by_stage = await conn.fetch(
-            """SELECT stage, count(*) AS count, COALESCE(sum(capacity_mw), 0) AS total_mw
-               FROM projects GROUP BY stage ORDER BY stage"""
+            f"""SELECT stage, count(*) AS count, COALESCE(sum(capacity_mw), 0) AS total_mw
+               FROM projects WHERE {pipeline_filter} GROUP BY stage ORDER BY stage"""
         )
         by_tech = await conn.fetch(
-            """SELECT technology, count(*) AS count, COALESCE(sum(capacity_mw), 0) AS total_mw
-               FROM projects WHERE technology IS NOT NULL
+            f"""SELECT technology, count(*) AS count, COALESCE(sum(capacity_mw), 0) AS total_mw
+               FROM projects WHERE technology IS NOT NULL AND {pipeline_filter}
                GROUP BY technology ORDER BY total_mw DESC"""
         )
         by_verdict = await conn.fetch(
@@ -238,11 +241,11 @@ async def pipeline_summary(pool: asyncpg.Pool = Depends(get_pool)):
                GROUP BY verdict"""
         )
         totals = await conn.fetchrow(
-            """SELECT count(*) AS total_projects,
+            f"""SELECT count(*) AS total_projects,
                       COALESCE(sum(capacity_mw), 0) AS total_mw,
                       count(*) FILTER (WHERE stage != 'energised') AS in_progress,
                       count(*) FILTER (WHERE blocker IS NOT NULL) AS blocked
-               FROM projects"""
+               FROM projects WHERE {pipeline_filter}"""
         )
 
     return {

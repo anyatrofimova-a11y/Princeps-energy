@@ -1,0 +1,136 @@
+/* Princeps Lineage Panel — slide-over from the right with SVG DAG. */
+
+.lin-backdrop {
+  position: fixed; inset: 0;
+  z-index: 1900;
+  background: rgba(15, 19, 24, 0.18);
+  backdrop-filter: blur(2px);
+  animation: lin-fade 140ms ease-out;
+}
+
+.lin-panel {
+  position: fixed;
+  top: 0; right: 0;
+  height: 100vh;
+  width: min(880px, 70vw);
+  z-index: 1901;
+  background: linear-gradient(180deg, #FBF8F2 0%, #F2F3F5 100%);
+  border-left: 1px solid rgba(15, 19, 24, 0.10);
+  box-shadow: -16px 0 48px rgba(15, 19, 24, 0.14);
+  display: flex;
+  flex-direction: column;
+  font-family: "DM Sans", -apple-system, sans-serif;
+  color: #0F1318;
+  animation: lin-slide 180ms ease-out;
+}
+
+@keyframes lin-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes lin-slide { from { transform: translateX(40px); opacity: 0.6 } to { transform: translateX(0); opacity: 1 } }
+
+.lin-head {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(15,19,24,0.08);
+}
+.lin-eyebrow {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #F5B731;
+}
+.lin-title {
+  font-size: 17px; font-weight: 600;
+  margin-top: 4px;
+}
+.lin-rid {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10.5px;
+  color: #5A5F66;
+  margin-top: 2px;
+  word-break: break-all;
+}
+.lin-close {
+  background: transparent; border: none;
+  font-size: 22px; line-height: 1;
+  color: #94A3B8;
+  cursor: pointer;
+  padding: 0; width: 28px; height: 28px;
+}
+.lin-close:hover { color: #0F1318; }
+
+.lin-loading, .lin-err {
+  padding: 36px;
+  text-align: center;
+  color: #5A5F66;
+  font-size: 13px;
+}
+.lin-err { color: #991B1B; background: #FEE2E2; border-radius: 8px; margin: 16px; }
+
+.lin-canvas-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.lin-svg {
+  flex: 1;
+  width: 100%; height: 100%;
+  background: rgba(255,255,255,0.55);
+  cursor: grab;
+}
+
+.lin-node {
+  cursor: pointer;
+  transition: filter 100ms;
+}
+.lin-node:hover {
+  filter: drop-shadow(0 4px 12px rgba(245,183,49,0.30));
+}
+
+.lin-node-kind {
+  font-size: 8.5px;
+  letter-spacing: 0.10em;
+  font-weight: 700;
+  fill: #5A5F66;
+  font-family: "DM Sans", sans-serif;
+}
+.lin-node-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  fill: #0F1318;
+  font-family: "DM Sans", sans-serif;
+}
+.lin-node.is-root .lin-node-kind { fill: #4A3208; }
+.lin-node.is-root .lin-node-label { fill: #0F1318; font-weight: 700; }
+
+.lin-edge-label {
+  font-size: 9px;
+  fill: #5A5F66;
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: 0.02em;
+}
+
+.lin-footer {
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 22px;
+  border-top: 1px solid rgba(15,19,24,0.08);
+  background: rgba(255,255,255,0.7);
+  font-size: 10.5px;
+  color: #5A5F66;
+  font-family: "JetBrains Mono", monospace;
+}
+
+.lin-legend { display: flex; gap: 10px; flex-wrap: wrap; }
+.lin-legend-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-family: "DM Sans", sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.lin-legend-dot {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 3px;
+  border: 1px solid rgba(15,19,24,0.10);
+}

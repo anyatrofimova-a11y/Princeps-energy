@@ -1,0 +1,79 @@
+# Princeps Data Fabric — BMRS half-hourly demand stream.
+#
+# Polls the BMRS Insights API every 5 minutes, transforms to the canonical
+# `demand_historical_stream` row shape, and inserts to Postgres. The
+# AFTER INSERT trigger fires `pg_notify('grid_state_change', ...)` so live
+# materialised views and FastAPI WebSocket clients refresh in <5s.
+#
+# Run:
+#   benthos -c streams/bmrs_demand.yaml
+# Or via Docker:
+#   docker run --network=host -e DATABASE_URL=$DATABASE_URL \
+#     -v $PWD/streams:/streams jeffail/benthos -c /streams/bmrs_demand.yaml
+#
+# License: BMRS data is OGL-3.0 (commercial-safe). Registered in
+# app/license_guard/licenses.yaml as 'bmrs_elexon'.
+
+input:
+  generate:
+    interval: 5m
+    count: 0
+    mapping: "root = {}"
+
+pipeline:
+  processors:
+    - http:
+        url: https://data.elexon.co.uk/bmrs/api/v1/demand/outturn?format=json
+        verb: GET
+        timeout: 30s
+        retries: 2
+
+    - mapping: |
+        let now = now()
+        # BMRS payload shape: { data: [ {settlementDate, settlementPeriod, demand}, ... ] }
+        root = this.data.or([]).map_each(p -> {
+          "settlement_date":   p.settlementDate,
+          "settlement_period": p.settlementPeriod,
+          "demand_mw":         p.demand,
+          "ingested_at":       $now
+        }).filter(p -> p.demand_mw != null)
+
+    - unarchive:
+        format: json_array
+
+output:
+  sql_insert:
+    driver: postgres
+    dsn: ${DATABASE_URL}
+    table: demand_historical_stream
+    columns: [settlement_date, settlement_period, demand_mw, ingested_at]
+    args_mapping: |
+      root = [
+        this.settlement_date,
+        this.settlement_period,
+        this.demand_mw,
+        this.ingested_at
+      ]
+    # Idempotent insert — UNIQUE (settlement_date, settlement_period) on the
+    # table catches re-publishes; init_statement turns the conflict into a
+    # no-op upsert.
+    init_statement: |
+      CREATE TABLE IF NOT EXISTS demand_historical_stream (
+          id              BIGSERIAL PRIMARY KEY,
+          settlement_date DATE        NOT NULL,
+          settlement_period SMALLINT  NOT NULL,
+          demand_mw       DOUBLE PRECISION,
+          ingested_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (settlement_date, settlement_period)
+      );
+
+logger:
+  level: INFO
+
+metrics:
+  prometheus:
+    push_url: ""
+
+http:
+  enabled: true
+  address: 0.0.0.0:4195

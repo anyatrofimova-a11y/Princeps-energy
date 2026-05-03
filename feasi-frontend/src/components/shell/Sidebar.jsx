@@ -311,6 +311,17 @@ export default function Sidebar({ onGridTwin, onPipeline, onDcTwin, onBessFacili
   }, [setActiveWorkspace, setActiveViewMode]);
 
   const goMap = useCallback(() => {
+    // Clear the redesign URL flag so RedesignLayout unmounts and the full-
+    // screen MapView takes over. Without this, clicking Map from a project
+    // page leaves the ProjectPage mounted and the map never appears.
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has("redesign")) {
+        url.searchParams.delete("redesign");
+        url.searchParams.delete("project");
+        window.history.replaceState({}, "", url);
+      }
+    } catch {}
     setActiveWorkspace?.("home");
     setActiveViewMode?.("map");
   }, [setActiveWorkspace, setActiveViewMode]);

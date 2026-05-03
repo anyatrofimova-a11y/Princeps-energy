@@ -53,6 +53,9 @@ pdal/
 # Runtime artifacts
 audit_logs/
 test-results/
+.tmp/
+.tmp_openapi.json
+.claude/worktrees/
 
 # Data
 /data/

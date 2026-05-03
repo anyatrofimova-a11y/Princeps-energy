@@ -59,7 +59,13 @@ def _dtdl_field_names(dtdl: dict[str, Any]) -> list[str]:
 # ---------------------------------------------------------------------------
 # Manifest schema — strict but minimal.
 # ---------------------------------------------------------------------------
-ALLOWED_KINDS = {"ObjectCard", "ObjectTable", "Chart", "Map", "Markdown", "ActionButton"}
+ALLOWED_KINDS = {
+    # Original v1 widgets (AI composer ships these)
+    "ObjectCard", "ObjectTable", "Chart", "Map", "Markdown", "ActionButton",
+    # Slate-equivalent composable widgets (frontend-rendered, data-fetching)
+    "QuiverChart", "ObjectList", "NotesFeed", "KPI", "DatasetHealth",
+    "TimeSeriesChart",
+}
 
 
 class Variable(BaseModel):
@@ -71,11 +77,12 @@ class Variable(BaseModel):
 class Widget(BaseModel):
     id: str
     kind: str
-    # Composer sometimes 0-indexes; we accept either and clamp at render.
-    col: int = Field(ge=0, le=12)
+    # `col`/`w` are optional for Slate manifests — frontend flow-lays out when
+    # only `w` is given; row/col are explicit only when the user pinned them.
+    col: int = Field(default=0, ge=0, le=12)
     row: int | None = None
-    w: int = Field(ge=1, le=12)
-    h: int = Field(ge=1, le=24, default=1)
+    w: int = Field(default=6, ge=1, le=12)
+    h: int = Field(default=1, ge=1, le=24)
     props: dict[str, Any] = Field(default_factory=dict)
     bindings: dict[str, Any] = Field(default_factory=dict)
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import mock from "../../../data/mock-alerts.json";
+import { getStarterPacks } from "../../../api/alerts";
 
 const C = {
   gold: "#F5B731",
@@ -116,8 +116,13 @@ export default function StarterPacks({ onSubscribePack, onCustomisePack, onAskAn
   const [packs, setPacks] = useState([]);
 
   useEffect(() => {
-    // Starter packs are a static catalogue — use mock fixture directly.
-    setPacks(mock.starter_packs || []);
+    // Starter packs come from /api/alerts/starter-packs (defined in
+    // app/alerts/starter_packs.py — server-side catalogue).
+    let cancelled = false;
+    getStarterPacks()
+      .then((d) => { if (!cancelled) setPacks(d.packs || d.starter_packs || []); })
+      .catch(() => { if (!cancelled) setPacks([]); });
+    return () => { cancelled = true; };
   }, []);
 
   return (

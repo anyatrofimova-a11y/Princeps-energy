@@ -1,0 +1,215 @@
+# Princeps License Guard registry.
+#
+# Every model weight, dataset, or library that ships inference into a Princeps
+# response MUST be registered here. Inference paths call
+# license_guard.assert_commercial_safe(artifact_id) before serving; the
+# LicenseGuardMiddleware enforces the same check at the response boundary.
+#
+# Adding a new artifact: pick a stable kebab-case id, fill license + commercial_use,
+# and link the source. If unsure about the license, mark commercial_use: false.
+#
+# Reviewer checklist:
+#  1. Is the license verbatim (e.g. "CC-BY-NC-4.0", not "CC-BY-NC")?
+#  2. Did the upstream weights/data have a separate license from the code?
+#  3. Have we documented the alternative if commercial_use is false?
+
+version: 1
+last_reviewed: 2026-04-30
+
+artifacts:
+
+  # ──────── HARD-BLOCKED (non-commercial) ────────
+
+  graphcast_weights:
+    license: CC-BY-NC-SA-4.0
+    commercial_use: false
+    source: https://github.com/google-deepmind/graphcast
+    notes: |
+      Code is Apache-2.0; weights are NC. Internal validation only.
+      Never ship inference output to a customer-facing endpoint.
+    alternative: ECMWF Open Data (raw 0.25° forecasts, free) or NOAA GFS.
+
+  gencast_weights:
+    license: CC-BY-NC-SA-4.0
+    commercial_use: false
+    source: https://github.com/google-deepmind/graphcast
+    notes: Diffusion ensemble member; same NC stance as GraphCast.
+    alternative: ECMWF AIFS Open Data (operational ensemble, free).
+
+  moirai_weights:
+    license: CC-BY-NC-4.0
+    commercial_use: false
+    source: https://huggingface.co/Salesforce/moirai-1.1-R-large
+    alternative: TimesFM (Apache-2.0) or Chronos (Apache-2.0).
+
+  opensanctions_data:
+    license: CC-BY-NC-4.0
+    commercial_use: false
+    source: https://www.opensanctions.org/licensing/
+    notes: Free tier is non-commercial; commercial requires paid licence.
+    alternative: |
+      UK government consolidated sanctions list (OGL, free) +
+      OFAC SDN list (US Treasury, public domain) +
+      EU Financial Sanctions Files (EU Open Data, free).
+
+  acled_data:
+    license: CC-BY-NC-SA-4.0
+    commercial_use: false
+    source: https://acleddata.com/terms-of-use/
+    notes: Free for academic use; paid commercial tier exists.
+    alternative: GDELT 2.0 (CC-BY, commercial-OK).
+
+  renewables_ninja_outputs:
+    license: CC-BY-NC-4.0
+    commercial_use: false
+    source: https://www.renewables.ninja/about
+    alternative: |
+      atlite (BSD-3) over ERA5 reanalysis (Copernicus free with attribution),
+      or NREL SAM PvWattsv8 (already wired in Princeps).
+
+  # ──────── COMMERCIAL-SAFE foundation models ────────
+
+  timesfm_weights:
+    license: Apache-2.0
+    commercial_use: true
+    source: https://huggingface.co/google/timesfm-1.0-200m
+    notes: Time-series foundation model; replaces Prophet/TFT baselines.
+
+  chronos_weights:
+    license: Apache-2.0
+    commercial_use: true
+    source: https://huggingface.co/amazon/chronos-t5-large
+
+  prithvi_weights:
+    license: Apache-2.0
+    commercial_use: true
+    source: https://huggingface.co/ibm-nasa-geospatial/Prithvi-100M
+    notes: Earth observation foundation model (NASA-IBM).
+
+  gemma_2_9b_weights:
+    license: Apache-2.0
+    commercial_use: true
+    source: https://huggingface.co/google/gemma-2-9b
+    notes: Local LLM fallback for cheap intent classification.
+
+  # ──────── COMMERCIAL-SAFE physics & data libs ────────
+
+  floris_models:
+    license: BSD-3-Clause
+    commercial_use: true
+    source: https://github.com/NREL/floris
+
+  openipsl_models:
+    license: BSD-3-Clause
+    commercial_use: true
+    source: https://github.com/OpenIPSL/OpenIPSL
+
+  modelica_standard_library:
+    license: BSD-3-Clause
+    commercial_use: true
+    source: https://github.com/modelica/ModelicaStandardLibrary
+
+  fmpy_runtime:
+    license: BSD-2-Clause
+    commercial_use: true
+    source: https://github.com/CATIA-Systems/FMPy
+
+  pytwin_runtime:
+    license: MIT
+    commercial_use: true
+    source: https://github.com/ansys/pytwin
+    notes: |
+      MIT runtime, but consumes Ansys-built .twin files. Files exported as
+      "unlicensed" (Twin Builder 2023 R1 SP1+) need no Ansys runtime licence;
+      "licensed" exports require Ansys License Manager features and must be
+      treated separately — register those .twin files individually here when
+      ingested.
+
+  web_ifc_lib:
+    license: MPL-2.0
+    commercial_use: true
+    source: https://github.com/IFCjs/web-ifc
+    notes: |
+      MPL-2.0 is file-level copyleft. Modifications to MPL files must be
+      published; modifications to our own files that import web-ifc are
+      unaffected. Safe for closed SaaS.
+
+  cognite_reveal:
+    license: Apache-2.0
+    commercial_use: true
+    source: https://github.com/cognitedata/reveal
+    notes: |
+      Use only inside DC building shells. Do not adopt for grid-scale viz —
+      Cesium/deck.gl already cover that.
+
+  # ──────── COMMERCIAL-SAFE datasets ────────
+
+  gleif_lei:
+    license: CC0-1.0
+    commercial_use: true
+    source: https://www.gleif.org/en/lei-data/gleif-api
+
+  uk_companies_house:
+    license: OGL-3.0
+    commercial_use: true
+    source: https://developer.company-information.service.gov.uk/
+
+  uk_sanctions_consolidated:
+    license: OGL-3.0
+    commercial_use: true
+    source: https://www.gov.uk/government/publications/the-uk-sanctions-list
+
+  repd_database:
+    license: OGL-3.0
+    commercial_use: true
+    source: https://www.gov.uk/government/publications/renewable-energy-planning-database-monthly-extract
+
+  bmrs_elexon:
+    license: OGL-3.0
+    commercial_use: true
+    source: https://bmrs.elexon.co.uk/api-documentation
+
+  neso_data_portal:
+    license: NESO Open Licence
+    commercial_use: true
+    source: https://www.neso.energy/data-portal
+    notes: NESO Open Licence is OGL-equivalent (verify per dataset).
+
+  gdelt_2_0:
+    license: CC-BY-4.0
+    commercial_use: true
+    source: https://www.gdeltproject.org
+
+  os_open_zoomstack:
+    license: OGL-3.0
+    commercial_use: true
+    source: https://osdatahub.os.uk/downloads/open
+
+  defra_lidar_national:
+    license: OGL-3.0
+    commercial_use: true
+    source: https://environment.data.gov.uk/dataset/13787b9a-26a4-4775-8523-806d13af58fc
+
+  ecmwf_open_data:
+    license: CC-BY-4.0
+    commercial_use: true
+    source: https://www.ecmwf.int/en/forecasts/datasets/open-data
+
+  copernicus_cds:
+    license: CC-BY-4.0
+    commercial_use: true
+    source: https://cds.climate.copernicus.eu
+
+policies:
+
+  # Endpoints under these prefixes may use NC-licensed artifacts because their
+  # output is internal/research-only and not surfaced to commercial customers.
+  # The middleware reads this list to decide whether a request is in
+  # commercial context.
+  research_path_prefixes:
+    - /api/research/
+    - /api/internal/validation/
+
+  # When set, unknown artifact ids fail closed (raise) instead of fail-open
+  # (log + allow). Keep true in production.
+  unknown_artifact_fails_closed: true

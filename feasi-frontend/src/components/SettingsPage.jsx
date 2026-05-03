@@ -19,6 +19,14 @@ const SECTIONS = [
   { id: "map", label: "Map & Display" },
   { id: "api", label: "API & Connections" },
   { id: "profile", label: "Profile & Notifications" },
+  { id: "team", label: "Team" },
+];
+
+const ROLES = [
+  { id: "owner", label: "Owner", desc: "Full admin, billing, delete workspace" },
+  { id: "admin", label: "Admin", desc: "Manage members, settings, projects" },
+  { id: "editor", label: "Editor", desc: "Edit projects, run analyses" },
+  { id: "viewer", label: "Viewer", desc: "Read-only access" },
 ];
 
 // Soft validation — only flag fields that are present BUT invalid.
@@ -57,7 +65,42 @@ export default function SettingsPage({ onExit }) {
     map: false,
     api: !!(errors.mapboxToken || errors.backendUrl),
     profile: !!(errors.displayName || errors.email),
+    team: false,
   }), [errors]);
+
+  const teamMembers = settingsForm.teamMembers || [];
+  const teamMode = settingsForm.teamMode !== false;
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("editor");
+  const addMember = useCallback(() => {
+    const e = (inviteEmail || "").trim();
+    if (!e || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) {
+      setToast("Enter a valid email to invite");
+      setTimeout(() => setToast(null), 2500);
+      return;
+    }
+    if (teamMembers.some(m => m.email === e)) {
+      setToast("Member already on team");
+      setTimeout(() => setToast(null), 2000);
+      return;
+    }
+    const next = [...teamMembers, {
+      email: e, role: inviteRole, status: "invited",
+      invited_at: new Date().toISOString(),
+    }];
+    updateSettingsForm({ teamMembers: next });
+    setInviteEmail("");
+    setToast(`Invite queued for ${e}`);
+    setTimeout(() => setToast(null), 2000);
+  }, [inviteEmail, inviteRole, teamMembers, updateSettingsForm]);
+  const removeMember = useCallback((email) => {
+    updateSettingsForm({ teamMembers: teamMembers.filter(m => m.email !== email) });
+  }, [teamMembers, updateSettingsForm]);
+  const changeRole = useCallback((email, role) => {
+    updateSettingsForm({
+      teamMembers: teamMembers.map(m => m.email === email ? { ...m, role } : m),
+    });
+  }, [teamMembers, updateSettingsForm]);
 
   const handleSave = useCallback(() => {
     if (hasErrors) {
@@ -215,6 +258,159 @@ export default function SettingsPage({ onExit }) {
                 />
                 {errors.backendUrl && <span className="settings-error-msg">{errors.backendUrl}</span>}
               </label>
+            </>
+          )}
+
+          {activeSection === "team" && (
+            <>
+              <div className="settings-field">
+                <span className="settings-label">Team mode</span>
+                <div className="settings-toggle-group">
+                  <button
+                    className={`settings-toggle-btn${teamMode ? " active" : ""}`}
+                    onClick={() => updateSettingsForm({ teamMode: true })}
+                  >On</button>
+                  <button
+                    className={`settings-toggle-btn${!teamMode ? " active" : ""}`}
+                    onClick={() => updateSettingsForm({ teamMode: false })}
+                  >Off (solo)</button>
+                </div>
+                <span style={{ fontSize: 11, color: "var(--cds-text-helper)", marginTop: 6, display: "block" }}>
+                  When on, projects and comments are shared with invited members; chat threads show authorship.
+                </span>
+              </div>
+
+              {teamMode && (
+                <>
+                  <div className="settings-field">
+                    <span className="settings-label">Invite a teammate</span>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        type="email"
+                        className="settings-input"
+                        placeholder="teammate@example.com"
+                        value={inviteEmail}
+                        onChange={e => setInviteEmail(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addMember(); } }}
+                        style={{ flex: "1 1 220px", minWidth: 200 }}
+                      />
+                      <select
+                        className="settings-select"
+                        value={inviteRole}
+                        onChange={e => setInviteRole(e.target.value)}
+                        style={{ flex: "0 0 140px" }}
+                      >
+                        {ROLES.filter(r => r.id !== "owner").map(r => (
+                          <option key={r.id} value={r.id}>{r.label}</option>
+                        ))}
+                      </select>
+                      <button className="settings-save-btn" onClick={addMember}>Invite</button>
+                    </div>
+                    <span style={{ fontSize: 11, color: "var(--cds-text-helper)", marginTop: 6, display: "block" }}>
+                      {ROLES.find(r => r.id === inviteRole)?.desc}
+                    </span>
+                  </div>
+
+                  <div className="settings-field">
+                    <span className="settings-label">Members ({teamMembers.length + 1})</span>
+                    <div style={{
+                      border: "1px solid var(--cds-border-subtle, #e5e7eb)",
+                      borderRadius: 8,
+                      overflow: "hidden",
+                    }}>
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 140px 110px 40px",
+                        gap: 0,
+                        padding: "10px 12px",
+                        background: "var(--cds-layer-02, #f7f7f8)",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: "var(--cds-text-helper)",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.04em",
+                      }}>
+                        <span>Member</span><span>Role</span><span>Status</span><span/>
+                      </div>
+                      <div style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 140px 110px 40px",
+                        padding: "12px",
+                        alignItems: "center",
+                        borderTop: "1px solid var(--cds-border-subtle, #e5e7eb)",
+                        fontSize: 13,
+                      }}>
+                        <span>
+                          <strong>{settingsForm.displayName || settingsForm.email || "You"}</strong>
+                          <span style={{ color: "var(--cds-text-helper)", marginLeft: 6 }}>(you)</span>
+                        </span>
+                        <span style={{ fontWeight: 600 }}>Owner</span>
+                        <span style={{ color: "#16a34a" }}>Active</span>
+                        <span/>
+                      </div>
+                      {teamMembers.length === 0 ? (
+                        <div style={{
+                          padding: "14px 12px",
+                          color: "var(--cds-text-helper)",
+                          fontSize: 12,
+                          borderTop: "1px solid var(--cds-border-subtle, #e5e7eb)",
+                          textAlign: "center",
+                        }}>
+                          No teammates yet. Invite one above.
+                        </div>
+                      ) : teamMembers.map(m => (
+                        <div key={m.email} style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 140px 110px 40px",
+                          padding: "12px",
+                          alignItems: "center",
+                          borderTop: "1px solid var(--cds-border-subtle, #e5e7eb)",
+                          fontSize: 13,
+                        }}>
+                          <span>{m.email}</span>
+                          <select
+                            className="settings-select"
+                            value={m.role}
+                            onChange={e => changeRole(m.email, e.target.value)}
+                            style={{ padding: "4px 8px", fontSize: 12 }}
+                          >
+                            {ROLES.filter(r => r.id !== "owner").map(r => (
+                              <option key={r.id} value={r.id}>{r.label}</option>
+                            ))}
+                          </select>
+                          <span style={{
+                            color: m.status === "active" ? "#16a34a" : "#d97706",
+                            fontSize: 12,
+                          }}>{m.status === "active" ? "Active" : "Invited"}</span>
+                          <button
+                            onClick={() => removeMember(m.email)}
+                            title="Remove"
+                            style={{
+                              background: "transparent",
+                              border: "none",
+                              color: "var(--cds-text-helper)",
+                              cursor: "pointer",
+                              fontSize: 16,
+                              padding: 4,
+                            }}
+                          >×</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="settings-field">
+                    <span className="settings-label">Workspace</span>
+                    <input
+                      type="text"
+                      className="settings-input"
+                      placeholder="Princeps workspace"
+                      value={settingsForm.workspaceName || ""}
+                      onChange={e => updateSettingsForm({ workspaceName: e.target.value })}
+                    />
+                  </div>
+                </>
+              )}
             </>
           )}
 

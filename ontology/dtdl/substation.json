@@ -1,0 +1,53 @@
+{
+  "@context": "dtmi:dtdl:context;3",
+  "@id": "dtmi:com:princeps:Substation;1",
+  "@type": "Interface",
+  "displayName": "Substation",
+  "description": "An electrical substation. IEC 61970 CIM-aligned (cim:Substation).",
+  "extends": [],
+  "contents": [
+    {"@type": "Property", "name": "name", "schema": "string"},
+    {"@type": "Property", "name": "dnoArea", "schema": {
+      "@type": "Enum", "valueSchema": "string",
+      "enumValues": [
+        {"name": "UKPN_LPN", "enumValue": "UKPN_LPN"},
+        {"name": "UKPN_SPN", "enumValue": "UKPN_SPN"},
+        {"name": "UKPN_EPN", "enumValue": "UKPN_EPN"},
+        {"name": "SSEN_SEPD", "enumValue": "SSEN_SEPD"},
+        {"name": "SSEN_SHEPD", "enumValue": "SSEN_SHEPD"},
+        {"name": "SPEN_SPD", "enumValue": "SPEN_SPD"},
+        {"name": "SPEN_SPM", "enumValue": "SPEN_SPM"},
+        {"name": "NPG_NEDL", "enumValue": "NPG_NEDL"},
+        {"name": "NPG_YEDL", "enumValue": "NPG_YEDL"},
+        {"name": "NGED_EMID", "enumValue": "NGED_EMID"},
+        {"name": "NGED_WMID", "enumValue": "NGED_WMID"},
+        {"name": "NGED_SWALES", "enumValue": "NGED_SWALES"},
+        {"name": "NGED_SWEST", "enumValue": "NGED_SWEST"},
+        {"name": "ENWL_NWED", "enumValue": "ENWL_NWED"}
+      ]
+    }},
+    {"@type": "Property", "name": "voltageLevels", "schema": {
+      "@type": "Array", "elementSchema": "string"
+    }, "description": "Voltage levels operating at this substation, e.g. ['EHV_132KV','HV_33KV']"},
+    {"@type": "Property", "name": "firmCapacityMw", "schema": "double"},
+    {"@type": "Property", "name": "location", "schema": {
+      "@type": "Object", "fields": [
+        {"name": "easting27700", "schema": "double"},
+        {"name": "northing27700", "schema": "double"}
+      ]
+    }},
+    {"@type": "Telemetry", "name": "headroomImportMw", "schema": "double"},
+    {"@type": "Telemetry", "name": "headroomExportMw", "schema": "double"},
+    {"@type": "Telemetry", "name": "utilisationPct", "schema": "double"},
+
+    {"@type": "Relationship", "name": "feedsFrom", "target": "dtmi:com:princeps:GSP;1",
+     "minMultiplicity": 0, "maxMultiplicity": 1,
+     "description": "Upstream Grid Supply Point feeding this substation."},
+    {"@type": "Relationship", "name": "connects", "target": "dtmi:com:princeps:Site;1",
+     "minMultiplicity": 0, "maxMultiplicity": 500,
+     "description": "Sites connected at this substation."},
+
+    {"@type": "Command", "name": "runPowerFlow",
+     "description": "Trigger a pandapower runpp() against this substation's local network."}
+  ]
+}

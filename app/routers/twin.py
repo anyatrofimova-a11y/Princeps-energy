@@ -60,6 +60,11 @@ from utils.asset_layout_engine import (
     catalogue_raw,
     layout_site_full,
 )
+from utils.bess_engineering import (
+    BessBrief,
+    design as bess_design,
+    design_to_dict as bess_design_to_dict,
+)
 
 log = logging.getLogger("princeps.twin")
 router = APIRouter(tags=["twin"], prefix="")
@@ -146,6 +151,116 @@ async def post_layout(req: LayoutRequest = Body(...)):
         log.exception("layout_site failed")
         raise HTTPException(500, f"layout engine failed: {exc}")
     return resp
+
+
+# ---------------------------------------------------------------------------
+# POST /api/twin/bess-design
+# ---------------------------------------------------------------------------
+class BessDesignRequest(BaseModel):
+    """Inbound body for /api/twin/bess-design — full engineering pass."""
+    capacity_mw: float = Field(50.0, gt=0, le=2000)
+    duration_h: float = Field(2.0, gt=0, le=12)
+    vendor_id: str = "tesla.megapack_2xl"
+    pcs_id: str = "sungrow.sc4400_uds"
+    main_tx_id: str = "hitachi.main_60mva"
+    grid_voltage_kv: float = 132.0
+    augmentation: Literal["none", "annual", "biennial", "year_5_only"] = "annual"
+    project_life_y: int = Field(20, ge=5, le=40)
+    target_dod: float = Field(0.95, gt=0.5, le=1.0)
+    cycles_per_year: int = Field(365, ge=50, le=730)
+    climate_zone: Literal["uk_temperate", "uk_north", "med", "tropical"] = "uk_temperate"
+    cni_grade: Literal["B3", "C5", "SR1"] = "C5"
+    fence_setback_m: float = Field(25.0, ge=5.0, le=100.0)
+    region_factor: float = Field(1.18, ge=0.5, le=2.5)
+    discount_rate: float = Field(0.08, ge=0.01, le=0.25)
+    poc_distance_m: float = Field(250.0, ge=10.0, le=20000.0)
+    site_polygon_wkt: str | None = None     # optional — used for centroid georef
+
+
+@router.post("/api/twin/bess-design")
+async def post_bess_design(req: BessDesignRequest = Body(...)):
+    """Run the full BESS engineering designer.
+
+    Returns vendor-aware sizing, NFPA 855 / BS 8629 / IFC 1207 compliant
+    container packing, PCS + transformer cascade, IEC 60364 conductor schedule,
+    single-line topology, augmentation schedule with RTE/SoH curves, full BoQ,
+    regional CapEx breakdown, and discounted LCOS — all in one payload.
+    """
+    try:
+        brief = BessBrief(
+            capacity_mw=req.capacity_mw,
+            duration_h=req.duration_h,
+            vendor_id=req.vendor_id,
+            pcs_id=req.pcs_id,
+            main_tx_id=req.main_tx_id,
+            grid_voltage_kv=req.grid_voltage_kv,
+            augmentation=req.augmentation,
+            project_life_y=req.project_life_y,
+            target_dod=req.target_dod,
+            cycles_per_year=req.cycles_per_year,
+            climate_zone=req.climate_zone,
+            cni_grade=req.cni_grade,
+            fence_setback_m=req.fence_setback_m,
+            region_factor=req.region_factor,
+            discount_rate=req.discount_rate,
+            poc_distance_m=req.poc_distance_m,
+        )
+        d = bess_design(brief)
+        out = bess_design_to_dict(d)
+
+        # Attach centroid lon/lat if a polygon was supplied so the frontend can
+        # plot all metric-offset assets without re-parsing the WKT itself.
+        if req.site_polygon_wkt:
+            try:
+                from utils.asset_layout_engine import _parse_polygon
+                _, centroid_lonlat, centroid_osgb = _parse_polygon(req.site_polygon_wkt)
+                out["centroid_lonlat"] = list(centroid_lonlat) if centroid_lonlat else None
+                out["centroid_osgb"] = list(centroid_osgb) if centroid_osgb else None
+            except Exception as exc:
+                log.warning("bess-design centroid resolution failed: %s", exc)
+                out["centroid_lonlat"] = None
+        return out
+    except KeyError as exc:
+        raise HTTPException(400, f"unknown vendor/pcs/transformer id: {exc}")
+    except Exception as exc:
+        log.exception("bess-design failed")
+        raise HTTPException(500, f"bess-design failed: {exc}")
+
+
+@router.get("/api/twin/bess-catalogue")
+async def get_bess_catalogue():
+    """Return the BESS engineering catalogue (vendors, PCS, transformers).
+
+    The frontend uses this to populate vendor pickers without round-trips
+    through the design endpoint.
+    """
+    from utils.bess_engineering import VENDORS, PCS_CATALOGUE, TX_CATALOGUE
+    return {
+        "battery_vendors": [
+            {
+                "id": v.id, "label": v.label, "chemistry": v.chemistry,
+                "energy_kwh": v.energy_kwh, "power_kw": v.power_kw,
+                "rte_bol": v.rte_bol, "rte_eol": v.rte_eol,
+                "cycle_life_to_80pct": v.cycle_life_to_80pct,
+                "capex_usd_per_kwh": v.capex_usd_per_kwh,
+                "footprint_m2": round(v.length_m * v.width_m, 1),
+            }
+            for v in VENDORS.values()
+        ],
+        "pcs_products": [
+            {"id": p.id, "label": p.label, "rating_kw": p.rating_kw,
+             "efficiency": p.efficiency, "capex_usd_per_kw": p.capex_usd_per_kw}
+            for p in PCS_CATALOGUE.values()
+        ],
+        "transformers": [
+            {"id": t.id, "label": t.label, "rating_mva": t.rating_mva,
+             "primary_kv": t.primary_kv, "secondary_kv": t.secondary_kv,
+             "no_load_loss_kw": t.no_load_loss_kw,
+             "load_loss_kw": t.load_loss_kw,
+             "cooling": t.cooling}
+            for t in TX_CATALOGUE.values()
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,19 @@
 import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
+// Princeps query client — sane defaults for the analysis cache (Stage B
+// of the SiteContext dissolution). Per-query options can override these.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 30_000,
+      retry: 1,
+    },
+  },
+});
 import { SiteProvider } from "./SiteContext";
 import { WorkspaceProvider } from "./contexts/WorkspaceContext";
 import App from "./App";
@@ -33,9 +46,43 @@ const DocketsIndex = lazy(() => import("./pages/Intelligence/Dockets/DocketsInde
 // Tracker admin (SME review + publish) at /tracker-admin.
 const TrackerDashboard = lazy(() => import("./pages/Tracker/TrackerDashboard.jsx"));
 
+// Workshop — Kognitwin-pattern operations cockpit demo (Swarm 10).
+const WorkshopDemo = lazy(() => import("./workshop/WorkshopDemo.jsx"));
+
+// Kongsberg-grade twin views — BESS + DC.
+const BESSTwinView = lazy(() => import("./twin-explorer/BESSTwinView.jsx"));
+const DCTwinView = lazy(() => import("./twin-explorer/DCTwinView.jsx"));
+
+// WorkshopShell — DEPRECATED. Replaced by AppShell (Princeps v2). Kept
+// only as a no-op layout route so existing nested children render bare.
+import { WorkshopShell } from "./workshop/WorkshopShell.jsx";
+
+// Princeps v2 shell — Foundry/Kognitwin three-column layout.
+const AppShell = lazy(() => import("./shell/AppShell.jsx"));
+const ObjectPage = lazy(() => import("./shell/ObjectPage.jsx"));
+const MissionControlPage = lazy(() => import("./components/MissionControl.jsx"));
+// Mission Control v2 — composed Workshop module backed by ontology objects.
+const MissionControlV2 = lazy(() => import("./mission_control/MissionControlV2.jsx"));
+
 // Workshop Module Builder MVP — AI-composed manifest runtime.
 const ModuleRuntime = lazy(() => import("./runtime/ModuleRuntime.jsx"));
 const ComposeDemo = lazy(() => import("./runtime/ComposeDemo.jsx"));
+// Magritte dataset catalogue — typed connector registry surface.
+const DatasetsCatalog = lazy(() => import("./pages/Datasets/DatasetsCatalog.jsx"));
+// Council demo — GRID + BESS + DC pods + Adjudicator (SSE timeline).
+const CouncilDemo = lazy(() => import("./pages/Council/CouncilDemo.jsx"));
+// Object Page — typed object detail / list at /v2/object/:type[/:id].
+const ObjectDetailPage = lazy(() => import("./object_page/ObjectPage.jsx"));
+// Lineage Panel — global slide-over; opens via window.dispatchEvent('princeps:lineage', {root}).
+const LineagePanel = lazy(() => import("./lineage/LineagePanel.jsx"));
+// Quiver — cross-filter charts over typed object sets.
+const QuiverPage = lazy(() => import("./quiver/QuiverPage.jsx"));
+// Solutions Marketplace — installable Slate dashboards.
+const SolutionsMarketplace = lazy(() => import("./solutions/SolutionsMarketplace.jsx"));
+// Object Sets — saved typed queries with set algebra.
+const SetsBrowser = lazy(() => import("./object_sets/SetsBrowser.jsx"));
+// Pipeline Builder — DAG editor + run + history.
+const PipelinesPage = lazy(() => import("./pipelines/PipelinesPage.jsx"));
 const DatasetsIndex = lazy(() => import("./pages/Intelligence/Datasets/DatasetsIndex.jsx"));
 const EngagementsIndex = lazy(() => import("./pages/Intelligence/Engagements/EngagementsIndex.jsx"));
 
@@ -118,11 +165,173 @@ const LegacyApp = () => (
 
 createRoot(document.getElementById("root")).render(
   <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <Suspense fallback={null}>
         <ParcelDrawer />
       </Suspense>
+      <Suspense fallback={null}>
+        <LineagePanel />
+      </Suspense>
       <Routes>
+        {/* Marketing / public routes — bare, no Workshop chrome. */}
+        <Route
+          path="/tracker"
+          element={
+            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading…</div>}>
+              <TrackerLanding />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/tracker-admin"
+          element={
+            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading tracker…</div>}>
+              <TrackerDashboard />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/tracker-admin/review/:id"
+          element={
+            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading tracker…</div>}>
+              <TrackerDashboard />
+            </Suspense>
+          }
+        />
+
+        {/* v2 shell — clean Foundry/Kognitwin three-column app */}
+        <Route
+          element={
+            <Suspense fallback={<div style={{padding: 40, fontFamily: "DM Sans"}}>Loading Princeps v2…</div>}>
+              <AppShell />
+            </Suspense>
+          }
+        >
+          <Route
+            path="/v2/object/:type/:rid"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading object…</div>}>
+                <ObjectPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading mission control…</div>}>
+                <MissionControlV2 />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/legacy"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading legacy dashboard…</div>}>
+                <MissionControlPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/modules/:id"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading module…</div>}>
+                <ModuleRuntime />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/builder"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading composer…</div>}>
+                <ComposeDemo />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/datasets"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading datasets…</div>}>
+                <DatasetsCatalog />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/council"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading council…</div>}>
+                <CouncilDemo />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/object/:type"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading object list…</div>}>
+                <ObjectDetailPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/object/:type/:id"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading object…</div>}>
+                <ObjectDetailPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/quiver/:type"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading quiver…</div>}>
+                <QuiverPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/quiver"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading quiver…</div>}>
+                <QuiverPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/solutions"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading marketplace…</div>}>
+                <SolutionsMarketplace />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/sets"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading object sets…</div>}>
+                <SetsBrowser />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/pipelines"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading pipelines…</div>}>
+                <PipelinesPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/pipelines/:slug"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading pipeline…</div>}>
+                <PipelinesPage />
+              </Suspense>
+            }
+          />
+        </Route>
+
+        {/* Legacy routes — bare. WorkshopShell drawers retired so they don't leak overlays. */}
+        <Route>
         <Route
           path="/canvas/:projectId"
           element={
@@ -184,46 +393,6 @@ createRoot(document.getElementById("root")).render(
           element={
             <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading connectors…</div>}>
               <ConnectorHealthDashboard />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/v2/modules/:id"
-          element={
-            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading module…</div>}>
-              <ModuleRuntime />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/v2/builder"
-          element={
-            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading composer…</div>}>
-              <ComposeDemo />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/tracker"
-          element={
-            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading…</div>}>
-              <TrackerLanding />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/tracker-admin"
-          element={
-            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading tracker…</div>}>
-              <TrackerDashboard />
-            </Suspense>
-          }
-        />
-        <Route
-          path="/tracker-admin/review/:id"
-          element={
-            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading tracker…</div>}>
-              <TrackerDashboard />
             </Suspense>
           }
         />
@@ -293,12 +462,39 @@ createRoot(document.getElementById("root")).render(
             }
           />
         </Route>
+        <Route
+          path="/workshop"
+          element={
+            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading workshop…</div>}>
+              <WorkshopDemo />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/twin/bess/:rid"
+          element={
+            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading BESS twin…</div>}>
+              <BESSTwinView />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/twin/dc/:rid"
+          element={
+            <Suspense fallback={<div style={{ padding: 40, fontFamily: "DM Sans" }}>Loading DC twin…</div>}>
+              <DCTwinView />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<LegacyApp />} />
+        </Route>
+        {/* End Workshop-shelled routes. */}
       </Routes>
       {/* Global toast render layer — driven by src/lib/toast.js. Mounted at
           the router root so it covers every route (legacy App, Intelligence,
           Canvas, Design, …). */}
       <Toast />
     </BrowserRouter>
+    </QueryClientProvider>
   </ErrorBoundary>
 );

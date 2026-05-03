@@ -9,8 +9,437 @@
  *   • Drill into the selected option for MVS gap, SQSS, switchgear, BOM,
  *     MSIP eligibility, and escalate cost between price bases
  */
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 import api from "../../services/api";
+
+// Inherit the same token convention used by the rest of the frontend
+// (NOMMap.jsx, TrackerMap.jsx, MapView.jsx, TwinRoot.jsx).
+if (!mapboxgl.accessToken) {
+  mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN || "";
+}
+
+// Voltage → line colour. Used for route rendering on OptionRouteMap.
+const VOLTAGE_COLOURS = {
+  400: "#f5b731", // gold
+  275: "#d97706", // amber
+  132: "#ea580c", // orange
+  66:  "#2563eb", // blue
+  33:  "#16a34a", // green
+  11:  "#0d9488", // teal
+};
+
+function voltageColour(kv) {
+  // Pick the closest bucket at/below the option voltage
+  const buckets = [400, 275, 132, 66, 33, 11];
+  for (const b of buckets) {
+    if (kv >= b) return VOLTAGE_COLOURS[b];
+  }
+  return "#64748b";
+}
+
+// Cost-per-km benchmarks for segment tooltips (memory:
+// "UK rates — 11kV £80k/km, 33kV £150k/km, 132kV £500k/km").
+// 66kV is interpolated; 275/400kV from NGET MSIP-era benchmarks.
+function costPerKmGbp(kv) {
+  if (kv >= 400) return 2_500_000;
+  if (kv >= 275) return 1_500_000;
+  if (kv >= 132) return 500_000;
+  if (kv >= 66)  return 250_000;
+  if (kv >= 33)  return 150_000;
+  return 80_000;
+}
+
+/** Haversine km — mirrors the backend helper in dc_hyperscaler_connection.py. */
+function haversineKm(a, b) {
+  const R = 6371;
+  const toRad = (x) => (x * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(s));
+}
+
+/** Given an option + site + a fallback pair, return the segments we draw.
+ *
+ * Each segment = { from, to, voltage_kv, length_km, cost_per_km_gbp, label, approximate }
+ * The `approximate` flag is set when we had to synthesise a straight-line
+ * fallback because the backend option didn't carry any substation geometry
+ * (true for all single-feed templates in the current payload).
+ */
+function buildSegments(option, site, fallbackPair) {
+  const segs = [];
+  if (!option || !site) return segs;
+  const pair = option.best_dual_feed_pair || fallbackPair || null;
+
+  if (option.dual_feed && pair) {
+    // Two independent feeders: site → A and site → B.
+    segs.push({
+      from: site,
+      to: { lat: pair.substation_a.lat, lon: pair.substation_a.lon, name: pair.substation_a.name },
+      voltage_kv: option.voltage_kv,
+      label: `Feeder A · ${pair.substation_a.name}`,
+      approximate: true,
+      circuit: "A",
+    });
+    segs.push({
+      from: site,
+      to: { lat: pair.substation_b.lat, lon: pair.substation_b.lon, name: pair.substation_b.name },
+      voltage_kv: option.voltage_kv,
+      label: `Feeder B · ${pair.substation_b.name}`,
+      approximate: true,
+      circuit: "B",
+    });
+  } else if (pair) {
+    // Single-feed: draw to the closer of the two pair subs for a
+    // representative target (clearly flagged as approximate).
+    const target =
+      haversineKm(site, pair.substation_a) <= haversineKm(site, pair.substation_b)
+        ? pair.substation_a
+        : pair.substation_b;
+    segs.push({
+      from: site,
+      to: { lat: target.lat, lon: target.lon, name: target.name },
+      voltage_kv: option.voltage_kv,
+      label: `Single feeder · ${target.name}`,
+      approximate: true,
+      circuit: "A",
+    });
+  }
+
+  // Enrich each segment with length + cost benchmarks
+  return segs.map((s) => {
+    const len = haversineKm(s.from, s.to);
+    const cpk = costPerKmGbp(s.voltage_kv);
+    return {
+      ...s,
+      length_km: len,
+      cost_per_km_gbp: cpk,
+      segment_cost_gbp: len * cpk,
+    };
+  });
+}
+
+/** Embedded Mapbox panel. Renders 1-2 options at once.
+ *
+ * @param site              { lat, lon }
+ * @param primaryOption     option object or null — drawn with solid line
+ * @param secondaryOption   option object or null — drawn dashed for compare
+ * @param fallbackPair      best dual-feed pair from ANY feasible option,
+ *                          used when the selected option itself has no pair
+ */
+function OptionRouteMap({ site, primaryOption, secondaryOption, fallbackPair }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+  const popupRef = useRef(null);
+  const loadedRef = useRef(false);
+
+  const primarySegs = useMemo(
+    () => buildSegments(primaryOption, site, fallbackPair),
+    [primaryOption, site, fallbackPair],
+  );
+  const secondarySegs = useMemo(
+    () => buildSegments(secondaryOption, site, fallbackPair),
+    [secondaryOption, site, fallbackPair],
+  );
+
+  // Init map once
+  useEffect(() => {
+    if (mapRef.current) return;
+    const hasToken = !!mapboxgl.accessToken;
+    const style = hasToken
+      ? "mapbox://styles/mapbox/light-v11"
+      : {
+          // Free fallback when no token: Carto light raster
+          version: 8,
+          sources: {
+            carto: {
+              type: "raster",
+              tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"],
+              tileSize: 256,
+              attribution: "&copy; CartoDB &copy; OpenStreetMap",
+            },
+          },
+          layers: [{ id: "carto-base", type: "raster", source: "carto" }],
+        };
+
+    const map = new mapboxgl.Map({
+      container: containerRef.current,
+      style,
+      center: [site.lon, site.lat],
+      zoom: 10,
+      attributionControl: false,
+    });
+    map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(new mapboxgl.AttributionControl({ compact: true }));
+
+    mapRef.current = map;
+
+    map.on("load", () => {
+      loadedRef.current = true;
+
+      map.addSource("route-primary",   { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addSource("route-secondary", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addSource("route-markers",   { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+
+      // Primary = thick solid, coloured by voltage
+      map.addLayer({
+        id: "route-primary-line",
+        type: "line",
+        source: "route-primary",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["coalesce", ["get", "colour"], "#0f172a"],
+          "line-width": 5,
+          "line-opacity": 0.9,
+        },
+      });
+
+      // Secondary = dashed, lighter
+      map.addLayer({
+        id: "route-secondary-line",
+        type: "line",
+        source: "route-secondary",
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ["coalesce", ["get", "colour"], "#475569"],
+          "line-width": 3,
+          "line-opacity": 0.75,
+          "line-dasharray": [2, 2],
+        },
+      });
+
+      // Circle markers — site + substations
+      map.addLayer({
+        id: "route-markers-pt",
+        type: "circle",
+        source: "route-markers",
+        paint: {
+          "circle-radius": ["match", ["get", "kind"], "site", 7, 6],
+          "circle-color": ["match", ["get", "kind"],
+            "site", "#0f172a",
+            "substation", "#f5b731",
+            "#64748b",
+          ],
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+
+      // Labels under markers
+      map.addLayer({
+        id: "route-markers-label",
+        type: "symbol",
+        source: "route-markers",
+        layout: {
+          "text-field": ["get", "label"],
+          "text-size": 11,
+          "text-offset": [0, 1.2],
+          "text-anchor": "top",
+          "text-font": ["Open Sans Semibold", "Arial Unicode MS Bold"],
+          "text-optional": true,
+          "text-allow-overlap": false,
+        },
+        paint: {
+          "text-color": "#0f172a",
+          "text-halo-color": "#ffffff",
+          "text-halo-width": 1.5,
+        },
+      });
+
+      // Hover tooltip on line segments
+      const hover = (e, kind) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const p = f.properties || {};
+        const html = `
+          <div style="font-family:'DM Sans',sans-serif;font-size:11px;line-height:1.4;color:#0f172a">
+            <div style="font-weight:700;margin-bottom:3px">${p.label || "Route segment"} ${kind === "secondary" ? "(compare)" : ""}</div>
+            <div>Voltage: <b>${p.voltage_kv} kV</b></div>
+            <div>Length: <b>${Number(p.length_km).toFixed(2)} km</b></div>
+            <div>Cost/km: <b>£${(p.cost_per_km_gbp / 1e6).toFixed(2)}M</b></div>
+            <div>Segment: <b>£${(p.segment_cost_gbp / 1e6).toFixed(2)}M</b></div>
+            ${p.approximate ? '<div style="color:#92400e;margin-top:4px;font-style:italic">Approximate straight-line — DNO route not yet available</div>' : ""}
+          </div>`;
+        if (popupRef.current) popupRef.current.remove();
+        popupRef.current = new mapboxgl.Popup({ closeButton: false, offset: 8 })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map);
+      };
+      const leave = () => {
+        if (popupRef.current) { popupRef.current.remove(); popupRef.current = null; }
+      };
+      map.on("mousemove", "route-primary-line",   (e) => { map.getCanvas().style.cursor = "pointer"; hover(e, "primary"); });
+      map.on("mouseleave", "route-primary-line",  () => { map.getCanvas().style.cursor = ""; leave(); });
+      map.on("mousemove", "route-secondary-line", (e) => { map.getCanvas().style.cursor = "pointer"; hover(e, "secondary"); });
+      map.on("mouseleave", "route-secondary-line",() => { map.getCanvas().style.cursor = ""; leave(); });
+    });
+
+    return () => {
+      if (popupRef.current) popupRef.current.remove();
+      map.remove();
+      mapRef.current = null;
+      loadedRef.current = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);  // init once — site recentring handled in separate effect
+
+  // Recentre to site when it changes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !site) return;
+    map.setCenter([site.lon, site.lat]);
+  }, [site?.lat, site?.lon]);
+
+  // Push segment data into sources + fit bounds whenever selections change
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const segsToFC = (segs) => ({
+      type: "FeatureCollection",
+      features: segs.map((s) => ({
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: [[s.from.lon, s.from.lat], [s.to.lon, s.to.lat]],
+        },
+        properties: {
+          label: s.label,
+          voltage_kv: s.voltage_kv,
+          length_km: s.length_km,
+          cost_per_km_gbp: s.cost_per_km_gbp,
+          segment_cost_gbp: s.segment_cost_gbp,
+          approximate: s.approximate,
+          colour: voltageColour(s.voltage_kv),
+          circuit: s.circuit,
+        },
+      })),
+    });
+
+    const markerFC = () => {
+      const feats = [];
+      if (site) {
+        feats.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [site.lon, site.lat] },
+          properties: { kind: "site", label: "DC site" },
+        });
+      }
+      const seen = new Set();
+      [...primarySegs, ...secondarySegs].forEach((s) => {
+        const key = `${s.to.lat.toFixed(5)},${s.to.lon.toFixed(5)}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        feats.push({
+          type: "Feature",
+          geometry: { type: "Point", coordinates: [s.to.lon, s.to.lat] },
+          properties: { kind: "substation", label: s.to.name || "Substation" },
+        });
+      });
+      return { type: "FeatureCollection", features: feats };
+    };
+
+    const push = () => {
+      if (!map.getSource("route-primary")) return;
+      map.getSource("route-primary").setData(segsToFC(primarySegs));
+      map.getSource("route-secondary").setData(segsToFC(secondarySegs));
+      map.getSource("route-markers").setData(markerFC());
+
+      // Fit bounds to everything visible
+      const coords = [];
+      if (site) coords.push([site.lon, site.lat]);
+      [...primarySegs, ...secondarySegs].forEach((s) => {
+        coords.push([s.from.lon, s.from.lat]);
+        coords.push([s.to.lon, s.to.lat]);
+      });
+      if (coords.length >= 2) {
+        const b = coords.reduce(
+          (acc, [lon, lat]) => [
+            Math.min(acc[0], lon), Math.min(acc[1], lat),
+            Math.max(acc[2], lon), Math.max(acc[3], lat),
+          ],
+          [coords[0][0], coords[0][1], coords[0][0], coords[0][1]],
+        );
+        map.fitBounds([[b[0], b[1]], [b[2], b[3]]], { padding: 60, duration: 700, maxZoom: 13 });
+      }
+    };
+
+    if (loadedRef.current) {
+      push();
+    } else {
+      map.once("load", push);
+    }
+  }, [primarySegs, secondarySegs, site?.lat, site?.lon]);
+
+  const noToken = !mapboxgl.accessToken;
+  const anyApprox = [...primarySegs, ...secondarySegs].some((s) => s.approximate);
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: 380, borderRadius: 12, overflow: "hidden", border: "1px solid #e5e7eb", background: "#f6f7f9" }}>
+      <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />
+      {noToken && (
+        <div style={{
+          position: "absolute", top: 10, left: 10, padding: "6px 10px",
+          background: "#fee2e2", color: "#991b1b", borderRadius: 8,
+          fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+        }}>
+          Missing VITE_MAPBOX_TOKEN — using Carto fallback
+        </div>
+      )}
+      <div style={{
+        position: "absolute", top: 10, right: 60, padding: "6px 10px",
+        background: "rgba(255,255,255,0.94)", border: "1px solid #e5e7eb",
+        borderRadius: 8, fontSize: 10, fontWeight: 700, color: "#475569",
+        display: "flex", gap: 10, alignItems: "center",
+      }}>
+        <span>Voltage:</span>
+        {[400, 275, 132, 66, 33].map((kv) => (
+          <span key={kv} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ width: 14, height: 3, background: VOLTAGE_COLOURS[kv], borderRadius: 2 }} />
+            {kv}kV
+          </span>
+        ))}
+      </div>
+      {primarySegs.length === 0 && (
+        <div style={{
+          position: "absolute", bottom: 12, left: 12, padding: "8px 12px",
+          background: "rgba(255,255,255,0.94)", border: "1px solid #e5e7eb",
+          borderRadius: 8, fontSize: 11, color: "#475569", maxWidth: 380,
+        }}>
+          Click a ranked option to view its route. Shift-click a second option to compare.
+        </div>
+      )}
+      {anyApprox && primarySegs.length > 0 && (
+        <div style={{
+          position: "absolute", bottom: 12, left: 12, padding: "6px 10px",
+          background: "rgba(255,255,255,0.94)", border: "1px solid #fde68a",
+          borderLeft: "3px solid #d97706", borderRadius: 8,
+          fontSize: 10, color: "#92400e", fontWeight: 600, maxWidth: 420,
+        }}>
+          Approximate straight-line — DNO cable route pending Tier 2 analysis
+        </div>
+      )}
+      {secondaryOption && (
+        <div style={{
+          position: "absolute", bottom: 12, right: 12, padding: "6px 10px",
+          background: "rgba(255,255,255,0.94)", border: "1px solid #e5e7eb",
+          borderRadius: 8, fontSize: 10, color: "#475569", fontWeight: 600,
+          display: "flex", flexDirection: "column", gap: 2,
+        }}>
+          <div><span style={{ display: "inline-block", width: 14, height: 3, background: "#0f172a", marginRight: 6, verticalAlign: "middle" }} />Primary: {primaryOption?.option_id}</div>
+          <div><span style={{ display: "inline-block", width: 14, height: 3, background: "#475569", marginRight: 6, verticalAlign: "middle", borderTop: "1px dashed #475569" }} />Compare: {secondaryOption.option_id}</div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const C = {
   bg:        "#f6f7f9",
@@ -380,6 +809,9 @@ export default function DCHyperscalerPanel() {
   });
   const [result, setResult] = useState(null);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
+  // compareOptionId is a second selection (set via shift-click) rendered on
+  // the map as a dashed overlay. Cleared when user plain-clicks a card.
+  const [compareOptionId, setCompareOptionId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState({
     mvsGap: null,
@@ -414,6 +846,7 @@ export default function DCHyperscalerPanel() {
       });
       setResult(res);
       setSelectedOptionId(res.selected_option_id);
+      setCompareOptionId(null);  // reset compare overlay on new run
     } catch (e) {
       console.warn("[DC hyperscaler] optioneer failed:", e);
     } finally {
@@ -502,6 +935,14 @@ export default function DCHyperscalerPanel() {
       params.parcel_area_ha, params.is_greenfield, result]);
 
   const selectedOption = result?.options.find(o => o.option_id === selectedOptionId);
+  const compareOption  = result?.options.find(o => o.option_id === compareOptionId);
+
+  // Fallback pair for options that don't carry substation geometry (all
+  // single-feed templates). We pick the top-ranked option that does have
+  // a best_dual_feed_pair so every card yields *something* to draw.
+  const fallbackPair = result
+    ? (result.options.find(o => o.best_dual_feed_pair)?.best_dual_feed_pair ?? null)
+    : null;
 
   return (
     <div style={ST.page}>
@@ -627,6 +1068,32 @@ export default function DCHyperscalerPanel() {
           targetEnergisation={params.target_energisation}
         />
 
+        {/* Route map — embedded above results. Shows the selected option's
+            line(s) coloured by voltage; Shift-click a second card to overlay
+            a compare route (dashed). Route is an approximate straight-line
+            fallback when the backend option object carries no DNO cable
+            geometry — visibly flagged to the user. */}
+        {result && (
+          <div style={{ marginBottom: 18 }}>
+            <div style={{
+              fontSize: 12, fontWeight: 700, color: C.textDim,
+              textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 8,
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+            }}>
+              <span>Route map — {selectedOption?.option_id || "select an option"}</span>
+              <span style={{ fontSize: 10, color: C.textMuted, fontWeight: 500, letterSpacing: 0 }}>
+                Shift-click a card to compare two options
+              </span>
+            </div>
+            <OptionRouteMap
+              site={{ lat: Number(params.lat), lon: Number(params.lon) }}
+              primaryOption={selectedOption}
+              secondaryOption={compareOption}
+              fallbackPair={fallbackPair}
+            />
+          </div>
+        )}
+
         {/* Results */}
         {result && (
           <div style={ST.panelGrid}>
@@ -637,12 +1104,31 @@ export default function DCHyperscalerPanel() {
               </div>
               {result.options.map(opt => {
                 const selected = opt.option_id === selectedOptionId;
+                const compared = opt.option_id === compareOptionId;
                 const feasible = opt.feasibility === "feasible";
                 return (
                   <div
                     key={opt.option_id}
-                    style={ST.optionCard(selected, feasible)}
-                    onClick={() => feasible && setSelectedOptionId(opt.option_id)}
+                    style={{
+                      ...ST.optionCard(selected, feasible),
+                      // Secondary (shift-click) gets a dashed left border so
+                      // the user can see both selections in the list
+                      ...(compared && !selected ? {
+                        borderLeft: "4px dashed #475569",
+                        background: "#f1f5f9",
+                      } : {}),
+                    }}
+                    onClick={(e) => {
+                      if (!feasible) return;
+                      if (e.shiftKey && selectedOptionId && selectedOptionId !== opt.option_id) {
+                        // Shift-click → add as compare overlay
+                        setCompareOptionId(opt.option_id);
+                      } else {
+                        setSelectedOptionId(opt.option_id);
+                        setCompareOptionId(null);   // plain click resets compare
+                      }
+                    }}
+                    title={feasible ? "Click to view route · Shift-click to compare against the selected option" : ""}
                   >
                     <div style={ST.optHeader}>
                       <span style={ST.optId}>{opt.option_id}</span>

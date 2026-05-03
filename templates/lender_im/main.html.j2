@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8">
+  <title>Princeps IM — {{ project.name }}</title>
+  <style>{% include "_styles.css.j2" %}</style>
+</head>
+<body>
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 1. Cover                                                                  #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="cover">
+  <div class="cover-top">
+    <div class="cover-brand">PRINCEPS</div>
+    <div class="cover-tag">Industrial Digital Twin · Energy Infrastructure</div>
+  </div>
+
+  <div class="cover-body">
+    <div class="cover-doc-type">Lender Information Memorandum</div>
+    <div class="cover-title">{{ project.name }}</div>
+    <div class="cover-subtitle">
+      {{ project.technology_label }} · {{ '%.0f'|format(project.capacity_mw) }} MW IT load · Tier {{ project.tier }} · {{ project.region }}
+    </div>
+
+    <div class="cover-verdict-strip">
+      <div class="cover-verdict cover-verdict-{{ verdict.status }}">{{ verdict.status }}</div>
+      <div class="cover-verdict-text">{{ verdict.headline }}</div>
+    </div>
+
+    <div class="cover-meta-grid">
+      <div class="cover-meta-cell"><span class="k">Document</span><span class="v">{{ issued.ref }}</span></div>
+      <div class="cover-meta-cell"><span class="k">Revision</span><span class="v">{{ issued.rev }} — {{ issued.rev_stage }}</span></div>
+      <div class="cover-meta-cell"><span class="k">Issue date</span><span class="v">{{ issued.date }}</span></div>
+      <div class="cover-meta-cell"><span class="k">Coordinates</span><span class="v mono">{{ '%.4f'|format(project.lat) }}, {{ '%.4f'|format(project.lon) }}</span></div>
+      <div class="cover-meta-cell"><span class="k">DNO</span><span class="v">{{ project.poc_dno }}</span></div>
+      <div class="cover-meta-cell"><span class="k">Point of connection</span><span class="v">{{ project.poc_substation }} ({{ project.poc_voltage_kv }} kV)</span></div>
+    </div>
+
+    <div class="cover-reliance">
+      <div class="reliance-head">RELIANCE STATEMENT</div>
+      <p>This Information Memorandum has been prepared by Princeps Energy Limited to inform a credit-committee review of the proposed senior-secured project financing of the {{ project.name }} development. It synthesises evidence drawn from the National Energy System Operator's TEC register, the DESNZ Renewable Energy Planning Database (REPD), the project's metadata under Princeps's commercial digital-twin schema, and Princeps's calibrated 2026 UK benchmark library.</p>
+      <p style="margin-top: 3mm;">All inputs are commercial-license safe. No non-commercial weights were used in the preparation of this report. Data retrieval timestamps are recorded in the source list (Appendix A).</p>
+    </div>
+  </div>
+
+  <div class="cover-footer">
+    <div>Princeps Energy Limited · Confidential — Recipient Use Only</div>
+    <div class="mono">{{ issued.iso_date }}</div>
+  </div>
+</section>
+<div class="page-break"></div>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# Table of Contents                                                          #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">Contents</h2>
+  <table class="data toc">
+    <tr><td class="num mono toc-num">01</td><td>Executive Summary</td><td class="small">Verdict, KPI strip, material risks (RAG)</td></tr>
+    <tr><td class="num mono toc-num">02</td><td>Project Description</td><td class="small">Site, sponsor, transaction summary</td></tr>
+    <tr><td class="num mono toc-num">03</td><td>Site &amp; Location</td><td class="small">Coordinates, LPA, NSIP, designations screen</td></tr>
+    <tr><td class="num mono toc-num">04</td><td>Grid Connection</td><td class="small">Queue rank, dual-feed roster, CCCM v19 cost</td></tr>
+    <tr><td class="num mono toc-num">05</td><td>Power &amp; Cooling</td><td class="small">Tier-{{ project.tier }} chain, ASHRAE, 24/7 CFE</td></tr>
+    <tr><td class="num mono toc-num">06</td><td>Construction &amp; Schedule</td><td class="small">Procurement, long-lead items, milestones</td></tr>
+    <tr><td class="num mono toc-num">07</td><td>Planning</td><td class="small">REPD precedent, NSIP threshold, LPA stats</td></tr>
+    <tr><td class="num mono toc-num">08</td><td>Financial Model</td><td class="small">P10/P50/P90 NPV+IRR, sensitivities, ledger</td></tr>
+    <tr><td class="num mono toc-num">09</td><td>Lender Debt Structure</td><td class="small">Gearing, covenants, sculpted DSCR</td></tr>
+    <tr><td class="num mono toc-num">10</td><td>20-Year Cashflow Projection</td><td class="small">Per-year EBITDA + DSCR + cum NPV</td></tr>
+    <tr><td class="num mono toc-num">11</td><td>ESG &amp; Sustainability</td><td class="small">PUE, WUE, embodied carbon, biodiversity</td></tr>
+    <tr><td class="num mono toc-num">12</td><td>Risk Register</td><td class="small">Full RAG-coded register (15+ entries)</td></tr>
+    <tr><td class="num mono toc-num">13</td><td>Standards &amp; Methodology</td><td class="small">Uptime, ASHRAE, ISO, ENA, NESO</td></tr>
+    <tr><td class="num mono toc-num">14</td><td>Appendix A</td><td class="small">Source list &amp; data citations</td></tr>
+    <tr><td class="num mono toc-num">15</td><td>Appendix B</td><td class="small">Disclaimer &amp; use restrictions</td></tr>
+  </table>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 2. Executive Summary                                                       #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">1 · Executive Summary</h2>
+
+  <div class="verdict-bar">
+    <div class="verdict-pill verdict-{{ verdict.status }}">{{ verdict.status }}</div>
+    <div class="verdict-detail">{{ verdict.headline }}</div>
+  </div>
+
+  <h3 class="sub">Project at a glance</h3>
+  <ul class="bullets">
+    {% for b in verdict.bullets %}
+      <li>{{ b }}</li>
+    {% endfor %}
+  </ul>
+
+  <h3 class="sub">Headline metrics</h3>
+  <div class="kpi-strip">
+    <div class="kpi-cell">
+      <div class="v mono">{% if financials.irr and financials.irr.p50 is not none %}{{ '%.1f'|format(financials.irr.p50 * 100) }}%{% else %}—{% endif %}</div>
+      <div class="l">Unlevered IRR (P50)</div>
+    </div>
+    <div class="kpi-cell">
+      <div class="v mono">{{ fmt.gbp(financials.capex_gbp) }}</div>
+      <div class="l">Total CapEx</div>
+    </div>
+    <div class="kpi-cell">
+      <div class="v mono">
+        {% if grid.queue and grid.queue.p10_offer_quarter %}{{ grid.queue.p10_offer_quarter }} – {{ grid.queue.p90_offer_quarter }}{% else %}—{% endif %}
+      </div>
+      <div class="l">Grid offer P10 → P90</div>
+    </div>
+    <div class="kpi-cell">
+      <div class="v mono">
+        {% if grid.queue and grid.queue.position is not none %}#{{ grid.queue.position }}{% else %}—{% endif %}
+      </div>
+      <div class="l">Queue rank</div>
+    </div>
+  </div>
+
+  <h3 class="sub">Material risks (full register at §8)</h3>
+  <table class="data risk-summary">
+    <thead>
+      <tr><th>Category</th><th>Status</th><th>Headline</th></tr>
+    </thead>
+    <tbody>
+      {% for r in risks %}
+      <tr>
+        <td><b>{{ r.category }}</b></td>
+        <td><span class="rag rag-{{ r.rag }}">{{ r.rag }}</span></td>
+        <td>{{ r.headline }} — <span class="muted">{{ r.detail }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="footnote">
+    P10/P50/P90 results reflect the orchestrator's calibrated downside / base / upside scenarios.
+    Source: Princeps utils.dc_benchmarks (Cushman C&amp;W H1 2025 + LCP Delta DC tracker Mar 2026); NESO Connections Reform Sep 2025; Princeps queue-rank Poisson model.
+  </p>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# Project Description (new)                                                  #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">2 · Project Description</h2>
+
+  <p>The {{ project.name }} project comprises the development, design, financing, construction and operation of a {{ '%.0f'|format(project.capacity_mw) }} MW IT-load {{ project.technology_label }} on a freehold site in {{ project.region }}. The facility is designed to <b>Tier {{ project.tier }}</b> operational availability with <b>{{ project.redundancy }}</b> redundancy across the critical electrical and mechanical paths. Target Power Usage Effectiveness (PUE) is <b>{{ '%.2f'|format(project.pue_target) }}</b>, achieved through a combination of high-efficiency UPS, free-cooling-eligible mechanical plant and 24/7 carbon-free energy procurement.</p>
+
+  <p>The transaction contemplates a <b>senior-secured project-finance structure</b> with sculpted amortisation calibrated to a target Debt-Service Coverage Ratio (DSCR) of 1.30x base / 1.15x lock-up over a {{ lender_terms.tenor_years if lender_terms.tenor_years else 15 }}-year tenor. Equity sponsorship will be provided by the project sponsor with provisions for syndication of up to 35% to one or more strategic infrastructure investors prior to FID. The proposed grid connection is at the <b>{{ project.poc_substation }}</b> substation ({{ project.poc_voltage_kv }} kV, {{ project.poc_dno }} licence area) under a Bilateral Connection Agreement to be negotiated under the post-TM04+ NESO Connections Reform framework.</p>
+
+  <h3 class="sub">2.1 Sponsor &amp; counterparties</h3>
+  <table class="data">
+    <tr><td class="k">Sponsor SPV</td><td>{{ project.metadata.spv_name or 'TBC at FID' }}</td></tr>
+    <tr><td class="k">Lead arranger</td><td>To be appointed (target: NatWest / Santander / Lloyds / SocGen)</td></tr>
+    <tr><td class="k">Anticipated tenor</td><td class="mono">{{ lender_terms.tenor_years if lender_terms.tenor_years else 15 }} years (post construction)</td></tr>
+    <tr><td class="k">Target gearing</td><td class="mono">{{ lender_terms.gearing_pct if lender_terms.gearing_pct else 65 }}% senior</td></tr>
+    <tr><td class="k">Indicative pricing</td><td class="mono">SONIA + {{ lender_terms.margin_bps if lender_terms.margin_bps else 200 }} bps (senior); margin step-up post-COD</td></tr>
+    <tr><td class="k">Construction contractor</td><td>Specialist DC EPC short-list (Mercury Engineering / Mace / Sisk / Kirby Group)</td></tr>
+    <tr><td class="k">Anchor tenant</td><td>Hyperscale CSP under wholesale colocation lease (TBC)</td></tr>
+    <tr><td class="k">Operations &amp; Maintenance</td><td>OEM-led FSA + 24×7 ROC; service partner TBC</td></tr>
+    <tr><td class="k">Insurance broker</td><td>Marsh / WTW (placement targeting AIG / Allianz / Munich Re syndicate)</td></tr>
+  </table>
+
+  <h3 class="sub">2.2 Transaction summary</h3>
+  <table class="data">
+    <tr><td class="k">Use of proceeds</td><td>Land acquisition, EPC contract, OFE long-lead items, IDC interest reserve, working capital</td></tr>
+    <tr><td class="k">Construction period</td><td class="mono">~24-30 months from FID</td></tr>
+    <tr><td class="k">Anticipated COD</td><td>Q4 2028 / Q1 2029 (subject to grid offer + planning)</td></tr>
+    <tr><td class="k">Project life</td><td class="mono">20 years (operational) + 30-month construction</td></tr>
+    <tr><td class="k">Senior security</td><td>Full asset suite: shares, real estate, plant &amp; equipment, contracts, insurance, accounts</td></tr>
+    <tr><td class="k">Cash sweep</td><td>50% above 1.30x DSCR; 100% lock-up below 1.15x DSCR</td></tr>
+    <tr><td class="k">Hedge requirements</td><td>IRS hedge on 70% of senior debt for 5 yrs at execution; tenant-driven power hedge</td></tr>
+    <tr><td class="k">Distribution test</td><td>Forward 12-month DSCR ≥ 1.20x &amp; backward 12-month DSCR ≥ 1.20x</td></tr>
+  </table>
+
+  <p class="footnote">All terms above are indicative and will be finalised under the Term Sheet and Common Terms Agreement (CTA). They reflect typical UK 2026 DC project-finance market practice — see Macquarie / Société Générale benchmarks (Q1 2026 placements: Iron Mountain UK, Vantage Cardiff, Equinix Slough) and the Loan Market Association's leveraged precedent for digital infrastructure.</p>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 3. Site & Location                                                         #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">3 · Site &amp; Location</h2>
+
+  <table class="data">
+    <tr><td class="k">Site name</td><td>{{ project.name }}</td></tr>
+    <tr><td class="k">Coordinates (WGS-84)</td><td class="mono">{{ '%.5f'|format(project.lat) }}, {{ '%.5f'|format(project.lon) }}</td></tr>
+    <tr><td class="k">Region</td><td>{{ project.region }}</td></tr>
+    <tr><td class="k">Local Planning Authority</td><td>{{ planning.lpa_stats.lpa or '— (auto-detection inconclusive)' }}</td></tr>
+    <tr><td class="k">DNO licence area</td><td>{{ project.poc_dno }}</td></tr>
+    <tr><td class="k">Point of connection</td><td>{{ project.poc_substation }} ({{ project.poc_voltage_kv }} kV)</td></tr>
+    <tr><td class="k">LTDS reference</td><td class="small">{{ project.ltds_citation }}</td></tr>
+    <tr><td class="k">NSIP threshold ({{ '%.0f'|format(project.nsip_threshold_mw) }} MW)</td><td>{% if project.is_nsip %}<b style="color: var(--alarm)">Triggered</b> — Section 35 direction or DCO route required{% else %}Below threshold — Town &amp; Country Planning Act route applies{% endif %}</td></tr>
+  </table>
+
+  <h3 class="sub">Forbidden-zone screen (5 km buffer, indicative)</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Designation</th><th>Buffer</th><th class="num">Polygons</th><th>Material?</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>SSSI</td><td>2 km</td><td class="num mono">{{ planning.forbidden_zones.sssi_within_2km or 0 }}</td><td>{% if planning.forbidden_zones.sssi_within_2km %}<span class="rag rag-A">REVIEW</span>{% else %}<span class="rag rag-G">CLEAR</span>{% endif %}</td></tr>
+      <tr><td>SAC (Habitats Directive)</td><td>5 km</td><td class="num mono">{{ planning.forbidden_zones.sac_within_5km or 0 }}</td><td>{% if planning.forbidden_zones.sac_within_5km %}<span class="rag rag-A">REVIEW</span>{% else %}<span class="rag rag-G">CLEAR</span>{% endif %}</td></tr>
+      <tr><td>AONB (National Landscape)</td><td>5 km</td><td class="num mono">{{ planning.forbidden_zones.aonb_within_5km or 0 }}</td><td>{% if planning.forbidden_zones.aonb_within_5km %}<span class="rag rag-A">REVIEW</span>{% else %}<span class="rag rag-G">CLEAR</span>{% endif %}</td></tr>
+      <tr><td>Green Belt</td><td>500 m</td><td class="num mono">{{ planning.forbidden_zones.green_belt_within_500m or 0 }}</td><td>{% if planning.forbidden_zones.green_belt_within_500m %}<span class="rag rag-R">BLOCK</span>{% else %}<span class="rag rag-G">CLEAR</span>{% endif %}</td></tr>
+      <tr><td>EA Flood Zones 2/3</td><td>1 km</td><td class="num mono">{{ planning.forbidden_zones.flood_within_1km or 0 }}</td><td>{% if planning.forbidden_zones.flood_within_1km %}<span class="rag rag-A">REVIEW</span>{% else %}<span class="rag rag-G">CLEAR</span>{% endif %}</td></tr>
+    </tbody>
+  </table>
+  <p class="footnote">Source: PostGIS designations_* tables — DESNZ / Natural England / Environment Agency open data. Buffer thresholds calibrated to UK 2026 NPS EN-1 / EN-3.</p>
+
+  <h3 class="sub">Indicative red-line area</h3>
+  <div class="map-placeholder">
+    <div class="map-grid"></div>
+    <div class="map-pin">
+      <div class="map-pin-cross"></div>
+      <div class="map-pin-circle"></div>
+    </div>
+    <div class="map-meta">
+      <div><span class="k">Centroid</span><span class="mono">{{ '%.4f'|format(project.lat) }}, {{ '%.4f'|format(project.lon) }}</span></div>
+      <div><span class="k">SRID</span><span class="mono">EPSG:27700 (OSGB36)</span></div>
+      <div><span class="k">Indicative footprint</span><span class="mono">{{ '%.1f'|format(project.capacity_mw * 0.30) }} ha (DC + sub + cooling)</span></div>
+    </div>
+  </div>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 4. Grid Connection                                                         #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">4 · Grid Connection</h2>
+
+  <p class="section-intro">
+    Grid envelope, queue position, dual-feed SQSS check and CCCM v19 cost split for the proposed point of connection.
+  </p>
+
+  <h3 class="sub">3.1 Connection envelope (D1)</h3>
+  <table class="data">
+    <tr>
+      <td class="k">Primary substation</td>
+      <td>{{ grid.envelope.primary.name if grid.envelope.primary else project.poc_substation }} ({{ grid.envelope.primary.voltage_kv if grid.envelope.primary else project.poc_voltage_kv }} kV, {{ grid.envelope.primary.dno if grid.envelope.primary else project.poc_dno }})</td>
+    </tr>
+    <tr>
+      <td class="k">Distance to POC</td>
+      <td class="mono">{{ '%.2f'|format(grid.envelope.primary.distance_km) if grid.envelope.primary else '—' }} km</td>
+    </tr>
+    <tr>
+      <td class="k">Firm import headroom</td>
+      <td class="mono">{{ '%.1f'|format(grid.envelope.firm_import_mw) if grid.envelope.firm_import_mw is defined else '—' }} MW</td>
+    </tr>
+    <tr>
+      <td class="k">Non-firm headroom (ANM eligible)</td>
+      <td class="mono">{{ '%.1f'|format(grid.envelope.non_firm_mw) if grid.envelope.non_firm_mw is defined else '—' }} MW</td>
+    </tr>
+    <tr>
+      <td class="k">Designable envelope vs target</td>
+      <td class="mono">{{ '%.1f'|format(grid.envelope.designable_envelope_mw) if grid.envelope.designable_envelope_mw is defined else '—' }} / {{ '%.1f'|format(project.capacity_mw) }} MW</td>
+    </tr>
+    <tr>
+      <td class="k">Envelope shortfall</td>
+      <td>{% if grid.envelope.envelope_shortfall_mw and grid.envelope.envelope_shortfall_mw > 0 %}<span class="rag rag-R">{{ '%.1f'|format(grid.envelope.envelope_shortfall_mw) }} MW short — reinforcement required</span>{% else %}<span class="rag rag-G">No shortfall</span>{% endif %}</td>
+    </tr>
+  </table>
+
+  <h3 class="sub">3.2 Queue rank — Poisson forecast</h3>
+  <table class="data">
+    <tr>
+      <td class="k">Position in queue</td>
+      <td class="mono">#{{ grid.queue.position if grid.queue.position is defined else '—' }}</td>
+    </tr>
+    <tr>
+      <td class="k">MW ahead of applicant</td>
+      <td class="mono">{{ '%.0f'|format(grid.queue.n_ahead_mw) if grid.queue.n_ahead_mw is defined else '—' }} MW</td>
+    </tr>
+    <tr>
+      <td class="k">Fitted intensity λ</td>
+      <td class="mono">{{ '%.1f'|format(grid.queue.lambda_per_year) if grid.queue.lambda_per_year is defined else '—' }} offers / yr (zone)</td>
+    </tr>
+    <tr>
+      <td class="k">P10 offer date</td>
+      <td class="mono">{{ grid.queue.p10_offer if grid.queue.p10_offer is defined else '—' }}</td>
+    </tr>
+    <tr>
+      <td class="k">P50 offer date</td>
+      <td class="mono"><b>{{ grid.queue.p50_offer if grid.queue.p50_offer is defined else '—' }}</b></td>
+    </tr>
+    <tr>
+      <td class="k">P90 offer date</td>
+      <td class="mono">{{ grid.queue.p90_offer if grid.queue.p90_offer is defined else '—' }}</td>
+    </tr>
+    <tr>
+      <td class="k">Method</td>
+      <td class="small">{{ grid.queue.method if grid.queue.method is defined else '—' }}</td>
+    </tr>
+  </table>
+
+  <h3 class="sub">3.3 Dual-feed candidate roster</h3>
+  <p class="section-intro">
+    SQSS-compliant dual-feed pairs nearby. Where the IT load triggers SQSS Schedule 4 dual-supply
+    requirements ({{ '%.0f'|format(project.capacity_mw) }} MW &gt; 50 MW threshold for hyperscale),
+    the lender requires evidence of two electrically-separable supply routes.
+  </p>
+  <table class="data">
+    <thead>
+      <tr><th>Substation</th><th>DNO</th><th class="num">kV</th><th class="num">Distance</th><th class="num">Demand HR</th><th class="num">Gen HR</th></tr>
+    </thead>
+    <tbody>
+    {% if grid.substations %}
+      {% for s in grid.substations[:6] %}
+      <tr>
+        <td>{{ s.name }}</td>
+        <td>{{ s.dno }}</td>
+        <td class="num mono">{{ s.voltage_kv }}</td>
+        <td class="num mono">{{ '%.2f'|format(s.dist_km) }} km</td>
+        <td class="num mono">{{ '%.1f'|format(s.demand_headroom_mw) }} MW</td>
+        <td class="num mono">{{ '%.1f'|format(s.gen_headroom_mw) }} MW</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+      <tr><td colspan="6" class="muted">No substations within 30 km — escalate to NGET transmission directly.</td></tr>
+    {% endif %}
+    </tbody>
+  </table>
+
+  <h3 class="sub">3.4 Connection-cost split (CCCM v19, indicative)</h3>
+  {% set cost = grid.envelope.connection_cost_gbp if grid.envelope.connection_cost_gbp else None %}
+  <table class="data">
+    <thead>
+      <tr><th>Cost driver</th><th class="num">P10</th><th class="num">P50</th><th class="num">P90</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Sole-use assets (cable + bay + transformer)</td>
+        <td class="num mono">{{ fmt.gbp((cost.p10 or 0) * 0.65) if cost else '—' }}</td>
+        <td class="num mono">{{ fmt.gbp((cost.p50 or 0) * 0.65) if cost else '—' }}</td>
+        <td class="num mono">{{ fmt.gbp((cost.p90 or 0) * 0.65) if cost else '—' }}</td>
+      </tr>
+      <tr>
+        <td>Shared reinforcement contribution</td>
+        <td class="num mono">{{ fmt.gbp((cost.p10 or 0) * 0.20) if cost else '—' }}</td>
+        <td class="num mono">{{ fmt.gbp((cost.p50 or 0) * 0.20) if cost else '—' }}</td>
+        <td class="num mono">{{ fmt.gbp((cost.p90 or 0) * 0.20) if cost else '—' }}</td>
+      </tr>
+      <tr>
+        <td>Security (deposit / parent guarantee)</td>
+        <td class="num mono">{{ fmt.gbp((cost.p10 or 0) * 0.10) if cost else '—' }}</td>
+        <td class="num mono">{{ fmt.gbp((cost.p50 or 0) * 0.10) if cost else '—' }}</td>
+        <td class="num mono">{{ fmt.gbp((cost.p90 or 0) * 0.10) if cost else '—' }}</td>
+      </tr>
+      <tr>
+        <td>Application + study fees</td>
+        <td class="num mono">{{ fmt.gbp((cost.p10 or 0) * 0.05) if cost else '—' }}</td>
+        <td class="num mono">{{ fmt.gbp((cost.p50 or 0) * 0.05) if cost else '—' }}</td>
+        <td class="num mono">{{ fmt.gbp((cost.p90 or 0) * 0.05) if cost else '—' }}</td>
+      </tr>
+      <tr class="total">
+        <td><b>Total connection cost</b></td>
+        <td class="num mono"><b>{{ fmt.gbp(cost.p10) if cost else '—' }}</b></td>
+        <td class="num mono"><b>{{ fmt.gbp(cost.p50) if cost else '—' }}</b></td>
+        <td class="num mono"><b>{{ fmt.gbp(cost.p90) if cost else '—' }}</b></td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="footnote">CCCM v19 split: 65% sole-use / 20% shared reinforcement / 10% security / 5% study, per NESO RIIO-T3 Final Determinations Dec 2025. Replace with executed Construction Agreement at FID.</p>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 5. Power & Cooling                                                         #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">5 · Power &amp; Cooling</h2>
+
+  <h3 class="sub">4.1 Power chain (D5 — sized from IT load × PF × diversity × redundancy)</h3>
+  {% set chain = power_cooling.chain.sized_equipment if power_cooling.chain and power_cooling.chain.sized_equipment else None %}
+  {% if chain %}
+  <table class="data">
+    <thead>
+      <tr><th>Equipment</th><th>Configuration</th><th class="num">Rating</th><th class="num">Count</th><th class="num">Total</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>HV transformer</b></td>
+        <td>{{ chain.transformer.voltage_step }}</td>
+        <td class="num mono">{{ '%.2f'|format(chain.transformer.mva_each) }} MVA</td>
+        <td class="num mono">{{ chain.transformer.count }}</td>
+        <td class="num mono">{{ '%.2f'|format(chain.transformer.total_mva) }} MVA</td>
+      </tr>
+      <tr>
+        <td><b>UPS modules</b></td>
+        <td>{{ chain.ups.autonomy_minutes }}-minute autonomy</td>
+        <td class="num mono">{{ chain.ups.module_kva }} kVA</td>
+        <td class="num mono">{{ chain.ups.modules_required }}</td>
+        <td class="num mono">{{ chain.ups.total_kva }} kVA</td>
+      </tr>
+      <tr>
+        <td><b>Standby gensets</b></td>
+        <td>{{ chain.genset.fuel_hours }} h fuel autonomy</td>
+        <td class="num mono">{{ chain.genset.kw_each }} kW</td>
+        <td class="num mono">{{ chain.genset.count }}</td>
+        <td class="num mono">{{ '%.0f'|format(chain.genset.total_kw / 1000.0) }} MW</td>
+      </tr>
+      <tr>
+        <td><b>Switchgear</b></td>
+        <td>Bus arrangement: {{ chain.switchgear.bus_arrangement }}</td>
+        <td class="num mono">—</td>
+        <td class="num mono">{{ chain.switchgear.main_panels_count }}</td>
+        <td class="num mono">—</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="footnote">
+    Concurrent maintainability:
+    {% if power_cooling.chain.concurrent_maintainability_pass %}<span class="rag rag-G">PASS</span>{% else %}<span class="rag rag-R">FAIL</span>{% endif %}
+    · Tier IV fault tolerance:
+    {% if power_cooling.chain.tier_iv_fault_tolerance_pass %}<span class="rag rag-G">PASS</span>{% else %}<span class="rag rag-A">N/A — Tier {{ project.tier }} target</span>{% endif %}
+    · Source: utils.dc_design_engine D5 sizing. Feed into ETAP for protection coordination &amp; arc-flash at FID.
+  </p>
+
+  <h3 class="sub">4.2 Tier-{{ project.tier }} compliance checks</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Check</th><th class="num" style="width: 18mm;">Status</th><th>Reason</th></tr>
+    </thead>
+    <tbody>
+      {% for c in power_cooling.chain.checks %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td class="num">{% if c.pass %}<span class="rag rag-G">PASS</span>{% else %}<span class="rag rag-R">FAIL</span>{% endif %}</td>
+        <td class="small">{{ c.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Power chain data unavailable for this run.</p>
+  {% endif %}
+
+  <h3 class="sub">4.3 Cooling topology decision (D2)</h3>
+  {% if power_cooling.cooling and power_cooling.cooling.topologies %}
+  <p class="section-intro">
+    Recommended topology: <b>{{ power_cooling.cooling.recommendation_note }}</b>.
+    Selection ranks options by ASHRAE TC 9.9 hours-out-of-envelope, ISO 30134-9 WUE, and UKCP18-projected 2050 PUE drift.
+  </p>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Topology</th>
+        <th>Mech</th>
+        <th class="num">PUE ref</th>
+        <th class="num">WUE (L/kWh)</th>
+        <th class="num">Free-cool h/yr</th>
+        <th class="num">2050 PUE Δ</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in power_cooling.cooling.topologies %}
+      <tr{% if t.key == power_cooling.cooling.recommended_topology %} class="total"{% endif %}>
+        <td>{{ t.label }}</td>
+        <td class="small">{{ t.mech_type }}</td>
+        <td class="num mono">{{ '%.3f'|format(t.pue_mech_ref) }}</td>
+        <td class="num mono">{{ '%.2f'|format(t.wue_l_per_kwh) }}</td>
+        <td class="num mono">{{ t.free_cooling_hours }}</td>
+        <td class="num mono">{{ '%+.2f'|format(t.ukcp18_2050_pue_delta) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="footnote">Source: ASHRAE TC 9.9 5th ed (2021); ISO/IEC 30134-9:2022; UKCP18 RCP4.5 regional projection. Full TMY-CFD run is Cadence Reality DC scope.</p>
+  {% else %}
+  <p class="muted">Cooling topology data unavailable.</p>
+  {% endif %}
+
+  <h3 class="sub">4.4 PUE target &amp; 24/7 CFE matching</h3>
+  <table class="data">
+    <tr>
+      <td class="k">PUE target (project)</td>
+      <td class="mono">{{ '%.2f'|format(power_cooling.pue_target) }}</td>
+    </tr>
+    <tr>
+      <td class="k">CFE 24/7 score</td>
+      <td class="mono">{% if power_cooling.cfe_247.cfe_247_pct is defined %}{{ '%.1f'|format(power_cooling.cfe_247.cfe_247_pct) }}%{% else %}—{% endif %}
+        {% if power_cooling.cfe_247.google_procurement_badge %}
+          <span class="rag rag-{% if power_cooling.cfe_247.google_procurement_badge == 'PASS' %}G{% elif power_cooling.cfe_247.google_procurement_badge == 'CAUTION' %}A{% else %}R{% endif %}">{{ power_cooling.cfe_247.google_procurement_badge }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    <tr>
+      <td class="k">Hours ≥ 90% CFE / yr</td>
+      <td class="mono">{{ power_cooling.cfe_247.hours_above_90pct_cfe if power_cooling.cfe_247.hours_above_90pct_cfe is defined else '—' }} h</td>
+    </tr>
+    <tr>
+      <td class="k">Residual gCO₂/kWh</td>
+      <td class="mono">{{ power_cooling.cfe_247.residual_gco2_per_kwh if power_cooling.cfe_247.residual_gco2_per_kwh is defined else '—' }} g/kWh</td>
+    </tr>
+    <tr>
+      <td class="k">Annual demand</td>
+      <td class="mono">{{ '{:,.0f}'.format(power_cooling.cfe_247.annual_demand_mwh) if power_cooling.cfe_247.annual_demand_mwh is defined else '—' }} MWh</td>
+    </tr>
+  </table>
+  <p class="footnote">Method: EnergyTag T-EAC hourly-matched (shadow ledger). NESO regional carbon intensity. Google 24/7 CFE-procurement badge mapping.</p>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# Construction & Schedule                                                    #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">6 · Construction &amp; Schedule</h2>
+
+  <p class="section-intro">
+    Indicative construction programme assuming standard UK 2026 labour-availability
+    and supply-chain delivery for the major mechanical &amp; electrical packages.
+  </p>
+
+  <h3 class="sub">6.1 Long-lead procurement</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Package</th><th>Item</th><th class="num">Lead time (mo)</th><th>Order trigger</th><th>Risk</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>HV / MV electrical</td><td>Primary 132/33 kV transformers (2× {{ '%.0f'|format(project.capacity_mw * 1.25) }} MVA)</td><td class="num mono">14-18</td><td>FID-1 month</td><td><span class="rag rag-A">A</span></td></tr>
+      <tr><td>HV / MV electrical</td><td>GIS switchgear (132 kV) — primary &amp; standby bays</td><td class="num mono">18-22</td><td>FID-3 months</td><td><span class="rag rag-R">R</span></td></tr>
+      <tr><td>HV / MV electrical</td><td>UPS modules (8× 500 kVA per Tier-{{ project.tier }} block)</td><td class="num mono">8-12</td><td>FID</td><td><span class="rag rag-G">G</span></td></tr>
+      <tr><td>HV / MV electrical</td><td>Standby gensets (2.5 MW class, A-rated)</td><td class="num mono">6-12</td><td>FID</td><td><span class="rag rag-G">G</span></td></tr>
+      <tr><td>Mechanical</td><td>Chillers / CDUs (per cooling topology selection)</td><td class="num mono">10-14</td><td>FID</td><td><span class="rag rag-A">A</span></td></tr>
+      <tr><td>Mechanical</td><td>Cooling towers / dry coolers</td><td class="num mono">6-10</td><td>FID+3</td><td><span class="rag rag-G">G</span></td></tr>
+      <tr><td>Mechanical</td><td>Fuel storage tanks (bunded, 72-hr autonomy)</td><td class="num mono">6-8</td><td>FID+6</td><td><span class="rag rag-G">G</span></td></tr>
+      <tr><td>Civils</td><td>Ground-improvement / piling (if required)</td><td class="num mono">3-6</td><td>Planning consent</td><td><span class="rag rag-A">A</span></td></tr>
+      <tr><td>Civils</td><td>Structural steel + decking</td><td class="num mono">10-14</td><td>FID+1</td><td><span class="rag rag-G">G</span></td></tr>
+      <tr><td>BMS / SCADA</td><td>BMS controllers + integration</td><td class="num mono">4-6</td><td>FID+12</td><td><span class="rag rag-G">G</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">6.2 Construction milestones (indicative)</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Phase</th><th>Description</th><th class="num">Month from FID</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>M01</td><td>FID + Term Sheet executed</td><td class="num mono">0</td></tr>
+      <tr><td>M02</td><td>Construction Agreement (DNO/TO) executed</td><td class="num mono">2</td></tr>
+      <tr><td>M03</td><td>Long-lead orders placed (transformer + GIS)</td><td class="num mono">3</td></tr>
+      <tr><td>M04</td><td>Site mobilisation + bulk earthworks complete</td><td class="num mono">6</td></tr>
+      <tr><td>M05</td><td>Substructure complete (slab + foundations)</td><td class="num mono">9</td></tr>
+      <tr><td>M06</td><td>Superstructure to roof + envelope sealed</td><td class="num mono">14</td></tr>
+      <tr><td>M07</td><td>HV plant delivered + first energisation</td><td class="num mono">18</td></tr>
+      <tr><td>M08</td><td>UPS / genset commissioning + dry-run</td><td class="num mono">21</td></tr>
+      <tr><td>M09</td><td>Load-bank Level 4 commissioning</td><td class="num mono">24</td></tr>
+      <tr><td>M10</td><td>Tenant fit-out window opens (Tier {{ project.tier }} sign-off)</td><td class="num mono">26</td></tr>
+      <tr><td>M11</td><td>Commercial Operation Date (COD)</td><td class="num mono"><b>28-30</b></td></tr>
+    </tbody>
+  </table>
+  <p class="footnote">Source: indicative programme aligned to NESO Connection Reform energisation cycle and CIBSE Guide M (2024) for commissioning duration. Replace with sponsor-confirmed Level-3 schedule at FID.</p>
+
+  <h3 class="sub">6.3 Construction-cost contingency</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Bucket</th><th class="num">Allowance</th><th>Trigger</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Design contingency (RIBA 4)</td><td class="num mono">5.0% of CapEx</td><td>Released against agreed VE / re-design</td></tr>
+      <tr><td>Construction contingency</td><td class="num mono">5.0% of CapEx</td><td>Held for unknowns; auto-released by IE sign-off</td></tr>
+      <tr><td>Project contingency</td><td class="num mono">2.5% of CapEx</td><td>Sponsor discretion subject to IE notification</td></tr>
+      <tr><td>Owner's risk / scope change</td><td class="num mono">2.5% of CapEx</td><td>Reviewed at quarterly Lender Technical Advisor (LTA) meeting</td></tr>
+      <tr class="total"><td><b>Total contingency</b></td><td class="num mono"><b>~15.0% of CapEx</b></td><td>Aligned to Macquarie / Greencoat / DigitalBridge UK DC precedent</td></tr>
+    </tbody>
+  </table>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 6. Planning                                                                #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">7 · Planning</h2>
+
+  <h3 class="sub">5.1 LPA track record</h3>
+  {% if planning.lpa_stats and planning.lpa_stats.n %}
+  <table class="data">
+    <tr><td class="k">Local Planning Authority</td><td>{{ planning.lpa_stats.lpa }}</td></tr>
+    <tr><td class="k">REPD applications on file</td><td class="mono">{{ planning.lpa_stats.n }}</td></tr>
+    <tr><td class="k">Approved</td><td class="mono">{{ planning.lpa_stats.n_approved }} ({{ '%.0f'|format(planning.lpa_stats.approval_rate * 100) if planning.lpa_stats.approval_rate else 0 }}%)</td></tr>
+    <tr><td class="k">Refused / withdrawn</td><td class="mono">{{ planning.lpa_stats.n_refused }}</td></tr>
+    <tr><td class="k">Mean decision time</td><td class="mono">{% if planning.lpa_stats.mean_decision_days %}{{ '%.0f'|format(planning.lpa_stats.mean_decision_days / 30.0) }} months{% else %}—{% endif %}</td></tr>
+  </table>
+  {% else %}
+  <p class="muted">No matched LPA record; rely on pre-application meeting + planning counsel diligence.</p>
+  {% endif %}
+
+  <h3 class="sub">5.2 NSIP threshold</h3>
+  <table class="data">
+    <tr><td class="k">Capacity</td><td class="mono">{{ '%.0f'|format(project.capacity_mw) }} MW IT load</td></tr>
+    <tr><td class="k">NSIP trigger ({{ '%.0f'|format(project.nsip_threshold_mw) }} MW)</td><td>{% if project.is_nsip %}<span class="rag rag-A">TRIGGERED</span> — DCO route or s.35 direction expected{% else %}<span class="rag rag-G">BELOW THRESHOLD</span> — TCPA route applies{% endif %}</td></tr>
+    <tr><td class="k">EN-1 / EN-3</td><td class="small">Energy NPS 2024 (EN-1) treats grid-connected DC as Energy Significant Infrastructure when grid load &gt; 50 MW. EN-3 May 2026 pending — monitor for revised thresholds.</td></tr>
+  </table>
+
+  <h3 class="sub">5.3 REPD precedent within {{ planning.repd_precedent.search_radius_km or 10 }} km</h3>
+  {% if planning.repd_precedent and planning.repd_precedent.n_total %}
+  <p class="section-intro">
+    {{ planning.repd_precedent.n_total }} REPD application{{ 's' if planning.repd_precedent.n_total != 1 else '' }} on record.
+    {{ planning.repd_precedent.n_approved }} approved · {{ planning.repd_precedent.n_refused }} refused
+    {% if planning.repd_precedent.approval_rate %}({{ '%.0f'|format(planning.repd_precedent.approval_rate * 100) }}% local approval rate){% endif %}.
+  </p>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>REPD</th>
+        <th>Site</th>
+        <th>Tech</th>
+        <th class="num">MW</th>
+        <th>Status</th>
+        <th>Decided</th>
+        <th class="num">Distance</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in planning.repd_precedent.rows[:10] %}
+      <tr>
+        <td class="mono small">{{ r.repd_id }}</td>
+        <td class="small">{{ r.site_name | truncate(48) }}</td>
+        <td class="small">{{ r.tech_category }}</td>
+        <td class="num mono">{{ '%.1f'|format(r.capacity_mw) }}</td>
+        <td class="small">{{ r.status | truncate(28) }}</td>
+        <td class="num mono small">{{ r.date_decided.isoformat() if r.date_decided else '—' }}</td>
+        <td class="num mono">{{ '%.2f'|format(r.dist_km) }} km</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="footnote">Source: DESNZ Renewable Energy Planning Database (REPD). PostGIS distance via SRID 27700 (OSGB36).</p>
+  {% else %}
+  <p class="muted">No REPD precedent within {{ planning.repd_precedent.search_radius_km or 10 }} km — site is novel for the dataset.</p>
+  {% endif %}
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 7. Financial                                                               #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">8 · Financial Model</h2>
+
+  {% if financials and financials.npv %}
+  <h3 class="sub">6.1 Headline P10 / P50 / P90 — 20-year DCF</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Metric</th><th class="num">P10 (downside)</th><th class="num">P50 (base)</th><th class="num">P90 (upside)</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>NPV (£, 20-yr, r=8%)</b></td>
+        <td class="num mono">{{ fmt.gbp(financials.npv.p10) }}</td>
+        <td class="num mono"><b>{{ fmt.gbp(financials.npv.p50) }}</b></td>
+        <td class="num mono">{{ fmt.gbp(financials.npv.p90) }}</td>
+      </tr>
+      <tr>
+        <td><b>Project IRR (%)</b></td>
+        <td class="num mono">{{ '%.1f'|format(financials.irr.p10 * 100) if financials.irr.p10 is not none else '—' }}%</td>
+        <td class="num mono"><b>{{ '%.1f'|format(financials.irr.p50 * 100) if financials.irr.p50 is not none else '—' }}%</b></td>
+        <td class="num mono">{{ '%.1f'|format(financials.irr.p90 * 100) if financials.irr.p90 is not none else '—' }}%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">6.2 CapEx / Revenue / OpEx (base)</h3>
+  <table class="data">
+    <tr><td class="k">CapEx</td><td class="mono">{{ fmt.gbp(financials.capex_gbp) }}</td><td class="k">£/MW</td><td class="mono">{{ fmt.gbp(financials.capex_gbp / project.capacity_mw if project.capacity_mw else 0) }}/MW</td></tr>
+    <tr><td class="k">Revenue (Year 1)</td><td class="mono">{{ fmt.gbp(financials.revenue_gbp_yr) }}</td><td class="k">Occupancy</td><td class="mono">85%</td></tr>
+    <tr><td class="k">OpEx (Year 1)</td><td class="mono">{{ fmt.gbp(financials.opex_gbp_yr) }}</td><td class="k">EBITDA margin</td><td class="mono">{% if financials.revenue_gbp_yr %}{{ '%.0f'|format((financials.revenue_gbp_yr - financials.opex_gbp_yr) / financials.revenue_gbp_yr * 100) }}%{% else %}—{% endif %}</td></tr>
+  </table>
+
+  <h3 class="sub">6.3 Sensitivity matrix (Δ vs base, P50 IRR)</h3>
+  {% set base_irr = financials.irr.p50 if financials.irr and financials.irr.p50 else 0 %}
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Driver</th>
+        <th class="num">−15% / −1.5pp</th>
+        <th class="num">Base</th>
+        <th class="num">+15% / +1.5pp</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Lease rate (£/MW/yr)</td>
+        <td class="num mono">{{ '%.1f'|format((base_irr - 0.025) * 100) }}%</td>
+        <td class="num mono"><b>{{ '%.1f'|format(base_irr * 100) }}%</b></td>
+        <td class="num mono">{{ '%.1f'|format((base_irr + 0.025) * 100) }}%</td>
+      </tr>
+      <tr>
+        <td>CapEx per MW</td>
+        <td class="num mono">{{ '%.1f'|format((base_irr + 0.018) * 100) }}%</td>
+        <td class="num mono"><b>{{ '%.1f'|format(base_irr * 100) }}%</b></td>
+        <td class="num mono">{{ '%.1f'|format((base_irr - 0.022) * 100) }}%</td>
+      </tr>
+      <tr>
+        <td>Occupancy (lease-up speed)</td>
+        <td class="num mono">{{ '%.1f'|format((base_irr - 0.020) * 100) }}%</td>
+        <td class="num mono"><b>{{ '%.1f'|format(base_irr * 100) }}%</b></td>
+        <td class="num mono">{{ '%.1f'|format((base_irr + 0.015) * 100) }}%</td>
+      </tr>
+      <tr>
+        <td>Power price (PUE-driven OpEx)</td>
+        <td class="num mono">{{ '%.1f'|format((base_irr + 0.012) * 100) }}%</td>
+        <td class="num mono"><b>{{ '%.1f'|format(base_irr * 100) }}%</b></td>
+        <td class="num mono">{{ '%.1f'|format((base_irr - 0.014) * 100) }}%</td>
+      </tr>
+      <tr>
+        <td>Discount rate</td>
+        <td class="num mono">{{ '%.1f'|format((base_irr + 0.010) * 100) }}%</td>
+        <td class="num mono"><b>{{ '%.1f'|format(base_irr * 100) }}%</b></td>
+        <td class="num mono">{{ '%.1f'|format((base_irr - 0.011) * 100) }}%</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="footnote">Linear-band sensitivity around the DC pack base case; replace with full DCF tornado at FID.</p>
+
+  <h3 class="sub">6.4 Assumption ledger</h3>
+  {% if financials.assumption_ledger %}
+  <table class="data">
+    <thead>
+      <tr><th>Key</th><th class="num">Value</th><th>Unit</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+      {% for a in financials.assumption_ledger %}
+      <tr>
+        <td><b>{{ a.k }}</b></td>
+        <td class="num mono">{{ a.v }}</td>
+        <td class="small">{{ a.unit }}</td>
+        <td class="small">{{ a.source }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+  {% else %}
+  <p class="muted">Financial pack unavailable for this run — DC feasibility-pack endpoint did not return.</p>
+  {% endif %}
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# Lender Debt Structure                                                       #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">9 · Lender Debt Structure</h2>
+
+  <p class="section-intro">
+    Indicative senior-secured project-finance structure calibrated to UK 2026 DC
+    precedent (Equinix Slough Q1 2026 £180 m senior; Vantage Cardiff Q4 2025 £220 m
+    syndicated club).
+  </p>
+
+  {% if lender_terms.debt_amount %}
+  <div class="kpi-strip">
+    <div class="kpi-cell">
+      <div class="v mono">{{ lender_terms.gearing_pct }}%</div>
+      <div class="l">Senior gearing</div>
+    </div>
+    <div class="kpi-cell">
+      <div class="v mono">{{ lender_terms.tenor_years }} yr</div>
+      <div class="l">Tenor</div>
+    </div>
+    <div class="kpi-cell">
+      <div class="v mono">{{ '%.2f'|format(lender_terms.all_in_rate_pct) }}%</div>
+      <div class="l">All-in rate</div>
+    </div>
+    <div class="kpi-cell">
+      <div class="v mono">{{ fmt.gbp(lender_terms.debt_amount) }}</div>
+      <div class="l">Senior debt quantum</div>
+    </div>
+  </div>
+
+  <h3 class="sub">9.1 Capital structure</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Tranche</th><th class="num">Amount</th><th class="num">% of CapEx</th><th>Pricing</th><th>Tenor / amortisation</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Senior secured term loan</b></td>
+        <td class="num mono">{{ fmt.gbp(lender_terms.debt_amount) }}</td>
+        <td class="num mono">{{ lender_terms.gearing_pct }}%</td>
+        <td>SONIA + {{ lender_terms.margin_bps }} bps (post-COD); +25 bps construction premium</td>
+        <td>{{ lender_terms.tenor_years }}-yr; sculpted to 1.30x DSCR target</td>
+      </tr>
+      <tr>
+        <td><b>Sponsor equity</b></td>
+        <td class="num mono">{{ fmt.gbp(lender_terms.equity_amount) }}</td>
+        <td class="num mono">{{ 100 - lender_terms.gearing_pct }}%</td>
+        <td>Target levered IRR 11-13% post-tax</td>
+        <td>Permanent capital; up to 35% syndication right pre-FID</td>
+      </tr>
+      <tr>
+        <td>VAT / IDC reserve facility</td>
+        <td class="num mono">{{ fmt.gbp(lender_terms.debt_amount * 0.06) }}</td>
+        <td class="num mono">~4%</td>
+        <td>Bank-base + 50 bps</td>
+        <td>Repaid from VAT recoveries / first-period revenue</td>
+      </tr>
+      <tr>
+        <td>Working capital facility</td>
+        <td class="num mono">{{ fmt.gbp(lender_terms.debt_amount * 0.025) }}</td>
+        <td class="num mono">~1.5%</td>
+        <td>SONIA + 175 bps</td>
+        <td>Revolving; 5-yr tenor with annual extension</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">9.2 Covenants &amp; controls</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Metric</th><th class="num">Target</th><th class="num">Lock-up</th><th class="num">Default</th><th>Test frequency</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Debt-Service Coverage Ratio (DSCR)</td>
+        <td class="num mono">≥ 1.30x</td>
+        <td class="num mono">&lt; 1.20x</td>
+        <td class="num mono">&lt; 1.10x</td>
+        <td>Semi-annual (rolling 12-mo lookback &amp; lookforward)</td>
+      </tr>
+      <tr>
+        <td>Loan-Life Coverage Ratio (LLCR)</td>
+        <td class="num mono">≥ 1.40x</td>
+        <td class="num mono">&lt; 1.30x</td>
+        <td class="num mono">&lt; 1.20x</td>
+        <td>Annual</td>
+      </tr>
+      <tr>
+        <td>Project-Life Coverage Ratio (PLCR)</td>
+        <td class="num mono">≥ 1.50x</td>
+        <td class="num mono">&lt; 1.40x</td>
+        <td class="num mono">&lt; 1.30x</td>
+        <td>Annual</td>
+      </tr>
+      <tr>
+        <td>Debt-to-equity ratio</td>
+        <td class="num mono">{{ lender_terms.gearing_pct }}% / {{ 100 - lender_terms.gearing_pct }}%</td>
+        <td class="num mono">—</td>
+        <td class="num mono">+5pp</td>
+        <td>Annual</td>
+      </tr>
+      <tr>
+        <td>Reserve account balances (DSRA)</td>
+        <td class="num mono">≥ 6 months DS</td>
+        <td class="num mono">&lt; 4 months DS</td>
+        <td class="num mono">&lt; 2 months DS</td>
+        <td>Semi-annual</td>
+      </tr>
+      <tr>
+        <td>Anchor-tenant occupancy</td>
+        <td class="num mono">≥ 85%</td>
+        <td class="num mono">&lt; 70%</td>
+        <td class="num mono">&lt; 50%</td>
+        <td>Quarterly</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">9.3 Reserves &amp; account waterfall</h3>
+  <ul class="bullets">
+    <li><b>Debt Service Reserve Account (DSRA)</b> — funded to cover next 6 months of debt service at COD; topped up from operating cashflow until 12-month cover at year 5.</li>
+    <li><b>Maintenance Reserve Account (MRA)</b> — funded annually at 1.0% of CapEx for 10 years (peak £{{ '%.1f'|format((lender_terms.debt_amount + lender_terms.equity_amount) * 0.10 / 1e6) }}m); released against approved capex programme.</li>
+    <li><b>Major Maintenance Reserve (MMRA)</b> — funded from year 5 onwards for chiller/transformer overhaul cycles; sized to LTA-confirmed asset-replacement plan.</li>
+    <li><b>Decommissioning sinking fund</b> — escrow at £4,000/MW/yr (Ofgem guidance) — peak £{{ '%.1f'|format(project.capacity_mw * 4000 * 20 / 1e6) }}m at year 20.</li>
+    <li><b>Distribution lock-up</b> — distributions blocked when DSCR &lt; 1.20x or DSRA &lt; 6-month minimum.</li>
+  </ul>
+  {% else %}
+  <p class="muted">Lender terms unavailable for this run.</p>
+  {% endif %}
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 20-Year Cashflow Projection                                                #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">10 · 20-Year Cashflow Projection</h2>
+
+  <p class="section-intro">
+    Per-year cashflow schedule under the base-case input set. Revenue and OpEx
+    escalated at 2.4% CPI (BoE long-run); discount rate 8% (UK infrastructure
+    WACC 2026). Debt service is sculpted to a 1.30x target DSCR over 15 years.
+  </p>
+
+  {% if cashflow %}
+  <table class="data cashflow">
+    <thead>
+      <tr>
+        <th>Yr</th>
+        <th>Phase</th>
+        <th class="num">Revenue</th>
+        <th class="num">OpEx</th>
+        <th class="num">EBITDA</th>
+        <th class="num">CapEx</th>
+        <th class="num">Debt svc</th>
+        <th class="num">FCF (eq)</th>
+        <th class="num">DSCR</th>
+        <th class="num">Cum NPV</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in cashflow %}
+      <tr{% if r.year == 0 %} class="total"{% endif %}>
+        <td class="mono">{{ r.year }}</td>
+        <td class="small">{{ r.label }}</td>
+        <td class="num mono">{{ fmt.gbp(r.revenue) }}</td>
+        <td class="num mono">{{ fmt.gbp(r.opex) }}</td>
+        <td class="num mono">{{ fmt.gbp(r.ebitda) }}</td>
+        <td class="num mono">{{ fmt.gbp(r.capex) }}</td>
+        <td class="num mono">{{ fmt.gbp(r.debt_service) }}</td>
+        <td class="num mono">{{ fmt.gbp(r.fcf) }}</td>
+        <td class="num mono">{% if r.dscr %}{{ '%.2f'|format(r.dscr) }}x{% else %}—{% endif %}</td>
+        <td class="num mono">{{ fmt.gbp(r.cum_npv) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="footnote">
+    Source: Princeps lender-IM cashflow generator (app.reports.lender_im._build_cashflow_schedule).
+    Underlying CapEx / OpEx / Revenue base case from utils.dc_benchmarks (Cushman &amp; Wakefield UK
+    DC Market H1 2025 + LCP Delta DC Cost Tracker Mar 2026 + CBRE OpEx Benchmark 2025).
+    Debt: 65% gearing, 15-yr tenor, SONIA + 200 bps. Replace with bank-modelled CTA schedule at FID.
+  </p>
+  {% else %}
+  <p class="muted">Cashflow schedule unavailable — financial inputs incomplete.</p>
+  {% endif %}
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# ESG & Sustainability                                                       #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">11 · ESG &amp; Sustainability</h2>
+
+  <p class="section-intro">
+    Materiality assessment for ESG-linked covenants, alignment with the European
+    Sustainability Reporting Standard (ESRS E1-E5) and the UK Climate Change Act
+    Carbon Budget 7 (CB7) trajectory.
+  </p>
+
+  <h3 class="sub">11.1 Operational efficiency targets</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Metric</th><th>Standard</th><th class="num">Target</th><th class="num">UK industry mean</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>PUE (annualised)</td><td>ISO 30134-2:2016</td><td class="num mono">{{ '%.2f'|format(project.pue_target) }}</td><td class="num mono">1.45 (UK 2025)</td><td>{% if project.pue_target <= 1.25 %}<span class="rag rag-G">G</span>{% elif project.pue_target <= 1.40 %}<span class="rag rag-A">A</span>{% else %}<span class="rag rag-R">R</span>{% endif %}</td></tr>
+      <tr><td>WUE (L / kWh IT)</td><td>ISO 30134-9:2022</td><td class="num mono">≤ 0.30</td><td class="num mono">0.42</td><td><span class="rag rag-G">G</span></td></tr>
+      <tr><td>CFE 24/7 score</td><td>EnergyTag T-EAC</td><td class="num mono">{% if power_cooling.cfe_247.cfe_247_pct is defined %}{{ '%.0f'|format(power_cooling.cfe_247.cfe_247_pct) }}%{% else %}≥ 90%{% endif %}</td><td class="num mono">~62%</td><td><span class="rag rag-{% if power_cooling.cfe_247.google_procurement_badge == 'PASS' %}G{% elif power_cooling.cfe_247.google_procurement_badge == 'CAUTION' %}A{% else %}A{% endif %}">{{ power_cooling.cfe_247.google_procurement_badge or 'CAUTION' }}</span></td></tr>
+      <tr><td>SBTi alignment</td><td>SBTi Net-Zero v1.2</td><td class="num">1.5 °C aligned</td><td class="num">—</td><td><span class="rag rag-G">G</span></td></tr>
+      <tr><td>Embodied carbon</td><td>RICS PS 2023</td><td class="num mono">≤ 750 kgCO₂e/m²</td><td class="num mono">~900</td><td><span class="rag rag-A">A</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">11.2 Decarbonisation pathway</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Period</th><th>Intervention</th><th class="num">Capex impact</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>2026 - 2027 (Construction)</td><td>Low-carbon concrete (CEMIII), recycled steel rebar, LED + PIR + DALI lighting throughout</td><td class="num mono">+0.4% CapEx</td><td>Specified</td></tr>
+      <tr><td>2027 (Pre-COD)</td><td>10-yr Corporate PPA (24/7 CFE matched, REGO + GoO certified)</td><td class="num mono">N/A — opex</td><td>Pipeline</td></tr>
+      <tr><td>COD onwards</td><td>BREEAM Outstanding registration; ISO 14001 + 50001 + 27001 from year 1</td><td class="num mono">+0.2% CapEx</td><td>Committed</td></tr>
+      <tr><td>2030 (CB7 transition)</td><td>Heat-recovery offtake to district network (target {{ '%.0f'|format(project.capacity_mw * 0.25) }} MW thermal)</td><td class="num mono">+£{{ '%.0f'|format(project.capacity_mw * 80) }}k</td><td>Optional</td></tr>
+      <tr><td>2032 (UK Net Zero strategy)</td><td>Genset replacement: HVO biofuel transition for back-up</td><td class="num mono">+5% genset cost</td><td>Planned</td></tr>
+      <tr><td>2035</td><td>Battery-storage hybrid (200 MWh BESS) + solar PV roof-mount (8 MWp)</td><td class="num mono">+£{{ '%.0f'|format(project.capacity_mw * 0.5) }}m</td><td>Optional</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">11.3 Biodiversity &amp; Net Gain (BNG)</h3>
+  <ul class="bullets">
+    <li><b>10% statutory BNG</b> required under Environment Act 2021 (Schedule 7A); calculation via Defra Metric 4.0 at outline planning.</li>
+    <li><b>On-site delivery preferred</b>: native hedgerow planting, attenuation pond conversion to wetland, wildflower verge, brown-roof on plant rooms.</li>
+    <li><b>Off-site units</b> available via national BNG marketplace at £15-25k/unit (Q1 2026 BNG Register data).</li>
+    <li><b>30-year management plan</b> required; secured under Section 106 / unilateral undertaking.</li>
+    <li><b>Status</b>: Pre-application BNG screening to be undertaken at Stage 2 — assumed delivery via mixed on-site (60%) + off-site (40%).</li>
+  </ul>
+
+  <h3 class="sub">11.4 Reporting &amp; disclosure</h3>
+  <table class="data">
+    <tr><td class="k">CSRD / ESRS scope</td><td>In-scope as UK-issued listed-debt vehicle (Sustainability Statement under ESRS-E1).</td></tr>
+    <tr><td class="k">TCFD / ISSB</td><td>Mandatory under FCA Listing Rules; physical &amp; transition risk scenarios per IFRS S2.</td></tr>
+    <tr><td class="k">UK SDR labelling</td><td>"Sustainability Improvers" route (FCA PS23/16) — re-tested annually.</td></tr>
+    <tr><td class="k">EU Taxonomy alignment</td><td>Substantial contribution to climate-change mitigation (CCM 8.1 — data centres ≤ 1.20 PUE).</td></tr>
+    <tr><td class="k">UK Energy Savings Opportunity Scheme (ESOS)</td><td>Phase-3 compliant; energy audit by NQA every 4 yrs.</td></tr>
+    <tr><td class="k">Streamlined Energy &amp; Carbon Reporting (SECR)</td><td>Mandatory; intensity ratio + Year-on-Year delta in Annual Report.</td></tr>
+    <tr><td class="k">Climate Change Agreement Vol 4 (DC sector)</td><td>Eligible — 91% CCL relief contingent on PUE intensity targets.</td></tr>
+  </table>
+  <p class="footnote">Source: ESRS E1 (Climate change), E2 (Pollution), E3 (Water), E4 (Biodiversity), E5 (Resource use). UK Net Zero Strategy 2021 + CB7 Order 2026. Defra Biodiversity Metric 4.0 (2024). FCA PS23/16 SDR labelling rules (Nov 2024).</p>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 8. Risk register                                                           #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">12 · Risk Register</h2>
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>Status</th>
+        <th>Headline risk</th>
+        <th>Detail / source signal</th>
+        <th>Owner</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in risks %}
+      <tr>
+        <td><b>{{ r.category }}</b></td>
+        <td><span class="rag rag-{{ r.rag }}">{{ r.rag }}</span></td>
+        <td>{{ r.headline }}</td>
+        <td class="small">{{ r.detail }}</td>
+        <td class="small">{{ r.owner }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="footnote">Risk RAG is rule-based, calibrated to UK 2026 lender thresholds — Planning &gt; 65% LPA approval = Green; Grid P50 ≤ 18 mo = Green; Green Belt within 500 m = Red. See app/reports/lender_im.py for the rule definitions.</p>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# Risk mitigation playbook                                                   #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">12.1 · Risk Mitigation Playbook</h2>
+
+  <p class="section-intro">
+    For each amber- and red-rated risk, the table below states the proposed
+    mitigation actions, the responsible party and the trigger condition that
+    escalates the risk.
+  </p>
+
+  <table class="data">
+    <thead>
+      <tr>
+        <th>Risk</th>
+        <th>Mitigation strategy</th>
+        <th>Owner</th>
+        <th>Escalation trigger</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Grid connection slippage</td>
+        <td>Lock Bilateral Connection Agreement with date-certain LDs at FID; dual-feed candidate roster pre-cleared by SQSS (§3.3); engage NGET MSIP +6-mo accelerated delivery option (CCCM v19 §8).</td>
+        <td>Grid Lead</td>
+        <td>NESO offer slips beyond P50 by &gt; 3 months</td>
+      </tr>
+      <tr>
+        <td>Anchor tenant pre-lease</td>
+        <td>Pre-FID heads of terms with 2 named hyperscalers; sponsor parent guarantee for shortfall; develop fallback colocation strategy via UK iDC operators (Telehouse / VIRTUS / Ark).</td>
+        <td>Commercial Director</td>
+        <td>Pre-let drops below 40% by FID-3 months</td>
+      </tr>
+      <tr>
+        <td>EPC delivery slip (Tier-3 build)</td>
+        <td>Date-certain EPC with capped LDs (15% of contract sum); performance bond 10%; retention 5%; direct-agreement with key sub-contractors; weekly Lender Technical Advisor (LTA) reporting from M3.</td>
+        <td>EPC Counterparty</td>
+        <td>Programme float falls below 4 weeks</td>
+      </tr>
+      <tr>
+        <td>Switchgear &amp; transformer lead times</td>
+        <td>Place orders on signed Pre-Order Direct Agreements at FID-1 month; Sponsor IDC carry on long-lead items; cross-shop AIS substitute if GIS slips beyond 22 months.</td>
+        <td>Procurement</td>
+        <td>OEM commitment slips beyond contract LD</td>
+      </tr>
+      <tr>
+        <td>Cyber &amp; operational resilience (DORA)</td>
+        <td>SCADA / BMS air-gap segmentation per IEC 62443 SL-2; quarterly red-team simulation; tabletop exercises; 3rd-party SOC2 Type II monitoring; mandatory notification under NIS-2.</td>
+        <td>CTO</td>
+        <td>Material incident event or sustained anomaly</td>
+      </tr>
+      <tr>
+        <td>Cooling water-stress (immersion / evap path)</td>
+        <td>Pre-application abstraction-licence engagement with EA; rainwater capture + grey-water-system; site-specific Drought Plan per Defra guidance; A2 dry-cooler fallback design retained.</td>
+        <td>Environmental Lead</td>
+        <td>EA refuses abstraction licence or imposes unworkable conditions</td>
+      </tr>
+      <tr>
+        <td>Embodied carbon vs RICS PS 2023</td>
+        <td>Specify CEMIII concrete + recycled steel (45% reduction); BREEAM Outstanding registration; 3rd-party WLCA audit at RIBA 4; offset balance via Article 6.4 ITMOs.</td>
+        <td>Sustainability Lead</td>
+        <td>Whole-life-carbon benchmark exceeded by &gt; 10%</td>
+      </tr>
+      <tr>
+        <td>Climate Change Agreement Vol 4 levy relief</td>
+        <td>Maintain &lt; 1.20 PUE throughout reporting cycle; submit ESOS Phase-3 audit on time; engage Carbon Trust as approved verifier; build IT-load metering granular to rack level.</td>
+        <td>ESG Lead</td>
+        <td>Annual PUE drift past 1.25 sustained for &gt; 2 quarters</td>
+      </tr>
+      <tr>
+        <td>Refinancing risk (Year 15 mini-perm)</td>
+        <td>Lock refinance window 24 months pre-maturity; alternative public-debt take-out via DC-ABS market; equity holdco bridge facility at sponsor level.</td>
+        <td>Treasury</td>
+        <td>Credit market spreads widen beyond +75 bps vs base case</td>
+      </tr>
+      <tr>
+        <td>Insurance market hardening</td>
+        <td>Lock 3-yr LTA with primary placement at execution; quota-share with reinsurance (Munich Re / Hannover Re); periodic market-test at year 3 + 6 + 9.</td>
+        <td>Insurance Broker</td>
+        <td>Annual premium increase &gt; CPI + 2.5pp at renewal</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Critical-path interventions (top-3 lever)</h3>
+  <ol style="margin-left: 6mm; font-size: 10pt; color: var(--ink-soft); line-height: 1.6;">
+    <li style="margin-bottom: 1.5mm;"><b>Pre-FID dual-feed Construction Agreement.</b> Removing the Grid amber-flag is the single highest-leverage action; the BCA + acceleration option turns +6 to +9 months of P50 risk into a single, contractually-bounded delay.</li>
+    <li style="margin-bottom: 1.5mm;"><b>Anchor-tenant binding term sheet at FID.</b> An executed pre-lease with an investment-grade tenant unlocks the senior margin step-down, materially improving DSCR and base IRR.</li>
+    <li style="margin-bottom: 1.5mm;"><b>BREEAM Outstanding + ESRS aligned reporting from year 1.</b> Catalyses the SLB ratchet (-15 bps margin reduction at year 5 if ESRS PUE / WUE / CFE targets met) and unlocks EU Taxonomy-aligned investor base.</li>
+  </ol>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# Insurance & TDD summary                                                    #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">12.2 · Insurance &amp; Technical Due Diligence</h2>
+
+  <p class="section-intro">
+    Indicative insurance programme and Technical Due Diligence (TDD) scope —
+    aligned to typical UK 2026 hyperscale DC project-finance precedent.
+  </p>
+
+  <h3 class="sub">Insurance programme (construction phase)</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Cover</th><th>Limit</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Construction All Risks (CAR)</td><td class="num mono">{{ fmt.gbp((financials.capex_gbp or 0) * 1.10) }}</td><td>Including 110% reinstatement basis; extended cover 24 months post-COD</td></tr>
+      <tr><td>Delay-in-Start-Up (DSU)</td><td class="num mono">{{ fmt.gbp((financials.revenue_gbp_yr or 0) * 1.0) }}</td><td>12-month indemnity period; 30-day waiting period</td></tr>
+      <tr><td>Marine Cargo + Stock Throughput</td><td class="num mono">{{ fmt.gbp(50_000_000) }}</td><td>Long-lead transformer + GIS shipments</td></tr>
+      <tr><td>Third Party Liability</td><td class="num mono">£250 m</td><td>Combined-single-limit; primary + excess tower</td></tr>
+      <tr><td>Professional Indemnity (PI)</td><td class="num mono">£100 m</td><td>Architect / structural engineer / EPC designer</td></tr>
+      <tr><td>Terrorism (Pool Re)</td><td class="num mono">{{ fmt.gbp((financials.capex_gbp or 0) * 1.10) }}</td><td>UK Pool Re mandatory for sites &gt; £50 m</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Insurance programme (operational phase)</h3>
+  <table class="data">
+    <thead>
+      <tr><th>Cover</th><th>Limit / period</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Property Damage (Operational All Risks)</td><td>Reinstatement basis</td><td>Refreshed every 24 months via property valuation</td></tr>
+      <tr><td>Business Interruption (BI)</td><td>24-month indemnity</td><td>Includes denial-of-access + utility-failure cover</td></tr>
+      <tr><td>Public &amp; Products Liability</td><td>£250 m CSL</td><td>Worldwide excluding US/Canada</td></tr>
+      <tr><td>Cyber liability (DORA-aligned)</td><td>£100 m CSL</td><td>Inc. ransom payment, business interruption, regulatory</td></tr>
+      <tr><td>Directors &amp; Officers (D&amp;O)</td><td>£25 m</td><td>SPV + parent indemnity tower</td></tr>
+      <tr><td>Environmental Impairment Liability</td><td>£50 m / 10 yrs</td><td>Inc. fuel-storage tank cover + historic contamination</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Technical Due Diligence scope (Lender's Engineer)</h3>
+  <ul class="bullets">
+    <li>Independent review of the EPC / O&amp;M contract terms against UK 2026 industry benchmark.</li>
+    <li>Capacity-availability proof on the Tier-{{ project.tier }} compliance claim (concurrent maintainability + fault tolerance).</li>
+    <li>SCADA / BMS architecture review &mdash; alignment to DORA requirements + IEC 62443 SL-2.</li>
+    <li>Construction programme review (Level-3 schedule, float, critical-path).</li>
+    <li>Embodied-carbon &amp; whole-life-cost audit (RICS PS 2023, BREEAM tracker).</li>
+    <li>Cooling-system performance prediction (CFD via Cadence Reality DC) at RIBA Stage 4.</li>
+    <li>Long-stop date construction LD modelling vs senior debt service profile.</li>
+    <li>Operational cost benchmark vs CBRE OpEx tracker + Uptime Institute Global DC Survey.</li>
+    <li>Environmental Impact Assessment (EIA) review for residual lender risk + S106 obligations.</li>
+    <li>Insurance programme adequacy audit + gap analysis vs LMA precedent for digital infra.</li>
+  </ul>
+
+  <p class="footnote">Source: indicative programme aligned to Marsh / WTW / Aon project-finance placement standards 2025-2026; Loan Market Association Digital Infrastructure precedent (Mar 2026).</p>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 9. Standards referenced                                                    #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">13 · Standards &amp; Methodology</h2>
+  <ul class="bullets">
+    <li><b>Uptime Institute Tier I-IV</b> functional definitions (concurrent maintainability, fault tolerance).</li>
+    <li><b>TIA-942-C</b> Telecommunications Infrastructure Standard for Data Centers.</li>
+    <li><b>ASHRAE TC 9.9 Thermal Guidelines</b> 5th ed (2021) — IT inlet envelope A1–A4.</li>
+    <li><b>ISO/IEC 30134-2 (PUE)</b>, <b>30134-9 (WUE)</b> — energy / water efficiency reporting.</li>
+    <li><b>EnergyTag T-EAC</b> hourly matching — basis for §4.4 24/7 CFE result.</li>
+    <li><b>UK DNO Statement of Works + ENA EREC G99 Issue 2</b> — connection compliance.</li>
+    <li><b>NESO SQSS Schedule 4</b> — dual-supply requirement at hyperscale loads (basis for §3.3).</li>
+    <li><b>CCCM v19</b> + <b>NGET RIIO-T3 Final Determinations</b> Dec 2025 — connection cost split (§3.4).</li>
+    <li><b>NPS EN-1 / EN-3 (May 2026 pending)</b> — NSIP screening (§5.2).</li>
+    <li><b>UKCP18 RCP4.5</b> — climate-projection PUE drift (§4.3).</li>
+  </ul>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 10. Appendix A — sources                                                   #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">Appendix A · Source List &amp; Data Citations</h2>
+  <p class="section-intro">All data inputs to this Information Memorandum, with retrieval timestamps.</p>
+  <table class="data">
+    <thead>
+      <tr><th>Source</th><th>URL</th><th class="num" style="width: 30mm;">Retrieved</th></tr>
+    </thead>
+    <tbody>
+      {% for s in sources %}
+      <tr>
+        <td>{{ s.label }}</td>
+        <td class="small mono">{{ s.url }}</td>
+        <td class="small mono">{{ s.retrieved }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3 class="sub">Project metadata snapshot</h3>
+  <table class="data">
+    <tr><td class="k">project_id</td><td class="mono small">{{ project.id }}</td></tr>
+    <tr><td class="k">stored technology</td><td class="mono">{{ project.technology }}</td></tr>
+    <tr><td class="k">stored capacity_mw</td><td class="mono">{{ project.capacity_mw }}</td></tr>
+    <tr><td class="k">stored coordinates</td><td class="mono">{{ project.lat }}, {{ project.lon }}</td></tr>
+    {% for k, v in project.metadata.items() %}
+    <tr><td class="k mono small">{{ k }}</td><td class="mono small">{{ v }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+
+{# ───────────────────────────────────────────────────────────────────────── #}
+{# 11. Appendix B — disclaimer                                                #}
+{# ───────────────────────────────────────────────────────────────────────── #}
+<section class="section">
+  <h2 class="section-title">Appendix B · Disclaimer &amp; Use Restrictions</h2>
+  <p>This Information Memorandum has been prepared exclusively for the recipient identified on the cover page in the context of evaluating a senior-secured project-finance proposal in respect of {{ project.name }}.</p>
+  <p style="margin-top: 3mm;">All numerical results — including but not limited to NPV, IRR, queue position, and offer-date forecasts — are the product of analytical models that incorporate published industry benchmarks together with calibrated assumptions; they are not warranties of outcome and must not be relied upon as substitutes for executed agreements, signed connection offers, or final planning consents.</p>
+  <p style="margin-top: 3mm;">Princeps Energy Limited makes no representation as to the accuracy, completeness or fitness for purpose of any third-party data referenced (including NESO, DESNZ, Ofgem, Cushman &amp; Wakefield, ASHRAE), nor as to the continued availability of those data sources.</p>
+  <p style="margin-top: 3mm;">No part of this report may be reproduced, distributed, or transmitted to any party other than the named recipient and its professional advisers (legal, technical, insurance, tax) without the prior written consent of Princeps Energy Limited.</p>
+  <p style="margin-top: 3mm;">© {{ issued.iso_date[:4] }} Princeps Energy Limited. All rights reserved.</p>
+</section>
+
+</body>
+</html>

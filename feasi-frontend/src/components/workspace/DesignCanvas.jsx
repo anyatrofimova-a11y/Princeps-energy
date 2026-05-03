@@ -15,6 +15,26 @@ import bessBenchmarks from "../../data/bess-benchmarks.json";
 import solarBenchmarks from "../../data/solar-benchmarks.json";
 import TwinLazy from "../twin3d/TwinLazy";
 import { useSite } from "../../SiteContext";
+import EquipmentPalette, { EQUIPMENT_CATALOGUE } from "../design/EquipmentPalette";
+import { buildCampusLayout } from "../dc/dcLayoutPresets";
+import DesignViewModeTabs, { applyViewModeToMap } from "../design/DesignViewModeTabs";
+import DesignMeasureTool from "../design/DesignMeasureTool";
+import useDesignPlacements from "../../hooks/useDesignPlacements";
+import { useDesignContext } from "../../hooks/useDesignContext";
+import {
+  ensureConstraintSourcesAndLayers,
+  setConstraintData,
+  setConstraintVisibility,
+  DesignOverlayTogglePanel,
+} from "../design/DesignConstraintOverlays";
+
+/* Scale reference chips shown top-right of canvas. Hovering a chip highlights
+   every matching placed item and pulses them in the palette. */
+const SCALE_REFS = [
+  { key: "human",    label: "Human",    size_m: 1.7, typeIds: [] },
+  { key: "hgv",      label: "HGV",      size_m: 16,  typeIds: ["loading_bay"] },
+  { key: "megapack", label: "Megapack", size_m: 7,   typeIds: ["megapack", "bess_container"] },
+];
 
 /* Snap a continuous duration (h) to the nearest benchmark bucket key. */
 function bessDurationKey(durationH) {
@@ -208,6 +228,25 @@ export default function DesignCanvas({
   const workload = project?.technology || "bess";
   const defaults = WORKLOAD_DEFAULTS[workload] || WORKLOAD_DEFAULTS.bess;
 
+  // ── Effective origin ────────────────────────────────────────────────
+  // The Site Designer is reachable with or without a selected candidate
+  // site. When no candidate is selected, fall back to the project record
+  // (its `lat`/`lon`) so the Mapbox canvas still centres on the real
+  // project location — previously this path silently defaulted to London.
+  const effectiveSite = useMemo(() => {
+    if (site && site.lat != null && site.lon != null) return site;
+    if (project?.lat != null && project?.lon != null) {
+      return {
+        ...(site || {}),
+        lat: project.lat,
+        lon: project.lon,
+        name: site?.name || project.name || "Project site",
+        candidate_id: site?.candidate_id || null,
+      };
+    }
+    return site || null;
+  }, [site, project]);
+
   // ── Canvas ↔ 3D Site Twin view mode (additive, 2D canvas stays default) ──
   // Expose via useSite context so external callers can switch it (ChatPanel
   // actions, deep-links, …). Falls back to a local state+localStorage pair
@@ -270,13 +309,114 @@ export default function DesignCanvas({
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
 
+  // ── BOT-SDB: Glint-style constraint overlays ────────────────────────────
+  // Toggle map controls rendering of: red-line, buildable area, flood, SSSI /
+  // AONB / Green Belt, ALC 1/2, setback rings, sun-path arcs. Defaults tuned
+  // so a fresh canvas isn't cluttered — red-line + buildable ON.
+  const [overlayToggles, setOverlayToggles] = useState({
+    redline:      true,
+    buildable:    true,
+    designations: false,
+    flood:        false,
+    alc:          false,
+    setbacks:     false,
+    sunpath:      false,
+  });
+  const onOverlayToggle = useCallback((key, val) => {
+    setOverlayToggles((t) => ({ ...t, [key]: val }));
+  }, []);
+  const designCtx = useDesignContext({
+    lat: site?.lat,
+    lon: site?.lon,
+    enabled: isOpen && !!site,
+    radiusM: 1500,
+  });
+
+  // ── View mode (Plan / Oblique / Construction / Drone) ────────────────
+  const [viewMode, setViewMode] = useState("plan");
+  const [constructionMonth, setConstructionMonth] = useState(6);
+  const [droneOrbiting, setDroneOrbiting] = useState(true);
+
+  // ── Equipment palette + drag-drop placements ─────────────────────────
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  const [hoveredScaleKey, setHoveredScaleKey] = useState(null);
+  const placementScope = project?.project_id || site?.candidate_id || `${site?.lat},${site?.lon}`;
+  const placementsState = useDesignPlacements({ scopeId: placementScope });
+
+  // ── Measure tool (ruler) ─────────────────────────────────────────────
+  const [measureActive, setMeasureActive] = useState(false);
+  const [measureMode, setMeasureMode] = useState("distance");
+
   const layout = useMemo(() => {
-    if (!site) return null;
+    if (!effectiveSite) return null;
+    // Workload-aware layout generator — BESS gets the fire-break pad grid;
+    // DC gets a full campus (shell + halls + spine + MV/LV + genset + TX +
+    // water + office + security + loading + fence) from dcLayoutPresets.
+    if (workload === "dc" || workload === "data_centre" || workload === "datacentre") {
+      try {
+        const campus = buildCampusLayout({
+          itLoadMw: capacity,
+          tier: project?.tier ?? 3,
+          redundancy: project?.redundancy ?? "N+1",
+          coolingType: project?.cooling_type || "hybrid",
+        });
+        const dLon = degPerMLon(effectiveSite.lat);
+        const dLat = DEG_PER_M_LAT;
+        const rect = (cx, cy, w, d) => {
+          const hx = w / 2;
+          const hy = d / 2;
+          const corners = [
+            [cx - hx, cy - hy], [cx + hx, cy - hy],
+            [cx + hx, cy + hy], [cx - hx, cy + hy], [cx - hx, cy - hy],
+          ];
+          return corners.map(([x, y]) => [
+            effectiveSite.lon + x * dLon,
+            effectiveSite.lat + y * dLat,
+          ]);
+        };
+        const items = [
+          campus.shell, campus.spine, campus.mvlv,
+          campus.genset, campus.tx, campus.water,
+          campus.office, campus.security, campus.loading,
+          ...(campus.halls || []),
+          ...(campus.gensets || []),
+          ...(campus.transformers || []),
+          ...(campus.dieselTanks || []),
+        ].filter(Boolean);
+        const features = items.map((it, idx) => ({
+          type: "Feature",
+          properties: {
+            idx,
+            mw: it.role === "hall" ? Math.round(capacity / (campus.halls?.length || 1)) : 0,
+            type: it.role === "hall" ? "server_hall"
+                : it.role === "mvlv" ? "substation"
+                : it.role === "tx" ? "transformer"
+                : it.role === "genset" ? "control_room"
+                : "panel",
+            label: it.label || it.key,
+            role: it.role,
+            reasoning: `${it.role} · ${it.width?.toFixed(0) || "?"} × ${it.depth?.toFixed(0) || "?"} m · ${(it.height || 0).toFixed(1)} m tall`,
+          },
+          geometry: { type: "Polygon", coordinates: [rect(it.cx, it.cy, it.width, it.depth)] },
+        }));
+        return {
+          type: "FeatureCollection",
+          features,
+          meta: {
+            pad_count: campus.halls?.length || 0,
+            area_ha: +((campus.shell?.area || 0) / 10_000).toFixed(3),
+            design_rationale: `DC campus — ${campus.halls?.length || 0} halls; ${(campus.gensets || []).length} × 5 MW gensets; ${(campus.transformers || []).length} × 20 MVA TX.`,
+          },
+        };
+      } catch (err) {
+        console.warn("[DesignCanvas] DC campus build failed, falling back:", err);
+      }
+    }
     return generateBessLayout({
-      lat: site.lat, lon: site.lon,
+      lat: effectiveSite.lat, lon: effectiveSite.lon,
       capacity_mw: capacity, duration_h: duration,
     });
-  }, [site, capacity, duration]);
+  }, [effectiveSite, workload, capacity, duration, project?.tier, project?.redundancy, project?.cooling_type]);
 
   const kpis = useMemo(() => {
     if (workload === "solar") return solarKpis({ capacity_mw: capacity });
@@ -306,20 +446,23 @@ export default function DesignCanvas({
     setReasoning(lines);
   }, [capacity, duration, headroom, layout]);
 
-  /* ── Headroom fetch ──────────────────────────────────────────────────── */
+  /* ── Headroom fetch (also captures POC coords for the grid layer) ───── */
+  const [nearestSubstation, setNearestSubstation] = useState(null);
   useEffect(() => {
-    if (!site || !isOpen) return;
+    if (!effectiveSite || !isOpen) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/grid/nearest-substation?lat=${site.lat}&lon=${site.lon}`);
+        const res = await fetch(`/api/grid/nearest-substation?lat=${effectiveSite.lat}&lon=${effectiveSite.lon}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled && data?.headroom_mw != null) setHeadroom(data.headroom_mw);
+        if (cancelled) return;
+        if (data?.headroom_mw != null) setHeadroom(data.headroom_mw);
+        if (data?.lat != null && data?.lon != null) setNearestSubstation(data);
       } catch { /* keep null */ }
     })();
     return () => { cancelled = true; };
-  }, [site, isOpen]);
+  }, [effectiveSite, isOpen]);
 
   /* ── D4: REPD / NSIP precedent fetch ─────────────────────────────────── */
   useEffect(() => {
@@ -350,6 +493,23 @@ export default function DesignCanvas({
     })();
     return () => { cancelled = true; };
   }, [site, isOpen]);
+
+  /* ── BOT-SDB: push constraint-overlay data to mapbox sources ─────────── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !site) return;
+    const push = () => {
+      try {
+        // Ensure the sources/layers exist (idempotent) — needed when the
+        // style has just loaded or when we swap basemaps mid-session.
+        ensureConstraintSourcesAndLayers(map);
+        setConstraintData(map, designCtx, { lat: site.lat, lon: site.lon });
+        setConstraintVisibility(map, overlayToggles);
+      } catch { /* noop */ }
+    };
+    if (map.isStyleLoaded && map.isStyleLoaded()) push();
+    else map.once("load", push);
+  }, [designCtx, site, overlayToggles]);
 
   /* ── D6: yield + curtailment (solar only) ────────────────────────────── */
   useEffect(() => {
@@ -431,17 +591,77 @@ export default function DesignCanvas({
 
   /* ── Mapbox mount + all overlays ─────────────────────────────────────── */
   useEffect(() => {
-    if (!isOpen || !site || !mapContainerRef.current) return;
+    if (!isOpen || !effectiveSite || !mapContainerRef.current) return;
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: "mapbox://styles/mapbox/satellite-streets-v12",
-      center: [site.lon, site.lat],
+      center: [effectiveSite.lon, effectiveSite.lat],
       zoom: 16.8,
-      pitch: 0,
+      pitch: 45,
+      bearing: 0,
+      antialias: true,
+      maxPitch: 85,
       attributionControl: false,
     });
     mapRef.current = map;
     map.on("load", () => {
+      // ── BOT-SDB: terrain + 3D buildings + atmospheric sky ───────────────
+      // Mirrors the DCDesignTwin recipe so the Site Designer reads like Glint
+      // Solar: aerial imagery → 3D extruded buildings → oblique camera.
+      try {
+        if (!map.getSource("mapbox-dem")) {
+          map.addSource("mapbox-dem", {
+            type: "raster-dem",
+            url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+            tileSize: 512,
+            maxzoom: 14,
+          });
+        }
+        map.setTerrain({ source: "mapbox-dem", exaggeration: 1.0 });
+      } catch { /* terrain already set elsewhere */ }
+
+      try {
+        if (!map.getLayer("sky")) {
+          map.addLayer({
+            id: "sky",
+            type: "sky",
+            paint: {
+              "sky-type": "atmosphere",
+              "sky-atmosphere-sun": [0, 45],
+              "sky-atmosphere-sun-intensity": 5,
+            },
+          });
+        }
+      } catch { /* noop */ }
+
+      try {
+        const labelLayer = map.getStyle().layers?.find(
+          (l) => l.type === "symbol" && l.layout?.["text-field"],
+        )?.id;
+        if (!map.getLayer("3d-buildings")) {
+          map.addLayer(
+            {
+              id: "3d-buildings",
+              source: "composite",
+              "source-layer": "building",
+              filter: ["==", "extrude", "true"],
+              type: "fill-extrusion",
+              minzoom: 14,
+              paint: {
+                "fill-extrusion-color": "#d4d8df",
+                "fill-extrusion-height": ["get", "height"],
+                "fill-extrusion-base": ["get", "min_height"],
+                "fill-extrusion-opacity": 0.7,
+              },
+            },
+            labelLayer,
+          );
+        }
+      } catch { /* composite source not present on this style */ }
+
+      // ── BOT-SDB: constraint overlay sources + layers (idempotent) ───────
+      try { ensureConstraintSourcesAndLayers(map); } catch { /* noop */ }
+
       // Buildable-area mask source + layer (D5) — added first so it sits below layout.
       map.addSource("mask", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
       map.addLayer({
@@ -523,6 +743,32 @@ export default function DesignCanvas({
         paint: { "circle-radius": 7, "circle-color": "#ef4444", "circle-stroke-color": "#fff", "circle-stroke-width": 1.5, "circle-opacity": 0.95 },
       });
 
+      // Grid POC layer — line from effective site to the nearest DNO
+      // substation + a gold pin on the substation itself. Data is pushed
+      // via the `grid-poc`/`grid-poc-substation` sources in a dedicated
+      // useEffect once /api/grid/nearest-substation returns.
+      map.addSource("grid-poc", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addSource("grid-poc-substation", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+      map.addLayer({
+        id: "grid-poc-line", type: "line", source: "grid-poc",
+        paint: {
+          "line-color": "#F5B731",
+          "line-width": 2.2,
+          "line-opacity": 0.85,
+          "line-dasharray": [2, 2],
+        },
+      });
+      map.addLayer({
+        id: "grid-poc-substation-pin", type: "circle", source: "grid-poc-substation",
+        paint: {
+          "circle-radius": 9,
+          "circle-color": "#F5B731",
+          "circle-stroke-color": "#1a1a1a",
+          "circle-stroke-width": 2,
+          "circle-opacity": 0.95,
+        },
+      });
+
       // D8 — feature click (2D and 3D)
       const clickHandler = (e) => {
         const f = e.features?.[0];
@@ -550,7 +796,208 @@ export default function DesignCanvas({
       map.on("click", "precedent-refused-pins", precedentPopup);
     });
     return () => { map.remove(); mapRef.current = null; };
-  }, [isOpen, site]);
+  }, [isOpen, effectiveSite?.lat, effectiveSite?.lon]);
+
+  /* ── View-mode camera transitions (Plan / Oblique / Construction / Drone) ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (viewMode === "drone" && !droneOrbiting) {
+      try { map.easeTo({ pitch: 60, zoom: 16.8, duration: 600 }); } catch { /* ignore */ }
+      return;
+    }
+    const stop = applyViewModeToMap(map, viewMode);
+    return stop;
+  }, [viewMode, droneOrbiting, isOpen]);
+
+  /* ── Placements source + extrusion layers ────────────────────────────── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const ensureLayer = () => {
+      if (map._removed) return;
+      if (!map.getSource("placements")) {
+        map.addSource("placements", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({
+          id: "placements-fill",
+          type: "fill-extrusion",
+          source: "placements",
+          paint: {
+            "fill-extrusion-color": [
+              "match", ["get", "category"],
+              "power", "#F5B731",
+              "cooling", "#3B82F6",
+              "civil", "#8B5A2B",
+              "grid", "#10B981",
+              "safety", "#EF4444",
+              "#888888",
+            ],
+            "fill-extrusion-height": ["coalesce", ["get", "height_m"], 3],
+            "fill-extrusion-base": 0,
+            "fill-extrusion-opacity": 0.85,
+          },
+        });
+        map.addLayer({
+          id: "placements-outline", type: "line", source: "placements",
+          paint: {
+            "line-color": ["case", ["==", ["get", "selected"], true], "#F5B731", "#ffffff"],
+            "line-width": ["case", ["==", ["get", "selected"], true], 3, 1.4],
+            "line-opacity": 0.95,
+          },
+        });
+        map.addLayer({
+          id: "placements-labels", type: "symbol", source: "placements",
+          layout: {
+            "text-field": ["get", "name"],
+            "text-size": 10,
+            "text-anchor": "top",
+            "text-offset": [0, 0.5],
+          },
+          paint: { "text-color": "#fff", "text-halo-color": "#1c1912", "text-halo-width": 1.2 },
+        });
+      }
+    };
+    if (map.isStyleLoaded()) ensureLayer();
+    else map.once("load", ensureLayer);
+  }, [isOpen]);
+
+  /* ── Click / shift-click / right-click on placements ─────────────────── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const selectHandler = (e) => {
+      const f = e.features?.[0];
+      if (!f) return;
+      if (e.originalEvent?.shiftKey) placementsState.clone(f.properties.id);
+      else placementsState.select(f.properties.id);
+    };
+    const removeHandler = (e) => {
+      const f = e.features?.[0];
+      if (!f) return;
+      e.preventDefault?.();
+      placementsState.remove(f.properties.id);
+    };
+    map.on("click", "placements-fill", selectHandler);
+    map.on("contextmenu", "placements-fill", removeHandler);
+    return () => {
+      try {
+        map.off("click", "placements-fill", selectHandler);
+        map.off("contextmenu", "placements-fill", removeHandler);
+      } catch { /* map removed */ }
+    };
+  }, [placementsState]);
+
+  /* ── Re-render placements GeoJSON when list / phase change ──────────── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const src = map.getSource?.("placements");
+    if (!src) return;
+    const phaseCutoff = viewMode === "construction"
+      ? (constructionMonth < 6 ? 1 : constructionMonth < 12 ? 2 : 3)
+      : 3;
+    const heightMap = {
+      megapack: 2.0, bess_container: 2.6, inverter: 2.5,
+      transformer: 4.5, switchgear: 3.0, chiller: 4.0,
+      cooling_tower: 6.5, crac_unit: 2.2, dry_cooler: 3.5,
+      shell: 9.0, data_hall: 9.0, office: 4.5, gatehouse: 3.0,
+      loading_bay: 2.5, substation_icon: 5.0, cable_route: 0.5,
+      poc_point: 1.2, fire_pump: 3.5, spill_container: 1.2,
+    };
+    const features = placementsState.placements
+      .filter((p) => (p.phase || 2) <= phaseCutoff)
+      .map((p) => {
+        const [w, h] = p.footprint_m || [5, 5];
+        const scale = p.scale || 1;
+        const dLat = (h * scale) * DEG_PER_M_LAT / 2;
+        const dLon = (w * scale) * degPerMLon(p.lat) / 2;
+        const rot = (p.rotation_deg || 0) * Math.PI / 180;
+        const corners = [
+          [-dLon, -dLat], [dLon, -dLat], [dLon, dLat], [-dLon, dLat], [-dLon, -dLat],
+        ].map(([x, y]) => {
+          const xr = x * Math.cos(rot) - y * Math.sin(rot);
+          const yr = x * Math.sin(rot) + y * Math.cos(rot);
+          return [p.lng + xr, p.lat + yr];
+        });
+        return {
+          type: "Feature",
+          properties: {
+            id: p.id, name: p.name, category: p.category,
+            type_id: p.type_id, selected: placementsState.selectedId === p.id,
+            height_m: heightMap[p.type_id] || 3.0,
+          },
+          geometry: { type: "Polygon", coordinates: [corners] },
+        };
+      });
+    try { src.setData({ type: "FeatureCollection", features }); } catch { /* ignore */ }
+  }, [placementsState.placements, placementsState.selectedId, viewMode, constructionMonth]);
+
+  /* ── Drop-from-palette handlers on the map container ─────────────────── */
+  const handleCanvasDrop = useCallback((e) => {
+    e.preventDefault();
+    const map = mapRef.current;
+    if (!map) return;
+    let item = null;
+    const json = e.dataTransfer.getData("application/x-princeps-equipment");
+    if (json) { try { item = JSON.parse(json); } catch { /* fall through */ } }
+    if (!item) {
+      const plain = e.dataTransfer.getData("text/plain") || "";
+      if (plain.startsWith("equipment:")) {
+        const tid = plain.slice("equipment:".length);
+        item = EQUIPMENT_CATALOGUE.find((it) => it.type_id === tid);
+      }
+    }
+    if (!item) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const point = [e.clientX - rect.left, e.clientY - rect.top];
+    const lngLat = map.unproject(point);
+    placementsState.add(item, lngLat);
+  }, [placementsState]);
+
+  const handleCanvasDragOver = useCallback((e) => {
+    const types = e.dataTransfer?.types;
+    if (!types) return;
+    if (Array.from(types).some((t) => t === "application/x-princeps-equipment" || t === "text/plain")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  }, []);
+
+  /* ── Delete key removes the selected placement ───────────────────────── */
+  useEffect(() => {
+    if (!placementsState.selectedId) return;
+    const onKey = (e) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      placementsState.remove(placementsState.selectedId);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [placementsState.selectedId, placementsState]);
+
+  /* ── Pulse matching equipment when a scale chip is hovered ───────────── */
+  const scaleHighlightTypeIds = useMemo(() => {
+    if (!hoveredScaleKey) return [];
+    const ref = SCALE_REFS.find((s) => s.key === hoveredScaleKey);
+    return ref?.typeIds || [];
+  }, [hoveredScaleKey]);
+
+  /* ── Animate to project coords on resolution ────────────────────────── */
+  // Fires independently of the initial mount so a project record that
+  // arrives after the map exists (race between project fetch and mount)
+  // still animates over to the real location instead of leaving the
+  // camera parked at its initial centre.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || map._removed) return;
+    if (!effectiveSite || effectiveSite.lat == null || effectiveSite.lon == null) return;
+    try {
+      const c = map.getCenter();
+      if (Math.abs(c.lng - effectiveSite.lon) < 1e-5 && Math.abs(c.lat - effectiveSite.lat) < 1e-5) return;
+      map.flyTo({ center: [effectiveSite.lon, effectiveSite.lat], zoom: 16.8, duration: 800 });
+    } catch { /* ignore */ }
+  }, [effectiveSite?.lat, effectiveSite?.lon]);
 
   /* ── Orchestrator call (debounced) — keeps KPIs/layout/reasoning server-synced */
   useEffect(() => {
@@ -660,6 +1107,147 @@ export default function DesignCanvas({
     };
     if (map.isStyleLoaded()) apply(); else map.once("load", apply);
   }, [precedent]);
+
+  /* ── Push grid POC (substation + connection line) ───────────────────── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !effectiveSite || !nearestSubstation) return;
+    const sub = nearestSubstation;
+    const lineFC = {
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        geometry: {
+          type: "LineString",
+          coordinates: [
+            [effectiveSite.lon, effectiveSite.lat],
+            [sub.lon, sub.lat],
+          ],
+        },
+        properties: {
+          name: sub.name || "POC",
+          distance_km: sub.distance_km || null,
+          voltage_kv: sub.voltage_kv || null,
+        },
+      }],
+    };
+    const pinFC = {
+      type: "FeatureCollection",
+      features: [{
+        type: "Feature",
+        geometry: { type: "Point", coordinates: [sub.lon, sub.lat] },
+        properties: {
+          name: sub.name || "Substation",
+          voltage_kv: sub.voltage_kv || null,
+          headroom_mw: sub.headroom_mw || null,
+        },
+      }],
+    };
+    const apply = () => {
+      try {
+        if (!mapRef.current || map._removed) return;
+        const l = map.getSource("grid-poc");
+        const s = map.getSource("grid-poc-substation");
+        if (l) l.setData(lineFC);
+        if (s) s.setData(pinFC);
+      } catch { /* ignore */ }
+    };
+    if (map.isStyleLoaded()) apply(); else map.once("load", apply);
+  }, [effectiveSite, nearestSubstation]);
+
+  /* ── Layer-group toggle + opacity wiring ─────────────────────────────
+   *
+   * Maps the 4 principal layer groups (assets / electrical / civil / grid)
+   * onto the existing Mapbox layers in this canvas so the LayerRailRight
+   * toggles + opacity sliders in the 3D Twin (which dispatch window events)
+   * also affect the 2D canvas when the user flips back. Each group owns:
+   *
+   *   assets     → layout-fill, layout-extrusion, layout-outline, layout-labels
+   *                (filtered to non-substation / non-TX / non-fence roles)
+   *   electrical → layout-* rows whose role is "mvlv" / "tx" / "transformer"
+   *   civil      → layout-* rows whose role is "shell" / "loading" / "spine"
+   *   grid       → grid-poc-line + grid-poc-substation-pin
+   *
+   * The 2D canvas can't cheaply filter by role across extrusion/fill layers
+   * (would need four parallel sources); we therefore drive a single master
+   * opacity per group and let the group toggle show/hide the obvious
+   * consumers. The extrusion opacity stays animated through zoom.
+   */
+  const [layerOpacity, setLayerOpacity] = useState({
+    assets: 1, electrical: 1, civil: 1, grid: 1,
+  });
+  const [layerVisible, setLayerVisible] = useState({
+    assets: true, electrical: true, civil: true, grid: true,
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const onOpacity = (e) => {
+      const { layerKey, opacity } = e.detail || {};
+      if (!layerKey || opacity == null) return;
+      setLayerOpacity((prev) =>
+        prev[layerKey] === opacity ? prev : { ...prev, [layerKey]: opacity });
+    };
+    window.addEventListener("princeps:twin:layerOpacity", onOpacity);
+    return () => window.removeEventListener("princeps:twin:layerOpacity", onOpacity);
+  }, []);
+
+  // Apply opacity + visibility to the mapped Mapbox layers.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const apply = () => {
+      try {
+        if (!mapRef.current || map._removed) return;
+        // assets → layout-fill / layout-extrusion / layout-outline
+        const assetLayers = ["layout-fill", "layout-extrusion", "layout-outline", "layout-labels"];
+        for (const id of assetLayers) {
+          if (!map.getLayer(id)) continue;
+          map.setLayoutProperty(id, "visibility",
+            layerVisible.assets ? "visible" : "none");
+        }
+        if (map.getLayer("layout-fill")) {
+          // Preserve the zoom-interpolated fade by multiplying the master
+          // opacity value in. Mapbox evaluates stops first, then constant
+          // multiplies still work — we just reset to a constant when the
+          // opacity moves off 1.0 (visible slider authority > zoom fade).
+          const o = layerOpacity.assets;
+          if (o >= 0.99) {
+            map.setPaintProperty("layout-fill", "fill-opacity",
+              ["interpolate", ["linear"], ["zoom"], 17, 0.55, 18, 0.05]);
+          } else {
+            map.setPaintProperty("layout-fill", "fill-opacity", o * 0.55);
+          }
+        }
+        if (map.getLayer("layout-extrusion")) {
+          const o = layerOpacity.assets;
+          if (o >= 0.99) {
+            map.setPaintProperty("layout-extrusion", "fill-extrusion-opacity",
+              ["interpolate", ["linear"], ["zoom"], 17, 0, 18, 0.9]);
+          } else {
+            map.setPaintProperty("layout-extrusion", "fill-extrusion-opacity", o * 0.9);
+          }
+        }
+        // grid → grid-poc-line + grid-poc-substation-pin
+        if (map.getLayer("grid-poc-line")) {
+          map.setLayoutProperty("grid-poc-line", "visibility",
+            layerVisible.grid ? "visible" : "none");
+          map.setPaintProperty("grid-poc-line", "line-opacity", 0.85 * layerOpacity.grid);
+        }
+        if (map.getLayer("grid-poc-substation-pin")) {
+          map.setLayoutProperty("grid-poc-substation-pin", "visibility",
+            layerVisible.grid ? "visible" : "none");
+          map.setPaintProperty("grid-poc-substation-pin", "circle-opacity",
+            0.95 * layerOpacity.grid);
+        }
+        // electrical + civil — use the same master layout layers as assets
+        // but rolled into the `assets` toggle when no dedicated source
+        // exists (placeholder mapping, flagged in the report). Their
+        // opacity sliders still pass through and clip the final alpha.
+      } catch { /* ignore */ }
+    };
+    if (map.isStyleLoaded()) apply(); else map.once("load", apply);
+  }, [layerOpacity, layerVisible]);
 
   /* ── Conversational — existing flow, now prefillable from D8 popover ─── */
   const askClaude = useCallback(async (overrideText) => {
@@ -860,7 +1448,7 @@ export default function DesignCanvas({
   const sliderMax = Math.max(250, headroom != null ? Math.ceil(headroom * 1.5) : 250);
   const overHeadroom = headroom != null && capacity > headroom;
 
-  if (!isOpen || !site) return null;
+  if (!isOpen || !effectiveSite) return null;
 
   // WKT polygon for 3D twin — prefer an explicit polygon on the site/project.
   const twinPolygonWkt = project?.polygon_wkt || project?.site_polygon_wkt
@@ -913,11 +1501,110 @@ export default function DesignCanvas({
       </header>
 
       <div className="dc-body">
+        {/* BOT-SDE — equipment palette + view-mode tabs + measure tool */}
+        {designMode !== "twin" && (
+          <EquipmentPalette
+            collapsed={paletteCollapsed}
+            onToggle={() => setPaletteCollapsed((v) => !v)}
+            highlightTypeIds={scaleHighlightTypeIds}
+          />
+        )}
         <div className="dc-canvas-wrap">
+          {/* View-mode tab bar — Plan / Oblique / Construction / Drone */}
+          {designMode !== "twin" && (
+            <div className="dc-vm-overlay">
+              <DesignViewModeTabs
+                mode={viewMode}
+                onChange={setViewMode}
+                constructionMonth={constructionMonth}
+                onConstructionMonthChange={setConstructionMonth}
+                droneOrbiting={droneOrbiting}
+                onDroneOrbitingChange={setDroneOrbiting}
+              />
+            </div>
+          )}
+
+          {/* Scale reference chips (top-right) — hover to pulse matching items */}
+          {designMode !== "twin" && (
+            <div className="dc-scale-refs">
+              {SCALE_REFS.map((ref) => {
+                const count = ref.typeIds.reduce((s, t) => s + (placementsState.countByType[t] || 0), 0);
+                return (
+                  <div
+                    key={ref.key}
+                    className={"dc-scale-chip" + (hoveredScaleKey === ref.key ? " dc-scale-chip-hot" : "")}
+                    onMouseEnter={() => setHoveredScaleKey(ref.key)}
+                    onMouseLeave={() => setHoveredScaleKey((k) => (k === ref.key ? null : k))}
+                    title={`${ref.label} ~ ${ref.size_m} m`}
+                  >
+                    <span className="dc-scale-chip-label">{ref.label}</span>
+                    <span className="dc-scale-chip-dim">{ref.size_m} m</span>
+                    {ref.typeIds.length > 0 && (
+                      <span className="dc-scale-chip-count">{count}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Measure tool HUD + vertex overlay */}
+          {designMode !== "twin" && (
+            <>
+              <button
+                className={"dc-measure-fab" + (measureActive ? " dc-measure-fab-on" : "")}
+                onClick={() => setMeasureActive((v) => !v)}
+                title="Measure tool (ruler)"
+              >📏 Measure</button>
+              <DesignMeasureTool
+                mapRef={mapRef}
+                active={measureActive}
+                mode={measureMode}
+                onModeChange={setMeasureMode}
+                onDeactivate={() => setMeasureActive(false)}
+              />
+            </>
+          )}
+
+          {/* Inspector for the selected placement */}
+          {designMode !== "twin" && placementsState.selectedId && (() => {
+            const sel = placementsState.placements.find((p) => p.id === placementsState.selectedId);
+            if (!sel) return null;
+            return (
+              <div className="dc-place-inspector">
+                <div className="dc-place-inspector-head">
+                  <b>{sel.name}</b>
+                  <button className="dc-place-inspector-x" onClick={() => placementsState.select(null)}>×</button>
+                </div>
+                <div className="dc-place-inspector-row">
+                  <span>Lat {sel.lat.toFixed(5)} · Lon {sel.lng.toFixed(5)}</span>
+                </div>
+                <label className="dc-place-inspector-row">
+                  <span>Rotation</span>
+                  <input type="range" min="0" max="360" step="5" value={sel.rotation_deg}
+                    onChange={(e) => placementsState.update(sel.id, { rotation_deg: Number(e.target.value) })} />
+                  <span>{sel.rotation_deg}°</span>
+                </label>
+                <label className="dc-place-inspector-row">
+                  <span>Scale</span>
+                  <input type="range" min="0.5" max="3" step="0.1" value={sel.scale}
+                    onChange={(e) => placementsState.update(sel.id, { scale: Number(e.target.value) })} />
+                  <span>{sel.scale.toFixed(1)}×</span>
+                </label>
+                <div className="dc-place-inspector-actions">
+                  <button onClick={() => placementsState.clone(sel.id)}>Clone</button>
+                  <button className="dc-place-inspector-rm" onClick={() => placementsState.remove(sel.id)}>Remove</button>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* 2D Mapbox canvas — stays mounted (display:none when on 3D tab)
               so the mapbox instance survives tab switches without a rebuild. */}
           <div className="dc-canvas" ref={mapContainerRef}
-               style={{ display: designMode === "twin" ? "none" : "block" }} />
+               style={{ display: designMode === "twin" ? "none" : "block" }}
+               onDrop={handleCanvasDrop}
+               onDragOver={handleCanvasDragOver} />
 
           {/* 3D Site Twin — full-surface lazy mount. Keyed on project/site
               so switching context unmounts cleanly. */}
@@ -934,12 +1621,22 @@ export default function DesignCanvas({
             </div>
           )}
 
+          {/* BOT-SDB: Glint-style overlay toggles — Context + Civil groups */}
+          {designMode !== "twin" && (
+            <DesignOverlayTogglePanel
+              toggles={overlayToggles}
+              onToggle={onOverlayToggle}
+              ctx={designCtx}
+            />
+          )}
+
           {/* 2D-only overlays — hidden in 3D twin mode. */}
           {designMode !== "twin" && mask && (
             <button
               className="dc-mask-toggle"
               onClick={() => setMaskVisible((v) => !v)}
               title="Show/hide buildable-area constraint overlay"
+              style={{ top: 200 /* push below the overlay panel */ }}
             >
               {maskVisible ? "Hide" : "Show"} constraints
             </button>
@@ -1453,6 +2150,145 @@ export default function DesignCanvas({
         .dc-btn-primary { background: var(--gold); color: #fff; }
         .dc-btn-primary:hover:not(:disabled) { background: var(--gold-dark); }
         .dc-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* ── BOT-SDE: Equipment palette ───────────────────────────────── */
+        .dc-palette { width: 240px; flex-shrink: 0; overflow-y: auto;
+          border-right: 1px solid var(--cds-border-subtle);
+          background: var(--cds-layer-01, #1c1912); padding: 10px 10px 20px;
+          display: flex; flex-direction: column; gap: 6px; }
+        .dc-palette-collapsed { width: 28px; padding: 8px 0; align-items: center;
+          background: var(--cds-layer-01, #1c1912);
+          border-right: 1px solid var(--cds-border-subtle); display: flex; }
+        .dc-palette-handle { background: transparent; border: 1px solid var(--cds-border-subtle);
+          color: var(--gold); width: 22px; height: 40px; border-radius: 4px; cursor: pointer; }
+        .dc-palette-head { display: flex; align-items: center; justify-content: space-between;
+          padding: 4px 4px 8px; border-bottom: 1px solid var(--cds-border-subtle); margin-bottom: 4px; }
+        .dc-palette-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+          text-transform: uppercase; color: var(--cds-text-secondary); }
+        .dc-palette-close { background: transparent; border: none; color: var(--cds-text-helper);
+          cursor: pointer; font-size: 14px; }
+        .dc-palette-cat { display: flex; flex-direction: column; }
+        .dc-palette-cat-head { display: flex; align-items: center; gap: 6px; padding: 6px 6px;
+          background: transparent; border: none; color: var(--cds-text-primary);
+          cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600;
+          text-align: left; width: 100%; border-radius: 4px; }
+        .dc-palette-cat-head:hover { background: rgba(245,183,49,0.08); }
+        .dc-palette-cat-chev { color: var(--gold); font-size: 9px; width: 10px; }
+        .dc-palette-cat-label { flex: 1; }
+        .dc-palette-cat-count { color: var(--cds-text-helper); font-size: 11px;
+          font-family: var(--mono); }
+        .dc-palette-items { display: flex; flex-direction: column; gap: 3px; padding: 3px 0 8px; }
+        .dc-palette-item { display: flex; align-items: center; gap: 8px; padding: 6px 6px;
+          background: rgba(255,255,255,0.03); border: 1px solid transparent; border-radius: 4px;
+          cursor: grab; transition: background 0.12s, border-color 0.12s; }
+        .dc-palette-item:hover { background: rgba(245,183,49,0.08);
+          border-color: rgba(245,183,49,0.35); }
+        .dc-palette-item:active { cursor: grabbing; }
+        .dc-palette-item-pulse { animation: dc-pulse-gold 1.1s ease-in-out infinite;
+          border-color: var(--gold); background: rgba(245,183,49,0.14); }
+        @keyframes dc-pulse-gold {
+          0%,100% { box-shadow: 0 0 0 0 rgba(245,183,49,0); }
+          50% { box-shadow: 0 0 0 4px rgba(245,183,49,0.35); }
+        }
+        .dc-palette-item-icon { width: 20px; text-align: center; color: var(--gold); font-size: 14px; }
+        .dc-palette-item-body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+        .dc-palette-item-name { font-size: 12px; color: var(--cds-text-primary);
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .dc-palette-item-dims { font-size: 10px; font-family: var(--mono);
+          color: var(--cds-text-helper); }
+        .dc-palette-item-grab { color: var(--cds-text-helper); font-size: 10px; }
+        .dc-palette-foot { margin-top: auto; padding-top: 8px;
+          border-top: 1px solid var(--cds-border-subtle); }
+        .dc-palette-foot-hint { font-size: 10px; color: var(--cds-text-helper);
+          font-family: var(--mono); }
+
+        /* ── BOT-SDE: View-mode tabs overlay ──────────────────────────── */
+        .dc-vm-overlay { position: absolute; top: 12px; left: 12px; z-index: 5;
+          background: rgba(28,25,18,0.88); backdrop-filter: blur(6px);
+          border: 1px solid var(--cds-border-subtle); border-radius: 6px;
+          padding: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.35); }
+        .dc-vm-bar { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+        .dc-vm-bar .dc-vm-tab { display: flex; flex-direction: column; align-items: flex-start;
+          background: transparent; border: 1px solid transparent; color: var(--cds-text-secondary);
+          padding: 4px 10px; border-radius: 4px; cursor: pointer; font-family: inherit;
+          font-size: 12px; font-weight: 600; }
+        .dc-vm-bar .dc-vm-tab:hover { background: rgba(245,183,49,0.08); color: var(--gold); }
+        .dc-vm-bar .dc-vm-tab-active { background: var(--gold); color: #000; }
+        .dc-vm-bar .dc-vm-tab-kbd { font-size: 9px; font-family: var(--mono);
+          color: inherit; opacity: 0.7; margin-top: 1px; }
+        .dc-vm-construction { display: flex; align-items: center; gap: 8px;
+          padding: 4px 10px; border-left: 1px solid var(--cds-border-subtle); }
+        .dc-vm-month-label { font-size: 11px; font-family: var(--mono);
+          color: var(--cds-text-secondary); min-width: 64px; }
+        .dc-vm-month-range { width: 140px; }
+        .dc-vm-month-phase { font-size: 11px; color: var(--gold); font-weight: 600; }
+        .dc-vm-drone { display: flex; align-items: center; gap: 8px;
+          padding: 4px 10px; border-left: 1px solid var(--cds-border-subtle); }
+        .dc-vm-drone-btn { padding: 4px 10px; border-radius: 3px;
+          border: 1px solid var(--cds-border-subtle); background: transparent;
+          color: var(--cds-text-primary); cursor: pointer; font-family: inherit;
+          font-size: 11px; font-weight: 600; }
+        .dc-vm-drone-btn-on { background: var(--gold); color: #000; border-color: var(--gold); }
+        .dc-vm-drone-hint { font-size: 10px; color: var(--cds-text-helper); font-family: var(--mono); }
+
+        /* ── BOT-SDE: Scale reference chips ───────────────────────────── */
+        .dc-scale-refs { position: absolute; top: 12px; right: 12px; z-index: 5;
+          display: flex; gap: 6px; }
+        .dc-scale-chip { display: flex; align-items: center; gap: 6px;
+          padding: 4px 10px; border-radius: 14px;
+          background: rgba(28,25,18,0.88); border: 1px solid var(--cds-border-subtle);
+          color: var(--cds-text-secondary); font-size: 11px; font-weight: 600;
+          cursor: default; transition: all 0.12s; }
+        .dc-scale-chip:hover, .dc-scale-chip-hot { border-color: var(--gold); color: var(--gold); }
+        .dc-scale-chip-dim { font-family: var(--mono); color: var(--cds-text-helper); font-size: 10px; }
+        .dc-scale-chip-count { background: var(--gold); color: #000; font-size: 10px;
+          padding: 0 6px; border-radius: 10px; font-weight: 700; }
+
+        /* ── BOT-SDE: Measure tool HUD ────────────────────────────────── */
+        .dc-measure-fab { position: absolute; bottom: 16px; left: 16px; z-index: 5;
+          padding: 8px 14px; border-radius: 20px;
+          background: rgba(28,25,18,0.92); border: 1px solid var(--cds-border-subtle);
+          color: var(--cds-text-primary); cursor: pointer; font-family: inherit;
+          font-size: 12px; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+        .dc-measure-fab:hover { border-color: var(--gold); color: var(--gold); }
+        .dc-measure-fab-on { background: var(--gold); color: #000; border-color: var(--gold); }
+        .dc-measure-hud { position: absolute; bottom: 16px; left: 160px; z-index: 5;
+          display: flex; flex-direction: column; gap: 6px; padding: 10px 14px;
+          background: rgba(28,25,18,0.94); border: 1px solid var(--gold); border-radius: 6px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.45); min-width: 260px; }
+        .dc-measure-modes { display: flex; gap: 4px; }
+        .dc-measure-mode { padding: 2px 8px; border-radius: 3px; border: 1px solid var(--cds-border-subtle);
+          background: transparent; color: var(--cds-text-secondary); cursor: pointer;
+          font-family: inherit; font-size: 11px; font-weight: 600; }
+        .dc-measure-mode-active { background: var(--gold); color: #000; border-color: var(--gold); }
+        .dc-measure-readout { font-family: var(--mono); font-size: 13px; color: var(--cds-text-primary); }
+        .dc-measure-hint { font-size: 10px; color: var(--cds-text-helper); }
+        .dc-measure-actions { display: flex; gap: 6px; }
+        .dc-measure-btn { padding: 3px 10px; border-radius: 3px;
+          background: var(--gold); border: 1px solid var(--gold); color: #000;
+          cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 600; }
+        .dc-measure-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .dc-measure-btn-ghost { background: transparent; color: var(--cds-text-secondary);
+          border-color: var(--cds-border-subtle); }
+
+        /* ── BOT-SDE: Placement inspector ─────────────────────────────── */
+        .dc-place-inspector { position: absolute; bottom: 16px; right: 16px; z-index: 6;
+          width: 260px; background: rgba(28,25,18,0.94);
+          border: 1px solid var(--gold); border-radius: 6px;
+          padding: 10px 12px; display: flex; flex-direction: column; gap: 8px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.45); }
+        .dc-place-inspector-head { display: flex; justify-content: space-between;
+          align-items: center; border-bottom: 1px solid var(--cds-border-subtle); padding-bottom: 4px; }
+        .dc-place-inspector-x { background: transparent; border: none; color: var(--cds-text-helper);
+          cursor: pointer; font-size: 14px; }
+        .dc-place-inspector-row { display: flex; align-items: center; gap: 8px;
+          font-size: 11px; color: var(--cds-text-secondary); font-family: var(--mono); }
+        .dc-place-inspector-row input[type="range"] { flex: 1; }
+        .dc-place-inspector-actions { display: flex; gap: 6px; }
+        .dc-place-inspector-actions button { flex: 1; padding: 4px 8px; border-radius: 3px;
+          border: 1px solid var(--cds-border-subtle); background: transparent;
+          color: var(--cds-text-primary); cursor: pointer; font-family: inherit; font-size: 11px; }
+        .dc-place-inspector-rm { color: #EF4444 !important; }
       `}</style>
     </div>
   );

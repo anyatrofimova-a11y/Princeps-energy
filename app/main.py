@@ -112,6 +112,15 @@ async def lifespan(_app: FastAPI):
     # Teardown
     from utils.graph_topology import close_driver as neo4j_close
     await neo4j_close()
+    # Stop the Magritte cadence scheduler before tearing down the pool
+    # so any in-flight jobs get a chance to release their connections.
+    try:
+        from app.startup import get_connector_scheduler
+        cs = get_connector_scheduler()
+        if cs is not None:
+            cs.stop()
+    except Exception as _e:
+        log.warning("connector_scheduler stop on lifespan exit failed: %s", _e)
     await pool.close()
 
 
@@ -147,6 +156,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+# License Guard — hard-blocks NC-licensed model artifacts on commercial endpoints.
+from app.license_guard import LicenseGuardMiddleware  # noqa: E402
+app.add_middleware(LicenseGuardMiddleware)
 
 # Register audit-log middleware (Task #13) — opt-in via PRINCEPS_AUDIT_ENABLED.
 try:
@@ -226,7 +239,7 @@ async def readiness_endpoint():
 # ---------------------------------------------------------------------------
 # Register all routers
 # ---------------------------------------------------------------------------
-from app.graph import router as graph_router  # noqa: E402
+from app.graph_neo4j import router as graph_router  # noqa: E402
 
 _ROUTER_MODULES = [
     "alerts",
@@ -238,7 +251,7 @@ _ROUTER_MODULES = [
     "assessments", "workflows", "auth",
     "cim",
     "consultees",
-    "datacentre", "reports", "reports_fva",
+    "datacentre", "reports", "reports_fva", "dc_reports",
     "hardware",
     "teaser",
     "dc_planner", "dc_ops", "eurosat", "land", "projects", "finance",
@@ -262,6 +275,8 @@ _ROUTER_MODULES = [
     "forecast",
     "engineering_primitives",
     "connectors",
+    "connector_scheduler",  # APScheduler cadence orchestration for Magritte
+    "datasets",     # Magritte dataset registry — princeps_datasets + lineage
     "exports",
     "twin_assets",
     "twin_dynamic",
@@ -274,16 +289,49 @@ _ROUTER_MODULES = [
     "enterprise_admin",
     "substrate",
     "ea_layers",
+    "land_rights",
+    "heritage_nature",
+    "scan",
+    "parcel_enrich",
     "lccc",
     "constraints",
     "project_memo",
     "utilities",
     "dno_engagement_workflow",
     "dno_engagement",
+    "portfolio_asset_exposure",
+    "asset_intel",
+    "industrial",  # Swarm 6 — UK Industrial Base Graph
+    "actions",     # Swarm 8 — typed Action Registry REST surface
+    "workshop",    # Workshop shell — /api/workshop/object + /api/workshop/tree
+    "dc_design",   # D1 — DC placement constraints (OSM forbidden zones)
+    "grid_overlay", # D3 — TEC/ECR/REPD GeoJSON + lines + project-info cards
+    "graph",        # Graph shadow ontology MVP — recursive-CTE Cypher shim
     "workshop_modules",  # Workshop Module Builder MVP — AI-composed manifests
+    "bess_live",    # Live BESS revenue dashboard — WS + REST + Modo overlay
+    "council",      # Agentic Council — GRID + BESS + DC pods + Adjudicator (SSE)
+    "mission_control_v2",  # Composed Workshop module — ontology-first home screen
+    "objects",      # Typed Object Page generator — /api/objects/:type[/:id]
+    "lineage",      # Foundry-style provenance: connector → table → class → object
+    "branches",     # Foundry-style fork-and-merge — what-if scenarios on objects
+    "notes",        # Foundry Notepad — markdown notes pinned to objects
+    "pending_actions",  # Action approval workflow — preview → approve / reject
+    "solutions",    # Foundry Marketplace — installable Slate dashboards
+    "object_sets",  # ObjectSet primitives — saved typed queries with set algebra
+    "object_events",  # SSE bridge over Postgres LISTEN/NOTIFY — live widgets
+    "pipelines",    # Pipeline Builder — declarative DAG executor
+    "asset_health", # Per-RID weighted 0-100 health score with driver provenance
+    "sso",          # OIDC federated identity (Auth0/Keycloak/Google/Entra/Okta)
+    "timeseries",   # Time-series store — sensor history + binned aggregations
 ]
 
 app.include_router(graph_router)
+
+# BOT-LOG-AUTH: Mount the login router used by the React login page.
+# Kept separate from app/routers/auth.py (DB-backed v1 auth at /api/v1/auth)
+# so the new in-memory allow-list flow can live cleanly at /api/auth/*.
+from app.routers import auth_login as auth_router  # noqa: E402
+app.include_router(auth_router.router, prefix="/api/auth", tags=["auth"])
 
 import importlib  # noqa: E402
 
@@ -292,6 +340,14 @@ for _mod_name in _ROUTER_MODULES:
     try:
         _mod = importlib.import_module(f"app.routers.{_mod_name}")
         app.include_router(_mod.router)
+        # Side-routers: any module exposing additional `*_router` attrs gets
+        # them included automatically. Used by `objects.py` for the spatial
+        # geo router that must live under a different prefix.
+        for _attr in dir(_mod):
+            if _attr != "router" and _attr.endswith("_router"):
+                _side = getattr(_mod, _attr, None)
+                if _side is not None and hasattr(_side, "routes"):
+                    app.include_router(_side)
     except Exception as _exc:
         _skipped.append((_mod_name, f"{type(_exc).__name__}: {_exc}"))
         log.warning("router %s skipped: %s", _mod_name, _exc)
@@ -331,6 +387,18 @@ try:
               name="design-exports")
 except Exception as _e:
     log.warning("design_exports static mount failed: %s", _e)
+
+# Twin geometry assets (IFC + glTF) served under /static/cad and /static/glb.
+_CAD_DIR = pathlib.Path(__file__).resolve().parent.parent / "static" / "cad"
+_GLB_DIR = pathlib.Path(__file__).resolve().parent.parent / "static" / "glb"
+_CAD_DIR.mkdir(parents=True, exist_ok=True)
+_GLB_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    from starlette.staticfiles import StaticFiles as _SF
+    app.mount("/static/cad", _SF(directory=_CAD_DIR), name="static-cad")
+    app.mount("/static/glb", _SF(directory=_GLB_DIR), name="static-glb")
+except Exception as _e:
+    log.warning("twin geometry static mounts failed: %s", _e)
 
     @app.get("/{full_path:path}")
     async def spa_fallback(full_path: str):

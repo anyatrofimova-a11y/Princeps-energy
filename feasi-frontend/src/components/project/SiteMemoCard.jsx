@@ -12,6 +12,27 @@ const VERDICT_COLOUR = { GO: GREEN, CAUTION: AMBER, "NO-GO": RED };
 
 export default function SiteMemoCard({ projectId }) {
   const { latest, past, loading, generating, progress, generate } = useSiteMemo(projectId);
+  const [expanded, setExpanded] = React.useState(false);
+  const [pdfBusy, setPdfBusy] = React.useState(false);
+
+  // Build a sensible PDF URL: prefer the URL the backend stamped on the
+  // memo when it rendered; otherwise hit the live download endpoint.
+  const pdfHref = latest?.pdf_url
+    || (latest?.memo_id && projectId
+        ? `/api/project/${encodeURIComponent(projectId)}/site-memo/pdf?memo_id=${encodeURIComponent(latest.memo_id)}`
+        : null);
+
+  const downloadPdf = async () => {
+    if (!pdfHref) return;
+    setPdfBusy(true);
+    try {
+      // window.open keeps the tab interactive; if the backend returns
+      // a non-pdf (e.g., 404 JSON), the new tab shows the error inline.
+      window.open(pdfHref, "_blank", "noopener,noreferrer");
+    } finally {
+      setPdfBusy(false);
+    }
+  };
 
   return (
     <section style={card}>
@@ -75,9 +96,79 @@ export default function SiteMemoCard({ projectId }) {
             <Headline label="DSCR" v={latest.financial_headline?.dscr?.toFixed(2) || "—"} />
           </div>
           <div style={{ display: "flex", gap: 10 }}>
-            <button style={ghostBtn}>Open full memo</button>
-            <button style={ghostBtn}>Download PDF ↗</button>
+            <button
+              style={ghostBtn}
+              onClick={() => setExpanded((e) => !e)}
+            >
+              {expanded ? "Hide full memo" : "Open full memo"}
+            </button>
+            <button
+              style={{ ...ghostBtn, opacity: pdfHref ? 1 : 0.5, cursor: pdfHref ? "pointer" : "not-allowed" }}
+              onClick={downloadPdf}
+              disabled={!pdfHref || pdfBusy}
+            >
+              {pdfBusy ? "Opening…" : "Download PDF ↗"}
+            </button>
           </div>
+
+          {expanded && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(15,19,24,0.08)" }}>
+              <MemoSection title="Key strengths" items={latest.key_strengths} />
+              <MemoSection title="Critical risks" items={latest.critical_risks} accent={RED} />
+              <MemoSection title="Next milestones" items={latest.next_milestones} accent={GREEN} />
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 12 }}>
+                <Pillar title="Financial">
+                  <Row k="NPV" v={`£${latest.financial_headline?.npv_gbp_m?.toFixed(1) ?? "—"}m`} />
+                  <Row k="IRR" v={`${latest.financial_headline?.irr_pct?.toFixed(1) ?? "—"}%`} />
+                  <Row k="DSCR" v={latest.financial_headline?.dscr?.toFixed(2) ?? "—"} />
+                </Pillar>
+                <Pillar title="Grid">
+                  <Row k="POC" v={latest.grid_headline?.poc ?? "—"} />
+                  <Row k="Firm" v={`${latest.grid_headline?.firm_mw ?? "—"} MW`} />
+                  <Row k="Timeline" v={`${latest.grid_headline?.timeline_months ?? "—"} mo`} />
+                </Pillar>
+                <Pillar title="Planning">
+                  <Row k="Approval" v={`${latest.planning_headline?.approval_pct ?? "—"}%`} />
+                  <Row k="LPA" v={latest.planning_headline?.lpa ?? "—"} />
+                  <Row k="Precedents" v={latest.planning_headline?.precedent_count ?? "—"} />
+                </Pillar>
+              </div>
+
+              {(latest.regulatory_flags || []).length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={eyebrow}>Regulatory flags</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+                    {latest.regulatory_flags.map((f, i) => (
+                      <span key={i} style={{
+                        fontSize: 11, padding: "3px 8px", borderRadius: 3,
+                        background: AMBER + "22", color: AMBER, fontWeight: 600,
+                      }}>{typeof f === "string" ? f : f?.label || f?.code}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(latest.source_evidence || []).length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={eyebrow}>Source evidence</div>
+                  <ul style={{ margin: "6px 0 0", padding: "0 0 0 18px", fontSize: 11, color: "#374151" }}>
+                    {latest.source_evidence.slice(0, 8).map((s, i) => (
+                      <li key={i} style={{ marginBottom: 3 }}>
+                        {s?.url ? (
+                          <a href={s.url} target="_blank" rel="noopener noreferrer" style={{ color: INK }}>
+                            {s.title || s.label || s.url}
+                          </a>
+                        ) : (
+                          s?.title || s?.label || JSON.stringify(s).slice(0, 80)
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
         </article>
       )}
 
@@ -122,6 +213,39 @@ function Headline({ label, v }) {
     <div style={{ padding: "8px 10px", background: "rgba(15,19,24,0.03)", borderRadius: 4 }}>
       <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", color: "#6B7280", fontWeight: 700 }}>{label}</div>
       <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{v}</div>
+    </div>
+  );
+}
+function MemoSection({ title, items, accent }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={eyebrow}>{title}</div>
+      <ul style={{ margin: "6px 0 0", padding: "0 0 0 18px", fontSize: 13, lineHeight: 1.5, color: "#1F2937" }}>
+        {items.map((s, i) => (
+          <li key={i} style={{
+            marginBottom: 4,
+            ...(accent ? { borderLeft: `2px solid ${accent}33`, paddingLeft: 6, marginLeft: -6 } : {}),
+          }}>{s}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+function Pillar({ title, children }) {
+  return (
+    <div style={{ padding: 10, background: "rgba(15,19,24,0.03)", borderRadius: 4 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em",
+        textTransform: "uppercase", color: "#6B7280", marginBottom: 6 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+function Row({ k, v }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+      <span style={{ color: "#6B7280" }}>{k}</span>
+      <span style={{ fontWeight: 600, fontFamily: "'JetBrains Mono', monospace", textAlign: "right" }}>{v}</span>
     </div>
   );
 }

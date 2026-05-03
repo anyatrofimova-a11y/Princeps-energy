@@ -614,6 +614,10 @@ async def ingest_all(
     # 4. Fuzzy match to grid_substations for coordinates
     coord_matched = await match_coordinates_fuzzy(pool)
 
+    # 4b. Promote matched LTDS substations into grid_substations so the
+    # grid_line_linker has transmission-level endpoints to snap against.
+    promote_result = await promote_ltds_to_grid_substations(pool)
+
     # 5. Aggregate stats
     async with pool.acquire() as conn:
         totals = await conn.fetchrow(
@@ -638,6 +642,7 @@ async def ingest_all(
         "per_region": per_region,
         "substation_number_matches": int(matched_numbers or 0),
         "coordinate_matches": coord_matched,
+        "promoted_to_grid_substations": promote_result,
         "totals": dict(totals) if totals else {},
     }
 
@@ -647,10 +652,83 @@ async def ingest_all(
 # ────────────────────────────────────────────────────────────────────────
 
 async def match_coordinates_fuzzy(pool: asyncpg.Pool) -> int:
-    """Join ltds_substations → grid_substations by normalised name match."""
-    updated = 0
+    """Join ``ltds_substations`` → ``grid_substations`` to populate coordinates.
+
+    Three match passes, evaluated in order (most precise first):
+
+    1. **wpd_site code** — ``grid_substations.raw_data->>'ref:GB:wpd_site'``
+       matches ``ltds_substations.substation_number``. This is the NGED
+       open-data identifier; it's the authoritative join.
+    2. **Normalised name (voltage-stripped)** — strip the trailing
+       ``' 132/33kV'`` / ``' 33kV'`` pattern from LTDS names and the
+       trailing ``' Substation'`` token from grid_substations names,
+       then compare lowercased alphanumeric-only strings.
+    3. **First-token match** — the original heuristic as a last-resort
+       fallback (kept so we don't regress existing matches).
+
+    Each pass updates only ``WHERE lat IS NULL`` so they compose cleanly.
+    Returns the total number of rows updated across all three passes.
+    """
+    total = 0
     async with pool.acquire() as conn:
-        # Heuristic: strip non-alphanumeric + lowercase, then compare
+        # Pass 1 — wpd_site code (authoritative for NGED)
+        result = await conn.execute(
+            """
+            UPDATE ltds_substations cs
+            SET lat = gs.lat, lon = gs.lon, grid_substation_id = gs.id,
+                geom = ST_SetSRID(ST_MakePoint(gs.lon, gs.lat), 4326)
+            FROM (
+                SELECT
+                    id,
+                    raw_data->>'ref:GB:wpd_site' AS wpd_site,
+                    ST_X(ST_Transform(geom, 4326)) AS lon,
+                    ST_Y(ST_Transform(geom, 4326)) AS lat
+                FROM grid_substations
+                WHERE geom IS NOT NULL
+                  AND raw_data->>'ref:GB:wpd_site' IS NOT NULL
+            ) gs
+            WHERE cs.lat IS NULL
+              AND cs.substation_number IS NOT NULL
+              AND gs.wpd_site = cs.substation_number
+            """
+        )
+        try:
+            total += int(result.split()[-1])
+        except Exception:
+            pass
+
+        # Pass 2 — voltage-stripped fuzzy name match
+        result = await conn.execute(
+            """
+            UPDATE ltds_substations cs
+            SET lat = gs.lat, lon = gs.lon, grid_substation_id = gs.id,
+                geom = ST_SetSRID(ST_MakePoint(gs.lon, gs.lat), 4326)
+            FROM (
+                SELECT
+                    id,
+                    LOWER(REGEXP_REPLACE(
+                        REGEXP_REPLACE(name, '\\s*substation\\s*$', '', 'i'),
+                        '[^a-zA-Z0-9]', '', 'g'
+                    )) AS norm,
+                    ST_X(ST_Transform(geom, 4326)) AS lon,
+                    ST_Y(ST_Transform(geom, 4326)) AS lat
+                FROM grid_substations
+                WHERE geom IS NOT NULL
+            ) gs
+            WHERE cs.lat IS NULL
+              AND LOWER(REGEXP_REPLACE(
+                    REGEXP_REPLACE(cs.name, '\\s+\\d+(\\.\\d+)?(/\\d+(\\.\\d+)?)*\\s*kv.*$', '', 'i'),
+                    '[^a-zA-Z0-9]', '', 'g'
+                  )) = gs.norm
+              AND gs.norm <> ''
+            """
+        )
+        try:
+            total += int(result.split()[-1])
+        except Exception:
+            pass
+
+        # Pass 3 — first-token fallback (the original heuristic)
         result = await conn.execute(
             """
             UPDATE ltds_substations cs
@@ -670,10 +748,164 @@ async def match_coordinates_fuzzy(pool: asyncpg.Pool) -> int:
             """
         )
         try:
-            updated = int(result.split()[-1])
+            total += int(result.split()[-1])
         except Exception:
-            updated = 0
-    return updated
+            pass
+    log.info("ltds_cim: match_coordinates_fuzzy -> %d rows updated", total)
+    return total
+
+
+# ────────────────────────────────────────────────────────────────────────
+# Promote matched LTDS substations into grid_substations
+# ────────────────────────────────────────────────────────────────────────
+
+# Map CIM psr_type → voltage (kV) estimate, used only when the LTDS row
+# doesn't already have an explicit voltage on its grid_substation match.
+_PSR_DEFAULT_KV = {
+    "GSP": 132.0,     # Grid Supply Point — always 132kV or higher
+    "BSP": 33.0,      # Bulk Supply Point
+    "Primary": 11.0,  # Primary substation
+    "Grid": 132.0,
+}
+
+
+async def promote_ltds_to_grid_substations(pool: asyncpg.Pool) -> dict[str, int]:
+    """Upsert located LTDS substations into ``grid_substations``.
+
+    The linker needs real transmission-level endpoints (GSPs, BSPs) to snap
+    lines against. OSM dominates ``grid_substations`` with 11kV distribution
+    cabinets that never appear as endpoints on 132kV+ lines. LTDS already
+    catalogues the right class of substation — once we've matched their
+    coords via :func:`match_coordinates_fuzzy`, we can either:
+
+      * re-use the matched ``grid_substation_id`` (no insert needed), or
+      * insert an LTDS-only row for future matching.
+
+    Strategy:
+      * For each located LTDS row, UPSERT into ``grid_substations`` keyed on
+        ``(external_id, dno)``. External id format: ``ltds:<mrid>``.
+      * If the LTDS row was matched to an existing grid_substations row,
+        we **don't** insert a duplicate — the existing row is already
+        findable by the linker. We do refresh voltage + site_type if the
+        existing row has NULL.
+      * For unmatched LTDS rows (no coords), we skip — we can't place them.
+
+    Returns a dict with ``inserted`` / ``updated`` counts.
+    """
+    inserted = 0
+    updated = 0
+    async with pool.acquire() as conn:
+        # Insert fresh rows for LTDS substations that DON'T already point at
+        # an existing grid_substations row but still have coords (e.g. when
+        # a future GL profile lands these will have lat/lon but no match).
+        rows = await conn.fetch(
+            """
+            SELECT mrid, name, dno, licence_area, psr_type, substation_number,
+                   lat, lon, grid_substation_id,
+                   (SELECT MAX(nominal_voltage_kv) FROM ltds_voltage_levels
+                    WHERE substation_mrid = cs.mrid) AS max_kv
+            FROM ltds_substations cs
+            WHERE lat IS NOT NULL AND lon IS NOT NULL
+            """
+        )
+        for r in rows:
+            ext_id = f"ltds:{r['mrid']}"
+            voltage_kv = float(r["max_kv"]) if r["max_kv"] is not None else _PSR_DEFAULT_KV.get(r["psr_type"])
+            dno = (r["dno"] or "").lower() or "ltds"
+
+            if r["grid_substation_id"] is not None:
+                # Existing row — only fill NULL voltage + site_type, and
+                # only touch raw_data if the LTDS keys aren't present yet.
+                # Skip entirely (no UPDATE, no updated_at bump) when the
+                # target already carries the same LTDS mrid — keeps
+                # re-runs a zero-work no-op.
+                res = await conn.execute(
+                    """
+                    UPDATE grid_substations
+                    SET voltage_kv = COALESCE(voltage_kv, $1),
+                        site_type  = COALESCE(site_type,  $2),
+                        raw_data   = raw_data || jsonb_build_object(
+                            'ltds_mrid', $3::text,
+                            'ltds_substation_number', $4::text,
+                            'ltds_psr_type', $5::text,
+                            'ltds_licence_area', $6::text,
+                            'external_source', 'ltds_nged'
+                        ),
+                        updated_at = now()
+                    WHERE id = $7
+                      AND (raw_data->>'ltds_mrid' IS DISTINCT FROM $3::text
+                           OR voltage_kv IS NULL
+                           OR site_type  IS NULL)
+                    """,
+                    voltage_kv,
+                    (r["psr_type"] or "").lower() or None,
+                    r["mrid"], r["substation_number"], r["psr_type"],
+                    r["licence_area"], r["grid_substation_id"],
+                )
+                try:
+                    if int(res.split()[-1]) > 0:
+                        updated += 1
+                except Exception:
+                    pass
+                continue
+
+            # New LTDS-origin row. We got here only if the LTDS row has
+            # coordinates but they didn't match an existing grid_substations
+            # row (e.g. future GL-profile-derived or an unrelated feed).
+            import json
+            raw = json.dumps({
+                "source": "ltds_cim",
+                "ltds_mrid": r["mrid"],
+                "ltds_substation_number": r["substation_number"],
+                "ltds_psr_type": r["psr_type"],
+                "ltds_licence_area": r["licence_area"],
+                "external_source": f"ltds_{dno}",
+            })
+            res = await conn.execute(
+                """
+                INSERT INTO grid_substations (
+                    external_id, name, dno, region, voltage_kv, site_type,
+                    geom, raw_data
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6,
+                    ST_Transform(ST_SetSRID(ST_MakePoint($7, $8), 4326), 27700),
+                    $9::jsonb
+                )
+                ON CONFLICT (external_id, dno) DO UPDATE SET
+                    voltage_kv = COALESCE(grid_substations.voltage_kv, EXCLUDED.voltage_kv),
+                    site_type  = COALESCE(grid_substations.site_type,  EXCLUDED.site_type),
+                    raw_data   = grid_substations.raw_data || EXCLUDED.raw_data,
+                    updated_at = now()
+                RETURNING id
+                """,
+                ext_id, r["name"], dno, r["licence_area"], voltage_kv,
+                (r["psr_type"] or "").lower() or None,
+                float(r["lon"]), float(r["lat"]), raw,
+            )
+            try:
+                # INSERT N or UPDATE N
+                if "INSERT" in res:
+                    inserted += 1
+                else:
+                    updated += 1
+            except Exception:
+                pass
+
+            # Back-link the LTDS row to the new grid_substations id we just
+            # created so subsequent runs don't re-insert.
+            new_id = await conn.fetchval(
+                "SELECT id FROM grid_substations WHERE external_id = $1 AND dno = $2",
+                ext_id, dno,
+            )
+            if new_id:
+                await conn.execute(
+                    "UPDATE ltds_substations SET grid_substation_id = $1 WHERE mrid = $2",
+                    new_id, r["mrid"],
+                )
+    log.info("ltds_cim: promote_ltds_to_grid_substations inserted=%d updated=%d",
+             inserted, updated)
+    return {"inserted": inserted, "updated": updated}
 
 
 # ────────────────────────────────────────────────────────────────────────

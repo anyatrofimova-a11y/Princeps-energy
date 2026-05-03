@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import useDocumentQuery from "../../../hooks/useDocumentQuery";
-import { rankMockDocs, MOCK_MODE } from "../../../api/alerts";
+// Removed: rankMockDocs / MOCK_MODE — citations come from the live
+// /api/alerts/query/stream protocol now.
 
 const C = {
   gold: "#F5B731",
@@ -176,14 +177,9 @@ export default function QueryView({ question, scope, onBack, onSelectDoc }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firstDocId]);
 
-  // Ranked doc list with scores — mock-mode only; falls back to citations.
-  const rankedForDocsTab = useMemo(() => {
-    if (MOCK_MODE && question) {
-      return rankMockDocs(question);
-    }
-    return [];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [question]);
+  // Ranked doc list — kept empty; the live SSE protocol emits citations
+  // directly which the Documents tab renders without re-ranking.
+  const rankedForDocsTab = useMemo(() => [], []);
 
   const figures = useMemo(() => {
     const out = [];

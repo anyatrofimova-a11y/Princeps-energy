@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 import asyncpg
 
-from ..base import (
+from ..protocol import (
     ConnectorHealth,
     IngestReport,
     read_health,

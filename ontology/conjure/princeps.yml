@@ -1,0 +1,577 @@
+types:
+  definitions:
+    default-package: com.palantir.princeps.api
+
+    objects:
+
+      # ───────────────────────── Aliases ─────────────────────────
+
+      WktGeometry:
+        alias: string
+        docs: |
+          OGC Well-Known Text geometry. Princeps stores all geometry in EPSG:27700
+          (OSGB36 / British National Grid). Frontend transforms to 4326 only at the
+          view boundary.
+
+      Mw:
+        alias: double
+        docs: Megawatts (active power capacity).
+
+      Mwh:
+        alias: double
+        docs: Megawatt-hours (energy).
+
+      Kv:
+        alias: double
+        docs: Kilovolts (voltage rating).
+
+      GbpPerMwh:
+        alias: double
+        docs: Tariff in GBP per megawatt-hour.
+
+      Lei:
+        alias: string
+        docs: |
+          Legal Entity Identifier (ISO 17442). 20 alphanumeric characters,
+          authoritative via GLEIF. Validate against GLEIF API before persistence.
+
+      CompaniesHouseNumber:
+        alias: string
+        docs: UK Companies House registration number (8 digits, possibly with leading letters for SC/NI).
+
+      RepdId:
+        alias: string
+        docs: REPD Reference (DECC/BEIS/DESNZ Renewable Energy Planning Database id).
+
+      # ───────────────────────── Enums ─────────────────────────
+
+      Technology:
+        values:
+          - SOLAR_PV
+          - ONSHORE_WIND
+          - BESS
+          - HYDROGEN_ELECTROLYSER
+          - DATA_CENTRE
+          - COMBINED_HEAT_AND_POWER
+          - BIOMASS
+          - HYDRO
+          - ENERGY_FROM_WASTE
+
+      VoltageLevel:
+        values:
+          - LV_400V
+          - HV_11KV
+          - HV_33KV
+          - HV_66KV
+          - EHV_132KV
+          - EHV_275KV
+          - EHV_400KV
+
+      ProjectStatus:
+        docs: REPD lifecycle status values.
+        values:
+          - APPLICATION_SUBMITTED
+          - APPLICATION_WITHDRAWN
+          - APPLICATION_REFUSED
+          - AWAITING_CONSTRUCTION
+          - UNDER_CONSTRUCTION
+          - OPERATIONAL
+          - DECOMMISSIONED
+          - ABANDONED
+
+      ConnectionType:
+        values:
+          - EXPORT_ONLY
+          - IMPORT_ONLY
+          - IMPORT_EXPORT
+
+      DnoArea:
+        docs: GB Distribution Network Operator licence areas.
+        values:
+          - UKPN_LPN
+          - UKPN_SPN
+          - UKPN_EPN
+          - SSEN_SEPD
+          - SSEN_SHEPD
+          - SPEN_SPD
+          - SPEN_SPM
+          - NPG_NEDL
+          - NPG_YEDL
+          - NGED_EMID
+          - NGED_WMID
+          - NGED_SWALES
+          - NGED_SWEST
+          - ENWL_NWED
+
+      TenderStage:
+        values:
+          - EXPRESSION_OF_INTEREST
+          - PRE_QUALIFICATION
+          - INVITATION_TO_TENDER
+          - AWARDED
+          - CONTRACT_SIGNED
+          - CANCELLED
+
+      CounterpartyRole:
+        values:
+          - DEVELOPER
+          - EPC_CONTRACTOR
+          - O_AND_M
+          - LANDOWNER
+          - OFFTAKER
+          - FINANCIER
+          - DNO
+          - LOCAL_PLANNING_AUTHORITY
+          - REGULATOR
+
+      # ───────────────────────── Core Objects ─────────────────────────
+
+      Site:
+        docs: |
+          A georeferenced onshore site under feasibility, development, or operation.
+          One Site may host multiple generation/storage/load assets (BESSUnit,
+          SolarFarm, WindFarm, DataCentre) — those are separate objects linked via
+          relationships.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+            docs: Princeps Resource Identifier (rid.princeps.{instance}.site.{uuid}).
+          name:
+            type: string
+            safety: safe
+          centroid:
+            type: WktGeometry
+            safety: safe
+            docs: Site centroid (POINT in EPSG:27700).
+          boundary:
+            type: optional<WktGeometry>
+            safety: safe
+            docs: Site polygon boundary (POLYGON in EPSG:27700).
+          areaHa:
+            type: optional<double>
+            safety: safe
+            docs: Hectares.
+          dnoArea:
+            type: optional<DnoArea>
+            safety: safe
+          alcGrade:
+            type: optional<string>
+            safety: safe
+            docs: Agricultural Land Classification grade (1, 2, 3a, 3b, 4, 5, urban).
+          createdAt:
+            type: datetime
+            safety: safe
+          updatedAt:
+            type: datetime
+            safety: safe
+
+      Substation:
+        docs: |
+          Grid substation, IEC 61970 CIM-aligned. Maps to existing Postgres table
+          grid_substations; new RID column to be added by migration.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          name:
+            type: string
+            safety: safe
+          location:
+            type: WktGeometry
+            safety: safe
+          voltageLevels:
+            type: list<VoltageLevel>
+            safety: safe
+            docs: Voltage levels operating at this substation (a substation can be multi-level).
+          dnoArea:
+            type: DnoArea
+            safety: safe
+          firmCapacityMw:
+            type: optional<Mw>
+            safety: safe
+          headroomImportMw:
+            type: optional<Mw>
+            safety: unsafe
+            docs: |
+              Available import headroom from latest LTDS/ECR. Commercially sensitive —
+              do not log in plaintext. Update timestamps in Substation.headroomAsOf.
+          headroomExportMw:
+            type: optional<Mw>
+            safety: unsafe
+          headroomAsOf:
+            type: optional<datetime>
+            safety: safe
+
+      GSP:
+        docs: |
+          Grid Supply Point. NESO-defined transmission/distribution interface,
+          typically operated by a TO.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          gspId:
+            type: string
+            safety: safe
+            docs: NESO GSP id (e.g. ACAS_1).
+          name:
+            type: string
+            safety: safe
+          location:
+            type: WktGeometry
+            safety: safe
+          firmDemandMw:
+            type: optional<Mw>
+            safety: safe
+          firmGenerationMw:
+            type: optional<Mw>
+            safety: safe
+
+      BESSUnit:
+        docs: Battery Energy Storage System asset.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          name:
+            type: string
+            safety: safe
+          siteRid:
+            type: rid
+            safety: safe
+            docs: The Site this BESS sits on.
+          ratedPowerMw:
+            type: Mw
+            safety: safe
+          energyCapacityMwh:
+            type: Mwh
+            safety: safe
+          chemistry:
+            type: optional<string>
+            safety: safe
+            docs: e.g. LFP, NMC, Vanadium-flow.
+          commercialOpsDate:
+            type: optional<datetime>
+            safety: safe
+
+      SolarFarm:
+        docs: Photovoltaic generation site.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          name:
+            type: string
+            safety: safe
+          siteRid:
+            type: rid
+            safety: safe
+          dcCapacityMwp:
+            type: Mw
+            safety: safe
+            docs: DC nameplate capacity.
+          acCapacityMw:
+            type: Mw
+            safety: safe
+          tilt:
+            type: optional<double>
+            safety: safe
+          azimuth:
+            type: optional<double>
+            safety: safe
+          tracking:
+            type: optional<boolean>
+            safety: safe
+
+      WindFarm:
+        docs: Onshore wind farm.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          name:
+            type: string
+            safety: safe
+          siteRid:
+            type: rid
+            safety: safe
+          totalCapacityMw:
+            type: Mw
+            safety: safe
+          turbineCount:
+            type: integer
+            safety: safe
+          turbineModel:
+            type: optional<string>
+            safety: safe
+          hubHeightM:
+            type: optional<double>
+            safety: safe
+
+      DataCentre:
+        docs: Onshore data centre site.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          name:
+            type: string
+            safety: safe
+          siteRid:
+            type: rid
+            safety: safe
+          itLoadMw:
+            type: Mw
+            safety: safe
+            docs: Critical IT load.
+          totalGridDrawMw:
+            type: Mw
+            safety: safe
+            docs: Including PUE overhead.
+          tier:
+            type: optional<string>
+            safety: safe
+            docs: Uptime Institute Tier (I/II/III/IV) or equivalent rating.
+          coolingType:
+            type: optional<string>
+            safety: safe
+
+      Counterparty:
+        docs: |
+          Legal entity participating in the value chain — developer, landowner,
+          offtaker, EPC, DNO, planning authority. Backed by GLEIF LEI where available;
+          UK companies cross-resolved via Companies House.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          legalName:
+            type: string
+            safety: safe
+          lei:
+            type: optional<Lei>
+            safety: safe
+          companiesHouseNumber:
+            type: optional<CompaniesHouseNumber>
+            safety: safe
+          role:
+            type: CounterpartyRole
+            safety: safe
+          parentRid:
+            type: optional<rid>
+            safety: safe
+            docs: Parent entity (for group structures).
+          sanctionsFlag:
+            type: boolean
+            safety: safe
+            docs: |
+              True if matched against UK sanctions list. Reason text not stored
+              here — see SanctionsMatch object (separate IDL). Matches are
+              re-evaluated nightly.
+
+      REPDProject:
+        docs: |
+          UK Renewable Energy Planning Database project record. Many-to-one with
+          Site (a single site may carry multiple REPD entries over its lifecycle —
+          e.g. solar consented, then later BESS variation).
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          repdId:
+            type: RepdId
+            safety: safe
+          name:
+            type: string
+            safety: safe
+          siteRid:
+            type: optional<rid>
+            safety: safe
+          technology:
+            type: Technology
+            safety: safe
+          status:
+            type: ProjectStatus
+            safety: safe
+          installedCapacityMw:
+            type: optional<Mw>
+            safety: safe
+          location:
+            type: WktGeometry
+            safety: safe
+          plannedCommissioningDate:
+            type: optional<datetime>
+            safety: safe
+
+      Tender:
+        docs: |
+          Procurement opportunity — public sector tender (Find-a-Tender, Contracts
+          Finder) or private RFP. Used by the Procurement Intelligence agent.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          title:
+            type: string
+            safety: safe
+          buyerRid:
+            type: optional<rid>
+            safety: safe
+          publishedAt:
+            type: datetime
+            safety: safe
+          closingAt:
+            type: optional<datetime>
+            safety: safe
+          stage:
+            type: TenderStage
+            safety: safe
+          estimatedValueGbp:
+            type: optional<double>
+            safety: unsafe
+            docs: Estimated tender value — commercially sensitive.
+          technology:
+            type: optional<Technology>
+            safety: safe
+          sourceUrl:
+            type: string
+            safety: safe
+
+      # ───────────────────────── Relationships (typed edges) ─────────────────────────
+
+      ConnectsTo:
+        docs: |
+          A site or generation asset connects to a substation. Carries the
+          electrical context of the connection.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          fromRid:
+            type: rid
+            safety: safe
+            docs: Site / SolarFarm / WindFarm / BESSUnit / DataCentre RID.
+          toRid:
+            type: rid
+            safety: safe
+            docs: Substation RID.
+          voltageLevel:
+            type: VoltageLevel
+            safety: safe
+          contractedCapacityMw:
+            type: Mw
+            safety: unsafe
+          connectionType:
+            type: ConnectionType
+            safety: safe
+          energisedAt:
+            type: optional<datetime>
+            safety: safe
+
+      OwnedBy:
+        docs: Ownership relationship between an asset/site and a counterparty.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          fromRid:
+            type: rid
+            safety: safe
+          toRid:
+            type: rid
+            safety: safe
+          ownershipPct:
+            type: double
+            safety: unsafe
+          since:
+            type: optional<datetime>
+            safety: safe
+          until:
+            type: optional<datetime>
+            safety: safe
+
+      AppliedFor:
+        docs: |
+          Counterparty applied for / submitted a REPDProject. Captures developer,
+          consultants, etc. for the planning record.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          fromRid:
+            type: rid
+            safety: safe
+            docs: Counterparty RID.
+          toRid:
+            type: rid
+            safety: safe
+            docs: REPDProject RID.
+          role:
+            type: CounterpartyRole
+            safety: safe
+
+      ContractedTo:
+        docs: |
+          Power Purchase Agreement / offtake contract between a generation asset
+          and a counterparty (typically an offtaker).
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          fromRid:
+            type: rid
+            safety: safe
+            docs: SolarFarm / WindFarm / BESSUnit RID.
+          toRid:
+            type: rid
+            safety: safe
+            docs: Counterparty (offtaker) RID.
+          tariffGbpPerMwh:
+            type: optional<GbpPerMwh>
+            safety: do-not-log
+            docs: Commercially sensitive — strike price under PPA. Encrypt at rest.
+          termYears:
+            type: optional<integer>
+            safety: safe
+          ppaType:
+            type: optional<string>
+            safety: safe
+            docs: e.g. CfD, baseload-strip, pay-as-clear, sleeved.
+
+      Procures:
+        docs: A tender procures (or is matched to) a candidate Site / asset.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          fromRid:
+            type: rid
+            safety: safe
+            docs: Tender RID.
+          toRid:
+            type: rid
+            safety: safe
+            docs: Site / asset RID.
+          matchScore:
+            type: double
+            safety: safe
+            docs: 0..1, generated by the procurement matcher.
+          matchedAt:
+            type: datetime
+            safety: safe
+
+      Powers:
+        docs: A substation is fed from / powers a Grid Supply Point.
+        fields:
+          rid:
+            type: rid
+            safety: safe
+          fromRid:
+            type: rid
+            safety: safe
+            docs: GSP RID.
+          toRid:
+            type: rid
+            safety: safe
+            docs: Substation RID.

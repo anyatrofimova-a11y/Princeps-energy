@@ -1191,14 +1191,19 @@ TOOLS: list[dict] = [
     {
         "name": "list_projects",
         "description": (
-            "List projects in the user's pipeline. Returns id, name, technology, "
-            "capacity_mw, stage, verdict, lat, lon, blocker, portfolio_id. Use this "
-            "when the user asks 'what projects do I have', 'list my portfolio', "
-            "'show pipeline', etc. Wraps GET /api/v1/projects."
+            "List projects in the user's pipeline (portfolio-tagged projects only by default). "
+            "Returns id, name, technology, capacity_mw, stage, verdict, lat, lon, blocker, "
+            "portfolio_id. Use this when the user asks 'what projects do I have', 'list my "
+            "portfolio', 'show pipeline'. Pipeline scope = portfolio_id IS NOT NULL OR "
+            "verdict IS NOT NULL (~26 rows), matching the Pipeline tab and mission control. "
+            "The default scope excludes the ~4,600 public REPD/TEC rows — pass source='repd' "
+            "or source='all' only if the user explicitly asks for public planning data or a "
+            "market-wide search."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
+                "source": {"type": "string", "enum": ["pipeline", "repd", "all"], "default": "pipeline", "description": "pipeline = user's own tracked projects (default); repd = public REPD rows only; all = everything"},
                 "portfolio_id": {"type": "string", "description": "Filter to a single portfolio UUID"},
                 "stage": {"type": "string", "description": "Filter by stage (prospect|screened|grid_applied|grid_offer|planning|fid|construction|energised)"},
                 "technology": {"type": "string", "description": "solar|bess|wind|dc|hybrid"},
@@ -1364,6 +1369,83 @@ TOOLS: list[dict] = [
         ),
         "input_schema": {"type": "object", "properties": {}},
     },
+    # ──────────────────────────────────────────────────────────────────────
+    # BOT-PILL 2026-04-21 — Mission Control chat-pill tools. Each wraps one
+    # SQL pass over the pipeline scope (portfolio_id IS NOT NULL OR verdict
+    # IS NOT NULL) and returns a pre-ranked list. Claude uses exactly one of
+    # these per matching pill prompt — no per-project fan-out.
+    # ──────────────────────────────────────────────────────────────────────
+    {
+        "name": "get_portfolio_risk_scan",
+        "description": (
+            "Rank the user's pipeline projects by risk right now. Pulls every project "
+            "with verdict='CAUTION' or a non-null blocker, ordered by capacity_mw DESC. "
+            "Returns name, verdict, blocker, stage, capacity_mw, technology, updated_at. "
+            "Use this for 'biggest pipeline risk', 'what's at risk', 'flagged projects'. "
+            "Prefer this over list_projects+manual filtering — it's one round-trip."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "default": 10, "minimum": 1, "maximum": 50},
+            },
+        },
+    },
+    {
+        "name": "get_recent_activity",
+        "description": (
+            "Return the last 7 days of portfolio activity: grid_events (substation/ECR "
+            "changes), notifications (alerts raised on sites), and projects whose "
+            "updated_at falls in the window. Use this for 'this week's activity', "
+            "'recent alerts', 'what changed', 'new signals'. Results are three capped "
+            "lists (<= 15 each) with detected_at/created_at/updated_at ISO timestamps."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {"type": "integer", "default": 7, "minimum": 1, "maximum": 30},
+            },
+        },
+    },
+    {
+        "name": "list_low_headroom_projects",
+        "description": (
+            "List pipeline projects whose nearest DNO-published substation has demand "
+            "headroom below a threshold (default 10 MW). Joins projects to grid_substations "
+            "by lateral nearest-neighbour on PostGIS geom, filtering to rows where "
+            "demand_headroom_mw IS NOT NULL (excludes OSM positional rows). Returns project "
+            "name, capacity_mw, nearest substation name/dno/voltage, distance_km, "
+            "demand_headroom_mw. Use this for 'low headroom sites', 'constrained substations', "
+            "'projects on tight grid'."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "threshold_mw": {"type": "number", "default": 10.0, "minimum": 0.0},
+                "limit": {"type": "integer", "default": 15, "minimum": 1, "maximum": 50},
+            },
+        },
+    },
+    {
+        "name": "run_portfolio_dscr_stress",
+        "description": (
+            "Stress-test pipeline projects at a user-supplied PPA price (£/MWh). For each "
+            "solar/wind/BESS project, computes annual revenue = capacity_mw * capacity_factor "
+            "* 8760 * ppa_price, assumes debt-service-ratio = revenue / (capex * 0.08) using "
+            "CB7 debt assumptions (70% gearing, 8% annual DS / MW installed), and returns "
+            "which projects fall below 1.20 DSCR. Use this for 'DSCR stress', 'cashflow "
+            "stress', 'which projects fail at £X PPA'. Data-centre (dc) projects are excluded "
+            "— they buy electricity rather than sell it. Returns project_name, capacity_mw, "
+            "tech, assumed_cf, annual_revenue_m, annual_ds_m, dscr, passes."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ppa_price_mwh": {"type": "number", "default": 55.0, "minimum": 0.0, "description": "PPA strike price in GBP/MWh"},
+                "dscr_threshold": {"type": "number", "default": 1.20, "minimum": 1.0, "maximum": 3.0},
+            },
+        },
+    },
 ]
 
 
@@ -1416,6 +1498,17 @@ async def execute_tool(
         if name == "list_projects":
             conds, params = [], []
             idx = 1
+            source = (args.get("source") or "pipeline").lower()
+            if source == "pipeline":
+                # BOT-PILL 2026-04-21 — harmonise with api_mission_control
+                # (portfolio_id IS NOT NULL OR verdict IS NOT NULL). Old
+                # AND-only filter returned 2 rows vs 26 in mission control,
+                # breaking every pipeline-wide question the 5 chat pills
+                # ask. OR-semantics matches the Pipeline tab + feed.
+                conds.append("(portfolio_id IS NOT NULL OR verdict IS NOT NULL)")
+            elif source == "repd":
+                conds.append("repd_id IS NOT NULL")
+            # source == "all" adds no filter
             if args.get("portfolio_id"):
                 conds.append(f"portfolio_id = ${idx}::uuid"); params.append(args["portfolio_id"]); idx += 1
             if args.get("stage"):
@@ -1816,6 +1909,210 @@ async def execute_tool(
             from app.dockets.dno_engagement_tool import get_dno_engagement_status
             return await get_dno_engagement_status(pool, args["project_id"])
 
+        # ──────────────────────────────────────────────────────────────────
+        # BOT-PILL 2026-04-21 — handlers for the 4 Mission Control pills
+        # that were BROKEN or WEAK against the generic list_projects fan-out.
+        # Each is SQL-only, 30-60 lines, returns a pre-ranked list.
+        # ──────────────────────────────────────────────────────────────────
+        if name == "get_portfolio_risk_scan":
+            lim = max(1, min(int(args.get("limit", 10) or 10), 50))
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """SELECT project_id, name, verdict, blocker, stage, capacity_mw,
+                              technology, updated_at
+                         FROM projects
+                        WHERE (portfolio_id IS NOT NULL OR verdict IS NOT NULL)
+                          AND (UPPER(COALESCE(verdict,'')) = 'CAUTION' OR blocker IS NOT NULL)
+                        ORDER BY capacity_mw DESC NULLS LAST
+                        LIMIT $1""",
+                    lim,
+                )
+            items = [
+                {
+                    "id": str(r["project_id"]),
+                    "name": r["name"],
+                    "verdict": r["verdict"],
+                    "blocker": r["blocker"],
+                    "stage": r["stage"],
+                    "capacity_mw": float(r["capacity_mw"]) if r["capacity_mw"] else None,
+                    "technology": r["technology"],
+                    "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+                }
+                for r in rows
+            ]
+            out = {"count": len(items), "at_risk_projects": items}
+            if not items:
+                out["_explanation"] = "No pipeline projects currently flagged CAUTION or with an active blocker."
+            return out
+
+        if name == "get_recent_activity":
+            days = max(1, min(int(args.get("days", 7) or 7), 30))
+            async with pool.acquire() as conn:
+                events = await conn.fetch(
+                    f"""SELECT event_id, event_type, severity, project_id, substation_id,
+                               source, detected_at
+                          FROM grid_events
+                         WHERE detected_at > now() - interval '{days} days'
+                         ORDER BY detected_at DESC LIMIT 15"""
+                )
+                notes = await conn.fetch(
+                    f"""SELECT notification_id, alert_type, title, severity, created_at
+                          FROM notifications
+                         WHERE created_at > now() - interval '{days} days'
+                         ORDER BY created_at DESC LIMIT 15"""
+                )
+                proj_updates = await conn.fetch(
+                    f"""SELECT project_id, name, stage, verdict, blocker, updated_at
+                          FROM projects
+                         WHERE (portfolio_id IS NOT NULL OR verdict IS NOT NULL)
+                           AND updated_at > now() - interval '{days} days'
+                         ORDER BY updated_at DESC LIMIT 15"""
+                )
+            return {
+                "window_days": days,
+                "grid_events": [
+                    {"id": int(e["event_id"]), "type": e["event_type"], "severity": e["severity"],
+                     "substation_id": e["substation_id"], "project_id": e["project_id"],
+                     "source": e["source"], "at": e["detected_at"].isoformat() if e["detected_at"] else None}
+                    for e in events
+                ],
+                "notifications": [
+                    {"id": str(n["notification_id"]), "alert_type": n["alert_type"],
+                     "title": n["title"], "severity": n["severity"],
+                     "at": n["created_at"].isoformat() if n["created_at"] else None}
+                    for n in notes
+                ],
+                "project_updates": [
+                    {"id": str(p["project_id"]), "name": p["name"], "stage": p["stage"],
+                     "verdict": p["verdict"], "blocker": p["blocker"],
+                     "at": p["updated_at"].isoformat() if p["updated_at"] else None}
+                    for p in proj_updates
+                ],
+                "counts": {"grid_events": len(events), "notifications": len(notes),
+                            "project_updates": len(proj_updates)},
+            }
+
+        if name == "list_low_headroom_projects":
+            threshold = float(args.get("threshold_mw", 10.0) or 10.0)
+            lim = max(1, min(int(args.get("limit", 15) or 15), 50))
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """SELECT p.project_id, p.name, p.capacity_mw, p.technology, p.stage,
+                              p.verdict, p.lat, p.lon,
+                              nn.id AS sub_id, nn.name AS sub_name, nn.dno, nn.voltage_kv,
+                              nn.demand_headroom_mw, nn.distance_m / 1000.0 AS distance_km
+                         FROM projects p
+                         JOIN LATERAL (
+                             SELECT s.id, s.name, s.dno, s.voltage_kv, s.demand_headroom_mw,
+                                    ST_Distance(
+                                      s.geom,
+                                      ST_Transform(ST_SetSRID(ST_MakePoint(p.lon, p.lat), 4326), 27700)
+                                    ) AS distance_m
+                               FROM grid_substations s
+                              WHERE s.demand_headroom_mw IS NOT NULL
+                                AND s.dno <> 'osm'
+                              ORDER BY s.geom <-> ST_Transform(ST_SetSRID(ST_MakePoint(p.lon, p.lat), 4326), 27700)
+                              LIMIT 1
+                         ) nn ON TRUE
+                        WHERE (p.portfolio_id IS NOT NULL OR p.verdict IS NOT NULL)
+                          AND p.lat IS NOT NULL AND p.lon IS NOT NULL
+                          AND nn.demand_headroom_mw < $1
+                        ORDER BY nn.demand_headroom_mw ASC, p.capacity_mw DESC NULLS LAST
+                        LIMIT $2""",
+                    threshold, lim,
+                )
+            items = [
+                {
+                    "project_id": str(r["project_id"]),
+                    "name": r["name"],
+                    "capacity_mw": float(r["capacity_mw"]) if r["capacity_mw"] else None,
+                    "technology": r["technology"],
+                    "stage": r["stage"],
+                    "verdict": r["verdict"],
+                    "nearest_substation": {
+                        "id": int(r["sub_id"]),
+                        "name": r["sub_name"],
+                        "dno": r["dno"],
+                        "voltage_kv": float(r["voltage_kv"]) if r["voltage_kv"] else None,
+                        "demand_headroom_mw": float(r["demand_headroom_mw"]),
+                        "distance_km": round(float(r["distance_km"]), 2),
+                    },
+                }
+                for r in rows
+            ]
+            out = {"threshold_mw": threshold, "count": len(items), "projects": items}
+            if not items:
+                out["_explanation"] = (
+                    f"No pipeline projects have a nearest DNO-published substation with "
+                    f"demand_headroom_mw < {threshold} MW."
+                )
+            return out
+
+        if name == "run_portfolio_dscr_stress":
+            ppa = float(args.get("ppa_price_mwh", 55.0) or 55.0)
+            thresh = float(args.get("dscr_threshold", 1.20) or 1.20)
+            # Capacity factors — UK typicals referenced in system prompt.
+            # Offshore wind gets a higher CF than onshore.
+            CF = {"solar": 0.11, "wind": 0.28, "wind_offshore": 0.42, "wind_onshore": 0.28,
+                  "bess": 0.20, "hybrid": 0.15, "pumped_storage_hydroelectricity": 0.12,
+                  "hydro": 0.35}
+            # CB7-aligned: capex £/MW and annual debt service £/MW (70% gearing,
+            # 25yr straight-line at ~6% cost of debt -> ~0.08 * capex / yr).
+            CAPEX_PER_MW = {"solar": 650_000, "wind": 1_500_000, "wind_offshore": 3_000_000,
+                             "wind_onshore": 1_500_000, "bess": 550_000, "hybrid": 900_000,
+                             "pumped_storage_hydroelectricity": 1_800_000, "hydro": 2_000_000}
+            def _lookup(d, tech, default):
+                if tech in d:
+                    return d[tech]
+                # longest-prefix match (e.g. wind_offshore_floating -> wind_offshore -> wind)
+                for k in sorted(d.keys(), key=len, reverse=True):
+                    if tech.startswith(k):
+                        return d[k]
+                return default
+            async with pool.acquire() as conn:
+                rows = await conn.fetch(
+                    """SELECT project_id, name, technology, capacity_mw, stage, verdict
+                         FROM projects
+                        WHERE (portfolio_id IS NOT NULL OR verdict IS NOT NULL)
+                          AND capacity_mw IS NOT NULL AND capacity_mw > 0
+                          AND LOWER(COALESCE(technology,'')) <> 'dc'
+                        ORDER BY capacity_mw DESC"""
+                )
+            fails, passes = [], []
+            for r in rows:
+                tech = (r["technology"] or "solar").lower()
+                cf = _lookup(CF, tech, 0.15)
+                capex_per_mw = _lookup(CAPEX_PER_MW, tech, 800_000)
+                mw = float(r["capacity_mw"])
+                annual_mwh = mw * cf * 8760.0
+                revenue_m = annual_mwh * ppa / 1_000_000.0
+                ds_m = mw * capex_per_mw * 0.08 / 1_000_000.0  # 8% annual DS on gross capex
+                dscr = (revenue_m / ds_m) if ds_m > 0 else None
+                rec = {
+                    "project_id": str(r["project_id"]),
+                    "name": r["name"],
+                    "technology": tech,
+                    "capacity_mw": mw,
+                    "assumed_cf": cf,
+                    "annual_revenue_m": round(revenue_m, 2),
+                    "annual_ds_m": round(ds_m, 2),
+                    "dscr": round(dscr, 2) if dscr is not None else None,
+                    "passes": bool(dscr is not None and dscr >= thresh),
+                }
+                (passes if rec["passes"] else fails).append(rec)
+            return {
+                "ppa_price_mwh": ppa,
+                "dscr_threshold": thresh,
+                "assumptions": {
+                    "capacity_factors": CF, "capex_gbp_per_mw": CAPEX_PER_MW,
+                    "annual_ds_pct_of_capex": 0.08,
+                    "note": "CB7 aligned: 70% gearing, ~25yr straight-line debt at ~6% cost",
+                },
+                "fail_count": len(fails), "pass_count": len(passes),
+                "failing_projects": fails[:15],
+                "passing_preview": passes[:5],
+            }
+
         if name == "run_solar_yield":
             return await run_sam_subprocess(
                 args["lat"], args["lon"],
@@ -1921,16 +2218,19 @@ async def execute_tool(
                 })
                 return result
             except Exception as e:
-                # Fallback: return analytical estimate
+                # Fallback: analytical estimate from DNO-published substations
+                # (grid_substations with dno != 'osm', demand_headroom_mw set).
                 async with pool.acquire() as conn:
                     sub = await conn.fetchrow(
-                        """SELECT sub_id, name, capacity_kw,
-                                  ST_Distance(geometry, ST_Transform(ST_SetSRID(ST_MakePoint($1,$2),4326),27700))/1000.0 AS dist_km
-                           FROM dno_substations
-                           ORDER BY geometry <-> ST_Transform(ST_SetSRID(ST_MakePoint($1,$2),4326),27700)
+                        """SELECT id, name, demand_headroom_mw, transformer_rating_mva,
+                                  ST_Distance(geom, ST_Transform(ST_SetSRID(ST_MakePoint($1,$2),4326),27700))/1000.0 AS dist_km
+                           FROM grid_substations
+                           WHERE dno IN ('nged','ukpn','ssen','spen','enwl','npg')
+                             AND demand_headroom_mw IS NOT NULL
+                           ORDER BY geom <-> ST_Transform(ST_SetSRID(ST_MakePoint($1,$2),4326),27700)
                            LIMIT 1""", lon, lat)
                 dist = float(sub["dist_km"]) if sub else 5.0
-                sub_cap = float(sub["capacity_kw"])/1000 if sub and sub["capacity_kw"] else 100
+                sub_cap = float(sub["transformer_rating_mva"]) if sub and sub["transformer_rating_mva"] else 100
                 headroom = sub_cap - cap_mw
                 voltage_dev = min(5.5, cap_mw * 0.02 * dist)
                 loading = min(95, cap_mw / sub_cap * 100) if sub_cap > 0 else 50
@@ -2990,15 +3290,44 @@ def build_system_prompt(session: ChatSession, ui_context: dict | None = None) ->
         "- For lists of substations or sites, use simple bullet format:",
         "  - Black Lake 132/11kV — 10.2km, 400MW headroom",
         "  - Ocker Hill B 275/132/33kV — 12.6km, 500MW headroom",
-        "- Never use ### headers, ~~strikethrough~~, or | table | syntax |.",
+        "- NEVER use markdown emphasis: no **bold**, no __bold__, no *italic*, no _italic_, no `backticks`.",
+        "- NEVER use ### headers, ~~strikethrough~~, or | table | syntax |.",
+        "- The UI does not render markdown — asterisks and underscores appear literally. Write plain prose.",
         "- Keep responses under 200 words unless the user asks for detail.",
+        "",
+        "Scope rule — projects:",
+        "- When the user says 'my projects', 'pipeline', 'portfolio', or 'projects', this means ONLY the projects in their active pipeline (portfolio_id IS NOT NULL in list_projects).",
+        "- Do NOT reference the full REPD/TEC dataset (~4,600 rows) as 'your projects' — that is public planning data, not the user's pipeline.",
+        "- list_projects defaults to pipeline scope. Use source='repd' or source='all' only if the user explicitly asks for public planning data or market-wide search.",
+        "",
+        "Scope rule — substations & headroom:",
+        "- The grid_substations table mixes two sources: DNO-published registers (dno IN ('nged','spen','enwl','ssen','npg','ukpn')) and raw OSM pylon geometry (dno='osm').",
+        "- All DNO-published substations HAVE demand_headroom_mw and gen_headroom_mw. OSM-geometry ones do NOT, by design — OSM is positional only.",
+        "- When answering headroom / capacity / connection-feasibility questions, only consider DNO-published substations. Never say 'most substations lack headroom data' — that statement conflates the two sources and is wrong.",
+        "- If a project's nearest DNO-published substation is further than 10km, say so explicitly rather than claiming no data exists.",
         "",
         "Tool usage:",
         "- Use tools proactively when they provide concrete data.",
         "- When discussing solar yield, run a simulation rather than estimating.",
-        "- When mentioning any location, call zoom_to_location.",
+        "- When mentioning any location, call zoom_to_location so the map re-centres to what you are reasoning about.",
+        "- When a project context is present, call zoom_to_location on the project's lat/lon at the start of a thread so the user sees the map align with your analysis.",
         "- When results have geographic components, create a map layer.",
         "- UK typical capacity factors: solar 9-12%, onshore wind 26-30%, offshore wind 38-42%.",
+        "",
+        "Clarify before acting:",
+        "- Before running an expensive tool chain (grid connection analysis, financial model, DSCR stress, site design), ask at most 1-2 short clarifying questions IF the request is genuinely ambiguous on a material parameter (e.g. 'BESS or solar?', 'what duration for the BESS?', 'PPA price assumption?').",
+        "- Do NOT ask clarifying questions you can resolve from the page/project context you already have. If the active project says 'BESS 50 MW', don't ask 'what technology?'.",
+        "- Cap clarifying questions at 2. After that, pick the most reasonable default and proceed, stating the assumption explicitly (e.g. 'Assuming 2-hour duration and £55/MWh PPA — say if you want different').",
+        "",
+        "Map-click coordinates:",
+        "- When `ui_context.focus.type === 'location'` or `ui_context.picked_location` is present, the user has just clicked a point on the map. Treat those coords as the primary location for the next response. Do not ask for coordinates again — they are right there.",
+        "",
+        "Mission Control pill routing (BOT-PILL 2026-04-21):",
+        "- 'biggest pipeline risk' / 'at risk' / 'flagged projects' -> call get_portfolio_risk_scan (single ranked pull; do NOT fan out get_project).",
+        "- 'this week' / 'recent activity' / 'what changed' -> call get_recent_activity (returns grid_events + notifications + project updates for the window).",
+        "- 'low headroom' / 'less than X MW headroom' / 'constrained substations' -> call list_low_headroom_projects with threshold_mw.",
+        "- 'DSCR stress' / 'fail at PPA £X' / 'cashflow stress at £X' -> call run_portfolio_dscr_stress with ppa_price_mwh.",
+        "- 'grid connection slip' / 'grid delay' -> call list_projects + forecast_grid_connection on the top 3-5 by capacity (already working).",
     ]
 
     if session.parcel_id:

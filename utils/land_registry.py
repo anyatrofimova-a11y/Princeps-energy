@@ -131,11 +131,16 @@ async def _osm_landuse_fallback(bbox: tuple, min_area_ha: float = 0.1) -> list:
     >;
     out skel qt;
     """
-    async with httpx.AsyncClient(timeout=20) as client:
+    # Overpass rejects httpx's default User-Agent with HTTP 406. Must spoof a real UA.
+    headers = {"User-Agent": "Princeps/1.0 (princeps.energy)"}
+    async with httpx.AsyncClient(timeout=30, headers=headers) as client:
         resp = await client.post("https://overpass-api.de/api/interpreter", data={"data": query})
         if resp.status_code != 200:
             return []
-        data = resp.json()
+        try:
+            data = resp.json()
+        except Exception:
+            return []
 
     # Build node lookup
     nodes = {}

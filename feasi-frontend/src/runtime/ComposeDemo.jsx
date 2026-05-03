@@ -7,6 +7,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { renderManifest } from "./ModuleRuntime.jsx";
+import ModuleCanvas from "./ModuleCanvas.jsx";
+import "./module-canvas.css";
 
 const TOKENS = {
   bg: "#FBF8F2",
@@ -19,6 +21,89 @@ const TOKENS = {
   fontUi: "'DM Sans', -apple-system, sans-serif",
   fontMono: "'JetBrains Mono', ui-monospace, monospace",
 };
+
+// ── Slate templates — one-click composable dashboards ─────────────────────
+const SLATE_TEMPLATES = [
+  {
+    id: "uk-bess-dashboard",
+    label: "UK BESS Pipeline",
+    desc: "BESS site count + capacity total + REPD scatter + recent BESS notes",
+    manifest: {
+      slug: `uk-bess-dashboard-${Date.now()}`,
+      title: "UK BESS Pipeline",
+      target_type: "bess_unit",
+      widgets: [
+        { id: "kpi-count",    kind: "KPI",          w: 3, props: { label: "BESS REPDs",     endpoint: "/api/objects/REPDProject?technology=Battery&limit=1", value_path: "count" } },
+        { id: "kpi-cap",      kind: "KPI",          w: 3, props: { label: "Substations",   endpoint: "/api/objects/Substation?limit=1",                       value_path: "count" } },
+        { id: "kpi-conn",     kind: "KPI",          w: 3, props: { label: "Connectors live", endpoint: "/api/datasets",                                       value_path: "count" } },
+        { id: "kpi-notes",    kind: "KPI",          w: 3, props: { label: "Recent notes",  endpoint: "/api/notes/recent?limit=1",                              value_path: "count" } },
+        { id: "scatter-bess", kind: "QuiverChart",  w: 8, props: { type: "REPDProject", x_field: "capacity_mw", y_field: "capacity_mw", technology: "Battery", limit: 200, title: "REPD Battery — capacity distribution" } },
+        { id: "health",       kind: "DatasetHealth", w: 4, props: { title: "Connector health" } },
+        { id: "list-bess",    kind: "ObjectList",    w: 8, props: { type: "REPDProject", technology: "Battery", limit: 10, title: "Recent battery REPDs", columns: ["label", "capacity_mw", "status", "operator"] } },
+        { id: "feed-recent",  kind: "NotesFeed",     w: 4, props: { limit: 6, title: "Recent notes (all)" } },
+      ],
+    },
+  },
+  {
+    id: "uk-dc-dashboard",
+    label: "UK Data Centre Pipeline",
+    desc: "DC NSIP + REPD + capacity + recent NSIP submissions",
+    manifest: {
+      slug: `uk-dc-dashboard-${Date.now()}`,
+      title: "UK Data Centre Pipeline",
+      target_type: "data_centre",
+      widgets: [
+        { id: "kpi-nsip",  kind: "KPI",         w: 3, props: { label: "NSIP projects",   endpoint: "/api/objects/NSIPProject?limit=1",                       value_path: "count" } },
+        { id: "kpi-repd",  kind: "KPI",         w: 3, props: { label: "REPD projects",   endpoint: "/api/objects/REPDProject?limit=1",                       value_path: "count" } },
+        { id: "kpi-tec",   kind: "KPI",         w: 3, props: { label: "TEC queue",       endpoint: "/api/objects/TecQueueEntry?limit=1",                     value_path: "count" } },
+        { id: "kpi-rows",  kind: "KPI",         w: 3, props: { label: "Total rows",      endpoint: "/api/datasets",                                          value_path: "count" } },
+        { id: "scatter-nsip", kind: "QuiverChart", w: 8, props: { type: "NSIPProject",   x_field: "capacity_mw", y_field: "capacity_mw", limit: 100, title: "NSIP — capacity distribution" } },
+        { id: "health",       kind: "DatasetHealth", w: 4, props: { title: "Connector health" } },
+        { id: "list-nsip",    kind: "ObjectList", w: 12, props: { type: "NSIPProject", limit: 10, title: "Recent NSIPs", columns: ["label", "sector", "status", "promoter", "capacity_mw"] } },
+      ],
+    },
+  },
+  {
+    id: "ops-pulse",
+    label: "Ops Pulse",
+    desc: "Connector health + recent notes + project list",
+    manifest: {
+      slug: `ops-pulse-${Date.now()}`,
+      title: "Ops Pulse",
+      widgets: [
+        { id: "health",     kind: "DatasetHealth", w: 5, props: { title: "Magritte connectors" } },
+        { id: "feed",       kind: "NotesFeed",     w: 7, props: { limit: 8, title: "Recent ops notes" } },
+        { id: "projects",   kind: "ObjectList",    w: 12, props: { type: "Project", limit: 12, title: "Active projects", columns: ["label", "stage", "verdict", "technology", "capacity_mw"] } },
+      ],
+    },
+  },
+];
+
+function SlateTemplatePicker({ onPick }) {
+  return (
+    <div style={{ marginBottom: 24, background: "rgba(245,183,49,0.10)", border: "1px solid rgba(245,183,49,0.40)", borderRadius: 12, padding: 14 }}>
+      <div style={{ fontSize: 10, letterSpacing: 0.10, textTransform: "uppercase", color: "#4A3208", fontWeight: 700, marginBottom: 8 }}>SLATE · TEMPLATES</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+        {SLATE_TEMPLATES.map(t => (
+          <button
+            key={t.id}
+            onClick={() => onPick(t.manifest)}
+            style={{
+              background: "#FFFFFF", border: "1px solid rgba(15,19,24,0.10)", borderRadius: 8,
+              padding: "10px 14px", textAlign: "left", cursor: "pointer",
+              fontFamily: "inherit", color: "#0F1318",
+              transition: "border-color 100ms, box-shadow 100ms",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "#F5B731"; e.currentTarget.style.boxShadow = "0 4px 12px rgba(245,183,49,0.18)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(15,19,24,0.10)"; e.currentTarget.style.boxShadow = "none"; }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{t.label}</div>
+            <div style={{ fontSize: 11, color: "#5A5F66", marginTop: 4, lineHeight: 1.4 }}>{t.desc}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function ComposeDemo() {
   const nav = useNavigate();
@@ -73,8 +158,11 @@ export default function ComposeDemo() {
       <div style={{ maxWidth: 1200, margin: "0 auto" }}>
         <h1 style={{ fontSize: 22, fontWeight: 600, margin: "0 0 6px" }}>Workshop Composer</h1>
         <p style={{ fontSize: 13, color: TOKENS.muted, margin: "0 0 24px" }}>
-          Describe the module you want. Claude composes a manifest against the DTDL schemas and renders it below.
+          Describe the module you want. Claude composes a manifest against the DTDL schemas and renders it below — or drop a Slate template to start with a working dashboard.
         </p>
+
+        <SlateTemplatePicker onPick={(t) => setManifest(t)} />
+
 
         <div style={{ background: TOKENS.card, padding: 20, borderRadius: 12, boxShadow: TOKENS.shadow, border: `1px solid ${TOKENS.border}`, marginBottom: 24 }}>
           <label style={{ display: "block", fontSize: 11, color: TOKENS.muted, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Prompt</label>
@@ -138,11 +226,16 @@ export default function ComposeDemo() {
 
         {manifest && (
           <>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 12 }}>
-              <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>{manifest.title || "Composed module"}</h2>
-              <span style={{ fontSize: 11, color: TOKENS.muted, fontFamily: TOKENS.fontMono }}>{manifest.slug}</span>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 12, marginTop: 8 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Visual canvas</h2>
+              <span style={{ fontSize: 11, color: TOKENS.muted }}>drag rows to reorder, slide ▭ to resize, click to edit props</span>
             </div>
-            {renderManifest(manifest)}
+            <ModuleCanvas
+              manifest={manifest}
+              onChange={setManifest}
+              onSave={save}
+              saving={saving}
+            />
             <details style={{ marginTop: 24 }}>
               <summary style={{ cursor: "pointer", fontSize: 11, color: TOKENS.muted, textTransform: "uppercase", letterSpacing: 0.6 }}>Manifest JSON</summary>
               <pre style={{ marginTop: 8, padding: 12, background: TOKENS.card, border: `1px solid ${TOKENS.border}`, borderRadius: 8, fontFamily: TOKENS.fontMono, fontSize: 11, overflow: "auto", maxHeight: 400 }}>
@@ -150,6 +243,23 @@ export default function ComposeDemo() {
               </pre>
             </details>
           </>
+        )}
+
+        {!manifest && (
+          <div style={{ marginTop: 12 }}>
+            <button
+              onClick={() => setManifest({slug: `module-${Date.now()}`, title: "New module", widgets: []})}
+              style={{
+                padding: "10px 20px", border: `1px solid ${TOKENS.border}`, borderRadius: 8,
+                background: TOKENS.card, color: TOKENS.text, fontFamily: TOKENS.fontUi,
+                fontSize: 13, fontWeight: 600, cursor: "pointer",
+              }}>
+              + Start blank canvas
+            </button>
+            <span style={{ fontSize: 11, color: TOKENS.muted, marginLeft: 12 }}>
+              or pick a Slate template above, or compose with Claude.
+            </span>
+          </div>
         )}
       </div>
     </div>

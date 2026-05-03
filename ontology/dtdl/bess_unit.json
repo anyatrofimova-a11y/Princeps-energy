@@ -1,0 +1,96 @@
+{
+  "@context": "dtmi:dtdl:context;3",
+  "@id": "dtmi:com:princeps:BESSUnit;1",
+  "@type": "Interface",
+  "displayName": "BESS Unit",
+  "description": "Battery Energy Storage System asset — full hierarchy + Kongsberg-grade SCADA surface.",
+  "contents": [
+    {"@type": "Property", "name": "name", "schema": "string"},
+    {"@type": "Property", "name": "siteRid", "schema": "string"},
+    {"@type": "Property", "name": "vendor", "schema": "string"},
+    {"@type": "Property", "name": "model", "schema": "string"},
+    {"@type": "Property", "name": "ratedPowerMw", "schema": "double"},
+    {"@type": "Property", "name": "energyCapacityMwh", "schema": "double"},
+    {"@type": "Property", "name": "chemistry", "schema": {
+      "@type": "Enum", "valueSchema": "string",
+      "enumValues": [
+        {"name": "LFP", "enumValue": "LFP"},
+        {"name": "NMC", "enumValue": "NMC"},
+        {"name": "VANADIUM_FLOW", "enumValue": "VANADIUM_FLOW"},
+        {"name": "LTO", "enumValue": "LTO"},
+        {"name": "SODIUM_ION", "enumValue": "SODIUM_ION"}
+      ]
+    }},
+    {"@type": "Property", "name": "numBlocks", "schema": "integer"},
+    {"@type": "Property", "name": "numRacksPerBlock", "schema": "integer"},
+    {"@type": "Property", "name": "numModulesPerRack", "schema": "integer"},
+    {"@type": "Property", "name": "numCellsPerModule", "schema": "integer"},
+    {"@type": "Property", "name": "nominalDcBusV", "schema": "double"},
+    {"@type": "Property", "name": "fireSuppressionType", "schema": "string"},
+    {"@type": "Property", "name": "gridCode", "schema": "string"},
+    {"@type": "Property", "name": "commercialOpsDate", "schema": "dateTime"},
+    {"@type": "Property", "name": "warrantyExpiryDate", "schema": "dateTime"},
+
+    {"@type": "Telemetry", "name": "stateOfChargePct", "schema": "double"},
+    {"@type": "Telemetry", "name": "stateOfHealthPct", "schema": "double"},
+    {"@type": "Telemetry", "name": "activePowerMw", "schema": "double"},
+    {"@type": "Telemetry", "name": "reactivePowerMvar", "schema": "double"},
+    {"@type": "Telemetry", "name": "gridFrequencyHz", "schema": "double"},
+    {"@type": "Telemetry", "name": "ambientTempC", "schema": "double"},
+    {"@type": "Telemetry", "name": "maxCellTempC", "schema": "double"},
+    {"@type": "Telemetry", "name": "minCellTempC", "schema": "double"},
+    {"@type": "Telemetry", "name": "maxCellVoltageV", "schema": "double"},
+    {"@type": "Telemetry", "name": "minCellVoltageV", "schema": "double"},
+    {"@type": "Telemetry", "name": "cellVoltageImbalancePct", "schema": "double"},
+    {"@type": "Telemetry", "name": "bmsState", "schema": "string"},
+    {"@type": "Telemetry", "name": "contactorState", "schema": "string"},
+    {"@type": "Telemetry", "name": "groundFaultCurrentA", "schema": "double"},
+    {"@type": "Telemetry", "name": "cycleCountTotal", "schema": "long"},
+    {"@type": "Telemetry", "name": "coolantFlowLpm", "schema": "double"},
+    {"@type": "Telemetry", "name": "fireDetectorOk", "schema": "boolean"},
+
+    {"@type": "Relationship", "name": "connectsTo", "target": "dtmi:com:princeps:Substation;1",
+     "minMultiplicity": 1, "maxMultiplicity": 1},
+    {"@type": "Relationship", "name": "ownedBy", "target": "dtmi:com:princeps:Counterparty;1",
+     "minMultiplicity": 0, "maxMultiplicity": 10},
+    {"@type": "Relationship", "name": "containsBlock", "target": "dtmi:com:princeps:BessBlock;1",
+     "minMultiplicity": 1, "maxMultiplicity": 50},
+
+    {"@type": "Component", "name": "thermalManagement",
+     "schema": {
+       "@type": "Interface", "@id": "dtmi:com:princeps:BessThermal;1",
+       "displayName": "BESS Thermal Management",
+       "contents": [
+         {"@type": "Property", "name": "coolingType", "schema": "string"},
+         {"@type": "Telemetry", "name": "coolantInletTempC", "schema": "double"},
+         {"@type": "Telemetry", "name": "coolantOutletTempC", "schema": "double"},
+         {"@type": "Telemetry", "name": "deltaTC", "schema": "double"}
+       ]
+     }
+    },
+    {"@type": "Component", "name": "powerConversionSystem",
+     "schema": {
+       "@type": "Interface", "@id": "dtmi:com:princeps:PCS;1",
+       "displayName": "Power Conversion System",
+       "contents": [
+         {"@type": "Property", "name": "vendor", "schema": "string"},
+         {"@type": "Property", "name": "ratedPowerMw", "schema": "double"},
+         {"@type": "Telemetry", "name": "efficiencyPct", "schema": "double"},
+         {"@type": "Telemetry", "name": "thdPct", "schema": "double"}
+       ]
+     }
+    },
+
+    {"@type": "Command", "name": "scheduleDispatch",
+     "description": "Run mctx MuZero policy to produce optimal half-hourly dispatch schedule.",
+     "request": {"name": "horizonHalfHours", "schema": "integer"},
+     "response": {"name": "scheduleId", "schema": "string"}},
+    {"@type": "Command", "name": "runCapacityTest",
+     "description": "C/3 full discharge then charge; updates stateOfHealthPct."},
+    {"@type": "Command", "name": "emergencyShutdown",
+     "description": "Open all contactors. Requires LOTO completion."},
+    {"@type": "Command", "name": "isolate",
+     "description": "Lock-out/tag-out a specific block, rack, or breaker.",
+     "request": {"name": "scope", "schema": "string"}}
+  ]
+}

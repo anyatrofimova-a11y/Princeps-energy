@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/shell/Sidebar";
 import TwinLazy from "../../components/twin3d/TwinLazy";
-import api from "../../services/api";
+import useDesignProject from "../../hooks/useDesignProject";
 
 /**
  * DesignPage — full-screen 3D Site Twin at /design/:projectId.
@@ -24,46 +24,24 @@ export default function DesignPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
 
-  const [project, setProject] = useState(null);
-  const [loadingProject, setLoadingProject] = useState(true);
-  const [notFound, setNotFound] = useState(false);
+  // Project context — handles the real fetch + normalisation + fallbacks.
+  // `project.lat`/`project.lon` are always non-null here (dev-shim path
+  // synthesises Slough coords so the twin always mounts somewhere real).
+  const { project, loading: loadingProject, notFound } = useDesignProject(projectId);
 
-  useEffect(() => {
-    if (!projectId) { setLoadingProject(false); setNotFound(true); return; }
-    let cancelled = false;
-    setLoadingProject(true);
-    setNotFound(false);
-
-    (async () => {
-      let data = null;
-      try {
-        const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
-        if (r.ok) data = await r.json();
-      } catch { /* ignore */ }
-      if (!data) {
-        try { data = await api.projects?.get?.(projectId); } catch { /* ignore */ }
-      }
-      if (cancelled) return;
-      if (!data) {
-        // Allow standalone mounts with no backend — synthesise a dev shim.
-        data = {
-          project_id: projectId,
-          name: projectId,
-          technology: "bess",
-          capacity_mw: 50,
-        };
-        setNotFound(true); // still flag for the header label, but let the twin try to render
-      }
-      setProject(data);
-      setLoadingProject(false);
-    })();
-
-    return () => { cancelled = true; };
-  }, [projectId]);
-
-  const tech = project?.technology || project?.workload_type || "bess";
-  const capacity = project?.capacity_mw || project?.it_load_mw || 50;
-  const polygon = project?.polygon_wkt || project?.site_polygon_wkt || null;
+  const tech = project?.tech || project?.technology || "bess";
+  const capacity = project?.capacity_mw || 50;
+  const polygon = project?.polygon_wkt || null;
+  const lat = project?.lat ?? null;
+  const lon = project?.lon ?? null;
+  const cooling = project?.cooling_type || "hybrid";
+  // Point-of-connection (grid substation) — used by intelligent DC layout
+  // to anchor the transformer yard on the correct polygon edge.
+  const pocLat = project?.poc_lat ?? project?.poc_latitude ?? project?.substation_lat ?? null;
+  const pocLon = project?.poc_lon ?? project?.poc_longitude ?? project?.substation_lon ?? null;
+  // Public-road access point — anchors gatehouse + office/NOC.
+  const roadLat = project?.road_lat ?? project?.access_road_lat ?? null;
+  const roadLon = project?.road_lon ?? project?.access_road_lon ?? null;
 
   return (
     <div className="dp-root">
@@ -100,6 +78,15 @@ export default function DesignPage() {
               polygon_wkt={polygon}
               tech={tech}
               capacity_mw={capacity}
+              lat={lat}
+              lon={lon}
+              cooling_type={cooling}
+              tier={project?.tier ?? 3}
+              redundancy={project?.redundancy ?? "N+1"}
+              poc_lat={pocLat}
+              poc_lon={pocLon}
+              road_lat={roadLat}
+              road_lon={roadLon}
               mode="oblique"
               onError={(err) => {
                 // eslint-disable-next-line no-console

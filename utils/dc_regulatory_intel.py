@@ -468,6 +468,113 @@ async def assess_regulatory(
         "opportunities": opportunities,
     }
 
-    log.info("Regulatory result: score=%d pathway=%s authority=%s gate=%s",
-             score, pathway, authority_name, tm04.get("gate"))
+    # Flat docket list sourced from the live regulatory registry (added
+    # 2026-04-19 BOT-Y sweep). The DCHyperscaler docket strip renders this
+    # under the "Regulatory · live dockets" card. Each entry is
+    # {title, status, state, date, source, docket}.
+    try:
+        from app.regulatory.versions import get as _reg_get
+    except Exception:
+        _reg_get = None
+
+    items: list[dict[str, Any]] = []
+    if _reg_get is not None:
+        def _item(key: str, state: str) -> dict[str, Any]:
+            try:
+                spec = _reg_get(key)
+                return {
+                    "title": f"{spec['name']} — {spec['version']}",
+                    "source": spec["name"],
+                    "status": state,
+                    "state": state,
+                    "date": spec.get("effective") or spec.get("published"),
+                    "url": spec.get("url"),
+                    "docket": key,
+                }
+            except Exception:
+                return {"title": key, "status": state, "state": state}
+
+        # Ofgem RIIO-T3 Final Determinations Dec 2025 — cost allowance frame
+        # that MSIP/MVS numbers hang off. Not a standard in the registry
+        # yet so build inline.
+        items.append({
+            "title": "Ofgem RIIO-T3 Final Determinations — Dec 2025",
+            "source": "Ofgem",
+            "status": "in_force",
+            "state": "in_force",
+            "date": "2025-12-18",
+            "url": "https://www.ofgem.gov.uk/publications/riio-t3-final-determinations",
+            "docket": "riio_t3",
+        })
+        # NESO TMO4+ / Gate 2 — status depends on site's current gate
+        tmo4_state = "in_force" if tm04.get("gate") else "applies"
+        items.append(_item("tmo4_gate2", tmo4_state))
+        # EU EED Art.12 — applies to DCs >=100 kW IT load (reporting since
+        # 15 Sep 2024). Post-Brexit DE-scoped for GB but still cited by
+        # multinational operators that report group-wide.
+        items.append({
+            "title": "EU Energy Efficiency Directive Art. 12 — DC reporting",
+            "source": "EU EED (Directive 2023/1791)",
+            "status": "applies_non_uk" if capacity_mw >= 0.1 else "n/a",
+            "state": "applies_non_uk",
+            "date": "2024-09-15",
+            "url": "https://energy.ec.europa.eu/topics/energy-efficiency/energy-efficiency-targets-directive-and-rules/energy-efficiency-directive_en",
+            "docket": "eu_eed_art12",
+        })
+        # DEFRA BNG — 10% biodiversity net gain mandatory for NSIPs from
+        # May 2026 (statutory commencement), Town & Country Planning since
+        # 12 Feb 2024.
+        bng_state = "required" if pathway != "permitted_development" else "exempt"
+        items.append({
+            "title": "DEFRA Biodiversity Net Gain — 10% mandatory",
+            "source": "DEFRA / Environment Act 2021",
+            "status": bng_state,
+            "state": bng_state,
+            "date": "2024-02-12",
+            "url": "https://www.gov.uk/guidance/understanding-biodiversity-net-gain",
+            "docket": "bng_10pct",
+        })
+        # BNG for NSIPs — May 2026 commencement
+        if pathway == "opt_in_nsip":
+            items.append({
+                "title": "BNG for NSIPs — mandatory from May 2026",
+                "source": "Environment Act 2021 (sch. 15 para 2, NSIPs)",
+                "status": "commences_may_2026",
+                "state": "pending",
+                "date": "2026-05-01",
+                "url": "https://www.gov.uk/guidance/statutory-biodiversity-net-gain",
+                "docket": "bng_nsip",
+            })
+        # Town & Country Planning (EIA) Regulations 2017 — EIA threshold
+        # for DCs is >0.5 ha typically schedule 2; >200 MW typically
+        # triggers schedule 1 mandatory EIA.
+        if capacity_mw > 200:
+            eia_state = "mandatory"
+        elif capacity_mw >= NSIP_THRESHOLD_MW:
+            eia_state = "likely_required"
+        else:
+            eia_state = "screening"
+        items.append({
+            "title": "Town & Country Planning (EIA) Regulations 2017",
+            "source": "DLUHC / Ministry of Housing",
+            "status": eia_state,
+            "state": eia_state,
+            "date": "2017-05-16",
+            "url": "https://www.legislation.gov.uk/uksi/2017/571/contents",
+            "docket": "tcp_eia_2017",
+        })
+        # NPPF Dec 2024 — current edition. Frontend shows this as info.
+        items.append(_item("nppf", "in_force"))
+        # Planning & Infrastructure Act 2025 — phased commencement context.
+        items.append(_item("pinfra_act_2025", "phased_commencement"))
+        # EN-3 (energy NPS) — most current revision Jan 2026
+        items.append(_item("en3", "in_force"))
+
+    result["items"] = items
+    # Convenience scalars the legacy frontend fallback synth path uses.
+    result["eu_eed_compliant"] = None   # unknown without operator data
+    result["bng_required"] = bng_state in ("required", "mandatory") if items else None
+
+    log.info("Regulatory result: score=%d pathway=%s authority=%s gate=%s dockets=%d",
+             score, pathway, authority_name, tm04.get("gate"), len(items))
     return result

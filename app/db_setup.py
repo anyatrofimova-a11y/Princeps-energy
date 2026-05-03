@@ -183,6 +183,11 @@ async def setup_database(pool: asyncpg.Pool) -> None:
         for _mig_name in (
             "2026_04_21c_dedupe_thames_bess.sql",
             "2026_04_21d_seed_docket_pins.sql",
+            # BOT-DD: REPD bulk-importer reingest dedupe + regression guard.
+            # `e` must run BEFORE `f` — `f` installs a partial UNIQUE INDEX
+            # that the pre-dedupe state would violate.
+            "2026_04_21e_repd_dedupe.sql",
+            "2026_04_21f_repd_unique_constraint.sql",
         ):
             _path = _repo_root_migrations_dir / _mig_name
             if _path.exists():

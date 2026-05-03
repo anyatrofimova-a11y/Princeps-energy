@@ -1,0 +1,181 @@
+/* Twin view styles — used by BESSTwinView + DCTwinView. */
+
+.px-twin-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #0F1318;
+  color: #E5E7EB;
+  font-family: 'Inter', 'DM Sans', -apple-system, system-ui, sans-serif;
+  padding-left: 36px;   /* clear the WorkshopShell collapsed left drawer */
+  padding-right: 36px;  /* clear the WorkshopShell collapsed right drawer */
+}
+
+.px-twin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 18px 24px;
+  border-bottom: 1px solid #1F2937;
+  background: linear-gradient(180deg, rgba(212,160,24,0.04), transparent);
+  gap: 24px;
+}
+
+.px-twin-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.px-twin-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #D4A018;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.px-twin-title h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+  color: #fff;
+}
+
+.px-twin-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 12px;
+}
+
+.px-twin-stat {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.px-twin-stat-label {
+  font-size: 10px;
+  color: #94A3B8;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.px-twin-stat-value {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: #CBD5E1;
+}
+.px-twin-stat.is-highlight .px-twin-stat-value { color: #D4A018; }
+.px-twin-stat.is-danger    .px-twin-stat-value { color: #EF4444; }
+
+
+.px-twin-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  grid-template-rows: 1fr auto;
+  gap: 12px;
+  padding: 12px 24px 24px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.px-twin-workspace {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  background: #0B0F14;
+  border: 1px solid #1F2937;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.px-twin-registers {
+  grid-column: 2;
+  grid-row: 1;
+  background: #0B0F14;
+  border: 1px solid #1F2937;
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow: auto;
+}
+
+.px-twin-trend {
+  grid-column: 2;
+  grid-row: 2;
+  background: #0B0F14;
+  border: 1px solid #1F2937;
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow: auto;
+  min-height: 220px;
+}
+.px-twin-trend .px-trend-chart { width: 100%; height: 100%; min-height: 180px; display: block; }
+
+.px-twin-placeholder, .px-twin-sld {
+  flex: 1 1 auto;
+  padding: 16px;
+  color: #94A3B8;
+  font-size: 12px;
+  background: #06090D;
+  overflow: auto;
+}
+
+.px-twin-loading {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15,19,24,0.92);
+  color: #94A3B8;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  border: 1px solid #1F2937;
+}
+
+/* Compact register tiles inside the dark twin grid */
+.px-twin-registers .px-sa-grid-section { background: transparent; }
+.px-twin-registers .px-sa-grid-title  { color: #94A3B8; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px; }
+/* Restore display:grid that the global .px-sa-grid expects (twin-view.css overrides only gap). */
+.px-sa-grid                            { display: grid; gap: 6px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.px-twin-registers .px-sa-grid        { gap: 6px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.px-twin-registers .px-register-tile {
+  background: #0F1318;
+  border: 1px solid #1F2937;
+  border-radius: 4px;
+  padding: 8px;
+  color: #CBD5E1;
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+  text-align: left;
+  transition: background 120ms;
+}
+.px-twin-registers .px-register-tile:hover { background: #16202B; }
+.px-twin-registers .px-register-icon  { font-size: 12px; opacity: .6; }
+.px-twin-registers .px-register-title { font-size: 10px; color: #94A3B8; line-height: 1.2; }
+.px-twin-registers .px-register-count { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 16px; font-weight: 600; color: #fff; }
+.px-twin-registers .px-severity-low      .px-register-count { color: #34D399; }
+.px-twin-registers .px-severity-medium   .px-register-count { color: #FBBF24; }
+.px-twin-registers .px-severity-high     .px-register-count { color: #F97316; }
+.px-twin-registers .px-severity-critical .px-register-count { color: #EF4444; }
+.px-twin-registers .px-trend             { font-size: 10px; opacity: .7; }
+
+/* Trend table + chart inside the dark grid */
+.px-twin-trend .px-trend-sync     { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 10px; align-items: stretch; }
+.px-twin-trend .px-trend-table    { color: #CBD5E1; font-size: 11px; width: 100%; border-collapse: collapse; }
+.px-twin-trend .px-trend-table th { color: #94A3B8; text-align: left; padding: 4px 6px; font-weight: 600; }
+.px-twin-trend .px-trend-table td { padding: 3px 6px; border-top: 1px solid #1F2937; }
+.px-twin-trend .px-trend-row.is-focused { background: rgba(212,160,24,0.10); }
+.px-twin-trend .px-trend-bg       { fill: #06090D; }
+.px-twin-trend .px-axis           { stroke: #1F2937; stroke-width: 1; }
+.px-twin-trend .px-trend-line     { fill: none; stroke-width: 1.4; opacity: 0.6; }
+.px-twin-trend .px-trend-line.is-focused { opacity: 1; stroke-width: 2; }
+
+.px-state-dot          { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
+.px-state-dot.px-state-ok    { background: #34D399; }
+.px-state-dot.px-state-warn  { background: #FBBF24; }
+.px-state-dot.px-state-alarm { background: #EF4444; }

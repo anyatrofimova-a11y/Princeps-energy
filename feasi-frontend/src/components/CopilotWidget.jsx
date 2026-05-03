@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useSite } from "../SiteContext";
+import { usePanel } from "../hooks/useUiPanels.js";
 import { useWorkspace } from "../contexts/WorkspaceContext";
 import api from "../services/api";
 import GridCanvas from "./GridCanvas";
@@ -319,11 +320,15 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
 
   const {
     parcelId, workflowStage, explain, solarYield, gridContext,
-    gridConnectionOpen, setGridConnectionOpen,
-    demandForecastOpen, gridTwinOpen, setGridTwinOpen,
     geeflowData, pickedLocation, chatLayers,
     layers, setLayers,
   } = site;
+
+  // Stage B5: panel flags moved out of SiteContext into URL-hash-backed
+  // usePanel(). Behaviour identical; deep-linking now works.
+  const [gridConnectionOpen, setGridConnectionOpen] = usePanel('grid-connection');
+  const [demandForecastOpen] = usePanel('demand-forecast');
+  const [gridTwinOpen, setGridTwinOpen] = usePanel('grid-twin');
 
   const { activeWorkspace, activeIntent, activeViewMode } = ws;
 

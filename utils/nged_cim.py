@@ -833,25 +833,55 @@ async def opportunity_summary(conn) -> dict:
 async def substations_geojson(conn, west: float, south: float,
                               east: float, north: float) -> dict:
     """GeoJSON FeatureCollection of NGED substations with headroom properties."""
+    # NULL-preserving aggregates: distinguish "no transformers found" from
+    # "transformers exist but rated_mva is placeholder". Without this the
+    # popup shows fake zeros where the upstream LTDS CIM data is missing.
+    # is_canonical filter dedupes coord-collisions (Astrazeneca east_midlands
+    # vs Astra Zeneca south_west). The flag is maintained by the dedupe SQL
+    # in app/migrations/0020_nged_substation_dedupe.sql; rows where it's
+    # FALSE are duplicate names at coords already covered by the canonical row.
     rows = await conn.fetch("""
         SELECT s.id, s.name, s.region, s.voltage_kv,
                ST_Y(s.geometry) AS lat, ST_X(s.geometry) AS lon,
                s.osm_match_score,
-               COALESCE(SUM(t.rated_mva), 0) AS rated_mva,
-               COALESCE((SELECT SUM(ec.p_mw) FROM nged_energy_consumer ec
-                         WHERE ec.substation_id = s.id), 0) AS load_mw
+               SUM(t.rated_mva) FILTER (WHERE t.rated_mva IS NOT NULL) AS rated_mva,
+               COUNT(t.id) AS transformer_count,
+               (SELECT SUM(ec.p_mw) FROM nged_energy_consumer ec
+                 WHERE ec.substation_id = s.id
+                   AND ec.p_mw IS NOT NULL) AS load_mw,
+               (SELECT COUNT(*) FROM nged_energy_consumer ec
+                 WHERE ec.substation_id = s.id) AS consumer_count
         FROM nged_substation s
         LEFT JOIN nged_transformer t ON t.substation_id = s.id
         WHERE s.geometry IS NOT NULL
           AND s.geometry && ST_MakeEnvelope($1, $2, $3, $4, 4326)
+          AND COALESCE(s.is_canonical, TRUE)
         GROUP BY s.id, s.name, s.region, s.voltage_kv, s.geometry, s.osm_match_score
     """, west, south, east, north)
 
+    # Treat the well-known LTDS placeholder (every transformer = exactly 100 MVA
+    # and only one transformer) as missing data rather than a real rating.
+    PLACEHOLDER_RATED_MVA = 100.0
+
     features = []
     for r in rows:
-        rated = float(r["rated_mva"])
-        load = float(r["load_mw"])
-        headroom = rated - load
+        rated_raw = r["rated_mva"]
+        rated = float(rated_raw) if rated_raw is not None else None
+        if rated is not None and r["transformer_count"] == 1 and abs(rated - PLACEHOLDER_RATED_MVA) < 0.01:
+            rated = None  # placeholder — surface as unknown
+
+        load = float(r["load_mw"]) if r["load_mw"] is not None else None
+        # If no consumers linked at all, load is unknown — not zero.
+        if r["consumer_count"] == 0:
+            load = None
+
+        headroom = (rated - load) if (rated is not None and load is not None) else None
+
+        if headroom is not None:
+            rag = "green" if headroom > 5 else "amber" if headroom >= 1 else "red"
+        else:
+            rag = "unknown"
+
         features.append({
             "type": "Feature",
             "geometry": {
@@ -863,12 +893,19 @@ async def substations_geojson(conn, west: float, south: float,
                 "name": r["name"],
                 "region": r["region"],
                 "voltage_kv": r["voltage_kv"],
-                "rated_mva": round(rated, 2),
-                "connected_load_mw": round(load, 2),
-                "headroom_mw": round(headroom, 2),
+                "rated_mva": round(rated, 2) if rated is not None else None,
+                "connected_load_mw": round(load, 2) if load is not None else None,
+                "headroom_mw": round(headroom, 2) if headroom is not None else None,
+                "transformer_count": int(r["transformer_count"]),
+                "consumer_count": int(r["consumer_count"]),
                 "osm_match_score": float(r["osm_match_score"]) if r["osm_match_score"] else None,
-                # RAG category for styling
-                "rag": "green" if headroom > 5 else "amber" if headroom >= 1 else "red",
+                "data_quality": (
+                    "complete" if (rated is not None and load is not None)
+                    else "rating_only" if rated is not None
+                    else "load_only" if load is not None
+                    else "name_only"
+                ),
+                "rag": rag,
             },
         })
 

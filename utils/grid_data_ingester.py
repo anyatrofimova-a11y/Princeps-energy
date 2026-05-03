@@ -46,15 +46,31 @@ DNO_CONFIGS = {
         "name": "UK Power Networks",
         "platform": "opendatasoft",
         "base_url": "https://ukpowernetworks.opendatasoft.com",
-        # NOTE: UKPN now requires an API key for record access (data_visible=false).
-        # Set env var UKPN_ODS_APIKEY to enable. Without it, requests return 403.
+        # NOTE: UKPN now gates every record-level endpoint behind API key
+        # auth (data_visible=false on the catalogue). Set UKPN_ODS_APIKEY
+        # or every fetch returns 403. Dataset IDs re-verified 2026-04-21
+        # against the live /api/explore/v2.1/catalog endpoint.
         "datasets": {
-            "substations": "ukpn-grid-supply-points-overview",
+            # Primary + grid substations (1,506 rows) with coords, voltage,
+            # max summer/winter demand, transformer firm capacity. Replaces
+            # the retired `ukpn-grid-and-primary-sites` id.
+            "substations": "grid-and-primary-sites",
+            # DFES Network Scenario Headroom Report (176,580 rows) —
+            # per-substation demand/generation headroom by scenario/year.
             "headroom": "dfes-network-headroom-report",
+            # GSP-level asset/technical limits + observed flows (60 rows).
+            "gsp": "ukpn-grid-supply-points-overview",
+            # Embedded Capacity Register (1,205 rows). Field names below
+            # follow UKPN's DCode v2 schema (snake_case long-form).
             "ecr": "ukpn-embedded-capacity-register",
         },
         "api_key_env": "UKPN_ODS_APIKEY",
         "regions": ["Eastern (EPN)", "London (LPN)", "South East (SPN)"],
+        # Scenario + year used to pin the "headline" headroom row per site.
+        # Holistic Transition is UKPN's central DFES pathway and closest to
+        # NESO FES "System Transformation". Year defaults to current.
+        "dfes_scenario": "Holistic Transition",
+        "dfes_year": "2026",
     },
     "npg": {
         "name": "Northern Powergrid",
@@ -295,6 +311,225 @@ class OpenDataSoftAdapter(DataAdapter):
             })
 
         log.info("[%s] Fetched %d ECR entries from %s", self.dno_code, len(entries), dataset_id)
+        return entries
+
+
+# ─── UKPN Adapter (OpenDataSoft + DFES headroom merge) ────────────────────
+
+class UKPNAdapter(OpenDataSoftAdapter):
+    """
+    UKPN-specific adapter.
+
+    UKPN's OpenDataSoft portal exposes primary/grid sites and DFES headroom
+    as two separate datasets. This adapter:
+      1. Pulls `grid-and-primary-sites` (1,506 rows, coords + firm capacity).
+      2. Pulls `dfes-network-headroom-report` filtered to one scenario/year
+         (default: Holistic Transition / current year) and left-joins on
+         `sitefunctionallocation` to enrich each substation with
+         demand_headroom_mw and gen_headroom_mw.
+      3. Falls back to (firm_capacity − max_demand) when DFES has no row
+         for a site (mostly Grid Supply Points which live outside DFES).
+
+    Rationale:
+    * `grid-and-primary-sites` has no headroom column directly — it only
+      carries winter/summer firm capacity and peak demand (LTDS Table 3a).
+    * DFES Network Scenario Headroom Report (176k rows) is the canonical
+      per-substation headroom source UKPN publishes, structured as one row
+      per (substation × category × scenario × year). We select a single
+      scenario/year per run to avoid explosion.
+
+    Dataset IDs and fields verified 2026-04-21 against the live API. See
+    docs/audits/ukpn_ingest_2026_04_21.md for the discovery trail.
+    """
+
+    DFES_DEMAND_CATEGORY = "Demand Headroom"
+    DFES_GEN_INVERTER_CATEGORY = "Gen inverter headroom"
+    DFES_GEN_SYNCH_CATEGORY = "Gen synch headroom"
+
+    async def _fetch_dfes_headroom(self) -> dict[str, dict[str, float]]:
+        """Return {sitefunctionallocation: {'demand_mw': x, 'gen_mw': y}}.
+
+        Filters DFES to a single (scenario, year) so we get ~11.7k rows
+        (three categories × ~3,900 substations) instead of 176k. Gen
+        headroom = min(inverter, synch) — both are thermal limits, we
+        take the tighter one.
+        """
+        if "headroom" not in self.config["datasets"]:
+            return {}
+
+        dataset_id = self.config["datasets"]["headroom"]
+        scenario = self.config.get("dfes_scenario", "Holistic Transition")
+        year = str(self.config.get("dfes_year", "2026"))
+        where = f'scenario="{scenario}" AND year="{year}"'
+
+        try:
+            records = await self._fetch_records(dataset_id, limit=100, where=where)
+        except httpx.HTTPStatusError as e:
+            log.warning(
+                "[ukpn] DFES headroom fetch failed (HTTP %s) — substations "
+                "will fall back to firm_capacity − max_demand",
+                e.response.status_code,
+            )
+            return {}
+        except Exception as e:
+            log.warning("[ukpn] DFES headroom fetch error: %s", e)
+            return {}
+
+        # Merge categories into one row per substation.
+        merged: dict[str, dict[str, Any]] = {}
+        for rec in records:
+            fields = rec.get("fields", rec)
+            floc = fields.get("sitefunctionallocation")
+            if not floc:
+                continue
+            category = fields.get("category")
+            headroom = _parse_num(fields.get("headroom_mw"))
+            if headroom is None:
+                continue
+            entry = merged.setdefault(floc, {"demand_mw": None, "gen_inv": None, "gen_synch": None})
+            if category == self.DFES_DEMAND_CATEGORY:
+                entry["demand_mw"] = headroom
+            elif category == self.DFES_GEN_INVERTER_CATEGORY:
+                entry["gen_inv"] = headroom
+            elif category == self.DFES_GEN_SYNCH_CATEGORY:
+                entry["gen_synch"] = headroom
+
+        # Collapse gen inverter/synch → single gen_mw (tighter of the two).
+        out: dict[str, dict[str, float]] = {}
+        for floc, e in merged.items():
+            gen_values = [v for v in (e["gen_inv"], e["gen_synch"]) if v is not None]
+            out[floc] = {
+                "demand_mw": e["demand_mw"],
+                "gen_mw": min(gen_values) if gen_values else None,
+            }
+
+        log.info(
+            "[ukpn] DFES headroom: %d substations enriched (scenario=%s year=%s)",
+            len(out), scenario, year,
+        )
+        return out
+
+    async def fetch_substations(self) -> list[dict]:
+        """Fetch UKPN primary/grid sites + merge DFES headroom."""
+        dataset_id = self.config["datasets"]["substations"]
+        records = await self._fetch_records(dataset_id, limit=100)
+        headroom_by_floc = await self._fetch_dfes_headroom()
+
+        substations = []
+        for rec in records:
+            fields = rec.get("fields", rec)
+            geo = fields.get("spatial_coordinates") or {}
+            lat = _parse_num(geo.get("lat"))
+            lon = _parse_num(geo.get("lon"))
+
+            floc = fields.get("sitefunctionallocation") or ""
+            name = (fields.get("sitename") or floc or "Unknown").strip()
+            site_type_raw = fields.get("sitetype") or ""
+            voltage_kv = _parse_num(fields.get("sitevoltage"))
+
+            # Peak demand — UKPN reports summer + winter; take the higher
+            # (LTDS Table 3a definition of "peak demand").
+            dem_s = _parse_num(fields.get("maxdemandsummer"))
+            dem_w = _parse_num(fields.get("maxdemandwinter"))
+            demand_mw = max(x for x in (dem_s, dem_w) if x is not None) if (dem_s or dem_w) else None
+
+            # Transformer firm capacity. Field carries one or more ratings
+            # comma-separated (e.g. "16.5, 16.5" for a 2×16.5 MVA site).
+            # Firm capacity under N-1 = (N-1) × individual_rating = sum − max.
+            rat_s = _parse_firm_mva(fields.get("transratingsummer"))
+            rat_w = _parse_firm_mva(fields.get("transratingwinter"))
+            firm_mva = min(x for x in (rat_s, rat_w) if x is not None) if (rat_s or rat_w) else None
+
+            # Headroom — prefer DFES; fall back to firm_capacity − peak_demand
+            # (assumes unity power factor — close enough for screening).
+            hr = headroom_by_floc.get(floc, {})
+            demand_headroom = hr.get("demand_mw")
+            gen_headroom = hr.get("gen_mw")
+            if demand_headroom is None and firm_mva is not None and demand_mw is not None:
+                demand_headroom = max(0.0, round(firm_mva - demand_mw, 2))
+
+            licence_area = (fields.get("licencearea") or "").strip()
+
+            substations.append({
+                "external_id": floc or name,
+                "name": name,
+                "dno": self.dno_code,
+                "region": licence_area,
+                "voltage_kv": voltage_kv,
+                "site_type": site_type_raw,
+                "demand_mw": demand_mw,
+                "generation_mw": None,  # UKPN doesn't report aggregate gen here.
+                "demand_headroom_mw": demand_headroom,
+                "gen_headroom_mw": gen_headroom,
+                "fault_level_ka": None,
+                "transformer_rating_mva": firm_mva,
+                "rag_demand": None,
+                "rag_generation": None,
+                "lat": lat,
+                "lon": lon,
+                "raw_data": fields,
+            })
+
+        with_hr = sum(1 for s in substations if s["demand_headroom_mw"] is not None)
+        log.info(
+            "[ukpn] Fetched %d substations from %s (%d with headroom)",
+            len(substations), dataset_id, with_hr,
+        )
+        return substations
+
+    async def fetch_ecr(self) -> list[dict]:
+        """UKPN ECR uses a different field schema than the generic adapter.
+
+        Fields verified against the live dataset (1,205 rows, 2026-04-21):
+        `reference`, `customer_site`, `licence_area`,
+        `energy_source_1`, `maximum_export_capacity_mw`,
+        `point_of_connection_poc_voltage_kv`, `primary`, `connection_status`,
+        `latitude`/`longitude` and `location_x_coordinate_eastings...`.
+        """
+        if "ecr" not in self.config["datasets"]:
+            return []
+
+        dataset_id = self.config["datasets"]["ecr"]
+        records = await self._fetch_records(dataset_id, limit=100)
+
+        entries = []
+        for rec in records:
+            fields = rec.get("fields", rec)
+
+            # Coords — UKPN's ECR keeps lat/lon in top-level fields rather
+            # than a geo_point_2d dict. spatialcoordinates_customer also
+            # exists for some rows.
+            lat = _parse_num(fields.get("latitude"))
+            lon = _parse_num(fields.get("longitude"))
+            if lat is None or lon is None:
+                geo = fields.get("spatialcoordinates_customer") or {}
+                lat = lat or _parse_num(geo.get("lat") if isinstance(geo, dict) else None)
+                lon = lon or _parse_num(geo.get("lon") if isinstance(geo, dict) else None)
+
+            # Capacity: export is what matters for generation; fall back to
+            # import for pure demand connections.
+            capacity = _parse_num(fields.get("maximum_export_capacity_mw"))
+            if capacity is None:
+                capacity = _parse_num(fields.get("maximum_import_capacity_mw"))
+
+            # Technology: use primary energy source when present.
+            tech_raw = fields.get("energy_source_1") or fields.get("energy_conversion_technology_1")
+
+            entries.append({
+                "external_id": str(fields.get("reference") or fields.get("export_mpan_msid") or ""),
+                "site_name": fields.get("customer_site") or fields.get("customer_name"),
+                "dno": self.dno_code,
+                "technology": _classify_tech(tech_raw),
+                "capacity_mw": capacity,
+                "voltage_kv": _parse_num(fields.get("point_of_connection_poc_voltage_kv")),
+                "substation_name": fields.get("primary") or fields.get("bulk_supply_point") or fields.get("grid_supply_point"),
+                "status": fields.get("connection_status"),
+                "lat": lat,
+                "lon": lon,
+                "raw_data": fields,
+            })
+
+        log.info("[ukpn] Fetched %d ECR entries from %s", len(entries), dataset_id)
         return entries
 
 

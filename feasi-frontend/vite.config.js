@@ -4,6 +4,24 @@ import cesium from "vite-plugin-cesium";
 
 export default defineConfig({
   plugins: [react(), cesium()],
+  // Pre-bundle the heavy 3D-twin deps so the browser doesn't 404 on first
+  // lazy-load of TwinRoot. @deck.gl/mapbox in particular wasn't being
+  // discovered by Vite (TwinRoot is React.lazy-imported, so its imports
+  // aren't scanned at startup). Without these, the browser sees
+  //   404 /node_modules/.vite/deps/@deck_gl_mapbox.js
+  // React.lazy's promise hangs, and TwinLazy's "Loading construction kit…"
+  // skeleton stays visible forever (BOT-TWIN-LOAD).
+  optimizeDeps: {
+    include: [
+      "@deck.gl/mapbox",
+      "@deck.gl/core",
+      "@deck.gl/layers",
+      "@deck.gl/extensions",
+      "@deck.gl/geo-layers",
+      "mapbox-gl",
+      "@turf/turf",
+    ],
+  },
   test: {
     environment: "jsdom",
     globals: true,
@@ -30,6 +48,7 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      "/static": "http://localhost:8000",
       "/site": "http://localhost:8000",
       "/sites": "http://localhost:8000",
       "/tiles": "http://localhost:8000",
@@ -67,7 +86,7 @@ export default defineConfig({
       "/hardware": "http://localhost:8000",
       "/teaser": "http://localhost:8000",
       "/alerts": "http://localhost:8000",
-      "/api": "http://localhost:8000",
+      "/api": { target: "http://localhost:8000", ws: true, changeOrigin: true },
       "/ws": { target: "http://localhost:8000", ws: true },
       "/pmtiles-proxy": {
         target: "https://pbcc.blob.core.windows.net",

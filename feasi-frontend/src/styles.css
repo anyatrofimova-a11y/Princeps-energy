@@ -17082,7 +17082,7 @@ input[type="range"] { accent-color: var(--accent); }
   align-items: center;
   gap: 16px;
   padding: 0 20px;
-  height: 28px;
+  height: 32px;
   background: #FFFFFF;
   border-top: 1px solid #E8E5DF;
   font-family: var(--mono, "JetBrains Mono"), ui-monospace, monospace;
@@ -17093,6 +17093,7 @@ input[type="range"] { accent-color: var(--accent); }
   scrollbar-width: none;
   position: relative;
   flex-shrink: 0;
+  z-index: 200;
 }
 .live-strip-v2::-webkit-scrollbar { display: none; }
 
@@ -22847,3 +22848,169 @@ input[type="range"] { accent-color: var(--accent); }
   text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; margin-top: 1px;
 }
 .cap-stat-div { width: 1px; height: clamp(16px, 2vw, 26px); background: rgba(0,0,0,0.08); }
+
+/* ── Parcel mini popup (rich card with outbound research links) ───── */
+.lp-mini-popup .mapboxgl-popup-content {
+  padding: 0; border-radius: 10px; overflow: hidden;
+  box-shadow: 0 6px 24px rgba(0,0,0,.18);
+}
+.lp-popup-card {
+  font-family: "DM Sans", system-ui, sans-serif; font-size: 12px;
+  line-height: 1.45; color: #1a1d23; padding: 12px 14px;
+}
+.lp-popup-head {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 6px; gap: 8px;
+}
+.lp-popup-title { font-size: 13px; font-weight: 600; }
+.lp-popup-verdict {
+  color: #fff; font-weight: 700; font-size: 10px;
+  padding: 2px 8px; border-radius: 4px; letter-spacing: .5px;
+}
+.lp-popup-meta {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-bottom: 8px;
+}
+.lp-popup-meta > span { font-size: 11px; }
+.lp-popup-tenure { font-weight: 600; text-transform: capitalize; }
+.lp-popup-area { font-weight: 600; }
+.lp-popup-chip {
+  background: #f3f4f6; color: #374151; padding: 1px 6px;
+  border-radius: 3px; font-size: 10px;
+}
+.lp-popup-row { font-size: 11px; margin: 2px 0; color: #374151; }
+.lp-popup-row b { color: #1a1d23; font-weight: 600; }
+.lp-popup-muted { color: #9ca3af; font-style: italic; }
+.lp-popup-mono {
+  font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10px;
+  color: #6b7280;
+}
+.lp-popup-actions {
+  display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px;
+  padding-top: 8px; border-top: 1px solid #eee;
+}
+.lp-popup-btn {
+  display: inline-block; font-size: 11px; padding: 4px 8px;
+  background: #fff; border: 1px solid #d1d5db; border-radius: 4px;
+  color: #374151; text-decoration: none; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.lp-popup-btn:hover { background: #f9fafb; border-color: #d4a018; color: #d4a018; }
+.lp-popup-btn-primary { background: #1a1d23; color: #fff; border-color: #1a1d23; }
+.lp-popup-btn-primary:hover { background: #d4a018; border-color: #d4a018; color: #fff; }
+
+/* Loading + reasoning rows for the enriched parcel popup */
+.lp-popup-verdict-loading {
+  background: #e5e7eb; color: #6b7280; font-weight: 700; font-size: 10px;
+  padding: 2px 8px; border-radius: 4px; letter-spacing: .5px;
+}
+.lp-popup-chip-warn { background: #fef3c7; color: #92400e; font-weight: 600; }
+.lp-popup-reasons {
+  margin: 6px 0 0; padding: 6px 8px 6px 22px;
+  list-style: disc; background: #fafafa; border-radius: 4px;
+  border-left: 2px solid #d4a018;
+}
+.lp-popup-reason { font-size: 11px; color: #374151; margin: 2px 0; }
+
+/* ── SearchZone button (one-click PV/BESS scan) ───────────────────────
+   Floats above the map, top-left, beneath the existing site-search card. */
+.sz-root {
+  position: absolute; top: 14px; left: 410px; z-index: 5;
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+  pointer-events: none;
+}
+.sz-root > * { pointer-events: auto; }
+.sz-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 8px; border: 1px solid #1a1d23;
+  background: #1a1d23; color: #fff; font-family: "DM Sans", system-ui, sans-serif;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.sz-btn:hover { background: #d4a018; border-color: #d4a018; color: #1a1d23; }
+.sz-btn-drawing  { background: #7C3AED; border-color: #7C3AED; }
+.sz-btn-drawing:hover { background: #fff; color: #7C3AED; border-color: #7C3AED; }
+.sz-btn-scanning { background: #f59e0b; border-color: #f59e0b; color: #1a1d23; }
+.sz-btn-done     { background: #16a34a; border-color: #16a34a; }
+.sz-btn-done:hover { background: #fff; color: #16a34a; border-color: #16a34a; }
+.sz-icon { font-size: 14px; line-height: 1; }
+.sz-summary {
+  display: flex; flex-wrap: wrap; gap: 4px; max-width: 320px;
+  padding: 6px 8px; background: rgba(255,255,255,.95); border-radius: 6px;
+  border: 1px solid #e5e7eb; box-shadow: 0 2px 8px rgba(0,0,0,.08);
+}
+.sz-chip {
+  font-size: 10px; padding: 2px 6px; border-radius: 3px;
+  background: #ede9fe; color: #5b21b6; font-weight: 600;
+}
+
+/* ── Scan-result banner inside the LayerControlPanel dropdown ─────── */
+.lyc-scan-banner {
+  margin-bottom: 10px; padding: 8px; border-radius: 6px;
+  background: linear-gradient(180deg, #faf5ff, #f3e8ff);
+  border: 1px solid #e9d5ff;
+}
+.lyc-scan-banner-title {
+  font-size: 10px; font-weight: 700; color: #5b21b6;
+  text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px;
+}
+.lyc-scan-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 11px; padding: 3px 4px; border-radius: 3px; margin: 1px 0;
+}
+.lyc-scan-row-hit  { color: #1a1d23; font-weight: 500; }
+.lyc-scan-row-hit .lyc-scan-badge {
+  background: #7C3AED; color: #fff; padding: 1px 6px; border-radius: 3px;
+  font-size: 10px; font-weight: 700;
+}
+.lyc-scan-row-empty { color: #9ca3af; }
+.lyc-scan-row-empty .lyc-scan-badge {
+  background: #f3f4f6; color: #9ca3af; padding: 1px 6px; border-radius: 3px;
+  font-size: 10px; font-weight: 600;
+}
+
+/* ── Stage funnel: clickable rows + filtered list view ───────────── */
+.mc-funnel-row-click {
+  cursor: pointer; border-radius: 6px;
+  transition: background .12s, transform .12s;
+}
+.mc-funnel-row-click:hover { background: rgba(212, 160, 24, .08); }
+.mc-funnel-row-click:active { transform: translateX(1px); }
+.mc-funnel-row-click:focus-visible {
+  outline: 2px solid #d4a018; outline-offset: 2px;
+}
+
+.rd-stage-list { padding: 24px 32px; max-width: 920px; margin: 0 auto; }
+.rd-stage-list-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #e5e7eb;
+}
+.rd-stage-list-eyebrow {
+  font-size: 11px; color: #d4a018; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.rd-stage-list-title {
+  font-size: 24px; font-weight: 700; color: #1a1d23; margin: 4px 0 0;
+}
+.rd-stage-list-count { color: #9ca3af; font-weight: 500; }
+.rd-stage-list-clear {
+  font-size: 12px; padding: 6px 12px; border-radius: 6px;
+  border: 1px solid #d1d5db; background: #fff; color: #374151;
+  cursor: pointer; font-weight: 500;
+}
+.rd-stage-list-clear:hover { border-color: #d4a018; color: #d4a018; }
+.rd-stage-list-empty {
+  padding: 48px; text-align: center; color: #9ca3af; font-size: 14px;
+}
+.rd-stage-list-rows { list-style: none; padding: 0; margin: 0; }
+.rd-stage-list-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid #f3f4f6;
+  cursor: pointer; transition: background .12s;
+}
+.rd-stage-list-row:hover { background: #faf5ff; }
+.rd-stage-list-row-main { display: flex; flex-direction: column; gap: 2px; }
+.rd-stage-list-row-name { font-size: 14px; font-weight: 600; color: #1a1d23; }
+.rd-stage-list-row-meta { font-size: 12px; color: #6b7280; }
+.rd-stage-list-row-date { font-size: 12px; color: #9ca3af; }
