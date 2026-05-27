@@ -337,7 +337,7 @@ function ActiveProjectsTable({ projects, loading, onSelectProject }) {
                       ({fmtDeadline(p.next_action_due_days)})
                     </span>
                   </td>
-                  <td className="mc-td-arr">{isHover ? "\u2192" : ""}</td>
+                  <td className="mc-td-arr">{"\u2192"}</td>
                 </tr>
               );
             })}
@@ -480,9 +480,6 @@ export default function Dashboard({
       {/* ── Live BESS revenue widget (WebSocket + Modo overlay) ── */}
       <LiveBessRevenue />
 
-      {/* ── Princeps Tools — links to the new Foundry/Warp-Speed surfaces ── */}
-      <PrincepsToolsCard />
-
       {/* ── Active projects table ── */}
       <ActiveProjectsTable
         projects={projects}
@@ -490,8 +487,124 @@ export default function Dashboard({
         onSelectProject={onSelectProject}
       />
 
+      {/* ── Regulatory & portfolio updates feed ── */}
+      <UpdatesFeed onActivityClick={handleActivityClick} />
+
       <style>{dashboardCss}</style>
     </div>
+  );
+}
+
+/**
+ * UpdatesFeed — unified regulatory + portfolio activity panel that sits
+ * below the Active Projects table on Mission Control. Pulls from
+ * `/api/portfolio/updates`: stage changes, council verdicts, new
+ * dockets, dataset refreshes, alert firings. Newest first.
+ */
+function UpdatesFeed({ onActivityClick }) {
+  const [updates, setUpdates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/portfolio/updates?limit=80")
+      .then(r => r.ok ? r.json() : { updates: [] })
+      .then(d => { if (!cancelled) setUpdates(d.updates || []); })
+      .catch(() => { if (!cancelled) setUpdates([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (filter === "all") return updates;
+    return updates.filter(u => u.kind === filter);
+  }, [updates, filter]);
+
+  const counts = useMemo(() => {
+    const c = { all: updates.length, stage_change: 0, council: 0, docket: 0, dataset_refresh: 0 };
+    updates.forEach(u => { c[u.kind] = (c[u.kind] || 0) + 1; });
+    return c;
+  }, [updates]);
+
+  const fmtAgo = (iso) => {
+    if (!iso) return "";
+    const t = new Date(iso).getTime();
+    const ago = Math.max(0, Date.now() - t);
+    if (ago < 60_000) return "just now";
+    if (ago < 3_600_000) return `${Math.round(ago / 60_000)}m ago`;
+    if (ago < 86_400_000) return `${Math.round(ago / 3_600_000)}h ago`;
+    return `${Math.round(ago / 86_400_000)}d ago`;
+  };
+
+  const KIND_BADGE = {
+    stage_change:    { label: "Stage",      color: "#16A34A" },
+    council:         { label: "Council",    color: "#9333EA" },
+    docket:          { label: "Docket",     color: "#E8A012" },
+    dataset_refresh: { label: "Connector",  color: "#0891B2" },
+    alert:           { label: "Alert",      color: "#DC2626" },
+  };
+
+  const filters = [
+    { id: "all",             label: "All" },
+    { id: "stage_change",    label: "Stages" },
+    { id: "council",         label: "Council" },
+    { id: "docket",          label: "Dockets" },
+    { id: "dataset_refresh", label: "Connectors" },
+  ];
+
+  return (
+    <section className="mc-updates" aria-label="Portfolio & regulatory updates">
+      <header className="mc-updates-head">
+        <div>
+          <div className="mc-hero-eyebrow">Updates</div>
+          <h3 className="mc-updates-title">Regulatory & portfolio activity</h3>
+        </div>
+        <nav className="mc-updates-filters">
+          {filters.map(f => (
+            <button
+              key={f.id}
+              type="button"
+              className={"mc-updates-filter" + (filter === f.id ? " mc-updates-filter--on" : "")}
+              onClick={() => setFilter(f.id)}
+            >
+              {f.label}
+              <span className="mc-updates-filter-count">{counts[f.id] || 0}</span>
+            </button>
+          ))}
+        </nav>
+      </header>
+
+      {loading ? (
+        <div className="mc-updates-loading">Loading regulatory & portfolio activity…</div>
+      ) : filtered.length === 0 ? (
+        <div className="mc-updates-empty">No updates yet in this view.</div>
+      ) : (
+        <ul className="mc-updates-list">
+          {filtered.slice(0, 12).map((u, i) => {
+            const badge = KIND_BADGE[u.kind] || { label: u.kind, color: "#6B7280" };
+            const clickable = u.ref?.type === "project";
+            return (
+              <li
+                key={`${u.kind}-${i}-${u.ts}`}
+                className={"mc-update-row" + (clickable ? " mc-update-clickable" : "")}
+                onClick={() => {
+                  if (clickable) onActivityClick?.({ project_id: u.ref.id });
+                }}
+                title={clickable ? "Open project workspace" : undefined}
+              >
+                <span className="mc-update-badge" style={{ background: badge.color }}>{badge.label}</span>
+                <div className="mc-update-body">
+                  <div className="mc-update-title">{u.title}</div>
+                  {u.subtitle && <div className="mc-update-sub">{u.subtitle}</div>}
+                </div>
+                <span className="mc-update-when">{fmtAgo(u.ts)}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -1025,6 +1138,8 @@ const dashboardCss = `
     border-bottom: 1px solid var(--cds-border-subtle);
     color: var(--cds-text-primary);
   }
+  .mc-table tbody tr { cursor: pointer; transition: background .12s ease; }
+  .mc-table tbody tr:hover { background: #FFFBF0; }
   .mc-tr-hover { background: #FFFBF0; cursor: pointer; }
   .mc-td-name { font-weight: 500; }
   .mc-td-type { color: var(--cds-text-helper); font-size: 12px; }
@@ -1033,11 +1148,104 @@ const dashboardCss = `
   .mc-td-next { font-size: 12px; }
   .mc-td-arr { text-align: right; color: var(--cds-text-helper); font-size: 14px; }
   .mc-table-empty { padding: 32px; text-align: center; color: var(--cds-text-helper); }
+  .mc-table tbody tr:has(.mc-table-empty) { cursor: default; }
+  .mc-table tbody tr:has(.mc-table-empty):hover { background: transparent; }
   .mc-pill {
     display: inline-flex; align-items: center;
     padding: 3px 8px; border-radius: 3px;
     font-family: "DM Sans", sans-serif; font-weight: 700;
     font-size: 10px; letter-spacing: 0.06em;
+  }
+
+  /* ── Regulatory & portfolio activity (matches .mc-table-wrap card) ── */
+  .mc-updates {
+    background: var(--cds-layer-01);
+    border: 1px solid var(--cds-border-subtle);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 24px;
+  }
+  .mc-updates-head {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--cds-border-subtle);
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap;
+  }
+  .mc-updates-title {
+    margin: 4px 0 0 0;
+    font-size: 16px; font-weight: 600;
+    color: var(--cds-text-primary); letter-spacing: -0.005em;
+  }
+  .mc-updates-filters {
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .mc-updates-filter {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 6px;
+    background: var(--cds-layer-02, #F7F8FA);
+    border: 1px solid var(--cds-border-subtle);
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+    color: var(--cds-text-secondary, #4B5563);
+    cursor: pointer; transition: background .12s, border-color .12s;
+  }
+  .mc-updates-filter:hover { background: #FFFBF0; }
+  .mc-updates-filter--on {
+    background: #FFF7E0;
+    border-color: #E8C36A;
+    color: var(--cds-text-primary);
+  }
+  .mc-updates-filter-count {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.04);
+    color: var(--cds-text-helper);
+  }
+  .mc-updates-filter--on .mc-updates-filter-count {
+    background: rgba(232,160,18,0.18); color: #8A5A00;
+  }
+  .mc-updates-loading, .mc-updates-empty {
+    padding: 32px 20px; text-align: center;
+    color: var(--cds-text-helper); font-size: 13px;
+  }
+  .mc-updates-list {
+    list-style: none; margin: 0; padding: 0;
+  }
+  .mc-update-row {
+    display: grid;
+    grid-template-columns: 88px 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--cds-border-subtle);
+    font-size: 13px;
+  }
+  .mc-update-row:last-child { border-bottom: none; }
+  .mc-update-clickable { cursor: pointer; }
+  .mc-update-clickable:hover { background: #FFFBF0; }
+  .mc-update-badge {
+    display: inline-flex; justify-content: center;
+    padding: 3px 8px; border-radius: 3px;
+    font-family: "DM Sans", sans-serif; font-weight: 700;
+    font-size: 10px; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #FFFFFF;
+  }
+  .mc-update-body { min-width: 0; }
+  .mc-update-title {
+    color: var(--cds-text-primary);
+    font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .mc-update-sub {
+    margin-top: 2px;
+    font-size: 12px; color: var(--cds-text-helper);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .mc-update-when {
+    font-family: var(--mono);
+    font-size: 11px; color: var(--cds-text-helper);
+    white-space: nowrap;
   }
 
   @media (max-width: 1100px) {
@@ -1049,5 +1257,7 @@ const dashboardCss = `
     .mc-hero { grid-template-columns: 1fr; }
     .mc-hero > :nth-child(3) { grid-column: auto; }
     .mc-top { flex-wrap: wrap; gap: 12px; }
+    .mc-update-row { grid-template-columns: 72px 1fr; }
+    .mc-update-when { grid-column: 1 / -1; padding-left: 86px; }
   }
 `;
