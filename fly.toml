@@ -34,9 +34,9 @@ kill_timeout = 5
   timeout = "5s"
 
 [[vm]]
-  memory = "2gb"
+  memory = "4gb"
   cpu_kind = "shared"
-  cpus = 1
+  cpus = 2
 
 # Secrets (set via: flyctl secrets set KEY=VALUE)
 # Required:

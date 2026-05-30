@@ -52,3 +52,6 @@ ezdxf>=1.3
 # ifcopenshell is optional — wheels exist for Python 3.10/3.11/3.12.
 # The twin router falls back to DXF if ifcopenshell is unavailable on 3.14.
 ifcopenshell>=0.7.0; python_version < "3.13"
+# ── Grid + REPD validation (tasks #24, #25) ──────────────────────────────────
+earth-osm>=3.0
+powerplantmatching>=0.8
