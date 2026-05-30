@@ -16,7 +16,7 @@ import {
   SHIFT, PNID_TAGS, PTM_TAGS, PTM_CONFIGURATIONS, SAVED_VIEWS,
   TREND_SERIES, TREND_ROWS, TREND_COLUMNS,
   TRIGGER_TAG_OPTIONS, TRIGGER_PARENT_GROUPS,
-} from './fixtures.js';
+} from './fixtures.jsx';
 
 /**
  * Demo route at /workshop. Mounts every Swarm-10 component against

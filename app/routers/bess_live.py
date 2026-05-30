@@ -69,15 +69,19 @@ def _row_to_dict(row: asyncpg.Record) -> dict:
 
 async def _resolve_default_rid(pool: asyncpg.Pool) -> str | None:
     """When the caller omits ``rid``, surface the most-recently-snapshotted
-    site so the dashboard widget always has something to render."""
-    async with pool.acquire(timeout=5) as conn:
-        return await conn.fetchval(
-            """
-            SELECT rid FROM bess_live_revenue_snapshots
-            ORDER BY ts DESC
-            LIMIT 1
-            """
-        )
+    site so the dashboard widget always has something to render. Returns
+    ``None`` when the snapshots table isn't provisioned on this DB."""
+    try:
+        async with pool.acquire(timeout=5) as conn:
+            return await conn.fetchval(
+                """
+                SELECT rid FROM bess_live_revenue_snapshots
+                ORDER BY ts DESC
+                LIMIT 1
+                """
+            )
+    except asyncpg.UndefinedTableError:
+        return None
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -102,17 +106,20 @@ async def api_bess_revenue_snapshot(
         return {"rid": None, "snapshots": [], "count": 0, "warning": "no_data_yet"}
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    async with pool.acquire(timeout=10) as conn:
-        rows = await conn.fetch(
-            """
-            SELECT snapshot_id, rid, ts, p10_rev_gbp, p50_rev_gbp, p90_rev_gbp,
-                   stack_breakdown, modo_p50_forecast, source
-            FROM bess_live_revenue_snapshots
-            WHERE rid = $1 AND ts >= $2
-            ORDER BY ts ASC
-            """,
-            rid, cutoff,
-        )
+    try:
+        async with pool.acquire(timeout=10) as conn:
+            rows = await conn.fetch(
+                """
+                SELECT snapshot_id, rid, ts, p10_rev_gbp, p50_rev_gbp, p90_rev_gbp,
+                       stack_breakdown, modo_p50_forecast, source
+                FROM bess_live_revenue_snapshots
+                WHERE rid = $1 AND ts >= $2
+                ORDER BY ts ASC
+                """,
+                rid, cutoff,
+            )
+    except asyncpg.UndefinedTableError:
+        return {"rid": rid, "snapshots": [], "count": 0, "warning": "table_not_provisioned"}
     snapshots = [_row_to_dict(r) for r in rows]
     latest = snapshots[-1] if snapshots else None
     return {

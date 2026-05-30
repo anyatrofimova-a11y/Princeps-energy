@@ -452,15 +452,18 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
            resize; double-click to snap-collapse the project tree. */
         <PanelGroup
           direction="horizontal"
-          autoSaveId="princeps-rd-layout-v2"
+          /* v3 bumped from v2 to invalidate the persisted "squeezed to 16%"
+             state that users were getting stuck in. New defaults: 26% with
+             a 22% floor so the project tree always shows full row labels. */
+          autoSaveId="princeps-rd-layout-v3"
           style={{ height: "100%", width: "100%" }}
         >
           <Panel
             id="rd-tree"
             order={1}
-            defaultSize={20}
-            minSize={16}
-            maxSize={40}
+            defaultSize={26}
+            minSize={22}
+            maxSize={44}
             collapsible
             collapsedSize={0}
             className="rd-pane rd-pane-tree"

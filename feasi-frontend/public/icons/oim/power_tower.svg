@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="a" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" width="35.0px" height="35.0px" viewBox="0 0 85.0394 85.0394">
+  <defs>
+    <style>
+      .c {
+        fill: #fff;
+        stroke: #000;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 5px;
+      }
+    </style>
+  </defs>
+  <rect class="c" x="24.04043" y="24.0197" width="36.8" height="36.9"/>
+  <line class="c" x1="24.04043" y1="24.0197" x2="60.84043" y2="60.9197"/>
+  <line class="c" x1="24.04043" y1="60.9197" x2="60.84043" y2="24.0197"/>
+</svg>

@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import ProvenanceFooter from "./ProvenanceFooter";
+import ProvenanceFooter, { WarmingState, TileSkeleton } from "./ProvenanceFooter";
 
 /**
  * TopOwnersTile — top 10 owners by total_capacity_mw across REPD + TEC,
@@ -12,7 +12,7 @@ function fmtMw(mw) {
   return `${Math.round(mw)} MW`;
 }
 
-export default function TopOwnersTile({ data }) {
+export default function TopOwnersTile({ data, loading = false }) {
   const navigate = useNavigate();
   const owners = (data && data.owners) || [];
   const max = Math.max(1, ...owners.map(o => o.total_capacity_mw || 0));
@@ -24,8 +24,12 @@ export default function TopOwnersTile({ data }) {
         <div className="mcv2-tile-tag">REPD × CCOD × TEC</div>
       </div>
       <div className="mcv2-tile-body">
-        {owners.length === 0 ? (
-          <div className="mcv2-empty">No owner aggregates available — REPD developer column may be empty.</div>
+        {loading && !data ? (
+          <TileSkeleton rows={5} />
+        ) : !data ? (
+          <WarmingState />
+        ) : owners.length === 0 ? (
+          <WarmingState label="No owner aggregates yet — awaiting REPD × TEC join." />
         ) : (
           <div className="mcv2-owners">
             {owners.map((o) => (
@@ -60,7 +64,10 @@ export default function TopOwnersTile({ data }) {
           </div>
         )}
       </div>
-      <ProvenanceFooter provenance={data?.provenance} />
+      <ProvenanceFooter
+        source="REPD (DESNZ) · NESO TEC Register · Companies House CCOD"
+        generatedAt={data?.provenance?.generated_at}
+      />
     </div>
   );
 }

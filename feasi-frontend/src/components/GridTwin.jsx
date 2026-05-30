@@ -7,6 +7,8 @@ import { Tiles3DLoader } from "@loaders.gl/3d-tiles";
 import api from "../services/api";
 import { createParticleLayer } from "./GridParticleFlow";
 import GridCameraChoreography from "./GridCameraChoreography";
+// OpenInfraMap overlay (BSD-3-Clause code, CC-BY 4.0 style — see footer).
+import { attachOimOverlay, OIM_ATTRIBUTION } from "../lib/oimOverlay";
 
 const GOOGLE_3D_TILES_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY || "";
 
@@ -58,6 +60,7 @@ export default function GridTwin({ onClose }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const overlayRef = useRef(null);
+  const oimRef = useRef(null);          // attachOimOverlay handle
   const wsRef = useRef(null);
   const animFrameRef = useRef(0);
 
@@ -79,6 +82,7 @@ export default function GridTwin({ onClose }) {
   const [particlesEnabled, setParticlesEnabled] = useState(true);
   const [constraintHeatmap, setConstraintHeatmap] = useState(false);
   const [google3d, setGoogle3d] = useState(false);
+  const [oimEnabled, setOimEnabled] = useState(true); // OIM power overlay (default ON per task #16)
 
   /* ── Animate flow arrows ── */
   const rafRef = useRef(null);
@@ -404,16 +408,52 @@ export default function GridTwin({ onClose }) {
       const overlay = new MapboxOverlay({ layers: [] });
       map.addControl(overlay);
       overlayRef.current = overlay;
+
+      // OpenInfraMap power overlay (toggleable; default ON per task #16).
+      // BSD-3-Clause code + CC-BY 4.0 style — attribution shown in footer.
+      try {
+        if (oimEnabled) {
+          oimRef.current = attachOimOverlay(map);
+        }
+        // Register CC-BY 4.0 attribution against an empty source so it shows
+        // in the AttributionControl alongside Mapbox's own credits.
+        if (!map.getSource("oim-attribution")) {
+          map.addSource("oim-attribution", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+            attribution: OIM_ATTRIBUTION,
+          });
+        }
+      } catch (e) {
+        console.warn("[GridTwin] OIM overlay attach failed:", e);
+      }
     });
 
     mapRef.current = map;
 
     return () => {
+      try { oimRef.current?.detach?.(); } catch {}
+      oimRef.current = null;
       map.remove();
       mapRef.current = null;
       overlayRef.current = null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* ── OIM overlay toggle ── */
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    if (oimEnabled && !oimRef.current) {
+      try { oimRef.current = attachOimOverlay(map); } catch (e) {
+        console.warn("[GridTwin] OIM toggle on failed:", e);
+      }
+    } else if (!oimEnabled && oimRef.current) {
+      try { oimRef.current.detach(); } catch {}
+      oimRef.current = null;
+    }
+  }, [oimEnabled]);
 
   /* ── Sync deck.gl layers ── */
   useEffect(() => {
@@ -543,6 +583,16 @@ export default function GridTwin({ onClose }) {
               3D
             </button>
           )}
+
+          {/* Grid layer (OpenInfraMap) — task #16. */}
+          <button
+            className={`gt-layer-btn ${oimEnabled ? "active" : ""}`}
+            onClick={() => setOimEnabled((v) => !v)}
+            title="Grid layer (OpenInfraMap voltage-banded power lines, substations, plants)"
+            style={oimEnabled ? { background: "#D4A018", color: "#000" } : {}}
+          >
+            Grid
+          </button>
 
           {/* AI Tour */}
           <button
@@ -689,6 +739,21 @@ export default function GridTwin({ onClose }) {
         <div className="gt-legend-item"><span className="gt-legend-dot" style={{ background: "#52c41a" }} /><span>&lt; 70%</span></div>
         <div className="gt-legend-item"><span className="gt-legend-dot" style={{ background: "#fa8c16" }} /><span>70-90%</span></div>
         <div className="gt-legend-item"><span className="gt-legend-dot" style={{ background: "#f5222d" }} /><span>&gt; 90%</span></div>
+      </div>
+
+      {/* OIM attribution footer (mandatory under CC-BY 4.0). */}
+      <div
+        style={{
+          position: "absolute", bottom: 6, left: 8, zIndex: 5,
+          fontSize: 10, lineHeight: 1.3, color: "rgba(255,255,255,0.78)",
+          textShadow: "0 1px 2px rgba(0,0,0,0.6)", pointerEvents: "auto",
+        }}
+      >
+        © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer"
+             style={{ color: "rgba(255,255,255,0.9)", textDecoration: "underline" }}>OpenStreetMap contributors</a>
+        {" · "}
+        Open Infrastructure Map style (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer"
+             style={{ color: "rgba(255,255,255,0.9)", textDecoration: "underline" }}>CC-BY 4.0</a>)
       </div>
     </div>
   );

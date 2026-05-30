@@ -30,7 +30,11 @@
   --px2-shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.03);
 
   display: grid;
-  grid-template-rows: 56px minmax(0, 1fr) 36px;
+  grid-template-rows: 56px minmax(0, 1fr) 64px;
+  /* Pin any auto-placed children (e.g. position:fixed ChatRail) to a
+     zero-height implicit track so they don't add a phantom row that
+     collapses the body. */
+  grid-auto-rows: 0;
   height: 100vh;
   background: var(--px2-bg);
   color: var(--px2-text);
@@ -180,6 +184,11 @@
   min-height: 0;
   overflow: hidden;
   gap: 0;
+}
+/* When the inspector is collapsed to its spine, shrink its column to 36px
+   so the main pane reclaims that horizontal space. */
+.px2-body:has(.px2-inspector-spine) {
+  grid-template-columns: 280px minmax(0, 1fr) 36px;
 }
 @media (max-width: 1100px) {
   .px2-body { grid-template-columns: 220px minmax(0, 1fr) 36px; }
@@ -541,44 +550,46 @@
   font-size: 11px;
   overflow: hidden;
   white-space: nowrap;
+  display: grid;
+  grid-template-rows: 36px 28px;
 }
 .px2-tape {
-  display: flex; align-items: center; gap: 22px;
-  padding: 0 18px; height: 100%;
-  font-family: "DM Sans", sans-serif;
+  display: flex; align-items: center; gap: 28px;
+  padding: 0 20px; height: 36px;
+  font-family: "Inter", "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  border-bottom: 1px solid var(--px2-border);
 }
 .px2-tape-tag {
   display: inline-flex; align-items: center; gap: 6px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.10em;
-  text-transform: uppercase; color: var(--px2-accent-dark);
+  font-size: 11.5px; font-weight: 500; letter-spacing: 0;
+  color: var(--px2-accent-dark);
 }
 .px2-tape-stat {
   display: inline-flex; align-items: baseline; gap: 6px;
 }
 .px2-tape-stat-label {
-  font-size: 9.5px; color: var(--px2-text-low);
-  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+  font-size: 11.5px; color: var(--px2-text-low);
+  font-weight: 500;
 }
 .px2-tape-stat-value {
-  font-family: "JetBrains Mono", "SF Mono", monospace;
-  font-size: 11.5px; font-weight: 600; color: var(--px2-text);
+  font-family: inherit;
+  font-size: 12.5px; font-weight: 500; color: var(--px2-text);
   font-variant-numeric: tabular-nums;
 }
 .px2-tape-stat-suffix {
-  font-size: 9px; color: var(--px2-text-dim);
-  letter-spacing: 0.04em; font-weight: 600;
-  padding: 1px 4px; border-radius: 3px; background: rgba(0,0,0,0.04);
+  font-size: 11px; color: var(--px2-text-dim);
+  font-weight: 400;
 }
 .px2-tape-clock {
   margin-left: auto;
-  font-family: "JetBrains Mono", monospace;
+  font-family: inherit;
   color: var(--px2-text-low);
-  letter-spacing: 0.04em; font-size: 11px;
+  font-size: 12px; font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 .px2-tape-error {
-  color: var(--px2-alarm); font-size: 10px;
-  text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
+  color: var(--px2-alarm); font-size: 11.5px;
+  font-weight: 500;
 }
 
 /* Mission Control inside v2 — make sure its hero typography matches. */
@@ -612,4 +623,75 @@
   font-family: "JetBrains Mono", monospace;
   color: var(--px2-text-low);
   letter-spacing: 0.04em;
+}
+
+/* ───────────── v2 agent activity band ───────────── */
+.px2-agent-activity {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 20px; height: 28px;
+  font-family: "Inter", "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11.5px;
+  color: var(--px2-text-dim);
+  background: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+}
+.px2-agent-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--px2-accent);
+  box-shadow: 0 0 0 0 rgba(245, 183, 49, 0.6);
+  animation: px2-agent-pulse 1.8s ease-in-out infinite;
+  flex: 0 0 6px;
+}
+@keyframes px2-agent-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 183, 49, 0.55); opacity: 1; }
+  50%      { box-shadow: 0 0 0 5px rgba(245, 183, 49, 0); opacity: 0.55; }
+}
+.px2-agent-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 260ms ease, transform 260ms ease;
+}
+.px2-agent-line.is-fade-in  { opacity: 1; transform: translateY(0); }
+.px2-agent-line.is-fade-out { opacity: 0; transform: translateY(-2px); }
+.px2-agent-actor {
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--px2-accent-dark);
+  letter-spacing: 0.01em;
+}
+.px2-agent-verb  { color: var(--px2-text-dim); }
+.px2-agent-body  { color: var(--px2-text); font-weight: 500; }
+.px2-agent-ellipsis { color: var(--px2-text-low); margin-left: 2px; }
+.px2-agent-rate {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: baseline; gap: 5px;
+  margin-left: 12px; padding-left: 14px;
+  border-left: 1px solid var(--px2-border);
+  color: var(--px2-text-low);
+}
+.px2-agent-rate-num {
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  font-size: 11.5px; font-weight: 600;
+  color: var(--px2-text);
+  font-variant-numeric: tabular-nums;
+}
+.px2-agent-rate-unit {
+  font-size: 10.5px; letter-spacing: 0.02em;
+  color: var(--px2-text-low);
+}
+
+/* ── ChatRail position override (Princeps v2) ──
+ * ChatRail ships inline-CSS with bottom: 52px which would sit under the
+ * 64px v2 live-strip footer. Bump the floating bubble + expanded card up
+ * to 88px so they clear the strip cleanly on /v2 surfaces. Selectors are
+ * scoped to .px2-shell so non-v2 routes (which mount the same component
+ * via App.jsx) keep their original positioning.
+ */
+.px2-shell .cr-pill-collapsed,
+.px2-shell .cr-root {
+  bottom: 88px;
 }

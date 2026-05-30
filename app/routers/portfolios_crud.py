@@ -167,20 +167,34 @@ async def list_portfolio_projects(
 
 @router.get("/tree/full")
 async def portfolio_tree(pool: asyncpg.Pool = Depends(get_pool)):
-    """Full nested tree for the ProjectTree sidebar — one request gets everything."""
+    """Full nested tree for the ProjectTree sidebar — one request gets everything.
+
+    Tolerant of missing tables — portfolios, project_candidate_sites and
+    projects can each be absent on a fresh DB without 500-ing the whole
+    response.
+    """
     async with pool.acquire() as conn:
-        pfs = await conn.fetch("SELECT * FROM portfolios ORDER BY created_at DESC")
-        prj = await conn.fetch(
-            """SELECT project_id, portfolio_id, name, technology, stage, verdict, blocker,
-                      capacity_mw, lat, lon
-               FROM projects
-               ORDER BY updated_at DESC NULLS LAST"""
-        )
-        sites = await conn.fetch(
-            """SELECT candidate_id, project_id, name, verdict, is_preferred
-               FROM project_candidate_sites
-               ORDER BY is_preferred DESC, created_at ASC"""
-        )
+        try:
+            pfs = await conn.fetch("SELECT * FROM portfolios ORDER BY created_at DESC")
+        except asyncpg.UndefinedTableError:
+            pfs = []
+        try:
+            prj = await conn.fetch(
+                """SELECT project_id, portfolio_id, name, technology, stage, verdict, blocker,
+                          capacity_mw, lat, lon
+                   FROM projects
+                   ORDER BY updated_at DESC NULLS LAST"""
+            )
+        except asyncpg.UndefinedTableError:
+            prj = []
+        try:
+            sites = await conn.fetch(
+                """SELECT candidate_id, project_id, name, verdict, is_preferred
+                   FROM project_candidate_sites
+                   ORDER BY is_preferred DESC, created_at ASC"""
+            )
+        except asyncpg.UndefinedTableError:
+            sites = []
     # build index
     sites_by_project: dict[str, list] = {}
     for s in sites:

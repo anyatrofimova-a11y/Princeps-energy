@@ -268,22 +268,31 @@ async def pipeline_summary(pool: asyncpg.Pool = Depends(get_pool)):
 @router.get("/{project_id}")
 async def get_project(project_id: str, pool: asyncpg.Pool = Depends(get_pool)):
     """Get full project details including linked parcels."""
-    pid = UUID(project_id)
+    try:
+        pid = UUID(project_id)
+    except ValueError:
+        raise HTTPException(400, f"project_id must be a UUID, got {project_id!r}")
     async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT * FROM projects WHERE project_id = $1", pid)
+        try:
+            row = await conn.fetchrow("SELECT * FROM projects WHERE project_id = $1", pid)
+        except asyncpg.UndefinedTableError:
+            raise HTTPException(404, "projects table not provisioned")
         if not row:
             raise HTTPException(404, "Project not found")
 
-        parcels = await conn.fetch(
-            """SELECT ps.parcel_id, ps.added_at,
-                      ST_Y(ST_Transform(p.centroid, 4326)) AS lat,
-                      ST_X(ST_Transform(p.centroid, 4326)) AS lon,
-                      p.area_m2
-               FROM project_sites ps
-               LEFT JOIN parcels p ON p.parcel_id = ps.parcel_id
-               WHERE ps.project_id = $1""",
-            pid,
-        )
+        try:
+            parcels = await conn.fetch(
+                """SELECT ps.parcel_id, ps.added_at,
+                          ST_Y(ST_Transform(p.centroid, 4326)) AS lat,
+                          ST_X(ST_Transform(p.centroid, 4326)) AS lon,
+                          p.area_m2
+                   FROM project_sites ps
+                   LEFT JOIN parcels p ON p.parcel_id = ps.parcel_id
+                   WHERE ps.project_id = $1""",
+                pid,
+            )
+        except asyncpg.UndefinedTableError:
+            parcels = []
 
     result = _row_to_dict(row)
     result["parcels"] = [
@@ -292,7 +301,7 @@ async def get_project(project_id: str, pool: asyncpg.Pool = Depends(get_pool)):
             "lat": float(p["lat"]) if p["lat"] else None,
             "lon": float(p["lon"]) if p["lon"] else None,
             "area_m2": float(p["area_m2"]) if p["area_m2"] else None,
-            "added_at": p["added_at"].isoformat(),
+            "added_at": p["added_at"].isoformat() if p["added_at"] else None,
         }
         for p in parcels
     ]

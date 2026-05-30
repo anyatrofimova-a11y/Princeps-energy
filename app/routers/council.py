@@ -386,14 +386,17 @@ async def list_sessions(
     """Recent council sessions, newest first. Used by the Mission Control
     Tools card to show council activity badges."""
     limit = max(1, min(50, int(limit)))
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """SELECT session_rid, query, status, final_verdict, created_at
-                 FROM council_sessions
-                 ORDER BY created_at DESC
-                 LIMIT $1""",
-            limit,
-        )
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT session_rid, query, status, final_verdict, created_at
+                     FROM council_sessions
+                     ORDER BY created_at DESC
+                     LIMIT $1""",
+                limit,
+            )
+    except asyncpg.UndefinedTableError:
+        return {"sessions": []}
     sessions = []
     for r in rows:
         fv = r["final_verdict"]

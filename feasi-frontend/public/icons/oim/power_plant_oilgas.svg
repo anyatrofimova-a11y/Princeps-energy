@@ -1,0 +1,42 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="35.0px" height="35.0px" viewBox="0 0 85.039 85.039">
+  <defs>
+    <style>
+      .c {
+        fill: none;
+        stroke-width: 5px;
+      }
+
+      .c, .d {
+        stroke: #000;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .e {
+        mix-blend-mode: multiply;
+        opacity: 1;
+      }
+
+      .f {
+        isolation: isolate;
+      }
+
+      .d {
+        fill: #fff;
+        stroke-width: 5px;
+      }
+    </style>
+  </defs>
+  <g class="f">
+    <g id="b" data-name="Layer 1" class="e">
+      <g>
+        <rect class="d" x="3.02" y="3.02" width="78.999" height="78.999" />
+        <g>
+          <polyline class="c" points="32.215 70.427 32.215 17.261 16.915 32.461" />
+          <polyline class="c" points="52.715 14.096 52.715 67.261 68.015 52.061" />
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

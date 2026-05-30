@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import mapboxgl from "mapbox-gl";
 import ProjectKpiStrip from "../project/ProjectKpiStrip.jsx";
 import SiteMemoCard from "../project/SiteMemoCard.jsx";
+import GlintAnalysisCard from "./GlintAnalysisCard.jsx";
 
 /**
  * SiteMapPin — tiny satellite map that drops a single gold pin on the
@@ -328,6 +329,14 @@ export default function OverviewTab({
           <ProjectKpiStrip projectId={projectId} />
         </div>
       )}
+
+      {/* Glint-Solar-grade site analysis — live MWp + ALC + BNG + grid
+          constraints + revenue + 500m planning hit count + verdict pill.
+          Pulls /api/planning-data/constraints + /api/finance/auto-defaults
+          in parallel; renders in under a second. */}
+      <div style={{ marginBottom: 16 }}>
+        <GlintAnalysisCard project={project} />
+      </div>
 
       <div className="ov-row ov-row-top">
         <div className="ov-card ov-map-card">

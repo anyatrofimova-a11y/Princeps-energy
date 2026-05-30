@@ -23,6 +23,14 @@ const PACKS = {
   mission_control: {
     header: "Ask across your pipeline.",
     pills: [
+      // Curated demo starters — surfaced first so a cold visitor can land a
+      // working tool-call stream in one click. Keep these four in slot 0-3
+      // (they're the agreed demo surface for partner/investor walk-throughs).
+      { label: "Thames BESS — connection capacity", prompt: "What is the realistic connection capacity at Thames BESS?" },
+      { label: "Slough DC — grid sensitivity",      prompt: "Run grid sensitivity for Slough Hyperscale DC." },
+      { label: "BNG risk across pipeline",          prompt: "Compare BNG risk across pipeline." },
+      { label: "Lower Farm Drointon — Gate 2",      prompt: "Draft Gate 2 application for Lower Farm Drointon." },
+      // Legacy portfolio-wide prompts retained beneath the demo set.
       { label: "Biggest pipeline risk",   prompt: "What's my biggest pipeline risk right now across all active projects?" },
       { label: "Grid slip watch",         prompt: "Which projects are at risk of grid connection slip in the next 6 months?" },
       { label: "This week's activity",    prompt: "Summarise this week's activity across my portfolio — new alerts, stage changes, risks." },

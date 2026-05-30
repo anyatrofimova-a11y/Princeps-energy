@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Princeps query client — sane defaults for the analysis cache (Stage B
@@ -24,6 +24,13 @@ import "@blueprintjs/icons/lib/css/blueprint-icons.css";
 import "@blueprintjs/select/lib/css/blueprint-select.css";
 import "@blueprintjs/table/lib/css/table.css";
 import "./styles.css";
+
+// HeroUI — uniform card/table/chip primitives across Princeps. We keep
+// the gold/cream Princeps palette by applying our own CSS overrides on
+// top of HeroUI's default tokens. The constellation grid backdrop sits
+// behind everything via the existing `.startup-mesh-canvas` / `.px2-shell`
+// layers.
+import "./styles/princeps-ui.css";
 
 // Unified Canvas (L1) — additive, additive. Lives under /canvas/:projectId.
 const CanvasShell = lazy(() => import("./canvas/ShellLayout.jsx"));
@@ -63,6 +70,10 @@ const ObjectPage = lazy(() => import("./shell/ObjectPage.jsx"));
 const MissionControlPage = lazy(() => import("./components/MissionControl.jsx"));
 // Mission Control v2 — composed Workshop module backed by ontology objects.
 const MissionControlV2 = lazy(() => import("./mission_control/MissionControlV2.jsx"));
+// Per-project workspace — map + verdict + agentic analysis cascade.
+const ProjectWorkspace = lazy(() => import("./mission_control/ProjectWorkspace.jsx"));
+// Grid Model Explorer — Squid-equivalent busbar-level circuit view over NGED LTDS CIM.
+const GridModelExplorer = lazy(() => import("./pages/v2/GridModelExplorer.jsx"));
 
 // Workshop Module Builder MVP — AI-composed manifest runtime.
 const ModuleRuntime = lazy(() => import("./runtime/ModuleRuntime.jsx"));
@@ -71,6 +82,8 @@ const ComposeDemo = lazy(() => import("./runtime/ComposeDemo.jsx"));
 const DatasetsCatalog = lazy(() => import("./pages/Datasets/DatasetsCatalog.jsx"));
 // Council demo — GRID + BESS + DC pods + Adjudicator (SSE timeline).
 const CouncilDemo = lazy(() => import("./pages/Council/CouncilDemo.jsx"));
+// Scope — YC pitch demo at /v2/scope: pin → ranked subs / cost / queue / draft app.
+const ScopePage = lazy(() => import("./scope/ScopePage.jsx"));
 // Object Page — typed object detail / list at /v2/object/:type[/:id].
 const ObjectDetailPage = lazy(() => import("./object_page/ObjectPage.jsx"));
 // Lineage Panel — global slide-over; opens via window.dispatchEvent('princeps:lineage', {root}).
@@ -155,13 +168,28 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-const LegacyApp = () => (
-  <SiteProvider>
-    <WorkspaceProvider>
-      <App />
-    </WorkspaceProvider>
-  </SiteProvider>
-);
+const LegacyApp = () => {
+  // Auto-seed demo auth so App.jsx never flips the auth gate after mount —
+  // that flip rearranges hooks and trips React error #310. With the token
+  // pre-set, isAuthenticated is true on the very first render and stable.
+  if (typeof window !== "undefined") {
+    try {
+      if (!localStorage.getItem("princeps.auth.token")) {
+        localStorage.setItem("princeps.auth.token", "demo");
+        localStorage.setItem("princeps.user.email", "anya@princeps.energy");
+        localStorage.setItem("princeps.user.firstName", "Anya");
+        localStorage.setItem("princeps.user.role", "admin");
+      }
+    } catch {}
+  }
+  return (
+    <SiteProvider>
+      <WorkspaceProvider>
+        <App />
+      </WorkspaceProvider>
+    </SiteProvider>
+  );
+};
 
 createRoot(document.getElementById("root")).render(
   <ErrorBoundary>
@@ -174,6 +202,13 @@ createRoot(document.getElementById("root")).render(
         <LineagePanel />
       </Suspense>
       <Routes>
+        {/* Root = the original Princeps Mission Control (left nav: Mission
+            Control / Projects / Map / Intelligence / Grid Twin / Site
+            Designer 3D / Chat / Settings). V2 explorer layout stays at
+            /v2/* for the new Workshop surfaces; new capabilities like
+            /v2/grid-model can be linked into the legacy nav as tabs. */}
+        <Route path="/" element={<LegacyApp />} />
+        <Route path="/app/*" element={<LegacyApp />} />
         {/* Marketing / public routes — bare, no Workshop chrome. */}
         <Route
           path="/tracker"
@@ -199,6 +234,24 @@ createRoot(document.getElementById("root")).render(
             </Suspense>
           }
         />
+        {/* /v2 (bare) — redirect to the legacy Mission Control so existing
+            user tabs land back on the original UI. /v2/grid-model and other
+            specific v2/* sub-routes still resolve to their own pages. */}
+        <Route path="/v2" element={<Navigate to="/" replace />} />
+        {/* /v2/object/* — broken object pages that don't integrate with the
+            map. Redirect to the working Grid Model Explorer (Squid-equivalent
+            busbar-level circuit view backed by NGED LTDS CIM). */}
+        <Route path="/v2/object" element={<Navigate to="/v2/grid-model" replace />} />
+        <Route path="/v2/object/*" element={<Navigate to="/v2/grid-model" replace />} />
+        {/* Grid Model Explorer — bare (no AppShell), takes full viewport. */}
+        <Route
+          path="/v2/grid-model"
+          element={
+            <Suspense fallback={<div style={{padding: 40, color: "#9CA3AF", background: "#0E1217", height: "100vh"}}>loading grid model…</div>}>
+              <GridModelExplorer />
+            </Suspense>
+          }
+        />
 
         {/* v2 shell — clean Foundry/Kognitwin three-column app */}
         <Route
@@ -221,6 +274,14 @@ createRoot(document.getElementById("root")).render(
             element={
               <Suspense fallback={<div style={{padding: 40}}>loading mission control…</div>}>
                 <MissionControlV2 />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/project/:id"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading project workspace…</div>}>
+                <ProjectWorkspace />
               </Suspense>
             }
           />
@@ -261,6 +322,14 @@ createRoot(document.getElementById("root")).render(
             element={
               <Suspense fallback={<div style={{padding: 40}}>loading council…</div>}>
                 <CouncilDemo />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/v2/scope"
+            element={
+              <Suspense fallback={<div style={{padding: 40}}>loading scope…</div>}>
+                <ScopePage />
               </Suspense>
             }
           />

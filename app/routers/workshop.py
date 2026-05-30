@@ -11,6 +11,7 @@ import json
 import logging
 from typing import Any
 
+import asyncpg
 from fastapi import APIRouter, HTTPException, Request
 
 log = logging.getLogger("princeps.workshop_router")
@@ -175,13 +176,19 @@ async def get_hierarchy(request: Request, axis: str = "stage", type: str = "all"
 
     Combines twin_instances + entities into a single normalized list, then
     buckets by the requested axis. Each item has {rid, type, name, badges}.
+
+    Tolerant: if either source table is missing on a fresh DB, that source
+    contributes zero items rather than 500-ing the whole endpoint.
     """
     pool = request.app.state.pool
     items: list[dict] = []
     async with pool.acquire() as conn:
-        twins = await conn.fetch(
-            "SELECT rid, dtmi, properties FROM twin_instances",
-        )
+        try:
+            twins = await conn.fetch(
+                "SELECT rid, dtmi, properties FROM twin_instances",
+            )
+        except asyncpg.UndefinedTableError:
+            twins = []
         for t in twins:
             props = _props(t["properties"])
             obj_type = _dtmi_to_type(t["dtmi"])
@@ -197,9 +204,12 @@ async def get_hierarchy(request: Request, axis: str = "stage", type: str = "all"
                 "badges": {},
             })
         if type in ("all", "counterparty"):
-            ents = await conn.fetch(
-                "SELECT rid, legal_name, role, sanctions_flag FROM entities ORDER BY legal_name",
-            )
+            try:
+                ents = await conn.fetch(
+                    "SELECT rid, legal_name, role, sanctions_flag FROM entities ORDER BY legal_name",
+                )
+            except asyncpg.UndefinedTableError:
+                ents = []
             for e in ents:
                 items.append({
                     "rid": e["rid"],

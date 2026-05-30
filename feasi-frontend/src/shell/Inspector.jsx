@@ -10,12 +10,14 @@ import {useOntologyObject} from '../hooks/queries/index.js';
  */
 export function Inspector() {
   const {selectedAssetRid} = useSelection();
-  const [collapsed, setCollapsed] = useState(false);
+  // Start collapsed by default so the right rail doesn't blank-eat the
+  // centre at first paint. User explicitly expands via the spine button.
+  const [collapsed, setCollapsed] = useState(true);
   const {data: obj, isLoading, error} = useOntologyObject(selectedAssetRid);
 
-  // Auto-collapse on small viewports.
+  // Force-collapse on narrow viewports; never auto-expand.
   useEffect(() => {
-    const onResize = () => setCollapsed(window.innerWidth < 1100);
+    const onResize = () => { if (window.innerWidth < 1100) setCollapsed(true); };
     onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);

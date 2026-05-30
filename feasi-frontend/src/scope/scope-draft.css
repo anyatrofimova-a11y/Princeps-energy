@@ -1,0 +1,156 @@
+/* Draft application + footer + responsive — split from scope.css to stay
+   under the 500-line ceiling. Tokens come from shell-v2.css via the parent
+   .scope-page container. */
+
+/* Draft application */
+.scope-draft {
+  margin-top: 16px;
+  background: linear-gradient(180deg, rgba(245, 183, 49, 0.08), rgba(245, 183, 49, 0.02));
+  border: 1px solid var(--px2-accent-border, rgba(245, 183, 49, 0.30));
+  border-radius: 10px;
+  overflow: hidden;
+}
+.scope-draft-head {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.scope-draft-head:hover { background: rgba(245, 183, 49, 0.06); }
+.scope-draft-eyebrow {
+  font-size: 9.5px;
+  letter-spacing: 2.2px;
+  font-weight: 700;
+  color: var(--px2-accent-dark, #E8A012);
+  margin-bottom: 3px;
+}
+.scope-draft-title { font-size: 13.5px; font-weight: 600; }
+.scope-draft-caret { font-size: 14px; color: var(--px2-accent-dark, #E8A012); }
+.scope-draft-body {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--px2-accent-border, rgba(245, 183, 49, 0.30));
+  background: rgba(255, 255, 255, 0.6);
+}
+.scope-draft-fields { display: flex; flex-direction: column; gap: 4px; }
+.scope-draft-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 8px;
+  font-size: 11.5px;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--px2-border, #E8EAED);
+}
+.scope-draft-row:last-child { border-bottom: 0; }
+.scope-draft-k { color: var(--px2-text-dim, #6B7280); font-weight: 500; }
+.scope-draft-v { color: var(--px2-text, #0F1318); font-weight: 500; }
+.scope-draft-evidence { margin-top: 12px; }
+.scope-draft-evidence-h {
+  font-size: 9.5px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--px2-text-dim, #6B7280);
+  margin-bottom: 6px;
+}
+.scope-evidence-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 11px;
+}
+.scope-evidence-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--px2-ok, #16A34A);
+}
+.scope-evidence-label { color: var(--px2-text, #0F1318); }
+.scope-evidence-ref {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  color: var(--px2-text-low, #9CA3AF);
+  font-size: 10px;
+}
+.scope-draft-actions { display: flex; gap: 8px; margin-top: 14px; }
+.scope-btn-ghost,
+.scope-btn-primary {
+  flex: 1;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 6px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.scope-btn-ghost {
+  background: transparent;
+  border: 1px solid var(--px2-border, #E8EAED);
+  color: var(--px2-text, #0F1318);
+}
+.scope-btn-ghost:hover { background: var(--px2-bg, #F2F3F5); }
+.scope-btn-primary {
+  background: var(--px2-accent, #F5B731);
+  border: 1px solid var(--px2-accent-dark, #E8A012);
+  color: #0F1318;
+}
+.scope-btn-primary:hover { background: var(--px2-accent-dark, #E8A012); }
+
+/* Footer */
+.scope-footer {
+  grid-area: footer;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 20px;
+  background: var(--px2-bg-2, rgba(255, 255, 255, 0.96));
+  border-top: 1px solid var(--px2-border, #E8EAED);
+  backdrop-filter: blur(20px);
+}
+.scope-footer-left,
+.scope-footer-right { display: flex; align-items: baseline; gap: 8px; }
+.scope-footer-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--px2-border, #E8EAED);
+}
+.scope-footer-eyebrow {
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--px2-text-dim, #6B7280);
+  font-weight: 600;
+}
+.scope-footer-strong {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--px2-accent-dark, #E8A012);
+}
+.scope-footer-faint {
+  color: var(--px2-text-dim, #6B7280);
+  text-decoration: line-through;
+  text-decoration-color: var(--px2-alarm, #DC2626);
+}
+.scope-footer-sources {
+  margin-left: auto;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  color: var(--px2-text-low, #9CA3AF);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 50%;
+}
+
+/* Narrow screens — collapse rails below 1100px */
+@media (max-width: 1100px) {
+  .scope-page { grid-template-columns: 280px minmax(0, 1fr) 320px; }
+}

@@ -98,6 +98,7 @@ async def api_demand_historical(
 @router.get("/api/demand/forecast")
 async def api_demand_forecast(
     gsp_id: str = Query("ABHA"),
+    gsp: str | None = Query(None, include_in_schema=False),  # alias
     horizon_hours: int = Query(168),
     model: str = Query("analytical"),
     peak_mw: float = Query(None),
@@ -107,8 +108,21 @@ async def api_demand_forecast(
     """
     Demand forecast for a GSP.
     model: 'analytical' (instant), 'prophet' (seconds), 'tft' (minutes).
+
+    Falls back to a deterministic synthesised forecast when the
+    .venv-forecast subprocess isn't available (Fly production).
     """
-    if model == "analytical":
+    if gsp and not gsp_id:
+        gsp_id = gsp
+    # Synthesise a tolerant fallback so the endpoint never 500s in prod
+    # where .venv-forecast isn't installed.
+    try:
+        if model == "prophet":
+            # Generate synthetic history then forecast (still goes via subprocess)
+            _ = await _run_forecast_subprocess(
+                {"command": "generate_compact", "n_gsps": 20, "days": 30},
+                script=DEMAND_INGESTER_SCRIPT,
+            )
         result = await _run_forecast_subprocess({
             "command": "quick_forecast",
             "gsp_id": gsp_id,
@@ -117,31 +131,31 @@ async def api_demand_forecast(
             "capacity_mw": capacity_mw or 360,
             "horizon_hours": horizon_hours,
         })
-    elif model == "prophet":
-        # Generate synthetic history then forecast
-        hist_result = await _run_forecast_subprocess(
-            {"command": "generate_compact", "n_gsps": 20, "days": 30},
-            script=DEMAND_INGESTER_SCRIPT,
-        )
-        # For Prophet, we need HH data — use quick_forecast as proxy
-        result = await _run_forecast_subprocess({
-            "command": "quick_forecast",
-            "gsp_id": gsp_id,
-            "peak_mw": peak_mw or 285,
-            "min_mw": min_mw or 95,
-            "capacity_mw": capacity_mw or 360,
+        if model == "prophet":
+            result["model"] = "prophet_proxy"
+    except Exception as exc:  # noqa: BLE001
+        # Synthetic-fallback: sinusoidal day/night demand curve so the UI
+        # always renders a chart even when the forecast worker is down.
+        import math
+        peak = peak_mw or 285.0
+        floor = min_mw or 95.0
+        amp = (peak - floor) / 2.0
+        mid = (peak + floor) / 2.0
+        points = []
+        from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+        now = _dt.now(_tz.utc)
+        for h in range(int(horizon_hours)):
+            ts = now + _td(hours=h)
+            local_h = (ts.hour + 24) % 24
+            mw = mid + amp * math.sin(2 * math.pi * (local_h - 6) / 24.0)
+            points.append({"ts": ts.isoformat(), "mw": round(mw, 1)})
+        result = {
+            "model": "synthetic_fallback", "gsp_id": gsp_id,
             "horizon_hours": horizon_hours,
-        })
-        result["model"] = "prophet_proxy"
-    else:
-        result = await _run_forecast_subprocess({
-            "command": "quick_forecast",
-            "gsp_id": gsp_id,
-            "peak_mw": peak_mw or 285,
-            "min_mw": min_mw or 95,
+            "points": points, "peak_mw": peak, "min_mw": floor,
             "capacity_mw": capacity_mw or 360,
-            "horizon_hours": horizon_hours,
-        })
+            "warning": f"forecast worker unavailable: {type(exc).__name__}",
+        }
     record_metric("demand_forecast", horizon_hours, labels={"gsp_id": gsp_id, "model": model})
     return result
 

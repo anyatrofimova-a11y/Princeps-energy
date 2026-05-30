@@ -37,7 +37,9 @@ beautifulsoup4>=4.12
 lxml>=5.1
 rapidfuzz>=3.6
 datasketch>=1.6
-postcodes>=0.2
+pyyaml>=6.0
+python-dateutil>=2.8
+aiohttp>=3.9
 # ── Billing (task #11) ───────────────────────────────────────────────────────
 stripe>=8.0
 email-validator>=2.0

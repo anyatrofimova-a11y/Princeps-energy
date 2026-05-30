@@ -1,5 +1,5 @@
 import React from "react";
-import ProvenanceFooter from "./ProvenanceFooter";
+import ProvenanceFooter, { WarmingState, TileSkeleton } from "./ProvenanceFooter";
 
 /**
  * GridPulseTile — BMRS prices + carbon intensity + frequency dial.
@@ -67,7 +67,7 @@ function FrequencyDial({ hz }) {
   );
 }
 
-export default function GridPulseTile({ data }) {
+export default function GridPulseTile({ data, loading = false }) {
   const prices = (data && data.prices_24h) || [];
   const priceVals = prices.map(p => p.gbp_per_mwh).filter(v => Number.isFinite(v));
   const lastPrice = priceVals.length ? priceVals[priceVals.length - 1] : null;
@@ -81,6 +81,9 @@ export default function GridPulseTile({ data }) {
   const carbonVals = [carbon.forecast_g_co2_per_kwh, carbon.actual_g_co2_per_kwh]
     .filter(v => Number.isFinite(v));
 
+  const hasAny = priceVals.length > 0 || carbonVals.length > 0 ||
+                 (freq.hz != null && Number.isFinite(freq.hz));
+
   return (
     <div className="mcv2-tile mcv2-area-pulse">
       <div className="mcv2-tile-head">
@@ -88,6 +91,13 @@ export default function GridPulseTile({ data }) {
         <div className="mcv2-tile-tag">24h</div>
       </div>
       <div className="mcv2-tile-body">
+        {loading && !data ? (
+          <TileSkeleton rows={4} />
+        ) : !data ? (
+          <WarmingState />
+        ) : !hasAny ? (
+          <WarmingState label="Awaiting BMRS / ESO refresh — feed warming" />
+        ) : (
         <div className="mcv2-sparks">
           <div className="mcv2-spark">
             <div className="mcv2-spark-label">System buy price</div>
@@ -123,8 +133,12 @@ export default function GridPulseTile({ data }) {
             <FrequencyDial hz={freq.hz} />
           </div>
         </div>
+        )}
       </div>
-      <ProvenanceFooter provenance={data?.provenance} />
+      <ProvenanceFooter
+        source="BMRS Insights API · National Grid ESO Carbon Intensity API"
+        generatedAt={data?.provenance?.generated_at}
+      />
     </div>
   );
 }

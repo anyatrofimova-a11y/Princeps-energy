@@ -147,6 +147,17 @@ async def launch_background_tasks(pool: asyncpg.Pool) -> None:
     except Exception as e:
         log.warning("DNO monthly scheduler init failed: %s", e)
 
+    # ── planning.data.gov.uk daily refresh (Task #17) ─────────────────
+    # Daily APScheduler cron @ 03:30 UTC + a one-shot boot run so the
+    # planning_designations table is non-empty on a fresh deploy.
+    try:
+        await _start_planning_data_uk_scheduler(pool)
+    except Exception as e:
+        log.warning("planning.data.gov.uk scheduler init failed: %s", e)
+    asyncio.create_task(_safe_bg(
+        "planning_data_uk_boot_refresh", _run_planning_data_uk_refresh, pool,
+    ))
+
     # ── Seed system workflow templates ──────────────────────────────
     asyncio.create_task(_safe_bg("workflow_templates_seed", _seed_workflow_templates, pool))
 
@@ -944,6 +955,65 @@ async def _start_dno_monthly_scheduler(pool: asyncpg.Pool) -> None:
 def get_dno_scheduler():
     """Return the singleton scheduler (for shutdown hooks)."""
     return _dno_scheduler
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Task #17 — planning.data.gov.uk daily refresh (Top-21 OGL v3.0 datasets).
+# In-process AsyncIOScheduler at 03:30 UTC, plus a single boot run gated
+# by PRINCEPS_SKIP_PLANNING_DATA_BOOT for CI / quick local restarts.
+# ─────────────────────────────────────────────────────────────────────────
+
+_planning_data_uk_scheduler = None
+
+
+async def _run_planning_data_uk_refresh(pool: asyncpg.Pool) -> None:
+    """Run scripts/refresh_planning_data_uk.refresh_all once."""
+    if os.environ.get("PRINCEPS_SKIP_PLANNING_DATA_BOOT", "").lower() in ("1", "true", "yes"):
+        log.info("planning.data.gov.uk boot refresh skipped (PRINCEPS_SKIP_PLANNING_DATA_BOOT)")
+        return
+    try:
+        from scripts.refresh_planning_data_uk import refresh_all
+        summary = await refresh_all(pool)
+        ok = sum(1 for r in summary if r.get("status") == "ok")
+        log.info("planning.data.gov.uk refresh complete: %d/%d slugs ok", ok, len(summary))
+    except Exception as exc:
+        log.warning("planning.data.gov.uk refresh failed: %s", exc)
+
+
+async def _start_planning_data_uk_scheduler(pool: asyncpg.Pool) -> None:
+    """Spin up an AsyncIOScheduler with a daily 03:30 UTC refresh."""
+    global _planning_data_uk_scheduler
+    if _planning_data_uk_scheduler is not None:
+        return
+    try:
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from apscheduler.triggers.cron import CronTrigger
+    except ImportError:
+        log.warning("APScheduler not installed — planning.data.gov.uk cron disabled")
+        return
+
+    scheduler = AsyncIOScheduler(timezone="UTC")
+
+    async def _job():
+        log.info("planning.data.gov.uk daily refresh starting (APScheduler)")
+        await _run_planning_data_uk_refresh(pool)
+
+    scheduler.add_job(
+        _job,
+        CronTrigger(hour=3, minute=30),
+        id="planning_data_uk_daily_refresh",
+        name="planning.data.gov.uk Top-21 daily refresh",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.start()
+    _planning_data_uk_scheduler = scheduler
+    log.info("APScheduler: planning.data.gov.uk daily refresh cron registered (03:30 UTC)")
+
+
+def get_planning_data_uk_scheduler():
+    """Return the singleton scheduler (for shutdown hooks)."""
+    return _planning_data_uk_scheduler
 
 
 # ─────────────────────────────────────────────────────────────────────────

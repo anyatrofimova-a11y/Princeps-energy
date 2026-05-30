@@ -6,6 +6,7 @@ at startup after the asyncpg pool is created.
 """
 
 import logging
+import os
 
 import asyncpg
 
@@ -209,10 +210,31 @@ async def setup_database(pool: asyncpg.Pool) -> None:
 
         # ── Weave demand ──────────────────────────────────────────────────
         await setup_demand_table(conn)
-        await seed_demand(conn)
+        if os.environ.get("WEAVE_SEED_ENABLED") == "1":
+            await seed_demand(conn)
+        else:
+            log.info("Weave demand seed skipped (set WEAVE_SEED_ENABLED=1 to enable; large parquet pull)")
 
         # ── OSM power infrastructure ──────────────────────────────────────
         await osm_power_setup(conn)
+
+        # ── OSM power SQL helpers (task #16) ─────────────────────────────
+        # Ports convert_voltage / convert_power / first_semi / nth_semi /
+        # power_line_angle from upstream OpenInfraMap (BSD-3-Clause). Runs
+        # AFTER osm_power_setup() because power_line_angle references the
+        # osm_power_line table.
+        import pathlib as _pl_oim
+        _osm_helpers_sql = (
+            _pl_oim.Path(__file__).parent.parent / "sql" / "migrate_osm_power_helpers.sql"
+        )
+        if _osm_helpers_sql.exists():
+            try:
+                await conn.execute(_osm_helpers_sql.read_text())
+                log.info("Applied migrate_osm_power_helpers.sql (OIM port)")
+            except Exception:
+                log.exception(
+                    "migrate_osm_power_helpers.sql failed — OIM-style queries may be degraded"
+                )
 
         # ── NGED CIM ─────────────────────────────────────────────────────
         await nged_setup(conn)
@@ -857,5 +879,100 @@ async def setup_database(pool: asyncpg.Pool) -> None:
                 FROM nearest n
                 WHERE parcels.parcel_id = n.parcel_id
             """)
+
+        # ── planning.data.gov.uk Top-21 OGL v3.0 designations (Task #17) ──
+        # MHCLG-maintained: SSSI, AONB, Ancient Woodland, ALC, Flood Zones,
+        # Listed Buildings, Scheduled Monuments, etc. Geometry in OSGB36.
+        # © Crown copyright · Open Government Licence v3.0
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS planning_designations (
+              entity_id           BIGINT PRIMARY KEY,
+              dataset             TEXT NOT NULL,
+              reference           TEXT,
+              name                TEXT,
+              organisation_entity TEXT,
+              quality             TEXT,
+              entry_date          DATE,
+              start_date          DATE,
+              end_date            DATE,
+              attrs               JSONB,
+              geom                GEOMETRY(MultiPolygon, 27700) NOT NULL,
+              source_url          TEXT,
+              last_updated        TIMESTAMPTZ DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS planning_designations_gix
+              ON planning_designations USING GIST(geom);
+            CREATE INDEX IF NOT EXISTS planning_designations_ds
+              ON planning_designations(dataset);
+            CREATE TABLE IF NOT EXISTS planning_dataset_etags (
+              dataset      TEXT PRIMARY KEY,
+              etag         TEXT,
+              last_fetched TIMESTAMPTZ
+            );
+        """)
+
+        # ── Landowner share tokens (Task #15 Glint UX move) ───────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_shares (
+              token         TEXT PRIMARY KEY,
+              project_id    UUID NOT NULL,
+              summary       TEXT,
+              map_png_data  TEXT,
+              created_at    TIMESTAMPTZ DEFAULT NOW(),
+              expires_at    TIMESTAMPTZ
+            );
+            CREATE INDEX IF NOT EXISTS project_shares_project
+              ON project_shares(project_id);
+        """)
+
+        # ── Synthetic grids (Task #19 PowerGridSynth vendor) ──────────────
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS synthetic_grids (
+              id              BIGSERIAL PRIMARY KEY,
+              name            TEXT NOT NULL,
+              dno_proxy       TEXT,
+              n_buses         INT,
+              cgmes_path      TEXT,
+              pandapower_json JSONB,
+              params          JSONB,
+              created_at      TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
+
+        # ── Northern Powergrid Flexibility ontology (Task #27) ────────────
+        # 7 OpenDataSoft datasets unified under a single discriminated table.
+        # © Northern Powergrid Open Data Licence v1.0
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS npg_flexibility_zones (
+              id                       BIGSERIAL PRIMARY KEY,
+              dataset                  TEXT NOT NULL,
+              external_id              TEXT,
+              external_id_key          TEXT GENERATED ALWAYS AS
+                                         (COALESCE(external_id, 'unknown')) STORED,
+              gsp_name                 TEXT,
+              substation_name          TEXT,
+              constraint_zone          TEXT,
+              postcode                 TEXT,
+              licence_area             TEXT,
+              region                   TEXT,
+              geom                     GEOMETRY(Point, 27700),
+              constraint_trigger       TEXT,
+              product                  TEXT,
+              forecast_year            INT,
+              delivery_year            TEXT,
+              flexibility_required_mw  NUMERIC,
+              flexibility_procured_mw  NUMERIC,
+              capacity_mva             NUMERIC,
+              voltage_kv               NUMERIC,
+              provider                 TEXT,
+              attrs                    JSONB,
+              ingested_at              TIMESTAMPTZ DEFAULT NOW(),
+              UNIQUE (dataset, external_id_key)
+            );
+            CREATE INDEX IF NOT EXISTS npg_flex_gix ON npg_flexibility_zones USING GIST(geom);
+            CREATE INDEX IF NOT EXISTS npg_flex_gsp ON npg_flexibility_zones(gsp_name);
+            CREATE INDEX IF NOT EXISTS npg_flex_zone ON npg_flexibility_zones(constraint_zone);
+            CREATE INDEX IF NOT EXISTS npg_flex_dataset ON npg_flexibility_zones(dataset);
+        """)
 
     log.info("Database setup complete")

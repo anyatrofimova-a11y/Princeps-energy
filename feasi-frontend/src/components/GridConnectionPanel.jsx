@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { useParams } from "react-router-dom";
 import { useSite } from "../SiteContext";
 
 const TIMELINE_PHASES = [
@@ -44,6 +45,8 @@ function fmtGbp(val) {
 
 export default function GridConnectionPanel({ onClose, onHighlightSubstation }) {
   const { selectedParcel, parcelId, explain, samCapacity } = useSite();
+  // Route param :id — only present when panel is rendered inside /v2/project/:id
+  const { id: routeProjectId } = useParams();
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -54,6 +57,10 @@ export default function GridConnectionPanel({ onClose, onHighlightSubstation }) 
   const [pfResult, setPfResult] = useState(null);
   const [pfLoading, setPfLoading] = useState(false);
   const [pfError, setPfError] = useState(null);
+  // 24-hour AC time-series feasibility (TU Delft port)
+  const [tsResult, setTsResult] = useState(null);
+  const [tsLoading, setTsLoading] = useState(false);
+  const [tsError, setTsError] = useState(null);
 
   // Sync capacity from samCapacity — use a sensible default for the MW input
   useEffect(() => {
@@ -124,6 +131,31 @@ export default function GridConnectionPanel({ onClose, onHighlightSubstation }) 
       setPfLoading(false);
     }
   }, [explain, selectedParcel, capacityMw, technology]);
+
+  // 24-hour AC time-series feasibility check (TU Delft port)
+  const runTimeseries = useCallback(async () => {
+    if (!routeProjectId) {
+      setTsError("Open this panel from a project page (/v2/project/:id) — no project_id in URL.");
+      return;
+    }
+    setTsLoading(true);
+    setTsError(null);
+    try {
+      const res = await fetch("/api/grid/timeseries-feasibility", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_id: routeProjectId, snapshot_hours: 24 }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Time-series check failed");
+      setTsResult(data);
+    } catch (e) {
+      setTsError(e.message);
+    } finally {
+      setTsLoading(false);
+    }
+  }, [routeProjectId]);
 
   // Auto-assess when panel opens with a valid parcel
   useEffect(() => {
@@ -677,6 +709,174 @@ export default function GridConnectionPanel({ onClose, onHighlightSubstation }) 
                 <div style={{ color: "#da1e28", fontSize: 11, padding: "4px 0" }}>
                   {pfResult.error || "Power flow analysis failed"}
                 </div>
+              )}
+            </div>
+
+            {/* 24-Hour AC Time-Series Feasibility (TU Delft port) */}
+            <div className="gc-section">
+              <div className="gc-section-header">
+                <span className="gc-section-title">24-Hour Violations</span>
+                {tsResult && (
+                  <span
+                    className="gc-section-badge"
+                    style={{
+                      background: tsResult.feasible
+                        ? "rgba(36,161,72,0.12)"
+                        : "rgba(218,30,40,0.12)",
+                      color: tsResult.feasible ? "#24a148" : "#da1e28",
+                    }}
+                  >
+                    {tsResult.feasible ? "FEASIBLE" : "VIOLATIONS"}
+                  </span>
+                )}
+              </div>
+
+              {!tsResult && !tsLoading && (
+                <button
+                  onClick={runTimeseries}
+                  disabled={tsLoading || !routeProjectId}
+                  className="gc-assess-btn"
+                  style={{ width: "100%", marginBottom: 4 }}
+                  title={!routeProjectId ? "Open from a project page" : ""}
+                >
+                  Run 24-hour check
+                </button>
+              )}
+
+              {tsLoading && (
+                <div style={{ textAlign: "center", padding: "12px 0", fontSize: 11, color: "var(--cds-text-helper)" }}>
+                  Running 24-hour pandapower timeseries...
+                </div>
+              )}
+
+              {tsError && (
+                <div style={{ color: "#da1e28", fontSize: 11, padding: "4px 0" }}>{tsError}</div>
+              )}
+
+              {tsResult && tsResult.success && (
+                <>
+                  {/* Worst-case pill */}
+                  <div style={{ display: "flex", gap: 8, margin: "4px 0 8px" }}>
+                    <div
+                      style={{
+                        flex: 1, padding: "6px 8px", borderRadius: 4,
+                        background: "rgba(82,82,82,0.08)",
+                        border: `1px solid ${
+                          tsResult.worst_loading_pct > 80 ? "#da1e28"
+                          : tsResult.worst_loading_pct > 60 ? "#f1c21b" : "rgba(82,82,82,0.2)"
+                        }`,
+                      }}
+                    >
+                      <div style={{ fontSize: 9, color: "var(--cds-text-helper)", textTransform: "uppercase", letterSpacing: 1 }}>
+                        Worst loading
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, fontFamily: "var(--mono)" }}>
+                        {tsResult.worst_loading_pct?.toFixed(1)}%
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        flex: 1, padding: "6px 8px", borderRadius: 4,
+                        background: "rgba(82,82,82,0.08)",
+                        border: `1px solid ${
+                          (tsResult.worst_voltage_low_pu < 0.94 || tsResult.worst_voltage_high_pu > 1.06)
+                            ? "#da1e28" : "rgba(82,82,82,0.2)"
+                        }`,
+                      }}
+                    >
+                      <div style={{ fontSize: 9, color: "var(--cds-text-helper)", textTransform: "uppercase", letterSpacing: 1 }}>
+                        Voltage range (pu)
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, fontFamily: "var(--mono)" }}>
+                        {tsResult.worst_voltage_low_pu?.toFixed(3)}-{tsResult.worst_voltage_high_pu?.toFixed(3)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Inline SVG chart: voltage vs hour with violation band */}
+                  {tsResult.voltage_per_hour?.length > 0 && (() => {
+                    const n = tsResult.voltage_per_hour.length;
+                    const W = 260, H = 90, PAD_L = 28, PAD_R = 6, PAD_T = 6, PAD_B = 16;
+                    const innerW = W - PAD_L - PAD_R, innerH = H - PAD_T - PAD_B;
+                    const vmin = Math.min(0.93, ...tsResult.voltage_per_hour);
+                    const vmax = Math.max(1.07, ...(tsResult.voltage_max_per_hour || tsResult.voltage_per_hour));
+                    const vlo = tsResult.voltage_limits?.[0] ?? 0.94;
+                    const vhi = tsResult.voltage_limits?.[1] ?? 1.06;
+                    const x = (i) => PAD_L + (i / Math.max(1, n - 1)) * innerW;
+                    const y = (v) => PAD_T + (1 - (v - vmin) / (vmax - vmin)) * innerH;
+                    const path = (arr) => arr.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+                    const violHrs = new Set(tsResult.hours_with_voltage_violation || []);
+                    return (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 9, color: "var(--cds-text-helper)", marginBottom: 2, textTransform: "uppercase", letterSpacing: 1 }}>
+                          Voltage vs hour-of-day
+                        </div>
+                        <svg width={W} height={H} style={{ display: "block" }}>
+                          {/* Acceptable band */}
+                          <rect
+                            x={PAD_L} y={y(vhi)} width={innerW} height={y(vlo) - y(vhi)}
+                            fill="rgba(36,161,72,0.10)"
+                          />
+                          {/* Limit lines */}
+                          <line x1={PAD_L} y1={y(vhi)} x2={PAD_L + innerW} y2={y(vhi)}
+                                stroke="#24a148" strokeDasharray="2 2" strokeWidth={0.7} />
+                          <line x1={PAD_L} y1={y(vlo)} x2={PAD_L + innerW} y2={y(vlo)}
+                                stroke="#24a148" strokeDasharray="2 2" strokeWidth={0.7} />
+                          {/* Violation hour markers */}
+                          {[...violHrs].map((h) => (
+                            <rect key={`vh${h}`} x={x(h) - 1} y={PAD_T} width={2} height={innerH}
+                                  fill="rgba(218,30,40,0.25)" />
+                          ))}
+                          {/* Max voltage line */}
+                          {tsResult.voltage_max_per_hour && (
+                            <path d={path(tsResult.voltage_max_per_hour)}
+                                  stroke="#D4A018" strokeWidth={1.2} fill="none" opacity={0.7} />
+                          )}
+                          {/* Min voltage line */}
+                          <path d={path(tsResult.voltage_per_hour)}
+                                stroke="var(--cds-interactive, #3b82f6)" strokeWidth={1.4} fill="none" />
+                          {/* Axis labels */}
+                          <text x={PAD_L - 4} y={y(vhi) + 3} fontSize={8} textAnchor="end" fill="var(--cds-text-helper)">{vhi}</text>
+                          <text x={PAD_L - 4} y={y(vlo) + 3} fontSize={8} textAnchor="end" fill="var(--cds-text-helper)">{vlo}</text>
+                          <text x={PAD_L} y={H - 3} fontSize={8} fill="var(--cds-text-helper)">0h</text>
+                          <text x={PAD_L + innerW} y={H - 3} fontSize={8} textAnchor="end" fill="var(--cds-text-helper)">{n - 1}h</text>
+                        </svg>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Loading per hour (bar strip) */}
+                  {tsResult.loading_per_hour?.length > 0 && (
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 9, color: "var(--cds-text-helper)", marginBottom: 2, textTransform: "uppercase", letterSpacing: 1 }}>
+                        Max line loading per hour
+                      </div>
+                      <div style={{ display: "flex", gap: 1, height: 30, alignItems: "flex-end" }}>
+                        {tsResult.loading_per_hour.map((pct, h) => {
+                          const overloaded = pct > (tsResult.loading_limit_pct ?? 100);
+                          const color = overloaded ? "#da1e28" : pct > 80 ? "#f1c21b" : "#24a148";
+                          return (
+                            <div key={h}
+                                 title={`Hour ${h}: ${pct.toFixed(1)}%`}
+                                 style={{
+                                   flex: 1, background: color,
+                                   height: `${Math.max(2, Math.min(100, pct))}%`,
+                                   opacity: 0.85,
+                                 }} />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Summary line */}
+                  <div style={{ fontSize: 10, color: "var(--cds-text-helper)" }}>
+                    {tsResult.summary}
+                  </div>
+                  <div style={{ fontSize: 9, color: "var(--cds-text-helper)", marginTop: 4, opacity: 0.7 }}>
+                    {tsResult.network_size?.substations} buses, {tsResult.network_size?.lines} lines | {tsResult.elapsed_s}s
+                  </div>
+                </>
               )}
             </div>
 

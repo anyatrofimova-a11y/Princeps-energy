@@ -1,0 +1,219 @@
+/* Princeps UI design tokens — applied on top of HeroUI defaults to keep
+   the gold-on-cream brand intact. The constellation grid backdrop is
+   preserved via the existing .startup-mesh-canvas / .px2-shell rules; we
+   only override component-level tokens here.
+
+   Anything that ships from HeroUI (Card, Table, Tabs, Chip, Button,
+   Modal, Input, Select, Tooltip) inherits these. */
+
+:root,
+[data-theme="light"],
+[data-theme="princeps"] {
+  /* Princeps brand palette */
+  --p-gold:        #F5B731;
+  --p-gold-soft:   #FCE6A5;
+  --p-gold-tint:   #FFF8E6;
+  --p-cream:       #FAF7F1;
+  --p-cream-2:     #F5F0E5;
+  --p-ink:         #15171C;
+  --p-ink-2:       #2A2E36;
+  --p-mute:        #6B7280;
+  --p-line:        rgba(15, 19, 24, 0.08);
+  --p-line-strong: rgba(15, 19, 24, 0.14);
+  --p-good:        #16A34A;
+  --p-warn:        #E8A012;
+  --p-bad:         #DC2626;
+
+  /* Push HeroUI tokens onto the brand palette */
+  --heroui-primary:        var(--p-gold);
+  --heroui-primary-50:     var(--p-gold-tint);
+  --heroui-primary-100:    var(--p-gold-soft);
+  --heroui-primary-foreground: var(--p-ink);
+  --heroui-background:     transparent;        /* let the constellation show through */
+  --heroui-foreground:     var(--p-ink);
+  --heroui-content1:       rgba(255, 255, 255, 0.86);
+  --heroui-content2:       rgba(255, 255, 255, 0.94);
+  --heroui-default:        var(--p-cream-2);
+  --heroui-default-foreground: var(--p-ink);
+  --heroui-divider:        var(--p-line);
+  --heroui-radius:         12px;
+  --heroui-radius-large:   16px;
+}
+
+/* ───────────── Princeps primitives ───────────── */
+
+/* KPI card — uniform card for top-row metrics across the app. */
+.princeps-kpi {
+  background: var(--heroui-content1);
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 1px 2px rgba(15, 19, 24, 0.03),
+              0 8px 32px -16px rgba(15, 19, 24, 0.08);
+  transition: border-color 120ms ease, transform 120ms ease;
+}
+.princeps-kpi:hover { border-color: var(--p-gold-soft); }
+.princeps-kpi__label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--p-mute);
+  font-weight: 600;
+}
+.princeps-kpi__value {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--p-ink);
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  line-height: 1;
+}
+.princeps-kpi__value--gold { color: var(--p-gold); }
+.princeps-kpi__unit {
+  font-size: 11.5px;
+  color: var(--p-mute);
+  font-weight: 500;
+}
+.princeps-kpi__delta {
+  font-size: 11px;
+  color: var(--p-good);
+  font-weight: 600;
+}
+.princeps-kpi__delta--down { color: var(--p-bad); }
+
+/* Card — uniform border / radius / shadow across HeroUI Card + plain divs. */
+.princeps-card {
+  background: var(--heroui-content1);
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 1px 2px rgba(15, 19, 24, 0.03),
+              0 8px 32px -16px rgba(15, 19, 24, 0.08);
+}
+.princeps-card__head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--p-line);
+}
+.princeps-card__title {
+  font-size: 13px; font-weight: 600; color: var(--p-ink);
+  letter-spacing: -0.01em;
+}
+.princeps-card__eyebrow {
+  font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--p-mute); font-weight: 600;
+}
+.princeps-card__body { padding: 14px 18px; }
+
+/* Tag chip — small status badge (GO / CAUTION / NO-GO / DERIVED, etc.) */
+.princeps-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.princeps-chip--gold { background: var(--p-gold-tint); color: var(--p-ink); }
+.princeps-chip--green { background: rgba(22, 163, 74, 0.10); color: var(--p-good); }
+.princeps-chip--amber { background: rgba(232, 160, 18, 0.12); color: #92660D; }
+.princeps-chip--red   { background: rgba(220, 38, 38, 0.10); color: var(--p-bad); }
+.princeps-chip--ghost { background: var(--p-cream-2); color: var(--p-ink-2); }
+
+/* Data table — TanStack-driven; the JSX uses these class names. */
+.princeps-table-wrap {
+  background: var(--heroui-content1);
+  border: 1px solid var(--p-line);
+  border-radius: 14px;
+  overflow: hidden;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.princeps-table-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--p-line);
+  gap: 12px;
+}
+.princeps-table-search {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--p-line);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 13px;
+  color: var(--p-ink);
+  outline: none;
+  transition: border-color 120ms ease;
+}
+.princeps-table-search:focus { border-color: var(--p-gold); background: rgba(255,255,255,0.9); }
+.princeps-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.princeps-table th {
+  text-align: left;
+  padding: 10px 16px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--p-mute);
+  background: rgba(245, 240, 229, 0.4);
+  border-bottom: 1px solid var(--p-line);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+.princeps-table th:hover { color: var(--p-ink); }
+.princeps-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--p-line);
+  color: var(--p-ink);
+  vertical-align: middle;
+}
+.princeps-table tr:last-child td { border-bottom: 0; }
+.princeps-table tbody tr {
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+.princeps-table tbody tr:hover { background: rgba(245, 183, 49, 0.04); }
+.princeps-table-empty {
+  padding: 36px 16px;
+  text-align: center;
+  color: var(--p-mute);
+  font-size: 13px;
+}
+
+.princeps-pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--p-line);
+  font-size: 12px;
+  color: var(--p-mute);
+  gap: 12px;
+}
+.princeps-pagination button {
+  background: transparent;
+  border: 1px solid var(--p-line);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--p-ink);
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.princeps-pagination button:hover:not(:disabled) {
+  border-color: var(--p-gold);
+  background: var(--p-gold-tint);
+}
+.princeps-pagination button:disabled { opacity: 0.4; cursor: not-allowed; }

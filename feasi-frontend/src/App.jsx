@@ -9,6 +9,7 @@ import api from "./services/api";
 import AppShell from "./components/shell/AppShell";
 import WorkspaceRouter from "./components/workspace/WorkspaceRouter";
 import MapView from "./components/MapView";
+import LayerControlPanel from "./components/LayerControlPanel";
 import SearchZone from "./components/SearchZone";
 import OnboardingDemo from "./components/OnboardingDemo";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -139,7 +140,7 @@ export default function App() {
   const [scenarioCompareOpen, setScenarioCompareOpen] = useState(false);
   const [dashboardBuilderOpen, setDashboardBuilderOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [demoOpen, setDemoOpen] = useState(() => !localStorage.getItem("princeps_onboarded"));
+  const [demoOpen, setDemoOpen] = useState(false);
   const [backendReady, setBackendReady] = useState(false);
   const handleBackendReady = useCallback(() => setBackendReady(true), []);
 
@@ -603,6 +604,15 @@ export default function App() {
 
       <ErrorBoundary name="MapAssetLayer" fallback={null}>
         <MapAssetLayer map={mapInstance} />
+      </ErrorBoundary>
+      {/* Categorised Layers + Filters control (top-right). LAND /
+          INFRASTRUCTURE / CONSTRAINTS / ANALYSIS / BASE toggles with
+          opacity sliders. Closes on outside-click. */}
+      <ErrorBoundary name="LayerControlPanel" fallback={null}>
+        <LayerControlPanel
+          layers={layers}
+          onLayerChange={(k, v) => setLayers((prev) => ({ ...prev, [k]: v }))}
+        />
       </ErrorBoundary>
       <ErrorBoundary name="SearchZone" fallback={null}>
         <SearchZone />

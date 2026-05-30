@@ -1,0 +1,47 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="35.0px" height="35.0px" viewBox="0 0 85.039 85.039">
+  <defs>
+    <style>
+      .c {
+        fill: none;
+        stroke-width: 5px;
+      }
+
+      .c, .d {
+        stroke: #000;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .e {
+        mix-blend-mode: multiply;
+        opacity: 1;
+      }
+
+      .f {
+        isolation: isolate;
+      }
+
+      .d {
+        fill: #fff;
+        stroke-width: 5px;
+      }
+    </style>
+  </defs>
+  <g class="f">
+    <g id="b" data-name="Layer 1" class="e">
+      <g>
+        <rect class="d" x="3.02" y="3.02" width="78.999" height="78.999" />
+        <g>
+          <path class="c" d="M42.367,13.244c0,5-7.4,10.9-15.3,14" />
+          <path class="c" d="M42.367,28.044c0,6.2-11.2,13.7-21,15.7" />
+          <path class="c" d="M42.367,45.844c0,6.5-13.9,14.7-23.3,14.7" />
+          <path class="c" d="M42.467,13.244c0,5,7.4,10.9,15.3,14" />
+          <path class="c" d="M42.467,28.044c0,6.2,11.2,13.7,21,15.7" />
+          <path class="c" d="M42.467,45.844c0,6.5,13.9,14.7,23.3,14.7" />
+          <line class="c" x1="42.467" y1="13.344" x2="42.467" y2="72.944" />
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

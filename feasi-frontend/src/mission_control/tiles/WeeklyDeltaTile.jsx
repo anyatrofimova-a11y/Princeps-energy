@@ -1,5 +1,5 @@
 import React from "react";
-import ProvenanceFooter from "./ProvenanceFooter";
+import ProvenanceFooter, { WarmingState, TileSkeleton, fmtOrDash } from "./ProvenanceFooter";
 
 /**
  * WeeklyDeltaTile — what changed since last refresh of REPD + NSIP.
@@ -18,7 +18,7 @@ function fmtDate(iso) {
   }
 }
 
-export default function WeeklyDeltaTile({ data }) {
+export default function WeeklyDeltaTile({ data, loading = false }) {
   const repd = (data && data.repd) || {};
   const nsip = (data && data.nsip) || {};
   const top5 = repd.top_5_new_projects || [];
@@ -31,11 +31,16 @@ export default function WeeklyDeltaTile({ data }) {
         <div className="mcv2-tile-tag">since last refresh</div>
       </div>
       <div className="mcv2-tile-body">
+        {loading && !data ? (
+          <TileSkeleton rows={4} />
+        ) : !data ? (
+          <WarmingState />
+        ) : (
         <div className="mcv2-delta-cols">
           <div className="mcv2-delta-col">
             <h4>REPD</h4>
-            <div className="mcv2-delta-bignum">{repd.new_count ?? 0}</div>
-            <div className="mcv2-delta-sub">new rows · {repd.rows_total ?? "—"} total</div>
+            <div className="mcv2-delta-bignum">{fmtOrDash(repd.new_count)}</div>
+            <div className="mcv2-delta-sub">new rows · {fmtOrDash(repd.rows_total)} total</div>
             {top5.length === 0 ? (
               <div className="mcv2-empty" style={{ padding: "6px 0" }}>No recent submissions.</div>
             ) : (
@@ -59,8 +64,8 @@ export default function WeeklyDeltaTile({ data }) {
           </div>
           <div className="mcv2-delta-col">
             <h4>NSIP / DCO</h4>
-            <div className="mcv2-delta-bignum">{nsip.new_count ?? 0}</div>
-            <div className="mcv2-delta-sub">new rows · {nsip.rows_total ?? "—"} total</div>
+            <div className="mcv2-delta-bignum">{fmtOrDash(nsip.new_count)}</div>
+            <div className="mcv2-delta-sub">new rows · {fmtOrDash(nsip.rows_total)} total</div>
             {statusRows.length === 0 ? (
               <div className="mcv2-empty" style={{ padding: "6px 0" }}>No status data.</div>
             ) : (
@@ -81,8 +86,12 @@ export default function WeeklyDeltaTile({ data }) {
             )}
           </div>
         </div>
+        )}
       </div>
-      <ProvenanceFooter provenance={data?.provenance} />
+      <ProvenanceFooter
+        source="REPD (DESNZ) · NSIP DCO Register"
+        generatedAt={data?.provenance?.generated_at}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import ProvenanceFooter from "./ProvenanceFooter";
+import ProvenanceFooter, { WarmingState, TileSkeleton } from "./ProvenanceFooter";
 
 /**
  * CouncilActivityTile — last 5 council sessions, click to replay.
@@ -33,7 +33,7 @@ function verdictClass(v) {
   return "unknown";
 }
 
-export default function CouncilActivityTile({ data }) {
+export default function CouncilActivityTile({ data, loading = false }) {
   const navigate = useNavigate();
   const sessions = (data && data.sessions) || [];
   return (
@@ -43,8 +43,12 @@ export default function CouncilActivityTile({ data }) {
         <div className="mcv2-tile-tag">audited</div>
       </div>
       <div className="mcv2-tile-body">
-        {sessions.length === 0 ? (
-          <div className="mcv2-empty">No council sessions yet — start one from the Council page.</div>
+        {loading && !data ? (
+          <TileSkeleton rows={4} />
+        ) : !data ? (
+          <WarmingState />
+        ) : sessions.length === 0 ? (
+          <WarmingState label="No council sessions yet — start one from the Council page." />
         ) : (
           <div className="mcv2-list">
             {sessions.slice(0, 5).map(s => (
@@ -73,7 +77,11 @@ export default function CouncilActivityTile({ data }) {
           </div>
         )}
       </div>
-      <ProvenanceFooter provenance={data?.provenance} />
+      <ProvenanceFooter
+        source="council_session_log · Apache AGE"
+        claudeDerived
+        generatedAt={data?.provenance?.generated_at}
+      />
     </div>
   );
 }

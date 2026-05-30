@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 import random
 from datetime import datetime, timedelta
+
+log = logging.getLogger("princeps.routers.grid")
 
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 import asyncpg
@@ -49,6 +52,8 @@ from utils.bess_benchmarks import bess_blended_price_gbp_mwh
 from utils.osm_power_infra import (
     power_lines_geojson, power_substations_geojson, power_towers_geojson,
     power_generators_geojson, power_plants_geojson, power_infra_summary,
+    # Task #16 (OpenInfraMap port) — substation polygons + switchgear endpoints.
+    power_substation_polys_geojson, power_switchgear_geojson,
 )
 
 router = APIRouter(tags=["grid"])
@@ -370,6 +375,8 @@ async def api_grid_substation_neighbourhood(
 
 
 @router.get("/api/grid/capacity-map")
+@router.get("/grid/capacity-map")
+@router.get("/api/grid/substations")
 async def api_grid_capacity_map(
     dno: str = Query(None),
     min_voltage_kv: float = Query(None),
@@ -385,11 +392,20 @@ async def api_grid_capacity_map(
     bbox = None
     if all(v is not None for v in [west, south, east, north]):
         bbox = (west, south, east, north)
-    async with pool.acquire() as conn:
-        return await gc_capacity_map(conn, dno=dno, min_voltage_kv=min_voltage_kv, bbox=bbox)
+    try:
+        async with pool.acquire() as conn:
+            return await gc_capacity_map(conn, dno=dno, min_voltage_kv=min_voltage_kv, bbox=bbox)
+    except Exception as e:
+        log.warning("capacity_map failed: %s", e)
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "metadata": {"total": 0, "error": str(e)[:200]},
+        }
 
 
 @router.get("/api/grid/lines")
+@router.get("/grid/lines")
 async def api_grid_lines(
     min_voltage_kv: float = Query(132),
     west: float = Query(None),
@@ -402,8 +418,16 @@ async def api_grid_lines(
     bbox = None
     if all(v is not None for v in [west, south, east, north]):
         bbox = (west, south, east, north)
-    async with pool.acquire() as conn:
-        return await gc_lines_geojson(conn, min_voltage_kv=min_voltage_kv, bbox=bbox)
+    try:
+        async with pool.acquire() as conn:
+            return await gc_lines_geojson(conn, min_voltage_kv=min_voltage_kv, bbox=bbox)
+    except Exception as e:
+        log.warning("grid_lines failed: %s", e)
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "metadata": {"total": 0, "min_voltage_kv": min_voltage_kv, "error": str(e)[:200]},
+        }
 
 
 # In-memory job registry for the endpoint linker. Single-process, best-effort —

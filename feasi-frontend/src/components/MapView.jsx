@@ -21,8 +21,15 @@ import GridQueueLayer from "./grid-overlay/GridQueueLayer";
 import QueueFilterBar from "./grid-overlay/QueueFilterBar";
 import ProjectInfoCard from "./grid-overlay/ProjectInfoCard";
 import "./grid-overlay/queue-overlay.css";
+// OpenInfraMap overlay (BSD-3-Clause code, CC-BY 4.0 style — see footer).
+import { attachOimOverlay, OIM_ATTRIBUTION } from "../lib/oimOverlay";
 
 const PROXY = "pmtiles://http://localhost:3000/pmtiles-proxy";
+// PMTiles overlays only work when the dev pmtiles-proxy is reachable
+// (localhost:3000). In production the proxy doesn't exist, so every
+// addSource call below would fail and spam the console. Skip them entirely.
+const PMTILES_AVAILABLE = typeof window !== "undefined"
+  && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
 
 let protocolAdded = false;
 
@@ -128,6 +135,9 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const deckOverlayRef = useRef(null);
+  // OpenInfraMap overlay (task #16): default ON, attached after setupMap().
+  const oimRef = useRef(null);
+  const [oimEnabled, setOimEnabled] = useState(true);
   const [mapReady, setMapReady] = React.useState(false);
   // D5 — UK queue overlay state. voltage default = 0 (All) so ECR rows
   // with NULL voltage_kv are included; otherwise the layer would be empty.
@@ -170,6 +180,17 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       pitch: 45,
       bearing: -10,
       maxPitch: 85,
+      // Task #17 — always-on OGL v3.0 footer for planning.data.gov.uk +
+      // Environment Agency overlays, even when the relevant source is not
+      // yet attached. Task #16 appends CC-BY 4.0 credit for the
+      // OpenInfraMap style so the requirement is satisfied even before
+      // the first overlay tile arrives.
+      attributionControl: {
+        customAttribution: [
+          "© Crown copyright · Open Government Licence v3.0 (planning.data.gov.uk)",
+          OIM_ATTRIBUTION,
+        ],
+      },
     };
     if (hasMapboxToken) {
       // Satellite-streets v12 — high-detail aerial basemap with vector road
@@ -379,6 +400,80 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
         layout: { visibility: layers.aerial ? "visible" : "none" },
       });
 
+      // ── Planning constraint vector overlay (Glint-style coloured
+      //    polygons for Protected Areas / Flood Zones / AONB / Conservation
+      //    Areas, etc.) — sources from /api/planning-data/designations.mvt.
+      //    101k rows on the backend; rendered via Mapbox vector tiles. ──
+      safe("planning-constraints", () => {
+        map.addSource("planning-designations", {
+          type: "vector",
+          tiles: [`${window.location.origin}/api/planning-data/designations.mvt?z={z}&x={x}&y={y}`],
+          minzoom: 6,
+          maxzoom: 16,
+          promoteId: "entity_id",
+        });
+
+        // CRITICAL — red fills (SSSI, SAC, SPA, Ramsar, Ancient Woodland,
+        //   Listed Buildings, Scheduled Monuments, National Parks)
+        map.addLayer({
+          id: "planning-critical-fill",
+          type: "fill",
+          source: "planning-designations",
+          "source-layer": "planning_designations",
+          filter: ["in", ["get", "dataset"],
+            ["literal", ["site-of-special-scientific-interest",
+                         "special-area-of-conservation", "special-protection-area",
+                         "ramsar", "ancient-woodland", "listed-building",
+                         "scheduled-monument", "national-park"]]],
+          paint: {
+            "fill-color":   "#DC2626",
+            "fill-opacity":  0.22,
+            "fill-outline-color": "#DC2626",
+          },
+          layout: { visibility: layers.planning_constraints !== false ? "visible" : "none" },
+        });
+
+        // HIGH — amber fills (AONB, Conservation Area, Flood Zone,
+        //   Nutrient Neutrality Catchment)
+        map.addLayer({
+          id: "planning-high-fill",
+          type: "fill",
+          source: "planning-designations",
+          "source-layer": "planning_designations",
+          filter: ["in", ["get", "dataset"],
+            ["literal", ["area-of-outstanding-natural-beauty",
+                         "conservation-area", "flood-risk-zone",
+                         "nutrient-neutrality-catchment"]]],
+          paint: {
+            "fill-color":   "#E8A012",
+            "fill-opacity":  0.18,
+            "fill-outline-color": "#E8A012",
+          },
+          layout: { visibility: layers.planning_constraints !== false ? "visible" : "none" },
+        });
+
+        // MEDIUM — soft blue (Green Belt, ALC, TPZ, Article 4, brownfield,
+        //   LPA boundaries) — visible only at high zoom to avoid clutter
+        map.addLayer({
+          id: "planning-medium-fill",
+          type: "fill",
+          source: "planning-designations",
+          "source-layer": "planning_designations",
+          filter: ["in", ["get", "dataset"],
+            ["literal", ["green-belt", "agricultural-land-classification",
+                         "tree-preservation-zone", "article-4-direction-area",
+                         "brownfield-land", "local-nature-reserve",
+                         "national-nature-reserve"]]],
+          paint: {
+            "fill-color":   "#0891B2",
+            "fill-opacity":  0.12,
+            "fill-outline-color": "#0891B2",
+          },
+          minzoom: 11,
+          layout: { visibility: layers.planning_constraints !== false ? "visible" : "none" },
+        });
+      });
+
       // ── Real energy infrastructure assets ──
       map.addSource("energy-assets", {
         type: "geojson",
@@ -553,8 +648,12 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       }); // end safe("aerial+assets")
 
       // PMTiles vector overlays — wrapped in try/catch because mapbox-gl v3
-      // removed addProtocol, so pmtiles:// URLs may fail
+      // removed addProtocol, so pmtiles:// URLs may fail. Skipped in prod
+      // (PMTILES_AVAILABLE is only true when the dev pmtiles-proxy is up).
       try {
+      if (!PMTILES_AVAILABLE) {
+        throw new Error("PMTiles proxy not available in production");
+      }
       map.addSource("pbcc-carbon", {
         type: "vector",
         url: `${PROXY}/pbcc.pmtiles`,
@@ -3190,6 +3289,15 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
       }); // end safe("data-fetch+draw")
 
       map.addControl(new mapboxgl.NavigationControl(), "top-left");
+
+      // OpenInfraMap power overlay (task #16, default ON). Attached after
+      // setupMap so it lands above terrain/hillshade/base layers.
+      safe("oim-overlay", () => {
+        if (oimEnabled) {
+          oimRef.current = attachOimOverlay(map);
+        }
+      });
+
       console.log("[MapView] setup complete");
       setMapReady(true);
     };
@@ -3204,9 +3312,26 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
 
     return () => {
       ro.disconnect();
+      try { oimRef.current?.detach?.(); } catch {}
+      oimRef.current = null;
       map.remove();
     };
   }, []);
+
+  // Toggle the OpenInfraMap power overlay on/off without rebuilding the map.
+  // Default ON per task #16; user can flip from the legend toggle in App.jsx.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    if (oimEnabled && !oimRef.current) {
+      try { oimRef.current = attachOimOverlay(map); } catch (e) {
+        console.warn("[MapView] OIM toggle on failed:", e);
+      }
+    } else if (!oimEnabled && oimRef.current) {
+      try { oimRef.current.detach(); } catch {}
+      oimRef.current = null;
+    }
+  }, [oimEnabled, mapReady]);
 
   // Lazy raster layer configs — added on first toggle to avoid slow initial load
   const LAZY_RASTER = useRef({
@@ -4795,6 +4920,28 @@ export default function MapView({ slopeOpacity = 0.6, layers = {}, pickMode = fa
   return (
     <>
       <div ref={containerRef} className={`mapContainer ${pickMode ? "pick-mode" : ""}`} />
+
+      {/* OIM grid-layer toggle (task #16) — small chip in the bottom-left
+          corner of the map. Default ON; click to hide OpenInfraMap power
+          features without rebuilding the basemap. */}
+      <button
+        type="button"
+        onClick={() => setOimEnabled((v) => !v)}
+        title="Toggle OpenInfraMap grid overlay (lines, substations, plants)"
+        style={{
+          position: "fixed", bottom: 28, left: 12, zIndex: 50,
+          padding: "6px 10px", borderRadius: 6,
+          background: oimEnabled ? "#D4A018" : "rgba(255,255,255,0.92)",
+          color: "#0F1318",
+          border: "1px solid rgba(15,19,24,0.18)",
+          fontFamily: "'DM Sans', sans-serif", fontSize: 11, fontWeight: 600,
+          letterSpacing: "0.03em", cursor: "pointer",
+          boxShadow: "0 2px 8px rgba(15,19,24,0.16)",
+        }}
+      >
+        Grid layer {oimEnabled ? "ON" : "OFF"}
+      </button>
+
       <AssetIntelPanel
         target={assetIntelTarget}
         onClose={() => setAssetIntelTarget(null)}

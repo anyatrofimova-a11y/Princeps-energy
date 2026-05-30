@@ -7,6 +7,13 @@ import {HierarchyExplorer} from './HierarchyExplorer.jsx';
 import {Inspector} from './Inspector.jsx';
 import {ConstellationBackdrop} from './ConstellationBackdrop.jsx';
 import V2LiveTape from './V2LiveTape.jsx';
+import V2AgentActivity from './V2AgentActivity.jsx';
+// Princeps-AI chat rail — floating bottom-right card. Already wires the
+// /chat/session + /chat/{sid}/message SSE stream and renders tool calls
+// as spinning chips. Mounted globally in App.jsx for non-v2 routes; the
+// v2 AppShell needs its own mount because /v2 sits on a parallel route
+// tree (see main.jsx — /v2 mounts <AppShell>, not <App>).
+import ChatRail from '../components/shell/ChatRail';
 import './shell-v2.css';
 
 /**
@@ -56,7 +63,13 @@ export default function AppShell() {
 
             <footer className="px2-live-strip">
               <V2LiveTape />
+              <V2AgentActivity />
             </footer>
+
+            {/* Princeps AI — floating chat bubble. Renders bottom-right;
+                an override below in shell-v2.css raises it above the live
+                strip so it doesn't tuck under the footer. */}
+            <ChatRail parcelId={null} projectId={null} />
           </div>
         </SelectionProvider>
       </WorkspaceProvider>

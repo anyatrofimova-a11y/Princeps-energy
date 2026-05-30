@@ -113,6 +113,11 @@ INTENT_PROMPTS: dict[str, str] = {
         "Evaluate whether this site is suitable for a solar PV installation. "
         "Your assessment must be holistic, covering all 8 data domains.\n\n"
         + DATA_DOMAINS_CONTEXT +
+        "\nIf the context contains a 'planning_designations' block, you MUST "
+        "cite the specific entity ids (e.g. \"SSSI '<name>' (entity 12345) "
+        "at <N>m distance\") for any CRITICAL/HIGH severity hits and use them "
+        "as the basis of any planning-driven verdict adjustment. Do not "
+        "invent designations; only cite those listed in the context."
         "\nProvide a GO / CAUTION / NO-GO verdict with confidence score."
     ),
     "grid_study": (
@@ -167,7 +172,12 @@ INTENT_PROMPTS: dict[str, str] = {
         "You are a UK planning consultant specialising in renewable energy. "
         "Assess planning permission likelihood, relevant NPPF policies, "
         "local plan alignment, and pre-application strategy.\n\n"
-        + DATA_DOMAINS_CONTEXT
+        + DATA_DOMAINS_CONTEXT +
+        "\nIf the context contains a 'planning_designations' block, you MUST "
+        "cite the specific entity ids (e.g. \"Listed Building '<name>' "
+        "(entity 12345) at <N>m\") for any CRITICAL/HIGH severity hits and "
+        "use them as the primary basis of the verdict. Do not invent "
+        "designations; only cite those listed in the context."
     ),
     "grid_opportunity": (
         "You are a UK distribution network connections specialist. "
@@ -436,6 +446,36 @@ INTENT_PROMPTS: dict[str, str] = {
         "capacity_mw ratio when sizing the connection — flag if >0.8 utilisation. End with a "
         "GO/CAUTION/NO-GO verdict on the layout as proposed."
     ),
+    "outage_planning": (
+        "You are a UK transmission/distribution operations planner specialising in "
+        "outage co-ordination. Given a proposed outage of a generator or a line on "
+        "the project's local network, assess whether the requested window respects "
+        "voltage limits (Eng Rec P28/P29: typically 0.94-1.06 pu at 11/33 kV, "
+        "0.95-1.05 pu at 66 kV+) and thermal loading limits (<=100% continuous "
+        "rating). Use the ``check_outage_window`` tool to test the requested "
+        "window against the time-series AC power-flow simulator — it returns "
+        "feasibility, blocking constraints, and up to 5 alternative windows of "
+        "the same duration that would clear all violations.\n\n"
+        "Cover the following themes:\n\n"
+        "1. REQUESTED WINDOW VERDICT — Is the requested outage feasible? If so, "
+        "state the headroom (voltage margin, thermal margin) the network retains "
+        "during the window. If not, quote the worst hour and binding constraint "
+        "(overvoltage / undervoltage / thermal overload).\n\n"
+        "2. ALTERNATIVE WINDOWS — If the requested window fails, recommend the "
+        "earliest clean alternative and the largest contiguous safe block in the "
+        "search horizon. Trade off operational convenience (daylight hours, "
+        "weekend) against constraint severity.\n\n"
+        "3. RISK SCALING — Estimate the consequence if the outage is taken "
+        "anyway: marginal (a few percent over limit, manageable with reactive "
+        "support or curtailment) or hard (>10% overload, voltage collapse risk)?\n\n"
+        "4. COORDINATION CONTEXT — Reference UK practice: NERS/DNO outage "
+        "planning process, ENA Engineering Recommendation G99 for embedded "
+        "generator outages, NGESO Outage Planning code for transmission. "
+        "Recommend whether this needs a DNO Network Access Application (NAA) "
+        "and how far in advance.\n\n"
+        "Provide GO / CAUTION / NO-GO verdict on the requested outage window "
+        "with confidence score."
+    ),
     "dno_engagement": (
         "You are a senior UK DNO connections engagement advisor. You have access to the "
         "``get_dno_engagement_status`` tool — call it first to understand where the project "
@@ -568,6 +608,20 @@ async def run_structured_agent(
         Parsed JSON dict with verdict, risks, etc.
     """
     system_prompt = INTENT_PROMPTS.get(intent, INTENT_PROMPTS["feasibility"])
+
+    # ── Task #17: planning.data.gov.uk Top-21 designations injection.
+    # Pulled live from the Postgres table populated by the daily refresher
+    # so the verdict can cite specific entity ids (e.g. "SSSI 'Foo' overlaps
+    # site by N m²"), not heuristics. Only active for feasibility + planning.
+    if pool is not None and intent in ("feasibility", "planning"):
+        try:
+            async with pool.acquire() as _conn:
+                context = await enrich_context_with_planning_designations(
+                    _conn, context, intent,
+                )
+        except Exception as _exc:
+            log.debug("planning designations enrichment skipped: %s", _exc)
+
     t0 = time.time()
 
     try:
@@ -1537,6 +1591,33 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
             },
         ]
 
+    if intent == "outage_planning":
+        actions = [
+            {
+                "label": "Run 24-hour Feasibility Check",
+                "endpoint": "/api/grid/timeseries-feasibility",
+                "method": "POST",
+                "payload": {"project_id": pid, "snapshot_hours": 24},
+            },
+            {
+                "label": "Run Outage-Window Check",
+                "endpoint": "/api/grid/outage-window",
+                "method": "POST",
+                "payload": {
+                    "project_id": pid,
+                    "asset_type": "generator",
+                    "asset_id": "proposed_generator",
+                    "outage_window": {"start_hour": 8, "end_hour": 16},
+                },
+            },
+            {
+                "label": "Open Grid Connection Panel",
+                "action": "open_panel",
+                "panel": "grid_connection",
+                "payload": {},
+            },
+        ]
+
     if intent == "dno_engagement":
         # Actions drive the DNO engagement workflow UI panels. Note: no
         # outbound email relay — `open_send_modal` triggers a client-side
@@ -1620,6 +1701,104 @@ def _default_actions(intent: str, ctx: dict) -> list[dict]:
         })
 
     return actions
+
+
+async def enrich_context_with_planning_designations(
+    conn,
+    context: dict,
+    intent: str,
+    *,
+    radius_m: int = 500,
+) -> dict:
+    """Inject planning.data.gov.uk Top-21 designations into the agent context.
+
+    Active for ``feasibility`` and ``planning`` intents. The block is
+    auditable — every cite includes the entity id, dataset slug, distance
+    (or overlap area), and the planning.data.gov.uk source URL — so the
+    composed verdict can ground its claims in real entities rather than
+    heuristics. Heuristic-only fall-through when the table is empty / the
+    query fails.
+    """
+    if intent not in ("feasibility", "planning"):
+        return context
+    loc = context.get("location", {})
+    lat = loc.get("lat", context.get("lat"))
+    lon = loc.get("lon", context.get("lon"))
+    if lat is None or lon is None:
+        return context
+
+    enriched = {**context}
+    try:
+        from utils.planning_data_uk import SEVERITY as _SEV
+    except Exception:
+        return enriched
+
+    sql = """
+    WITH q AS (
+        SELECT ST_Transform(
+                   ST_SetSRID(ST_MakePoint($1, $2), 4326),
+                   27700
+               ) AS pt
+    )
+    SELECT
+        d.entity_id,
+        d.dataset,
+        d.name,
+        d.reference,
+        d.source_url,
+        ROUND(ST_Distance(d.geom, q.pt)::numeric, 1) AS distance_m
+    FROM planning_designations d, q
+    WHERE ST_DWithin(d.geom, q.pt, $3)
+    ORDER BY ST_Distance(d.geom, q.pt) ASC
+    LIMIT 60
+    """
+    try:
+        rows = await conn.fetch(sql, lon, lat, radius_m)
+    except Exception as exc:
+        log.debug("planning_designations enrichment skipped: %s", exc)
+        return enriched
+
+    if not rows:
+        enriched["planning_designations"] = {
+            "radius_m": radius_m,
+            "by_severity": {"CRITICAL": [], "HIGH": [], "MEDIUM": []},
+            "summary": "no planning.data.gov.uk designations within %dm" % radius_m,
+            "attribution": "© Crown copyright · Open Government Licence v3.0",
+        }
+        return enriched
+
+    by_sev: dict[str, list[dict]] = {"CRITICAL": [], "HIGH": [], "MEDIUM": []}
+    for r in rows:
+        sev = _SEV.get(r["dataset"], "MEDIUM")
+        by_sev.setdefault(sev, []).append({
+            "entity_id": r["entity_id"],
+            "dataset": r["dataset"],
+            "name": r["name"],
+            "reference": r["reference"],
+            "distance_m": float(r["distance_m"]) if r["distance_m"] is not None else None,
+            "source_url": r["source_url"],
+        })
+
+    # One-line summary the LLM can quote verbatim in its verdict.
+    parts = []
+    if by_sev["CRITICAL"]:
+        n = by_sev["CRITICAL"][0]["name"] or by_sev["CRITICAL"][0]["dataset"]
+        eid = by_sev["CRITICAL"][0]["entity_id"]
+        d = by_sev["CRITICAL"][0]["distance_m"]
+        parts.append(f"{len(by_sev['CRITICAL'])} CRITICAL (nearest: '{n}' entity {eid} at {d}m)")
+    if by_sev["HIGH"]:
+        parts.append(f"{len(by_sev['HIGH'])} HIGH")
+    if by_sev["MEDIUM"]:
+        parts.append(f"{len(by_sev['MEDIUM'])} MEDIUM")
+
+    enriched["planning_designations"] = {
+        "radius_m": radius_m,
+        "by_severity": by_sev,
+        "summary": "; ".join(parts),
+        "attribution": "© Crown copyright · Open Government Licence v3.0",
+        "source": "planning.data.gov.uk (Top-21 OGL v3.0)",
+    }
+    return enriched
 
 
 async def enrich_context_with_trackers(conn, context: dict) -> dict:

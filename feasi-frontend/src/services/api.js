@@ -107,7 +107,27 @@ const api = {
     ngedSummary: () => get("/nged/summary"),
     ngedSubstation: (id) => get(`/nged/substation/${enc(id)}`),
     substationDetail: (id) => get(`/api/grid/substation/${enc(id)}/detail`),
-    circuit: (subId, depth = 3) => get(`/grid/cim/circuit/${enc(subId)}?depth=${depth}`),
+    // /grid/cim/circuit hit Neo4j and returned 503; pointing at the Postgres-
+    // native /api/ltds endpoint instead. Adapter below transforms the raw
+    // graph shape ({from, to}) into React Flow shape ({id, source, target})
+    // and gives each node a label so React Flow + bfsLayout render cleanly.
+    circuit: async (subId /* , depth ignored on ltds endpoint */) => {
+      const raw = await get(`/api/ltds/substations/${enc(subId)}/circuit`);
+      if (!raw || raw.detail) return raw;
+      const nodes = (raw.nodes || []).map((n) => ({
+        id: n.id,
+        type: n.type,
+        data: { label: n.name || n.id?.slice(0, 8), ...n },
+      }));
+      const edges = (raw.edges || []).map((e, i) => ({
+        id: e.terminal_mrid || `e_${i}_${e.from}__${e.to}`,
+        source: e.from,
+        target: e.to,
+        type: "CONNECTS",
+        data: { terminal_mrid: e.terminal_mrid, seq: e.sequence_number },
+      }));
+      return { ...raw, nodes, edges };
+    },
     circuitSearch: (q) => get(`/grid/cim/search?q=${enc(q)}`),
     circuitPath: (fromId, toId) => get(`/grid/cim/path?from_id=${enc(fromId)}&to_id=${enc(toId)}`),
     circuitDownstream: (subId) => get(`/grid/cim/downstream/${enc(subId)}`),
@@ -145,8 +165,8 @@ const api = {
     // GridFinder — unmapped grid detection
     unmappedGrid: (lat, lon, km = 10) => get(`/api/grid/unmapped?lat=${lat}&lon=${lon}&radius_km=${km}`),
     // Grid connection capacity endpoints
-    capacityMap: (bbox) => get(`/grid/capacity-map?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
-    gridLines: (bbox) => get(`/grid/lines?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
+    capacityMap: (bbox) => get(`/api/grid/capacity-map?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
+    gridLines: (bbox) => get(`/api/grid/lines?west=${bbox[0]}&south=${bbox[1]}&east=${bbox[2]}&north=${bbox[3]}`),
     powerFlow: (lat, lon, capacityMw, technology, substationId, contingency) => {
       const q = new URLSearchParams({ lat, lon, capacity_mw: capacityMw, technology });
       if (substationId != null) q.set("substation_id", substationId);

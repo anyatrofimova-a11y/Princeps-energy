@@ -272,8 +272,28 @@ async def list_objects(
     where_sql = ("WHERE " + " AND ".join(where)) if where else ""
     sql = f"SELECT * FROM {table} {where_sql} LIMIT {int(limit)}"
 
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(sql, *params)
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(sql, *params)
+    except asyncpg.exceptions.UndefinedTableError:
+        return {
+            "type": obj_type,
+            "filters": {
+                "stage": stage, "status": status, "technology": technology,
+                "sector": sector, "voltage_min": voltage_min,
+                "capacity_min": capacity_min, "q": q,
+            },
+            "count": 0,
+            "items": [],
+            "source": "table_not_seeded",
+            "warning": f"table '{table}' not present in this database",
+        }
+    except asyncpg.exceptions.UndefinedColumnError as exc:
+        return {
+            "type": obj_type, "count": 0, "items": [],
+            "source": "schema_drift",
+            "warning": f"column missing: {exc}",
+        }
 
     items = [cfg["loader"](r) for r in rows]
     return {

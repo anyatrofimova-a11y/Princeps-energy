@@ -520,7 +520,9 @@ async def _datasets_passthrough(request: Request) -> dict[str, Any]:
 async def v2_snapshot(request: Request) -> dict[str, Any]:
     pool: asyncpg.Pool = request.app.state.pool
 
-    funnel, datasets, grid, owners, delta, council, actions = await asyncio.gather(
+    # Degrade gracefully — if a single sub-query fails (e.g. missing optional
+    # table on a fresh DB), we still return a snapshot the UI can render.
+    results = await asyncio.gather(
         _portfolio_mc_passthrough(request),
         _datasets_passthrough(request),
         _grid_pulse_payload(pool),
@@ -528,16 +530,24 @@ async def v2_snapshot(request: Request) -> dict[str, Any]:
         _weekly_delta_payload(pool),
         _council_sessions_payload(pool),
         _pending_actions_payload(pool),
-        return_exceptions=False,
+        return_exceptions=True,
     )
 
+    def _safe(r, default):
+        if isinstance(r, Exception):
+            log.warning("mission_control_v2 sub-query failed: %s", r)
+            return default
+        return r
+
+    funnel, datasets, grid, owners, delta, council, actions = results
+
     return {
-        "funnel": funnel,
-        "datasets": datasets,
-        "grid_pulse": grid,
-        "top_owners": owners,
-        "weekly_delta": delta,
-        "council": council,
-        "actions": actions,
+        "funnel": _safe(funnel, {"metrics": {}, "active_projects": []}),
+        "datasets": _safe(datasets, []),
+        "grid_pulse": _safe(grid, {}),
+        "top_owners": _safe(owners, []),
+        "weekly_delta": _safe(delta, {"repd": {}, "nsip": {}}),
+        "council": _safe(council, {"sessions": []}),
+        "actions": _safe(actions, []),
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }

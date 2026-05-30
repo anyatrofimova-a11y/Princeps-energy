@@ -162,25 +162,82 @@
   flex: 1;
 }
 
-/* ---- Provenance footer (10px uppercase letter-spaced) ---- */
+/* ---- Provenance footer (10.5px, low contrast, mixed-case) ----
+   Nyxium-style: every datapoint cites its source. Intentionally subdued —
+   ignorable while scanning, available when scrutinising. */
 .mcv2-provenance {
-  border-top: 1px solid var(--mcv2-border);
+  border-top: 1px solid #F0EDE4;
   margin-top: 12px;
-  padding-top: 8px;
-  font-family: var(--mcv2-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--mcv2-ink-mute);
+  padding-top: 6px;
+  font-family: var(--mcv2-font-body);
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--px2-text-dim, #6B7280);
+  opacity: 0.78;
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mcv2-provenance-source {
+  font-feature-settings: "tnum" 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mcv2-provenance-label {
-  color: var(--mcv2-gold);
+  color: var(--px2-text-dim, #6B7280);
   font-weight: 600;
-  margin-right: 6px;
+  margin-right: 4px;
+  letter-spacing: 0.1px;
+}
+
+.mcv2-provenance-stamp {
+  font-family: var(--mcv2-font-mono);
+  font-size: 10px;
+  color: var(--px2-text-low, #9CA3AF);
+  flex-shrink: 0;
+}
+
+/* ---- Warming / first-paint helpers ---- */
+.mcv2-warming {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--mcv2-ink-mute);
+  padding: 14px 4px;
+  font-style: italic;
+}
+
+.mcv2-warming-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mcv2-gold);
+  display: inline-block;
+  animation: mcv2-warming-pulse 1.4s ease-in-out infinite;
+}
+.mcv2-warming-dot:nth-child(2) { animation-delay: 0.18s; }
+.mcv2-warming-dot:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes mcv2-warming-pulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.85); }
+  50%      { opacity: 1;    transform: scale(1.1); }
+}
+
+.mcv2-skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.mcv2-naked-missing {
+  color: var(--px2-text-low, #9CA3AF);
 }
 
 /* ---- Pipeline funnel ---- */

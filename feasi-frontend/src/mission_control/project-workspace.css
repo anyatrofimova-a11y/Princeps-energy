@@ -1,0 +1,395 @@
+/* ProjectWorkspace — Princeps cream/gold palette. Lives inside AppShell's
+   <Outlet />, so we only style our own surface and let .px2-main pad us. */
+
+.pwx-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  /* AppShell's .px2-main has overflow:auto and intrinsic padding. We size
+     to the available viewport minus the topbar (~52px) + live tape (~38px)
+     so the map and rails can fill the surface without a second scrollbar. */
+  min-height: calc(100vh - 110px);
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: #0F1318;
+  background: #FBF8F2;
+  margin: -20px -24px -24px;  /* cancel .px2-main padding so the workspace edges hit the rails */
+  border-radius: 0;
+}
+
+.pwx-page-state {
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: #4A5057;
+  gap: 12px;
+}
+
+.pwx-back {
+  appearance: none;
+  border: 1px solid #ECE7DA;
+  background: #FFFFFF;
+  color: #0F1318;
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.pwx-back:hover { border-color: #F5B731; background: #FFFBF0; }
+
+.pwx-error {
+  color: #DC2626;
+  font-size: 13px;
+  padding: 16px 20px;
+  background: rgba(220, 38, 38, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  max-width: 520px;
+}
+
+/* ── Top bar ── */
+.pwx-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  background: #FFFFFF;
+  border-bottom: 1px solid #ECE7DA;
+  flex-shrink: 0;
+}
+.pwx-topbar-title {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.pwx-topbar-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F1318;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pwx-topbar-meta {
+  font-size: 11px;
+  color: #8A9099;
+  margin-top: 2px;
+}
+.pwx-topbar-meta strong { color: #4A5057; font-weight: 600; }
+
+/* ── Verdict pill ── */
+.pwx-verdict {
+  display: inline-flex;
+  align-items: center;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+.pwx-verdict-lg {
+  font-size: 12px;
+  padding: 6px 14px;
+}
+
+/* ── 3-pane body ── */
+.pwx-body {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 360px;
+  gap: 14px;
+  padding: 14px;
+  flex: 1;
+  min-height: 0;
+}
+
+.pwx-left, .pwx-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.pwx-centre {
+  position: relative;
+  background: #FFFFFF;
+  border: 1px solid #ECE7DA;
+  border-radius: 14px;
+  overflow: hidden;
+  min-height: 320px;
+}
+
+/* ── Cards ── */
+.pwx-card {
+  background: #FFFFFF;
+  border: 1px solid #ECE7DA;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.pwx-card-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  color: #F5B731;
+  margin-bottom: 10px;
+}
+.pwx-card-blocker {
+  background: rgba(232, 160, 18, 0.08);
+  border-color: rgba(232, 160, 18, 0.35);
+}
+.pwx-blocker-text {
+  font-size: 12px;
+  color: #4A5057;
+  line-height: 1.5;
+}
+
+.pwx-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 12px;
+  row-gap: 6px;
+  font-size: 12px;
+}
+.pwx-dl dt {
+  color: #8A9099;
+  font-weight: 500;
+}
+.pwx-dl dd {
+  margin: 0;
+  color: #0F1318;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ── Map ── */
+.pwx-map {
+  position: absolute;
+  inset: 0;
+}
+.pwx-map-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px;
+  color: #4A5057;
+  font-size: 12px;
+  text-align: center;
+}
+.pwx-map-empty code {
+  background: #F5F1E8;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+
+/* ── Cascade ── */
+.pwx-cascade {
+  background: #FFFFFF;
+  border: 1px solid #ECE7DA;
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.pwx-cascade-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  gap: 10px;
+}
+.pwx-cascade-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0F1318;
+}
+.pwx-cascade-sub {
+  font-size: 11px;
+  color: #8A9099;
+  margin-top: 3px;
+}
+.pwx-cascade-btn {
+  appearance: none;
+  border: none;
+  background: #F5B731;
+  color: #0F1318;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.pwx-cascade-btn:hover:not(:disabled) { background: #E8A012; }
+.pwx-cascade-btn:disabled { opacity: 0.6; cursor: progress; }
+
+.pwx-cascade-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.pwx-cascade-empty {
+  font-size: 12px;
+  color: #8A9099;
+  padding: 20px 8px;
+  line-height: 1.6;
+}
+.pwx-cascade-empty strong { color: #F5B731; }
+
+.pwx-step {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #FBF8F2;
+  border: 1px solid transparent;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.pwx-step-running {
+  background: rgba(245, 183, 49, 0.08);
+  border-color: rgba(245, 183, 49, 0.35);
+}
+.pwx-step-done {
+  background: #F5F1E8;
+}
+.pwx-step-glyph {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8A9099;
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.pwx-step-done .pwx-step-glyph { color: #16A34A; }
+.pwx-step-body { flex: 1; min-width: 0; }
+.pwx-step-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0F1318;
+}
+.pwx-step-sub {
+  font-size: 11px;
+  color: #8A9099;
+  margin-top: 2px;
+}
+.pwx-step-result {
+  font-size: 11px;
+  color: #4A5057;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed #ECE7DA;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.pwx-spin {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(245, 183, 49, 0.25);
+  border-top-color: #F5B731;
+  border-radius: 50%;
+  animation: pwx-spin 0.8s linear infinite;
+}
+@keyframes pwx-spin {
+  to { transform: rotate(360deg); }
+}
+
+.pwx-chat-stub {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px dashed #ECE7DA;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #4A5057;
+}
+.pwx-chat-stub span { font-weight: 600; color: #0F1318; }
+.pwx-chat-stub em { color: #8A9099; font-style: normal; }
+
+/* ── Bottom strip ── */
+.pwx-bottom {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  padding: 12px 18px;
+  background: #FFFFFF;
+  border-top: 1px solid #ECE7DA;
+  flex-shrink: 0;
+}
+.pwx-bar {
+  display: grid;
+  grid-template-columns: 110px 1fr 80px;
+  align-items: center;
+  gap: 10px;
+}
+.pwx-bar-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #8A9099;
+  font-weight: 600;
+}
+.pwx-bar-track {
+  height: 8px;
+  background: #F5F1E8;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.pwx-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 600ms ease;
+}
+.pwx-bar-headroom { background: linear-gradient(90deg, #16A34A, #22C55E); }
+.pwx-bar-queue    { background: linear-gradient(90deg, #E8A012, #F5B731); }
+.pwx-bar-timeline { background: linear-gradient(90deg, #6366F1, #8B5CF6); }
+.pwx-bar-value {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0F1318;
+  text-align: right;
+}
+
+/* Narrow screens — drop the right rail under the map. */
+@media (max-width: 1180px) {
+  .pwx-body {
+    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-areas:
+      "left centre"
+      "right right";
+  }
+  .pwx-left { grid-area: left; }
+  .pwx-centre { grid-area: centre; }
+  .pwx-right { grid-area: right; }
+}
+@media (max-width: 720px) {
+  .pwx-body {
+    grid-template-columns: 1fr;
+    grid-template-areas: "left" "centre" "right";
+  }
+  .pwx-bottom { grid-template-columns: 1fr; gap: 8px; }
+}

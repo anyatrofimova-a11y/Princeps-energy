@@ -62,8 +62,9 @@ if not CLAUDE_API_KEY:
 async def lifespan(_app: FastAPI):
     pool = await asyncpg.create_pool(
         DATABASE_URL, min_size=3, max_size=15, command_timeout=30,
+        statement_cache_size=0,
     )
-    log.info("Database pool created (min=3, max=15)")
+    log.info("Database pool created (min=3, max=15, stmt_cache=0 — pgbouncer-safe)")
 
     _app.state.pool = pool
     _app.state.claude = anthropic.AsyncAnthropic(api_key=CLAUDE_API_KEY)
@@ -92,6 +93,7 @@ async def lifespan(_app: FastAPI):
         from utils.gu_capabilities import ensure_schema as ensure_gu_schema
         from utils.dno_opendata_ingester import ensure_schema as ensure_dno_schema
         from utils.neso098_dc_optimiser import ensure_schema as ensure_neso098_schema
+        from utils.planning_data_uk import ensure_schema as ensure_planning_data_schema
         await ensure_cluster_schema(pool)
         await ensure_events_schema(pool)
         await ensure_nged_live_schema(pool)
@@ -101,7 +103,8 @@ async def lifespan(_app: FastAPI):
         await ensure_gu_schema(pool)
         await ensure_dno_schema(pool)
         await ensure_neso098_schema(pool)
-        log.info("Pulse + Gu + NESO098 schemas ensured")
+        await ensure_planning_data_schema(pool)
+        log.info("Pulse + Gu + NESO098 + planning.data.gov.uk schemas ensured")
     except Exception as e:
         log.warning("Pulse suite schema setup failed: %s", e)
 
@@ -211,6 +214,16 @@ async def health_check(request: Request):
         "max": pool.get_max_size(),
     }
 
+    # Agentmemory sidecar (Task #28 — cross-session episodic recall)
+    try:
+        from app.memory import memory_health
+        am_ok = await memory_health()
+        checks["agentmemory"] = {"status": "healthy" if am_ok else "unreachable"}
+        if not am_ok:
+            overall = "degraded"
+    except Exception as exc:
+        checks["agentmemory"] = {"status": "error", "error": str(exc)}
+
     # Uptime
     uptime = _time.time() - getattr(request.app.state, "_start_time", _time.time())
 
@@ -283,6 +296,7 @@ _ROUTER_MODULES = [
     "twin",
     "parcel",
     "agent_ops",
+    "site_analysis",  # YC-pitch demo endpoint — POST /api/agent/analyze-site
     "substation_tracker",
     "n1_contingency",
     "billing",
@@ -320,9 +334,18 @@ _ROUTER_MODULES = [
     "object_sets",  # ObjectSet primitives — saved typed queries with set algebra
     "object_events",  # SSE bridge over Postgres LISTEN/NOTIFY — live widgets
     "pipelines",    # Pipeline Builder — declarative DAG executor
+    "planning_constraints",  # planning.data.gov.uk Top-21 OGL v3.0 datasets (Task #17)
+    "flexibility",  # Northern Powergrid Flexibility ontology — 7 OpenDataSoft datasets (Task #27)
     "asset_health", # Per-RID weighted 0-100 health score with driver provenance
     "sso",          # OIDC federated identity (Auth0/Keycloak/Google/Entra/Okta)
     "timeseries",   # Time-series store — sensor history + binned aggregations
+    "timeseries_feasibility",  # 24h AC time-series + outage-window feasibility (TU Delft port)
+    "synthetic_grids",         # Princeps PowerGridSynth substitute — CGMES export (Task #19)
+    "demo_seed",               # One-shot endpoint to load the BESS+DC demo seed
+    "grid_osm",                # /api/grid/osm/* — Map layer endpoints (substations from LTDS)
+    "finance_agentic",         # /api/finance/auto-defaults · explain-verdict · optimise · sensitivity-scenarios
+    "portfolio_performance",   # /api/portfolio/bess-revenue · /updates — Portfolio Performance tile + Updates tab
+    "parcel_enrichment",       # /api/parcels/{inspire_id}/enriched — ALC + BNG + Companies House + Tenders
 ]
 
 app.include_router(graph_router)

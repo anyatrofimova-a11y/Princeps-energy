@@ -75,15 +75,18 @@ def _row_to_dict(row: asyncpg.Record) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 @router.get("/modules")
 async def list_modules(pool: asyncpg.Pool = Depends(get_pool)):
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            SELECT id, slug, title, target_type, manifest, created_at, updated_at
-              FROM workshop_modules
-          ORDER BY updated_at DESC
-             LIMIT 10
-            """
-        )
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, slug, title, target_type, manifest, created_at, updated_at
+                  FROM workshop_modules
+              ORDER BY updated_at DESC
+                 LIMIT 10
+                """
+            )
+    except asyncpg.UndefinedTableError:
+        return {"modules": []}
     return {"modules": [_row_to_dict(r) for r in rows]}
 
 

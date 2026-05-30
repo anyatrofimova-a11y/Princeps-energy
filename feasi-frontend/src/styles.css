@@ -5513,7 +5513,10 @@ input[type="range"] { accent-color: var(--accent); }
 .site-picker {
   position: absolute;
   top: 16px;
-  left: 16px;
+  /* Shifted right past the vertical map-tool icon column (M/sun/grid/globe)
+     which can be up to ~136px wide on wider viewports — 160px clears it
+     fully with a 16-24px gap. */
+  left: 160px;
   z-index: 15;
   width: 340px;
   background: var(--cds-layer-01);

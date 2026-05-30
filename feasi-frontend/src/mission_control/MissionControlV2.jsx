@@ -8,6 +8,8 @@ import CouncilActivityTile from "./tiles/CouncilActivityTile";
 import TopOwnersTile from "./tiles/TopOwnersTile";
 import WeeklyDeltaTile from "./tiles/WeeklyDeltaTile";
 import ActionQueueTile from "./tiles/ActionQueueTile";
+import ActiveProjectsTile from "./tiles/ActiveProjectsTile";
+import ProvenanceFooter from "./tiles/ProvenanceFooter";
 
 // Reuse the existing live BESS revenue widget — DO NOT rebuild.
 const LiveBessRevenue = lazy(() => import("../components/bess/LiveBessRevenue.jsx"));
@@ -93,20 +95,21 @@ export default function MissionControlV2() {
 
       <div className="mcv2-grid">
         {/* Row 1 — kpi (spans 2 cols) + activity (right column) */}
-        <PipelineFunnelTile data={snapshot?.funnel} />
+        <PipelineFunnelTile data={snapshot?.funnel} loading={loading} />
         <ConnectorHealthTile
           data={snapshot?.datasets}
           onRefresh={fetchSnapshot}
+          loading={loading}
         />
 
         {/* Row 2 — pulse (spans 2 cols) + council */}
-        <GridPulseTile data={snapshot?.grid_pulse} />
-        <CouncilActivityTile data={snapshot?.council} />
+        <GridPulseTile data={snapshot?.grid_pulse} loading={loading} />
+        <CouncilActivityTile data={snapshot?.council} loading={loading} />
 
         {/* Row 3 — owners / delta / actions */}
-        <TopOwnersTile data={snapshot?.top_owners} />
-        <WeeklyDeltaTile data={snapshot?.weekly_delta} />
-        <ActionQueueTile data={snapshot?.actions} />
+        <TopOwnersTile data={snapshot?.top_owners} loading={loading} />
+        <WeeklyDeltaTile data={snapshot?.weekly_delta} loading={loading} />
+        <ActionQueueTile data={snapshot?.actions} loading={loading} />
 
         {/* Row 4 — BESS live revenue (reused widget, full-width) */}
         <div className="mcv2-tile mcv2-area-bess" style={{ minHeight: 320 }}>
@@ -119,8 +122,17 @@ export default function MissionControlV2() {
               <LiveBessRevenue />
             </Suspense>
           </div>
+          <ProvenanceFooter
+            source="BMRS Insights API · NESO Balancing Mechanism · Modo Energy benchmark"
+            generatedAt={lastFetchAt}
+          />
         </div>
       </div>
+
+      {/* Active projects — clickable rows route to /v2/project/:id workspace.
+          Lives outside .mcv2-grid so it spans the full width without touching
+          the named-areas template above. */}
+      <ActiveProjectsTile />
     </div>
   );
 }

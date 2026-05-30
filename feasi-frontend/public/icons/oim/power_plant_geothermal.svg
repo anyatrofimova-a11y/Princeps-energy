@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="35.0px" height="35.0px" viewBox="0 0 85.039 85.039">
+  <defs>
+    <style>
+      .c {
+        fill: none;
+      }
+
+      .c, .d {
+        stroke: #000;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 5px;
+      }
+
+      .e {
+        mix-blend-mode: multiply;
+        opacity: 1;
+      }
+
+      .f {
+        isolation: isolate;
+      }
+
+      .d {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <g class="f">
+    <g id="b" data-name="Layer 1" class="e">
+      <g>
+        <rect class="d" x="3.02" y="3.02" width="78.999" height="78.999" />
+        <g>
+          <line class="c" x1="29.992" y1="70.661" x2="54.992" y2="70.661" />
+          <line class="c" x1="24.992" y1="59.661" x2="59.992" y2="59.661" />
+          <line class="c" x1="12.492" y1="37.661" x2="72.492" y2="37.661" />
+          <line class="c" x1="19.992" y1="48.661" x2="64.992" y2="48.661" />
+        </g>
+      </g>
+    </g>
+  </g>
+</svg>

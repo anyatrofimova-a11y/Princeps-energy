@@ -10,7 +10,11 @@ export function useDocketList(filters) {
     setLoading(true);
     try {
       const res = await api.listDockets(filters || {});
-      setRows(res?.rows || []);
+      // /api/dockets/library returns {items, count, next_cursor} with
+      // docket_id as the primary key — the rest of the UI uses .id, so
+      // alias here. Older shape used `rows` — keep as fallback.
+      const items = res?.items || res?.rows || [];
+      setRows(items.map((d) => ({ ...d, id: d.id ?? d.docket_id })));
       setError(null);
     } catch (e) {
       setError(e);

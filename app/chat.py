@@ -227,6 +227,46 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "check_outage_window",
+        "description": (
+            "Check whether a proposed outage of a generator or line at a project is feasible. "
+            "Runs the pandapower time-series AC power-flow simulator on the project's local "
+            "network with the asset out of service across the search horizon, returns "
+            "feasibility for the requested window plus up to 5 alternative windows of the "
+            "same duration that would clear all voltage/thermal violations. Adapted from "
+            "TU Delft LLM-Electricity-Contracts (BSD-3-Clause)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "project_id": {"type": "string", "description": "UUID of the Princeps project"},
+                "asset_type": {
+                    "type": "string",
+                    "enum": ["generator", "line"],
+                    "description": "Which asset is being taken out of service",
+                },
+                "asset_id": {
+                    "type": "string",
+                    "description": "Name of the asset (sgen/gen/line/trafo name) — e.g. 'proposed_generator'",
+                },
+                "outage_start_hour": {
+                    "type": "integer",
+                    "description": "Outage window start, hour-of-horizon (0-167 for 1-week horizon)",
+                },
+                "outage_end_hour": {
+                    "type": "integer",
+                    "description": "Outage window end, hour-of-horizon (exclusive)",
+                },
+                "snapshot_hours": {
+                    "type": "integer",
+                    "description": "Search horizon in hours",
+                    "default": 168,
+                },
+            },
+            "required": ["project_id", "asset_type", "asset_id", "outage_start_hour", "outage_end_hour"],
+        },
+    },
+    {
         "name": "run_financial_analysis",
         "description": "Run energy price forecast and revenue estimation for a solar system. Returns 24h price forecast and estimated annual revenue.",
         "input_schema": {
@@ -2246,6 +2286,36 @@ async def execute_tool(
                     "losses_pct": round(dist * 0.3, 2),
                     "verdict": "GO" if headroom > 0 and voltage_dev < 5 else "CAUTION" if headroom > -10 else "NO-GO",
                     "recommendation": "Full pandapower Newton-Raphson simulation recommended for Tier 2 assessment" if headroom < cap_mw * 0.5 else "Site has sufficient headroom — Tier 1 assessment adequate",
+                }
+
+        elif name == "check_outage_window":
+            # Wraps POST /api/grid/outage-window — gives the agent a
+            # one-shot tool that returns feasibility + alternative windows.
+            import httpx
+            from urllib.parse import urljoin
+            base = os.environ.get("PRINCEPS_INTERNAL_API_URL", "http://localhost:8000")
+            payload = {
+                "project_id": args["project_id"],
+                "asset_type": args["asset_type"],
+                "asset_id": args["asset_id"],
+                "outage_window": {
+                    "start_hour": int(args["outage_start_hour"]),
+                    "end_hour": int(args["outage_end_hour"]),
+                },
+                "snapshot_hours": int(args.get("snapshot_hours", 168)),
+            }
+            try:
+                async with httpx.AsyncClient(timeout=320) as http:
+                    resp = await http.post(
+                        urljoin(base, "/api/grid/outage-window"), json=payload,
+                    )
+                    resp.raise_for_status()
+                    return resp.json()
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"check_outage_window failed: {e}",
+                    "hint": "Ensure PRINCEPS_INTERNAL_API_URL points at the FastAPI service and GRID_PYTHON is set.",
                 }
 
         elif name == "run_financial_analysis":

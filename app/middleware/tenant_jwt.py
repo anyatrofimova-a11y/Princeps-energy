@@ -238,9 +238,14 @@ class TenantPool:
             return await conn.execute(query, *args, **kwargs)
 
 
-async def get_tenant_pool(request) -> TenantPool:
+async def get_tenant_pool(request: Request) -> TenantPool:
     """FastAPI dependency: drop-in replacement for ``get_pool`` that scopes
-    every query to ``request.state.tenant_id`` (set by the middleware)."""
+    every query to ``request.state.tenant_id`` (set by the middleware).
+
+    The ``: Request`` type annotation is **load-bearing** — without it
+    FastAPI treats ``request`` as a query-parameter and 422s every call
+    with ``{"loc":["query","request"],"msg":"Field required"}``.
+    """
     raw_pool = request.app.state.pool
     tenant_id = getattr(request.state, "tenant_id", DEFAULT_TENANT_ID)
     return TenantPool(raw_pool, tenant_id)

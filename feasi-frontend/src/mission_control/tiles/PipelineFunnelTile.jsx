@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import ProvenanceFooter from "./ProvenanceFooter";
+import ProvenanceFooter, { WarmingState, TileSkeleton } from "./ProvenanceFooter";
 
 /**
  * PipelineFunnelTile — clickable per-stage drill into typed Project objects.
@@ -23,7 +23,7 @@ function stageLabel(s) {
   })[s] || s;
 }
 
-export default function PipelineFunnelTile({ data }) {
+export default function PipelineFunnelTile({ data, loading = false }) {
   const navigate = useNavigate();
   const [bins, setBins] = useState([]);
   const [total, setTotal] = useState(0);
@@ -56,8 +56,12 @@ export default function PipelineFunnelTile({ data }) {
         <div className="mcv2-tile-tag">Project · ontology</div>
       </div>
       <div className="mcv2-tile-body">
-        {bins.length === 0 ? (
-          <div className="mcv2-empty">No active projects yet — the funnel will populate as you create them.</div>
+        {loading && !data ? (
+          <TileSkeleton rows={5} />
+        ) : !data ? (
+          <WarmingState />
+        ) : bins.length === 0 ? (
+          <WarmingState label="No active projects yet — funnel will populate once projects are created." />
         ) : (
           <div className="mcv2-funnel">
             {bins.map(b => (
@@ -81,13 +85,8 @@ export default function PipelineFunnelTile({ data }) {
         )}
       </div>
       <ProvenanceFooter
-        provenance={{
-          sources: [
-            `${total} projects · ontology Project`,
-            "backed by projects table",
-          ],
-          generated_at: new Date().toISOString(),
-        }}
+        source={`Apache AGE · Postgres + PostGIS 3.3 · ${total} projects`}
+        generatedAt={new Date().toISOString()}
       />
     </div>
   );

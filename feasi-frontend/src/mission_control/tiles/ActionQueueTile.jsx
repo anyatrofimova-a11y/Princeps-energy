@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import ProvenanceFooter from "./ProvenanceFooter";
+import ProvenanceFooter, { WarmingState, TileSkeleton } from "./ProvenanceFooter";
 
 /**
  * ActionQueueTile — typed actions awaiting human approval (read from
@@ -31,7 +31,7 @@ function paramSummary(params) {
   }).join(" · ");
 }
 
-export default function ActionQueueTile({ data }) {
+export default function ActionQueueTile({ data, loading = false }) {
   const [approvedRids, setApprovedRids] = useState(new Set());
   const [busy, setBusy] = useState({});
   const actions = (data && data.actions) || [];
@@ -64,8 +64,12 @@ export default function ActionQueueTile({ data }) {
         <div className="mcv2-tile-tag">awaiting review</div>
       </div>
       <div className="mcv2-tile-body">
-        {actions.length === 0 ? (
-          <div className="mcv2-empty">No actions awaiting approval.</div>
+        {loading && !data ? (
+          <TileSkeleton rows={3} />
+        ) : !data ? (
+          <WarmingState />
+        ) : actions.length === 0 ? (
+          <WarmingState label="No actions awaiting approval — queue clear." />
         ) : (
           <div>
             {actions.slice(0, 6).map(a => {
@@ -95,7 +99,11 @@ export default function ActionQueueTile({ data }) {
           </div>
         )}
       </div>
-      <ProvenanceFooter provenance={data?.provenance} />
+      <ProvenanceFooter
+        source="action_audit_log · Apache AGE"
+        claudeDerived
+        generatedAt={data?.provenance?.generated_at}
+      />
     </div>
   );
 }

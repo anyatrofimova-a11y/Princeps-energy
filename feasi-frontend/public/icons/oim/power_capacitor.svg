@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="35.0px" height="35.0px" viewBox="0 0 85.039 85.039">
+  <defs>
+    <style>
+      .c {
+        fill: none;
+      }
+
+      .c, .d {
+        stroke: #000;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 5px;
+      }
+
+      .e {
+        mix-blend-mode: multiply;
+        opacity: 1;
+      }
+
+      .f {
+        isolation: isolate;
+      }
+
+      .d {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <g class="f">
+    <g id="b" data-name="Layer 1" class="e">
+      <g>
+        <path class="d" d="M42.441,81.892c21.8,0,39.5-17.6,39.5-39.5S64.241,2.892,42.441,2.892,2.941,20.592,2.941,42.392s17.6,39.5,39.5,39.5Z" />
+        <line class="c" x1="19.741" y1="49.792" x2="65.441" y2="49.792" />
+        <line class="c" x1="19.741" y1="49.792" x2="65.441" y2="49.792" />
+        <line class="c" x1="20.041" y1="34.992" x2="65.741" y2="34.992" />
+        <line class="c" x1="20.041" y1="34.992" x2="65.741" y2="34.992" />
+        <path class="c" d="M42.441,49.792v23.596" />
+        <path class="c" d="M42.441,11.396v23.596" />
+      </g>
+    </g>
+  </g>
+</svg>

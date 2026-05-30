@@ -1,0 +1,42 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" width="35.0px" height="35.0px" viewBox="0 0 85.039 85.039">
+  <defs>
+    <style>
+      .c {
+        fill: none;
+      }
+
+      .c, .d {
+        stroke: #000;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: 5px;
+      }
+
+      .e {
+        mix-blend-mode: multiply;
+        opacity: 1;
+      }
+
+      .f {
+        isolation: isolate;
+      }
+
+      .d {
+        fill: #fff;
+      }
+    </style>
+  </defs>
+  <g class="f">
+    <g id="b" data-name="Layer 1" class="e">
+      <g>
+        <path class="d" d="M42.467,81.927c21.8,0,39.5-17.6,39.5-39.5S64.267,2.927,42.467,2.927,2.967,20.627,2.967,42.427s17.6,39.5,39.5,39.5Z" />
+        <line class="c" x1="15.567" y1="34.427" x2="29.667" y2="48.527" />
+        <line class="c" x1="35.167" y1="15.227" x2="49.267" y2="29.327" />
+        <polyline class="c" points="37.267 41.127 37.267 56.127 22.267 56.127" />
+        <polyline class="c" points="56.867 21.927 56.867 36.927 41.867 36.927" />
+        <line class="c" x1="34.867" y1="71.027" x2="70.767" y2="35.127" />
+      </g>
+    </g>
+  </g>
+</svg>

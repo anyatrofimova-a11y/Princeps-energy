@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import ProvenanceFooter from "./ProvenanceFooter";
+import ProvenanceFooter, { WarmingState, TileSkeleton } from "./ProvenanceFooter";
 
 /**
  * ConnectorHealthTile — 5 dataset health pills with refresh buttons inline.
@@ -22,7 +22,7 @@ function fmtRows(n) {
   return String(n);
 }
 
-export default function ConnectorHealthTile({ data, onRefresh }) {
+export default function ConnectorHealthTile({ data, onRefresh, loading = false }) {
   const [busy, setBusy] = useState({});
   const [errors, setErrors] = useState({});
   const datasets = (data && data.datasets) || [];
@@ -50,11 +50,17 @@ export default function ConnectorHealthTile({ data, onRefresh }) {
     <div className="mcv2-tile mcv2-area-activity">
       <div className="mcv2-tile-head">
         <div className="mcv2-tile-title">Connector health</div>
-        <div className="mcv2-tile-tag">{datasets.length} datasets</div>
+        <div className="mcv2-tile-tag">
+          {data ? `${datasets.length} datasets` : "warming"}
+        </div>
       </div>
       <div className="mcv2-tile-body">
-        {datasets.length === 0 ? (
-          <div className="mcv2-empty">No connectors registered yet.</div>
+        {loading && !data ? (
+          <TileSkeleton rows={5} />
+        ) : !data ? (
+          <WarmingState />
+        ) : datasets.length === 0 ? (
+          <WarmingState label="No connectors registered yet — register one to begin." />
         ) : (
           <div className="mcv2-pill-list">
             {datasets.slice(0, 5).map(d => (
@@ -89,10 +95,8 @@ export default function ConnectorHealthTile({ data, onRefresh }) {
         )}
       </div>
       <ProvenanceFooter
-        provenance={{
-          sources: ["princeps_datasets", "dataset_refresh_log"],
-          generated_at: data?.generated_at || new Date().toISOString(),
-        }}
+        source="princeps_datasets · dataset_refresh_log"
+        generatedAt={data?.generated_at || new Date().toISOString()}
       />
     </div>
   );
