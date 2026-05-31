@@ -33,6 +33,9 @@ AGENT_REGISTRY: dict[str, tuple[str, str]] = {
     "repd_cross_val":          ("agents.market",     "REPDCrossValidator"),
     "twin_replay":             ("agents.replay",     "TwinReplayWaiter"),
     "council_convener":        ("agents.council",    "CouncilConvener"),
+    "api_health":              ("agents.platform",   "ApiHealthSentinel"),
+    "migration_applier":       ("agents.platform",   "MigrationApplier"),
+    "ci_health":               ("agents.platform",   "CiHealthSentinel"),
 }
 
 

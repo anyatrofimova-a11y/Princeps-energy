@@ -63,6 +63,7 @@ jobs:
           - princeps-agent-replay        # A14 — twin replay / backtest
           - princeps-agent-council       # A16 — multi-agent convener for high-stakes actions
           - princeps-agent-builder       # autonomous self-build loop: reads builder.queue, opens PRs via GitHub API
+          - princeps-agent-platform      # backend keeper: api health probes, missing migrations, CI failure watcher
     concurrency:
       group: deploy-${{ matrix.service }}
       cancel-in-progress: true
