@@ -55,3 +55,5 @@ ifcopenshell>=0.7.0; python_version < "3.13"
 # ── Grid + REPD validation (tasks #24, #25) ──────────────────────────────────
 earth-osm>=3.0
 powerplantmatching>=0.8
+# ── Docket enrichment (gov.uk/Ofgem/PINS readable extraction) ─────────────────
+trafilatura>=1.12

@@ -239,6 +239,46 @@ async def library(
 # 2) GET /api/dockets/{docket_id}
 # ═══════════════════════════════════════════════════════════════════════
 
+@router.post("/{docket_id}/enrich")
+async def enrich_docket_endpoint(
+    docket_id: str,
+    force: bool = False,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Fetch canonical source + extract structured intelligence via Claude."""
+    from utils.docket_enricher import enrich_docket
+    return await enrich_docket(pool, docket_id, force=force)
+
+
+@router.get("/{docket_id}/enriched")
+async def get_latest_enrichment(
+    docket_id: str,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Return the most recent enrichment for this docket (no fetch)."""
+    row = await pool.fetchrow(
+        """SELECT enrichment_id, source_url, fetched_at, http_status,
+                  summary, key_paragraphs, stakeholders, deadlines,
+                  related_dockets, expert_take, confidence, bounds
+             FROM docket_enrichments WHERE docket_id::text = $1
+            ORDER BY fetched_at DESC LIMIT 1""",
+        docket_id,
+    )
+    if not row:
+        return {"enriched": False}
+    return {"enriched": True, **dict(row)}
+
+
+@router.post("/enrich-all")
+async def enrich_all_endpoint(
+    limit: int = 10,
+    pool: asyncpg.Pool = Depends(get_pool),
+):
+    """Bulk enrich up to N open dockets with stale or missing enrichment."""
+    from utils.docket_enricher import enrich_all_open_dockets
+    return await enrich_all_open_dockets(pool, limit=limit)
+
+
 @router.get("/{docket_id}")
 async def docket_detail(
     docket_id: str,
