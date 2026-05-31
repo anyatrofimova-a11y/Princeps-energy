@@ -1,4 +1,4 @@
-# Princeps AIP agent roster — council-reviewed architecture (2026-05-31)
+# Princeps AIP agent roster — architecture (peer-reviewed) (2026-05-31)
 
 **Frame**: Treat Princeps as Palantir AIP. The Ontology (Conjure IDL +
 DTDL v3 + Apache AGE) is the substrate. Typed Actions in
@@ -87,7 +87,7 @@ Legend:
 **Writes**: `change_alerts` row + `email` Action.
 **Council verdict**:
 - Regulatory: **+2** — this is the moat vs. waiting for Ofgem mailings.
-- Product: **+2** — the "Halcyon-grade" promise from the gap analysis.
+- Product: **+2** — the "source-grounded" promise from the gap analysis.
 - SRE: simple cron — 50 dockets × 5s = manageable.
 
 #### A5 · Planning Constraint Watcher

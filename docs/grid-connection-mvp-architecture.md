@@ -3,7 +3,7 @@
 
 ---
 
-## 1. HALCYON.IO DECONSTRUCTION
+## 1. COMPETITOR REGULATORY INTELLIGENCE DECONSTRUCTION
 
 **What it actually is:** AI-powered US energy *regulatory intelligence* platform (not a UK grid connection tool).
 
@@ -11,14 +11,14 @@
 |--------|--------|
 | **Core** | Search, alerts, and structured data across 5.5M+ US regulatory filings from 41+ state PUCs, FERC, ISOs |
 | **AI** | LLM-powered natural language search with inline citations; knowledge graph linking entities/dockets/filings |
-| **Products** | Halcyon Search (free beta), Alerts (free), Query (paid), 5 Data Trackers (paid) |
+| **Products** | CompetitorRegIntel Search (free beta), Alerts (free), Query (paid), 5 Data Trackers (paid) |
 | **Trackers** | Gas Power Plant (201 plants, 104 GW), BESS (440+ projects, ~210 GWh), Rate Case (259 cases), Large Load Tariff (108 tariffs), New Substation (200+ projects) |
 | **Funding** | $10.8M seed (Apr 2024) — Obvious Ventures + Congruent Ventures + Overture Climate VC |
 | **Team** | Bruce Falck (ex-Twitter revenue), Nat Bullard (ex-BloombergNEF), Jonathan Lewis (ex-Stripe VP Product), Alex Huras (CTO) |
 | **Tech hints** | Knowledge graph, ~2K docs/day ingestion, REST API (publisher/filing_type/date params), entity pages |
 | **No** | Public API, open source, UK coverage, geospatial analysis, engineering calculations |
 
-**Takeaway for Princeps:** Halcyon's *data product architecture* (AI-extracted structured trackers from unstructured filings) and knowledge graph approach are applicable patterns. Their regulatory intelligence model could be adapted for UK planning/connection data.
+**Takeaway for Princeps:** CompetitorRegIntel's *data product architecture* (AI-extracted structured trackers from unstructured filings) and knowledge graph approach are applicable patterns. Their regulatory intelligence model could be adapted for UK planning/connection data.
 
 ---
 
@@ -553,7 +553,7 @@ npm install @deck.gl/layers @deck.gl/geo-layers cesium
 ## 8. SOURCES
 
 ### Companies
-- [Halcyon.io](https://halcyon.io) — US energy regulatory intelligence
+- [CompetitorRegIntel](https://competitor-reg-intel) — US energy regulatory intelligence
 - [Searchland](https://searchland.co.uk) — UK site sourcing + DNO data (GBP 195/mo, has API)
 - [Nira Energy](https://www.niraenergy.com) — US grid capacity mapping (YC)
 - [envelio](https://envelio.com) — Grid digital twin + Connection Navigator (E.ON)

@@ -1,4 +1,4 @@
--- Docket enrichment — Halcyon-grade detail per docket.
+-- Docket enrichment — source-grounded detail per docket.
 -- Adds a canonical source_url to dockets + an enrichments table that
 -- stores the fetched primary source, structured summary with paragraph
 -- citations, stakeholder filings, deadlines, and related dockets.

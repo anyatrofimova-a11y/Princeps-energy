@@ -26,12 +26,12 @@ The broader energy management software market is $56.2B in 2025, growing at 9.4%
 
 **Princeps implication**: Princeps spans multiple sub-segments (grid intelligence, feasibility, asset management, compliance). The specific addressable segment (pre-development intelligence) is estimated at $2-5B globally.
 
-### 4. Halcyon: $21M Series A at Pre-Revenue (Source: BusinessWire, March 2026)
-Halcyon raised $21M led by Energize Capital for energy regulatory NLP. US-only. No UK coverage, no GIS, no 3D, no design tools. Pure data subscription model.
+### 4. CompetitorRegIntel: $21M Series A at Pre-Revenue (Source: BusinessWire, March 2026)
+CompetitorRegIntel raised $21M led by Energize Capital for energy regulatory NLP. US-only. No UK coverage, no GIS, no 3D, no design tools. Pure data subscription model.
 
-**Princeps implication**: Validates the market. Halcyon covers US regulatory NLP only — Princeps covers full lifecycle (site → design → compliance → operations) with real engineering tools, not just search. Princeps is further along in product but earlier in funding.
+**Princeps implication**: Validates the market. CompetitorRegIntel covers US regulatory NLP only — Princeps covers full lifecycle (site → design → compliance → operations) with real engineering tools, not just search. Princeps is further along in product but earlier in funding.
 
-### 5. $850 Billion US Power Infrastructure Investment in 2026 (Source: Halcyon Series A press release)
+### 5. $850 Billion US Power Infrastructure Investment in 2026 (Source: CompetitorRegIntel Series A press release)
 "Up to $850 billion will be invested in power and digital infrastructure in 2026" in the US alone, driving demand for intelligence tools.
 
 **Princeps implication**: The investment wave is now. Developers need tools that work in months, not years. Timing is perfect for platform launch.
@@ -82,7 +82,7 @@ Expected to reach $10.13B in 2025, growing to $16.2B by 2030 at 9.73% CAGR.
 **Princeps implication**: Asset lifecycle management (legacy compliance, condition monitoring, repowering analysis) is already built in Princeps. This is a separate revenue stream from pre-development.
 
 ### 15. No Single Platform Does What Princeps Does (Competitive Gap)
-Halcyon = US regulatory NLP only. PVcase = solar site selection. LandGate = data API. Transect = environmental screening. Searchland = land data. Ramboll = consulting. None offer: real-time UK grid data + physics simulation + 3D twin + AI agent + compliance + financial modelling + DC scoring in one platform.
+CompetitorRegIntel = US regulatory NLP only. PVcase = solar site selection. LandGate = data API. Transect = environmental screening. Searchland = land data. Ramboll = consulting. None offer: real-time UK grid data + physics simulation + 3D twin + AI agent + compliance + financial modelling + DC scoring in one platform.
 
 **Princeps implication**: Princeps is the only full-lifecycle energy intelligence platform for the UK market. No direct competitor covers the full stack.
 
@@ -93,7 +93,7 @@ Halcyon = US regulatory NLP only. PVcase = solar site selection. LandGate = data
 1. **87% failure rate** — Only 13% of US interconnection requests ever reach operation. The waste in the system is staggering.
 2. **125 GW demand queue growth since Nov 2024** — Data centre demand is reshaping the UK grid faster than generation capacity can be built.
 3. **£1.8B/year UK constraint costs** — Grid congestion isn't theoretical; it's costing billions annually already.
-4. **Halcyon raised $21M with US-only coverage and no engineering tools** — Validates that even a narrow energy intelligence product attracts significant VC interest.
+4. **CompetitorRegIntel raised $21M with US-only coverage and no engineering tools** — Validates that even a narrow energy intelligence product attracts significant VC interest.
 5. **No competitor has physics simulation** — SustainDC RL integration gives Princeps a genuine technical moat that would take 12+ months to replicate.
 
 ---
@@ -104,7 +104,7 @@ Halcyon = US regulatory NLP only. PVcase = solar site selection. LandGate = data
 |--------|----------|-----------|------------|
 | LandGate expanding to UK | HIGH | 6-12 months | They announced international DC intelligence — but no UK DNO integrations yet. Speed matters. |
 | PVcase adding UK data | MEDIUM | 12-18 months | They're EU-expanding but solar-only. Multi-asset coverage is Princeps moat. |
-| Halcyon entering UK | LOW | 18-24 months | US regulatory focus. UK regulations are fundamentally different (Ofgem vs FERC). |
+| CompetitorRegIntel entering UK | LOW | 18-24 months | US regulatory focus. UK regulations are fundamentally different (Ofgem vs FERC). |
 | Searchland adding analysis | MEDIUM | 6-12 months | They have UK land data but no engineering capability. Partnership opportunity? |
 | Ramboll building software | LOW | 24+ months | Consulting firms rarely build good software. Cultural mismatch. |
 | Google/Microsoft building internal | HIGH | Always | They're buyers, not builders of developer tools. But could build for internal use. |
@@ -116,7 +116,7 @@ Halcyon = US regulatory NLP only. PVcase = solar site selection. LandGate = data
 1. **Exact number of UK grid connection applications per year** — Ofgem publishes aggregate data but specific application counts by DNO are not readily available online
 2. **Average feasibility study cost by project size** — Industry benchmarks exist verbally but no published survey data found
 3. **UK renewable planning application volumes by technology** — BEIS/DESNZ publishes energy statistics but per-technology application counts require FOI requests
-4. **Competitor revenue figures** — Halcyon, LandGate, Transect, Searchland are all private; no revenue data publicly available
+4. **Competitor revenue figures** — CompetitorRegIntel, LandGate, Transect, Searchland are all private; no revenue data publicly available
 5. **Developer software spend budgets** — No published survey on what UK developers spend on feasibility software vs consultants
 
 ---
@@ -125,7 +125,7 @@ Halcyon = US regulatory NLP only. PVcase = solar site selection. LandGate = data
 
 1. **Launch before H2 2026 connection window** — Every developer preparing applications is a potential customer NOW
 2. **Target Google/Microsoft/Amazon DC teams** — 125 GW demand queue, each needs site assessment, willing to pay enterprise pricing
-3. **Seek Energize Capital introduction** — They led Halcyon's $21M; they understand the thesis and Princeps is further along in product
+3. **Seek Energize Capital introduction** — They led CompetitorRegIntel's $21M; they understand the thesis and Princeps is further along in product
 4. **Build US interconnection data** — LBNL publishes queue data; adding US coverage 10x the TAM
 5. **Commission Cornwall Insight or Aurora research** — Get third-party validation of market size for pitch deck
 
@@ -135,7 +135,7 @@ Halcyon = US regulatory NLP only. PVcase = solar site selection. LandGate = data
 
 1. [NESO Connections Reform Results](https://www.neso.energy/industry-information/connections-reform/connections-reform-results)
 2. [LBNL Queued Up 2025 Edition](https://emp.lbl.gov/publications/queued-2025-edition-characteristics)
-3. [Halcyon $21M Series A](https://www.businesswire.com/news/home/20260316032633/en/Halcyon-Raises-$21-Million-Series-A-To-Bring-AI-Powered-Intelligence-to-the-Energy-Industry)
+3. [CompetitorRegIntel $21M Series A](https://www.businesswire.com/news/home/20260316032633/en/CompetitorRegIntel-Raises-$21-Million-Series-A-To-Bring-AI-Powered-Intelligence-to-the-Energy-Industry)
 4. [LandGate AI Data Agent](https://www.landgate.com/news/ai-driven-site-selection-for-data-centers-and-energy-landgate-s-api)
 5. [PVcase Prospect](https://pvcase.com/prospect)
 6. [Transect Platform](https://www.transect.com/)

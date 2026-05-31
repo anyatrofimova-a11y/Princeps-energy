@@ -1,4 +1,4 @@
-"""Docket enricher — Halcyon-grade per-docket detail.
+"""Docket enricher — source-grounded per-docket detail.
 
 Pipeline per docket:
   1. Resolve canonical source URL (mapped registry first, then docket
