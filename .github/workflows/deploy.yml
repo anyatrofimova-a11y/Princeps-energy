@@ -37,6 +37,7 @@ jobs:
       fail-fast: false
       matrix:
         service:
+          # Existing 13 services
           - princeps-frontend
           - princeps-web
           - princeps-scheduler
@@ -50,6 +51,17 @@ jobs:
           - princeps-worker-planning
           - princeps-worker-market
           - princeps-worker-builder
+          # AIP agent layer (council-architected 2026-05-31)
+          # See docs/architecture/aip_agents_council_2026_05.md
+          - princeps-agent-graph         # A1 + A2 + A15 — ontology coherence + schema drift + backfill
+          - princeps-agent-connector     # A3 — connector health sentinel
+          - princeps-agent-regwatch      # A4 + A5 + A12 — dockets + planning + AR7 watch
+          - princeps-agent-grid          # A6 + A11 — headroom patrol + reinforcement cost
+          - princeps-agent-screen        # A7 — counterparty sanctions re-screen
+          - princeps-agent-contracts     # A8 + A9 — obligation deadlines + doc change watcher
+          - princeps-agent-market        # A10 + A13 — DA price reactor + REPD cross-val
+          - princeps-agent-replay        # A14 — twin replay / backtest
+          - princeps-agent-council       # A16 — multi-agent convener for high-stakes actions
     concurrency:
       group: deploy-${{ matrix.service }}
       cancel-in-progress: true
@@ -61,7 +73,10 @@ jobs:
 
       - name: Deploy ${{ matrix.service }}
         env:
+          # Project-scoped token for `railway up` against the princeps project
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # Account-scoped token as fallback for the CLI's project resolution
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: railway up --service ${{ matrix.service }} --detach
 
   # Single-service redeploy. Fires only on workflow_dispatch with a
@@ -82,4 +97,5 @@ jobs:
       - name: Deploy ${{ github.event.inputs.service }}
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: railway up --service "${{ github.event.inputs.service }}" --detach
