@@ -79,6 +79,7 @@ async def receive_webhook(
 
 
 async def _handle_inbound(pool, msg: dict[str, Any], envelope: dict[str, Any]):
+    """Route inbound message to the right dispatcher (slash / plan / ask)."""
     from utils.brief_translator import translate_brief
     from utils.whatsapp_sender import send_whatsapp_text
 
@@ -110,47 +111,118 @@ async def _handle_inbound(pool, msg: dict[str, Any], envelope: dict[str, Any]):
         return
 
     routed = await translate_brief(text)
-    intent = routed.get("intent", "ask")
+    kind = routed.get("kind", "ask")
 
-    if intent == "ask":
+    if kind == "slash":
+        reply = await _dispatch_slash(pool, routed["command"], routed.get("args", ""),
+                                      requested_by=f"whatsapp:{wa_from}")
+        await send_whatsapp_text(wa_from, reply)
+        await _log_outbound(pool, wa_from, reply, intent="slash")
+        return
+
+    if kind == "ask":
         reply = routed.get("answer", "(no answer)")
         await send_whatsapp_text(wa_from, reply)
         await _log_outbound(pool, wa_from, reply, intent="ask")
         return
 
-    # build / research → enqueue a builder.queue row
-    title = (routed.get("title") or text)[:200]
-    brief = routed.get("brief") or text
-    if intent == "research":
-        brief = (
-            "RESEARCH MODE — use WebSearch and produce a markdown summary "
-            "(no code changes unless explicitly asked).\n\n" + brief
-        )
+    # kind == "plan" — multi-step. Enqueue every task, link inter-step deps.
+    tasks = routed.get("tasks", [])
+    if not tasks:
+        await send_whatsapp_text(wa_from, "I parsed a plan but no tasks came back. Try rephrasing.")
+        return
+
+    plan_summary = routed.get("plan_summary", text[:200])
+    import uuid
+    plan_group = str(uuid.uuid4())
+    step_to_taskid: dict[int, str] = {}
     async with pool.acquire() as conn:
-        task_id = await conn.fetchval(
-            """INSERT INTO builder.queue
-                 (title, brief, context_paths, branch_policy, priority,
-                  requested_by)
-               VALUES ($1, $2, $3::text[], 'pr', $4, $5)
-               RETURNING task_id::text""",
-            title, brief,
-            list(routed.get("context_paths") or []),
-            int(routed.get("priority", 5)),
-            f"whatsapp:{wa_from}",
-        )
+        for t in sorted(tasks, key=lambda x: x.get("step", 1)):
+            step = int(t["step"])
+            intent = t.get("intent", "build")
+            depends = [step_to_taskid[s] for s in t.get("depends_on_steps", [])
+                       if s in step_to_taskid]
+            title = (t.get("title") or text)[:200]
+            brief = t.get("brief") or text
+            mode = "build"
+            if intent == "research":
+                mode = "research"
+                brief = (
+                    "RESEARCH MODE — investigate using WebSearch + summarise as "
+                    "markdown under docs/research/<slug>.md with cited sources.\n\n" + brief
+                )
+            elif intent == "agent_trigger":
+                mode = "agent_trigger"
+                brief = f"AGENT TRIGGER: {t.get('agent_name') or t.get('brief')}"
+            tid = await conn.fetchval(
+                """INSERT INTO builder.queue
+                     (title, brief, context_paths, branch_policy, priority,
+                      requested_by, depends_on, mode, plan_group)
+                   VALUES ($1, $2, $3::text[], 'pr', $4, $5, $6::uuid[], $7, $8::uuid)
+                   RETURNING task_id::text""",
+                title, brief,
+                list(t.get("context_paths") or []),
+                int(t.get("priority", 5)),
+                f"whatsapp:{wa_from}",
+                depends, mode, plan_group,
+            )
+            step_to_taskid[step] = tid
         await conn.execute(
-            "UPDATE whatsapp.messages SET intent=$2, task_id=$3 "
+            "UPDATE whatsapp.messages SET intent='plan', task_id=$2 "
             "WHERE message_id=$1",
-            wa_id, intent, task_id,
+            wa_id, list(step_to_taskid.values())[0],
         )
 
+    short_ids = " · ".join(f"`{tid[:8]}`" for tid in step_to_taskid.values())
     ack = (
-        f"Got it. Queued as {intent} task `{title}` "
-        f"(id `{task_id[:8]}`, priority {routed.get('priority',5)}). "
-        f"I'll message back when the PR opens."
+        f"📋 Plan: {plan_summary}\n"
+        f"Queued {len(step_to_taskid)} task(s): {short_ids}\n"
+        f"I'll DM you as each PR opens."
     )
     await send_whatsapp_text(wa_from, ack)
-    await _log_outbound(pool, wa_from, ack, intent=intent, task_id=task_id)
+    await _log_outbound(pool, wa_from, ack, intent="plan",
+                        task_id=list(step_to_taskid.values())[0])
+
+
+async def _dispatch_slash(pool, command: str, args: str, *, requested_by: str) -> str:
+    """Handle /help, /status, /list, /trigger, /show, /cancel, /ship, /research."""
+    from utils.agent_orchestrator import (
+        cmd_help, cmd_status, cmd_list, cmd_show, cmd_cancel,
+        cmd_ship, cmd_research, trigger_agent,
+    )
+    # Audit
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO builder.commands (command, args, requested_by) "
+            "VALUES ($1, $2, $3)", command, args, requested_by,
+        )
+    cmd = command.lower()
+    if cmd == "/help":
+        return await cmd_help()
+    if cmd == "/status":
+        return await cmd_status(pool)
+    if cmd in ("/list", "/list-queue"):
+        try: n = int(args) if args.strip() else 10
+        except ValueError: n = 10
+        return await cmd_list(pool, n)
+    if cmd == "/show":
+        return await cmd_show(pool, args.strip()) if args.strip() else "Usage: /show <id>"
+    if cmd == "/cancel":
+        return await cmd_cancel(pool, args.strip()) if args.strip() else "Usage: /cancel <id>"
+    if cmd == "/ship":
+        return await cmd_ship(pool, args.strip()) if args.strip() else "Usage: /ship <id>"
+    if cmd == "/research":
+        return await cmd_research(pool, args.strip(), requested_by)
+    if cmd == "/trigger":
+        agent = args.strip().split()[0] if args.strip() else ""
+        if not agent: return "Usage: /trigger <agent_name>"
+        out = await trigger_agent(pool, agent, requested_by=requested_by)
+        if "error" in out and "available" in out:
+            return f"unknown agent. available: {', '.join(out['available'])}"
+        if "error" in out:
+            return f"❌ {agent}: {out['error']}"
+        return f"⚡ {agent} ticked. Result: {str(out.get('result'))[:240]}"
+    return f"unknown command {command}. /help for options."
 
 
 async def _log_outbound(pool, wa_to: str, body: str, *, intent: str, task_id: str | None = None):
