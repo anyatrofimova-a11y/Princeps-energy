@@ -349,6 +349,14 @@ class Builder(Agent):
                         plan.get("plan"),
                         json.dumps([c["path"] for c in changes]),
                     )
+
+                # If this task came from WhatsApp, DM the operator back.
+                try:
+                    api = os.environ.get("PRINCEPS_API_URL", "https://princeps-api.fly.dev")
+                    async with httpx.AsyncClient(timeout=10) as cn:
+                        await cn.post(f"{api}/api/whatsapp/notify-task-complete/{task_id}")
+                except Exception as exc:
+                    log.info("whatsapp notify failed (non-fatal): %s", exc)
                 return {
                     "task": str(task_id), "branch": branch,
                     "commit": commit_sha[:8], "pr": pr_number,

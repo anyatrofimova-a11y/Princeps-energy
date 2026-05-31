@@ -348,6 +348,7 @@ _ROUTER_MODULES = [
     "parcel_enrichment",       # /api/parcels/{inspire_id}/enriched — ALC + BNG + Companies House + Tenders
     "contract_intelligence",   # /api/contracts/* — document workspace, cite, diff, obligations
     "applications",            # /api/applications/* — UK grid+planning templates + pre-fill
+    "whatsapp",                # /api/whatsapp/* — Meta Cloud API webhook + builder-agent inbox
 ]
 
 app.include_router(graph_router)
