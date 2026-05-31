@@ -49,9 +49,33 @@ class AR7WindowMonitor(Agent):
 
     async def tick(self):
         import httpx
+        from agents.lib.build_queue import enqueue_build_task
         async with httpx.AsyncClient(timeout=20) as c:
-            r = await c.get("https://www.gov.uk/government/publications/contracts-for-difference-cfd-allocation-round-7-ar7", follow_redirects=True)
-        opened = "opened" in r.text.lower() or "applications open" in r.text.lower()
+            r = await c.get(
+                "https://www.gov.uk/government/publications/contracts-for-difference-cfd-allocation-round-7-ar7",
+                follow_redirects=True,
+            )
+        opened = "applications open" in r.text.lower() or "round open" in r.text.lower()
+        if opened:
+            pool = await get_pool()
+            try:
+                await enqueue_build_task(
+                    pool,
+                    title="AR7 round open — surface banner on AR7-eligible projects",
+                    brief=(
+                        "The AR7 monitor agent detected that the CfD AR7 round is open. "
+                        "Add a top-of-page banner to project workspaces flagged ar7-eligible "
+                        "linking to the AR7 application template (/api/applications/templates/ar7_cfd_application)."
+                    ),
+                    context_paths=[
+                        "feasi-frontend/src/components/workspace/ProjectPage.jsx",
+                        "feasi-frontend/src/components/workspace/ApplicationsPanel.jsx",
+                    ],
+                    requested_by="agent:ar7_window_monitor",
+                    priority=3,
+                )
+            finally:
+                await pool.close()
         return {"ar7_page_http": r.status_code, "applications_open_detected": opened}
 
 
