@@ -346,6 +346,8 @@ _ROUTER_MODULES = [
     "finance_agentic",         # /api/finance/auto-defaults · explain-verdict · optimise · sensitivity-scenarios
     "portfolio_performance",   # /api/portfolio/bess-revenue · /updates — Portfolio Performance tile + Updates tab
     "parcel_enrichment",       # /api/parcels/{inspire_id}/enriched — ALC + BNG + Companies House + Tenders
+    "contract_intelligence",   # /api/contracts/* — document workspace, cite, diff, obligations
+    "applications",            # /api/applications/* — UK grid+planning templates + pre-fill
 ]
 
 app.include_router(graph_router)

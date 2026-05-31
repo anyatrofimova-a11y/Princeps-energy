@@ -10,17 +10,21 @@ import AssessTab from "./AssessTab";
 import DecideTab from "./DecideTab";
 import FileTab from "./FileTab";
 import OperateTab from "./OperateTab";
+import ContractIntelligencePanel from "./ContractIntelligencePanel";
+import ApplicationsPanel from "./ApplicationsPanel";
 
 // Verb-based IA per 2026-04-19 redesign brief: collapsed from 10 domain tabs
 // to 6 verbs (Overview · Discover · Assess · Decide · File · Operate).
 // Nothing deleted — every legacy panel surfaces inside one of the verb tabs.
 const TABS = [
-  { key: "overview", label: "Overview" },
-  { key: "discover", label: "Discover" },
-  { key: "assess",   label: "Assess" },
-  { key: "decide",   label: "Decide" },
-  { key: "file",     label: "File" },
-  { key: "operate",  label: "Operate" },
+  { key: "overview",     label: "Overview" },
+  { key: "discover",     label: "Discover" },
+  { key: "assess",       label: "Assess" },
+  { key: "decide",       label: "Decide" },
+  { key: "file",         label: "File" },
+  { key: "applications", label: "Applications" },
+  { key: "contracts",    label: "Contracts" },
+  { key: "operate",      label: "Operate" },
 ];
 
 function StubTab({ name }) {
@@ -145,6 +149,17 @@ export default function ProjectPage({
           <DecideTab project={project} />
         ) : activeTab === "file" ? (
           <FileTab project={project} />
+        ) : activeTab === "applications" ? (
+          <ApplicationsPanel
+            projectRid={project?.project_id}
+            siteRid={sites[0]?.site_id || null}
+            projectName={project?.name}
+          />
+        ) : activeTab === "contracts" ? (
+          <ContractIntelligencePanel
+            projectRid={project?.project_id}
+            projectName={project?.name}
+          />
         ) : activeTab === "operate" ? (
           <OperateTab project={project} onPopOutTwin={onPopOutTwin} />
         ) : (

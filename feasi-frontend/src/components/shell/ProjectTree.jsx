@@ -254,7 +254,10 @@ export default function ProjectTree({
       </div>
       <div className="pt-scroll" ref={listRef}>
         {filtered.length === 0 && (
-          <div className="pt-empty">No portfolios. <button className="pt-link" onClick={onNewPortfolio}>Create one</button></div>
+          <div className="pt-empty">
+            <div className="pt-empty-title">No projects yet</div>
+            <button className="pt-link" onClick={onNewPortfolio}>+ Create one</button>
+          </div>
         )}
         {filtered.map((pf) => {
           const pfKey = `pf-${pf.portfolio_id}`;
@@ -404,9 +407,12 @@ export default function ProjectTree({
           padding: 4px 0;
         }
         .pt-empty {
-          padding: 24px; text-align: center;
-          color: var(--cds-text-helper); font-size: 13px;
+          padding: 16px 8px; text-align: center;
+          color: var(--cds-text-helper); font-size: 12px;
+          display: flex; flex-direction: column; gap: 8px;
+          align-items: center; min-width: 0;
         }
+        .pt-empty-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
         .pt-link {
           background: none; border: none;
           color: #B5912F;

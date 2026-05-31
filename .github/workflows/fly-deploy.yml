@@ -1,0 +1,50 @@
+name: Deploy to Fly
+
+# Auto-deploys princeps-api (backend) and princeps-app (frontend) on
+# every push to main. Each Fly app gets its own job so build failures
+# don't take both down.
+#
+# Setup: GitHub repo Settings -> Secrets -> Actions -> New secret
+#   Name:  FLY_API_TOKEN
+#   Value: `flyctl tokens create deploy --name github-actions --expiry 8760h`
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Single Fly app to redeploy (api | app | both)"
+        required: false
+        default: "both"
+
+jobs:
+  deploy-api:
+    name: Deploy princeps-api
+    if: github.event_name == 'push' || github.event.inputs.target == 'api' || github.event.inputs.target == 'both'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fly-api
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy princeps-api
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --config fly.toml --app princeps-api --remote-only --wait-timeout 1200
+
+  deploy-app:
+    name: Deploy princeps-app
+    if: github.event_name == 'push' || github.event.inputs.target == 'app' || github.event.inputs.target == 'both'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: fly-app
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Deploy princeps-app
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --config fly.frontend.toml --app princeps-app --remote-only --wait-timeout 1200
