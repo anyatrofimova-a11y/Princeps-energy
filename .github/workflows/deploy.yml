@@ -62,6 +62,7 @@ jobs:
           - princeps-agent-market        # A10 + A13 — DA price reactor + REPD cross-val
           - princeps-agent-replay        # A14 — twin replay / backtest
           - princeps-agent-council       # A16 — multi-agent convener for high-stakes actions
+          - princeps-agent-builder       # autonomous self-build loop: reads builder.queue, opens PRs via GitHub API
     concurrency:
       group: deploy-${{ matrix.service }}
       cancel-in-progress: true
