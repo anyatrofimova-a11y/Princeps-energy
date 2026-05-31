@@ -12,6 +12,7 @@ import FileTab from "./FileTab";
 import OperateTab from "./OperateTab";
 import ContractIntelligencePanel from "./ContractIntelligencePanel";
 import ApplicationsPanel from "./ApplicationsPanel";
+import GridCanvas from "../GridCanvas";
 
 // Verb-based IA per 2026-04-19 redesign brief: collapsed from 10 domain tabs
 // to 6 verbs (Overview · Discover · Assess · Decide · File · Operate).
@@ -136,8 +137,17 @@ export default function ProjectPage({
       <main className="pp-body">
         {!project ? (
           <div className="pp-empty">
-            <div className="pp-empty-title">No project selected</div>
-            <div className="pp-empty-sub">Pick a project from the left rail, or create a new one.</div>
+            <GridCanvas className="pp-empty-bg" />
+            <div className="pp-empty-content">
+              <div className="pp-empty-title">No project selected</div>
+              <div className="pp-empty-sub">Pick a project from the left rail, or create a new one.</div>
+              <button
+                className="pp-empty-cta"
+                onClick={() => window.dispatchEvent(new CustomEvent("princeps-redesign-new-project"))}
+              >
+                + Create a new project
+              </button>
+            </div>
           </div>
         ) : activeTab === "overview" ? (
           <OverviewTab project={project} mapSlot={mapSlot} onViewTab={onTabChange} onViewMap={onViewMap} />
@@ -210,14 +220,34 @@ export default function ProjectPage({
           flex: 1; min-height: 0; overflow: auto;
         }
         .pp-empty {
+          position: relative;
           display: flex; flex-direction: column;
           align-items: center; justify-content: center;
           height: 100%; min-height: 320px;
           color: var(--cds-text-helper);
           font-family: "DM Sans", -apple-system, sans-serif;
+          overflow: hidden;
         }
-        .pp-empty-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; color: var(--cds-text-secondary); }
-        .pp-empty-sub { font-size: 13px; }
+        .pp-empty-bg {
+          position: absolute !important; inset: 0 !important;
+          z-index: 0 !important; pointer-events: none !important;
+          opacity: 0.6;
+        }
+        .pp-empty-content {
+          position: relative; z-index: 2;
+          display: flex; flex-direction: column;
+          align-items: center; gap: 14px;
+        }
+        .pp-empty-title { font-size: 22px; font-weight: 700; color: var(--ink, #0f0e0a); letter-spacing: -0.01em; }
+        .pp-empty-sub { font-size: 14px; color: var(--cds-text-helper); }
+        .pp-empty-cta {
+          margin-top: 6px;
+          padding: 10px 18px; border-radius: 8px;
+          background: #0f0e0a; color: #fff; border: none;
+          font-family: inherit; font-weight: 600; font-size: 13px;
+          cursor: pointer; transition: background 120ms;
+        }
+        .pp-empty-cta:hover { background: #2d2d2d; }
         .pp-stub {
           padding: 64px 24px;
           text-align: center;

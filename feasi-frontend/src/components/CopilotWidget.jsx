@@ -706,6 +706,10 @@ export default function CopilotWidget({ onMapLayer, onZoomTo, onAction }) {
       {/* ── Chat panel ── */}
       {chatOpen && (
         <div className="copilot-chat-panel">
+          {/* Grid-node network background — user requirement: visible during
+              streaming + empty + result states (was missing because the chat
+              panel painted a solid white background over everything). */}
+          <GridCanvas className="copilot-chat-bg-canvas" />
           <div className="copilot-chat-header">
             <div className="copilot-chat-header-left">
               <svg width="24" height="24" viewBox="0 0 48 52" fill="none" style={{ flexShrink: 0 }}>

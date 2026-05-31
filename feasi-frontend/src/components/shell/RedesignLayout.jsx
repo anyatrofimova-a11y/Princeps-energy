@@ -329,7 +329,12 @@ export default function RedesignLayout({ actions = null, mapSlot = null, onViewM
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
-  const showTreePane = workspace?.activeViewMode === "projects" && !isNarrow;
+  // showTreePane disabled 2026-05-31 — the resizable side tree kept
+  // squashing under ~80px regardless of minSize (autoSave race during
+  // mount), wasn't reachable from a fresh viewport, and duplicated the
+  // sidebar's Projects expander. Projects are now selected from the
+  // sidebar OR via the project picker rendered in the empty workspace.
+  const showTreePane = false;
 
   // ── Stage funnel filter view ──────────────────────────────────────
   // When the user clicks a row in Dashboard's "Stage funnel" we land here
